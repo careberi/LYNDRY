@@ -203,39 +203,79 @@ stale and replayed ones all fail.
 
 ## Website decisions
 
-**The design follows telnyx.com, with LYNDRY's teal kept as the accent.** Neil
-asked for two things that partly conflict — match the locker, and match
-telnyx.com. The resolution: take the *structure and typography* from Telnyx and
-the *colour* from the locker.
+**The design is the LYNDRY design handoff — the "Organic" system, retinted to
+the LYNDRY teal.** Neil supplied a four-file bundle (an implementation brief, a
+README of tokens and copy, a stylesheet, and an iPhone frame component) and
+asked for the whole site to match it. It replaces the earlier telnyx.com-derived
+look entirely.
 
-Inspected telnyx.com directly rather than guessing, and copied the system:
-
-| | Telnyx | LYNDRY |
+| | Was (Telnyx-derived) | Now (handoff) |
 |---|---|---|
-| Background | `#fefdf5` warm cream | same |
-| Text | pure black | `#0a0a0a` |
-| Display face | PP Formula, weight 800 | Outfit, weight 700–800 |
-| Body face | Inter | Inter |
-| Accent | — | locker teal `#178a94` |
+| Background | `#fefdf5` near-white cream | `#f5ead8` warm cream |
+| Panels | white / light grey | `#ebddc5` deeper cream |
+| Text | `#0a0a0a` | `#201e1d` |
+| Display face | Outfit, weight 700–800 | Caprasimo, weight 400 |
+| Body face | Inter | Figtree, 400–900 |
+| Accent | `#178a94` | `#17919b`, with a full 100–900 ramp |
+| Header | teal bar, white wordmark | cream, teal wordmark |
+| Radii | 12–16px | 16px panels, 28px cards, pills |
 
-**PP Formula is a commercial licence** from Pangram Pangram, so it is not used
-here. Outfit is the closest free equivalent — same wide geometric bones. If the
-real face is ever licensed, change the name in two places in
-`src/web/layout.js` and the whole site follows.
+**Caprasimo ships at weight 400 only.** Applying a bold class to a heading makes
+the browser synthesise a fake bold, which on a display face looks smeared. The
+layout forces `font-weight: 400` on `h1`–`h4` so that can't happen by accident.
 
-Buttons are pills, headings are large and tightly tracked, section labels are
-small bold uppercase with wide letter-spacing. All of that is lifted from
-Telnyx's system.
+**Teal on cream only clears 3:1 contrast.** That is fine for large text, icons
+and chrome, and not fine for paragraph copy — the handoff says so explicitly.
+Accent-coloured body text uses `brand-700` or darker throughout.
 
-**Brand colour is the locker teal (#178a94).** Taken from the photo of the
-physical LYNDRY locker so the website and the hardware match. The whole palette
-is lighter and darker versions of that one colour. The wordmark in the header is
-white on teal, the same as the locker.
+**The palette lives in `src/web/layout.js` under the same colour names as
+before.** Keeping the names (`brand`, `paper`, `ink`) meant the whole site
+re-skinned by changing values in one file rather than editing nine HTML files.
 
-**The home page is built around "text us to get started"**, matching the sign
-mounted beside the locker: a large phone number, a QR code that opens the
-customer's messaging app with the number filled in, the three steps, then the
-services list.
+**The home page is the handoff's layout A** — eyebrow pill, an 82px headline, a
+phone field, and an iPhone showing a real LYNDRY message thread. Layout B and
+the A/B toggle in the prototype were not built; the handoff says to ship A.
+
+**The phone mock is laid out at real iPhone size (402 × 874) and scaled to
+0.73** as one piece, exactly as the handoff specifies. Building it small instead
+would mean shrinking every font, radius and bubble by hand and getting them
+wrong. It is static — the handoff records that animation was added, reviewed and
+removed on purpose.
+
+### Where this build departs from the handoff, and why
+
+**The hero phone field goes to `/signup`, it does not text immediately.** The
+handoff's product decision is "enter a number, we text you first". We cannot do
+that: the unticked consent box on the signup page is our legal proof of opt-in,
+and texting someone before we have it is the thing carriers deregister you for.
+The number typed in the hero is carried across and prefilled, so nobody types it
+twice.
+
+**The invented customer testimonial is not on the site.** The handoff's own
+notes list "Dani R. — customer since March" under placeholder content that is
+not real business data. A made-up customer quote on a live site is not something
+to ship. The panel keeps its shape and sage colour and says something true
+instead.
+
+**Handoff content that is factually wrong for LYNDRY was dropped, not
+reproduced:** lockers, dry cleaning, standing orders, rush service, $2.25/lb,
+20 lb minimums, free delivery over $40, card-on-file, and the fake number
+(555) 018-2240. The handoff flags all of it as placeholder written to make the
+design reviewable.
+
+**Three of the handoff's seven pages were not built** — Business accounts, FAQ
+and About. Business accounts exists to quote a volume rate we have not set;
+About needs a photograph we do not have. The FAQ content is folded into the
+How it works and Pricing pages instead. Say the word and any of them can be
+added.
+
+**Pricing shows one plan, not three.** We sell one service at one price.
+Inventing two more tiers to fill a three-card layout would be inventing business
+decisions, so the three cards became: the price, what's in it, what isn't.
+
+**The QR code is still generated but no longer placed on the home page.** The
+handoff's home page has no QR block. `textUsQrSvg()` in `src/web/site.js` is
+unchanged and `{{QR_SVG}}` still resolves, so it can be dropped onto any page.
 
 **The published phone number is (201) 554-1877** — the LYNDRY Telnyx number,
 bought 2026-08-07. (It replaced an earlier Twilio number that was briefly on the

@@ -1,9 +1,17 @@
-<!-- Signup. Wrapped in the shared layout by src/web/layout.js.
-     Handled by POST /signup in src/routes/web.js. -->
+<!-- Signup. Built to the LYNDRY design handoff. Handled by POST /signup in
+     src/routes/web.js.
 
-<section class="reveal mx-auto max-w-2xl px-5 pb-4 pt-20">
-  <h1 class="text-4xl font-semibold tracking-tight text-ink sm:text-5xl">Get started</h1>
-  <p class="mt-6 text-lg leading-relaxed text-ink/70">
+     The handoff's signup page is a single phone field — the business texts you
+     first and collects everything else over SMS. Ours asks for the address and
+     preferences here instead, on purpose: it is the one place we can capture
+     written consent to text someone, and consent has to come before the first
+     message, not after it. Same panel, same pills, more fields. -->
+
+<section class="reveal mx-auto max-w-[720px] px-5 pb-4 pt-20 sm:px-8">
+  <h1 class="text-[42px] leading-[0.98] tracking-[-0.02em] text-ink sm:text-[62px]">
+    Start with a number.
+  </h1>
+  <p class="mt-6 text-[19px] leading-[1.55] text-neutral-800">
     Two minutes, once. After this, booking a pickup is a single text message —
     we'll already know where you live and how you like your laundry done.
   </p>
@@ -11,96 +19,96 @@
 
 {{FORM_ERROR}}
 
-<section class="reveal mx-auto max-w-2xl px-5 py-8">
-  <form method="post" action="/signup" class="space-y-12" novalidate="false">
+<section class="reveal mx-auto max-w-[720px] px-5 pb-24 pt-8 sm:px-8">
+  <form method="post" action="/signup" class="space-y-[22px]">
 
     <!-- ------------------------------------------------------------------ -->
-    <fieldset>
-      <legend class="text-lg font-semibold text-ink">About you</legend>
-      <p class="mt-1 text-sm text-ink/55">So we know who's texting and where to go.</p>
+    <fieldset class="rounded-2xl bg-paperdark p-7 sm:p-9">
+      <legend class="float-left w-full font-display text-[26px] text-ink">About you</legend>
+      <p class="clear-both pt-1 text-[16px] text-neutral-700">So we know who's texting, and where to go.</p>
 
-      <div class="mt-6 space-y-5">
+      <div class="mt-7 space-y-5">
         <div>
-          <label for="name" class="block text-sm font-medium text-ink/80">Full name</label>
+          <label for="name" class="block text-[15px] font-bold text-ink">Full name</label>
           <input type="text" id="name" name="name" required autocomplete="name" value="{{V_NAME}}"
-                 class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                 class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
         </div>
 
         <div>
-          <label for="phone" class="block text-sm font-medium text-ink/80">Mobile number</label>
+          <label for="phone" class="block text-[15px] font-bold text-ink">Mobile number</label>
           <input type="tel" id="phone" name="phone" required autocomplete="tel"
                  placeholder="(201) 555-0142" value="{{V_PHONE}}"
-                 class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
-          <p class="mt-2 text-sm text-ink/55">
+                 class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors placeholder:text-neutral-600 focus:border-brand-500">
+          <p class="mt-2 text-[15px] text-neutral-700">
             This is how you'll book pickups. It has to be a mobile number that can receive texts.
           </p>
         </div>
 
         <div>
-          <label for="email" class="block text-sm font-medium text-ink/80">Email</label>
+          <label for="email" class="block text-[15px] font-bold text-ink">Email</label>
           <input type="email" id="email" name="email" required autocomplete="email" value="{{V_EMAIL}}"
-                 class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
-          <p class="mt-2 text-sm text-ink/55">Used for receipts and account matters, not marketing.</p>
+                 class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
+          <p class="mt-2 text-[15px] text-neutral-700">Used for receipts and account matters, not marketing.</p>
         </div>
       </div>
     </fieldset>
 
     <!-- ------------------------------------------------------------------ -->
-    <fieldset>
-      <legend class="text-lg font-semibold text-ink">Pickup address</legend>
-      <p class="mt-1 text-sm text-ink/55">
+    <fieldset class="rounded-2xl bg-paperdark p-7 sm:p-9">
+      <legend class="float-left w-full font-display text-[26px] text-ink">Pickup address</legend>
+      <p class="clear-both pt-1 text-[16px] leading-[1.5] text-neutral-700">
         We currently serve {{SERVICE_AREA}}. Sign up anyway if you're just
         outside — we'll let you know when we reach you.
       </p>
 
-      <div class="mt-6 space-y-5">
+      <div class="mt-7 space-y-5">
         <div>
-          <label for="address_line1" class="block text-sm font-medium text-ink/80">Street address</label>
+          <label for="address_line1" class="block text-[15px] font-bold text-ink">Street address</label>
           <input type="text" id="address_line1" name="address_line1" required autocomplete="address-line1" value="{{V_ADDRESS1}}"
-                 class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                 class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
         </div>
 
         <div>
-          <label for="address_line2" class="block text-sm font-medium text-ink/80">
-            Apartment, unit, floor <span class="font-normal text-slate-400">(optional)</span>
+          <label for="address_line2" class="block text-[15px] font-bold text-ink">
+            Apartment, unit, floor <span class="font-normal text-neutral-600">(optional)</span>
           </label>
           <input type="text" id="address_line2" name="address_line2" autocomplete="address-line2" value="{{V_ADDRESS2}}"
-                 class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                 class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
         </div>
 
         <div class="grid gap-5 sm:grid-cols-6">
           <div class="sm:col-span-3">
-            <label for="city" class="block text-sm font-medium text-ink/80">City</label>
+            <label for="city" class="block text-[15px] font-bold text-ink">City</label>
             <input type="text" id="city" name="city" required autocomplete="address-level2" value="{{V_CITY}}"
-                   class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                   class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
           </div>
           <div class="sm:col-span-1">
-            <label for="state" class="block text-sm font-medium text-ink/80">State</label>
+            <label for="state" class="block text-[15px] font-bold text-ink">State</label>
             <input type="text" id="state" name="state" required maxlength="2" autocomplete="address-level1" value="{{V_STATE}}"
-                   class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 uppercase text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                   class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-4 py-3.5 text-center text-[17px] uppercase text-ink outline-none transition-colors focus:border-brand-500">
           </div>
           <div class="sm:col-span-2">
-            <label for="postal_code" class="block text-sm font-medium text-ink/80">ZIP code</label>
+            <label for="postal_code" class="block text-[15px] font-bold text-ink">ZIP code</label>
             <input type="text" id="postal_code" name="postal_code" required inputmode="numeric" autocomplete="postal-code" value="{{V_ZIP}}"
-                   class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                   class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-5 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
           </div>
         </div>
       </div>
     </fieldset>
 
     <!-- ------------------------------------------------------------------ -->
-    <fieldset>
-      <legend class="text-lg font-semibold text-ink">How you like it washed</legend>
-      <p class="mt-1 text-sm text-ink/55">
+    <fieldset class="rounded-2xl bg-paperdark p-7 sm:p-9">
+      <legend class="float-left w-full font-display text-[26px] text-ink">How you like it washed</legend>
+      <p class="clear-both pt-1 text-[16px] text-neutral-700">
         We ask this once. You'll never get a text asking about detergent.
       </p>
 
-      <div class="mt-6 space-y-5">
+      <div class="mt-7 space-y-6">
         <div class="grid gap-5 sm:grid-cols-2">
           <div>
-            <label for="water_temp" class="block text-sm font-medium text-ink/80">Water temperature</label>
+            <label for="water_temp" class="block text-[15px] font-bold text-ink">Water temperature</label>
             <select id="water_temp" name="water_temp"
-                    class="mt-2 block w-full rounded-lg border border-ink/20 bg-white px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                    class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
               <option value="COLD">Cold</option>
               <option value="WARM">Warm</option>
               <option value="HOT">Hot</option>
@@ -108,9 +116,9 @@
           </div>
 
           <div>
-            <label for="detergent" class="block text-sm font-medium text-ink/80">Detergent</label>
+            <label for="detergent" class="block text-[15px] font-bold text-ink">Detergent</label>
             <select id="detergent" name="detergent"
-                    class="mt-2 block w-full rounded-lg border border-ink/20 bg-white px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">
+                    class="mt-2 block w-full rounded-full border-2 border-neutral-300 bg-neutral-100 px-6 py-3.5 text-[17px] text-ink outline-none transition-colors focus:border-brand-500">
               <option value="STANDARD">Standard</option>
               <option value="HYPOALLERGENIC">Hypoallergenic / fragrance free</option>
               <option value="CUSTOMER_PROVIDED">I'll send my own</option>
@@ -119,51 +127,51 @@
         </div>
 
         <div>
-          <span class="block text-sm font-medium text-ink/80">Fabric softener</span>
-          <div class="mt-3 flex gap-6">
-            <label class="flex items-center gap-2.5 text-ink/80">
+          <span class="block text-[15px] font-bold text-ink">Fabric softener</span>
+          <div class="mt-3 flex gap-7">
+            <label class="flex items-center gap-2.5 text-[17px] text-neutral-800">
               <input type="radio" name="fabric_softener" value="yes" checked
-                     class="h-4 w-4 border-ink/20 text-brand-800 focus:ring-brand-600">
+                     class="h-4 w-4 border-neutral-400 text-brand-600 focus:ring-brand-500">
               Yes please
             </label>
-            <label class="flex items-center gap-2.5 text-ink/80">
+            <label class="flex items-center gap-2.5 text-[17px] text-neutral-800">
               <input type="radio" name="fabric_softener" value="no"
-                     class="h-4 w-4 border-ink/20 text-brand-800 focus:ring-brand-600">
+                     class="h-4 w-4 border-neutral-400 text-brand-600 focus:ring-brand-500">
               No thanks
             </label>
           </div>
         </div>
 
         <div>
-          <span class="block text-sm font-medium text-ink/80">Usual pickup</span>
+          <span class="block text-[15px] font-bold text-ink">Usual pickup</span>
           <div class="mt-3 space-y-3">
-            <label class="flex items-start gap-2.5 text-ink/80">
+            <label class="flex items-start gap-3 text-neutral-800">
               <input type="radio" name="default_pickup_method" value="LEAVE_OUTSIDE" checked
-                     class="mt-1 h-4 w-4 border-ink/20 text-brand-800 focus:ring-brand-600">
+                     class="mt-1.5 h-4 w-4 border-neutral-400 text-brand-600 focus:ring-brand-500">
               <span>
-                <span class="font-medium text-ink">I'll leave the bag outside my door</span><br>
-                <span class="text-sm text-ink/55">You don't need to be home.</span>
+                <span class="text-[17px] font-bold text-ink">I'll leave the bag outside my door</span><br>
+                <span class="text-[15px] text-neutral-700">You don't need to be home.</span>
               </span>
             </label>
-            <label class="flex items-start gap-2.5 text-ink/80">
+            <label class="flex items-start gap-3 text-neutral-800">
               <input type="radio" name="default_pickup_method" value="HAND_TO_DRIVER"
-                     class="mt-1 h-4 w-4 border-ink/20 text-brand-800 focus:ring-brand-600">
+                     class="mt-1.5 h-4 w-4 border-neutral-400 text-brand-600 focus:ring-brand-500">
               <span>
-                <span class="font-medium text-ink">I'll hand it to the driver</span><br>
-                <span class="text-sm text-ink/55">We'll knock when we arrive.</span>
+                <span class="text-[17px] font-bold text-ink">I'll hand it to the driver</span><br>
+                <span class="text-[15px] text-neutral-700">We'll knock when we arrive.</span>
               </span>
             </label>
           </div>
-          <p class="mt-3 text-sm text-ink/55">You can change this for any individual pickup.</p>
+          <p class="mt-3 text-[15px] text-neutral-700">You can change this for any individual pickup.</p>
         </div>
 
         <div>
-          <label for="special_instructions" class="block text-sm font-medium text-ink/80">
-            Anything else we should know? <span class="font-normal text-slate-400">(optional)</span>
+          <label for="special_instructions" class="block text-[15px] font-bold text-ink">
+            Anything else we should know? <span class="font-normal text-neutral-600">(optional)</span>
           </label>
           <textarea id="special_instructions" name="special_instructions" rows="3"
                     placeholder="Gate code, where to leave the bag, items that need care&hellip;"
-                    class="mt-2 block w-full rounded-lg border border-ink/20 px-4 py-2.5 text-slate-900 shadow-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100">{{V_INSTRUCTIONS}}</textarea>
+                    class="mt-2 block w-full rounded-lg border-2 border-neutral-300 bg-neutral-100 px-5 py-3.5 text-[17px] text-ink outline-none transition-colors placeholder:text-neutral-600 focus:border-brand-500">{{V_INSTRUCTIONS}}</textarea>
         </div>
       </div>
     </fieldset>
@@ -171,37 +179,37 @@
     <!-- ------------------------------------------------------------------ -->
     <!-- SMS consent. Unchecked by default and required — this is our legal
          record that the customer agreed to be texted. Do not pre-check it. -->
-    <fieldset>
-      <legend class="text-lg font-semibold text-ink">Text messages</legend>
+    <fieldset class="rounded-2xl bg-brand-100 p-7 sm:p-9">
+      <legend class="float-left w-full font-display text-[26px] text-ink">Text messages</legend>
 
-      <div class="mt-5 rounded-xl border border-ink/10 bg-paperdark p-5">
-        <label class="flex items-start gap-3">
+      <div class="clear-both pt-5">
+        <label class="flex items-start gap-3.5">
           <input type="checkbox" id="sms_consent" name="sms_consent" value="yes" required
-                 class="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-brand-800 focus:ring-brand-600">
-          <span class="text-ink/80">
+                 class="mt-1.5 h-[18px] w-[18px] shrink-0 rounded border-neutral-400 text-brand-600 focus:ring-brand-500">
+          <span class="text-[17px] leading-[1.5] text-neutral-800">
             I agree to receive text messages from LYNDRY about my laundry orders.
             Message and data rates may apply. Message frequency varies. Reply STOP
             to opt out or HELP for help.
           </span>
         </label>
 
-        <p class="mt-4 text-sm leading-relaxed text-ink/55">
+        <p class="mt-5 text-[15px] leading-[1.6] text-neutral-700">
           We only text you about your own orders. We never send marketing texts,
           and we never sell or share your phone number with third parties.
-          See our <a href="/sms-terms" class="underline underline-offset-2 hover:text-brand-700">messaging terms</a>
-          and <a href="/privacy" class="underline underline-offset-2 hover:text-brand-700">privacy policy</a>.
+          See our <a href="/sms-terms" class="font-semibold text-brand-800 underline underline-offset-2">messaging terms</a>
+          and <a href="/privacy" class="font-semibold text-brand-800 underline underline-offset-2">privacy policy</a>.
         </p>
       </div>
     </fieldset>
 
-    <div>
+    <div class="pt-2">
       <button type="submit"
-              class="w-full rounded-full bg-brand-600 px-6 py-3.5 font-medium text-white transition-colors hover:bg-brand-700 sm:w-auto">
+              class="w-full rounded-full bg-brand-500 px-8 py-4 text-[17px] font-extrabold text-white transition-colors hover:bg-brand-600 sm:w-auto">
         Create my account
       </button>
-      <p class="mt-4 text-sm text-ink/55">
+      <p class="mt-5 text-[16px] leading-[1.6] text-neutral-700">
         No card required. By continuing you agree to our
-        <a href="/terms" class="underline underline-offset-2 hover:text-brand-700">terms of service</a>.
+        <a href="/terms" class="font-semibold text-brand-800 underline underline-offset-2">terms of service</a>.
       </p>
     </div>
 

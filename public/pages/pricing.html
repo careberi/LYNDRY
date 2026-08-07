@@ -1,109 +1,180 @@
-<!-- Pricing. Wrapped in the shared layout by src/web/layout.js. -->
+<!-- Pricing. Built to the LYNDRY design handoff.
 
-<section class="reveal mx-auto max-w-3xl px-5 pb-6 pt-20">
-  <h1 class="text-4xl font-semibold tracking-tight text-ink sm:text-5xl">Pricing</h1>
-  <p class="mt-6 text-lg leading-relaxed text-ink/70">
-    One service, one price. No subscription, no membership, no minimum order.
+     The handoff's pricing page has three plan cards — wash & fold, locker
+     drop, standing order. We have one service and one price, and inventing
+     two more tiers to fill a layout would be inventing business decisions.
+     So the three-card rhythm is kept; the second and third cards say what is
+     in the price and what isn't, instead of quoting plans we don't sell. -->
+
+<section class="reveal mx-auto max-w-[1180px] px-5 pb-14 pt-20 sm:px-8">
+  <h1 class="text-[46px] leading-[0.96] tracking-[-0.02em] text-ink sm:text-[72px]">Pricing</h1>
+  <p class="mt-6 max-w-[46ch] text-[21px] leading-[1.5] text-neutral-800">
+    Weighed after pickup, texted to you before you pay anything.
   </p>
 </section>
 
-<section class="reveal mx-auto max-w-3xl px-5 py-10">
-  <div class="rounded-2xl border border-ink/10 bg-paperdark p-8 sm:p-10">
-    <div class="flex flex-wrap items-baseline gap-3">
-      <span class="text-5xl font-semibold tracking-tight text-ink">{{PRICE_PER_LB}}</span>
-      <span class="text-lg text-ink/70">per pound</span>
-    </div>
-    <p class="mt-4 text-lg font-medium text-ink">Wash, dry &amp; fold</p>
-    <p class="mt-2 leading-relaxed text-ink/70">
-      You pay for what you send, nothing more. A typical bag holds
-      {{BAG_WEIGHT}} — about one washing machine, which works out around
-      {{ESTIMATE_RANGE}}. We can take up to {{MAX_ORDER}} in a single pickup.
-    </p>
-    <p class="mt-3 leading-relaxed text-ink/70">
-      Your laundry is weighed after we collect it, so the exact figure comes
-      after pickup, not before. We'll always tell you what it is before you pay.
-    </p>
+<!-- ===================================================================== -->
+<!-- The price, and what's on either side of it                             -->
+<!-- ===================================================================== -->
+<section class="reveal mx-auto grid max-w-[1180px] gap-[22px] px-5 pb-[88px] sm:px-8 lg:grid-cols-3">
 
-    <div class="mt-8 border-t border-ink/10 pt-8">
-      <p class="font-medium text-ink">Included in every order</p>
-      <ul class="mt-4 space-y-3 text-ink/70">
-        <li class="flex gap-3">
-          <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
-          <span>Pickup from your door, whenever you need it</span>
-        </li>
-        <li class="flex gap-3">
-          <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
-          <span>Washed to your saved preferences — temperature, detergent, softener</span>
-        </li>
-        <li class="flex gap-3">
-          <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
-          <span>Dried and folded</span>
-        </li>
-        <li class="flex gap-3">
-          <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
-          <span>Delivered back to your door within {{TURNAROUND}}, with a photo</span>
-        </li>
-        <li class="flex gap-3">
-          <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
-          <span>Free cancellation right up until your bag is collected</span>
-        </li>
-      </ul>
-    </div>
+  <!-- The emphasis card. Deep teal, white type — the one thing on the page
+       we want read first. -->
+  <div class="rounded-2xl bg-brand-800 p-10 text-white">
+    <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-300">One price</div>
+    <h2 class="mt-3.5 text-[30px] text-white">Wash &amp; fold</h2>
+    <div class="mt-5 text-[58px] leading-none text-white">{{PRICE_PER_LB}}</div>
+    <p class="mt-3 text-[17px] text-brand-200">per pound &middot; no minimum</p>
 
-    <a href="/signup" class="mt-9 inline-block rounded-full bg-brand-600 px-6 py-3 font-medium text-white transition-colors hover:bg-brand-700">
+    <ul class="mt-8 space-y-3.5 border-t border-white/20 pt-8 text-[17px] leading-[1.5]">
+      <li>Pickup and delivery from your door</li>
+      <li>{{TURNAROUND}} turnaround as standard</li>
+      <li>No subscription, no membership</li>
+    </ul>
+
+    <a href="/signup"
+       class="mt-9 inline-block rounded-full bg-white px-7 py-3.5 text-[16px] font-extrabold text-brand-800 transition-colors hover:bg-brand-100">
       Get started
     </a>
   </div>
+
+  <div class="rounded-2xl bg-paperdark p-10">
+    <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">In the price</div>
+    <h2 class="mb-6 mt-3.5 text-[30px] text-ink">Everything below</h2>
+    <ul class="space-y-4 text-[17px] leading-[1.5] text-neutral-800">
+      <li class="flex gap-3.5">
+        <span class="mt-[9px] h-2 w-2 shrink-0 rounded-full bg-brand-500"></span>
+        <span>Pickup from your door, whenever you need it — no fixed route days</span>
+      </li>
+      <li class="flex gap-3.5">
+        <span class="mt-[9px] h-2 w-2 shrink-0 rounded-full bg-brand-500"></span>
+        <span>Washed to your saved preferences: temperature, detergent, softener</span>
+      </li>
+      <li class="flex gap-3.5">
+        <span class="mt-[9px] h-2 w-2 shrink-0 rounded-full bg-brand-500"></span>
+        <span>Dried and folded</span>
+      </li>
+      <li class="flex gap-3.5">
+        <span class="mt-[9px] h-2 w-2 shrink-0 rounded-full bg-brand-500"></span>
+        <span>Delivered back within {{TURNAROUND}}, with a photo of where it was left</span>
+      </li>
+      <li class="flex gap-3.5">
+        <span class="mt-[9px] h-2 w-2 shrink-0 rounded-full bg-brand-500"></span>
+        <span>Free cancellation right up until your bag is collected</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="rounded-2xl bg-paperdark p-10">
+    <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Not in the price</div>
+    <h2 class="mb-6 mt-3.5 text-[30px] text-ink">Nothing</h2>
+    <p class="text-[17px] leading-[1.6] text-neutral-800">
+      There is no delivery fee, no rush fee, no minimum order, no membership
+      and no card on file. {{PRICE_PER_LB}} a pound is the entire price.
+    </p>
+    <p class="mt-4 text-[17px] leading-[1.6] text-neutral-800">
+      What we don't do yet: dry cleaning, pressing and alterations. Wash, dry
+      and fold is the whole service today.
+    </p>
+    <p class="mt-4 text-[17px] leading-[1.6] text-neutral-800">
+      We can take up to {{MAX_ORDER}} in a single pickup.
+    </p>
+  </div>
+
 </section>
 
-<section class="reveal mx-auto max-w-3xl px-5 py-12">
-  <h2 class="text-2xl font-semibold tracking-tight text-ink">Questions about the price</h2>
+{{MARQUEE}}
 
-  <dl class="mt-10 space-y-8">
+<!-- ===================================================================== -->
+<!-- What a bag costs                                                       -->
+<!-- ===================================================================== -->
+<section class="reveal mx-auto max-w-[1180px] px-5 py-[88px] sm:px-8">
+  <div class="grid gap-[22px] lg:grid-cols-2">
 
-    <div>
-      <dt class="font-semibold text-ink">Is there a subscription?</dt>
-      <dd class="mt-2 leading-relaxed text-ink/70">
-        No. You pay {{PRICE_PER_LB}} a pound when you use us, and nothing when you
-        don't. We may offer a membership later for people who send laundry every
-        week, but you will never be required to join one.
-      </dd>
+    <div class="rounded-2xl bg-brand-100 p-10 sm:p-11">
+      <h2 class="text-[34px] leading-[1.05] text-ink">What a bag costs</h2>
+      <p class="mt-5 text-[18px] leading-[1.6] text-neutral-800">
+        A typical bag holds {{BAG_WEIGHT}} — about one full washing machine —
+        which works out around {{ESTIMATE_RANGE}}.
+      </p>
+      <p class="mt-4 text-[18px] leading-[1.6] text-neutral-800">
+        Because wash and fold is priced by weight, nobody can tell you the
+        exact figure until the bag is on the scale. Anything quoted before
+        that is an estimate, and we'll say so. You get the real number by text
+        before you pay.
+      </p>
     </div>
 
-    <div>
-      <dt class="font-semibold text-ink">How do you know what I'll be charged?</dt>
-      <dd class="mt-2 leading-relaxed text-ink/70">
+    <div class="flex flex-col justify-between rounded-2xl bg-sage-200 p-10 sm:p-11">
+      <p class="font-display text-[26px] leading-[1.25] text-ink sm:text-[30px]">
+        You pay for what you send. Not for a plan you forgot you were on.
+      </p>
+      <div class="mt-7 text-[16px] font-bold text-sage-800">
+        No subscription, ever required.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- Questions about the price                                              -->
+<!-- ===================================================================== -->
+<section class="reveal mx-auto grid max-w-[1180px] gap-14 px-5 pb-[88px] sm:px-8 lg:grid-cols-[0.8fr_1.2fr]">
+
+  <div>
+    <h2 class="text-[40px] leading-[1.02] text-ink sm:text-[52px] lg:sticky lg:top-[100px]">
+      Questions<br>about the price
+    </h2>
+  </div>
+
+  <div>
+    <div class="border-t border-ink/[0.16] py-[26px]">
+      <p class="text-[21px] font-extrabold text-ink">Is there a subscription?</p>
+      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
+        No. You pay {{PRICE_PER_LB}} a pound when you use us and nothing when
+        you don't. We may offer a membership later for people who send laundry
+        every week, but you will never be required to join one.
+      </p>
+    </div>
+
+    <div class="border-t border-ink/[0.16] py-[26px]">
+      <p class="text-[21px] font-extrabold text-ink">How do I know what I'll be charged?</p>
+      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
         We weigh your laundry after collecting it and multiply by
-        {{PRICE_PER_LB}}. Because the weight isn't known until then, anything we
-        say beforehand is an estimate — a typical bag of {{BAG_WEIGHT}} works out
-        around {{ESTIMATE_RANGE}}. You'll always be told the exact figure before
+        {{PRICE_PER_LB}}. A typical {{BAG_WEIGHT}} bag works out around
+        {{ESTIMATE_RANGE}}. You always get the exact figure by text before
         paying anything.
-      </dd>
+      </p>
     </div>
 
-    <div>
-      <dt class="font-semibold text-ink">How do I pay?</dt>
-      <dd class="mt-2 leading-relaxed text-ink/70">
-        We'll arrange payment with you directly for now. There's no card
-        required to sign up and nothing stored on this website.
-      </dd>
+    <div class="border-t border-ink/[0.16] py-[26px]">
+      <p class="text-[21px] font-extrabold text-ink">How do I pay?</p>
+      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
+        We arrange it with you directly for now. There is no card required to
+        sign up and nothing stored on this website.
+      </p>
     </div>
 
-    <div>
-      <dt class="font-semibold text-ink">What isn't included?</dt>
-      <dd class="mt-2 leading-relaxed text-ink/70">
-        We currently offer wash, dry and fold only — no dry cleaning, pressing or
-        alterations. If something in your bag needs special handling, mention it
-        when you book and we'll take care of it.
-      </dd>
-    </div>
-
-    <div>
-      <dt class="font-semibold text-ink">Do you charge for pickup or delivery?</dt>
-      <dd class="mt-2 leading-relaxed text-ink/70">
+    <div class="border-t border-ink/[0.16] py-[26px]">
+      <p class="text-[21px] font-extrabold text-ink">Do you charge for pickup or delivery?</p>
+      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
         No. Both are included in the {{PRICE_PER_LB}} a pound.
-      </dd>
+      </p>
     </div>
 
-  </dl>
+    <div class="border-y border-ink/[0.16] py-[26px]">
+      <p class="text-[21px] font-extrabold text-ink">What if something needs special handling?</p>
+      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
+        Mention it when you book and we'll take care of it. If it's something
+        we can't do, we'll tell you before we collect — not after.
+      </p>
+    </div>
+
+    <a href="/signup"
+       class="mt-11 inline-block rounded-full bg-brand-500 px-8 py-4 text-[17px] font-extrabold text-white transition-colors hover:bg-brand-600">
+      Get started
+    </a>
+  </div>
+
 </section>

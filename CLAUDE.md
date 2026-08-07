@@ -88,26 +88,38 @@ placeholders and must never hardcode any of it. Changing the price is one line.
 plus the Tailwind colour palette. Page files in `public/pages/` contain only
 their own middle section.
 
-**The palette comes from the LYNDRY bags**, and there are four colours. Don't
-add a fifth.
+**The visual system is the LYNDRY design handoff** — the "Organic" system,
+retinted to the LYNDRY teal. Every value below comes from it. If you need a
+value the palette doesn't carry, that's a signal to ask, not to hard-code a hex.
 
 | Role | Class | Value |
 |---|---|---|
-| Primary — teal | `brand-600` | `#178a94` |
-| Clean background, lettering on colour | `paper` / `text-white` | `#ffffff` |
-| Supporting contrast — deep navy | `ink` | `#10314f` |
-| Secondary accent — light blue | `sky-*` | `#94d2f5` and friends |
+| Page ground — warm cream | `paper` | `#f5ead8` |
+| Card and panel fill | `paperdark` | `#ebddc5` |
+| Text | `ink` | `#201e1d` |
+| Brand teal | `brand-500` | `#17919b` (full 100–900 ramp) |
+| Second voice — sage | `sage-*` | used once, on the quote panel |
+| Secondary text | `neutral-700` / `-800` | a warm grey ramp, not slate |
 
-`ink` is navy, not black — all body text is navy. Secondary text is
-`text-ink/70`, never a grey scale. `paperdark` (`#eaf6f9`) is the light blue
-tint used to alternate sections.
+**Teal on cream only clears 3:1.** Fine for large text, icons and chrome; not
+for paragraph copy. Accent-coloured body text uses `brand-700` or darker. Never
+`text-brand-500` on a paragraph.
 
 **The names are deliberately unchanged from the previous scheme**, so the whole
 site re-skins by editing the values in `layout.js` rather than nine HTML files.
 
-**Typography:** headings in `Outfit`, body in `Inter`, both set once in the
-layout. Buttons are pills. Section labels are small, bold, uppercase, widely
-letter-spaced.
+**Typography:** headings in `Caprasimo`, body in `Figtree`, both set once in the
+layout. **Caprasimo ships at weight 400 only** — never put a bold class on a
+heading, or the browser fakes it and the display face looks smeared. The layout
+forces weight 400 on `h1`–`h4` to stop that happening by accident. A `<legend>`
+or other non-heading that should look like a heading needs `font-display`.
+
+**Everything is round.** Panels 16px (`rounded-lg`/`xl`), cards 28px
+(`rounded-2xl`), and every button and input is a full pill (`rounded-full`).
+Sharp corners are out.
+
+Section labels ("kickers") are 14px, weight 800, uppercase, `tracking-[0.08em]`,
+in `brand-700`. Content max-width is 1180px; section padding is `88px 32px`.
 
 **Motion.** Two things, both defined once in `layout.js`:
 

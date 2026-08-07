@@ -33,50 +33,48 @@ function fillTokens(html, extra = {}) {
   );
 }
 
-// The navigation bar sits on brand teal, so everything inside it is white or
-// near-white. A teal chip or navy link would disappear against it.
+// Sticky chrome on the cream ground, per the handoff: teal wordmark in Figtree
+// 900, ghost pill links that fill with the palest teal on hover, and one solid
+// pill for the action we actually want.
 function navBar(currentPath) {
   const links = NAV_LINKS.map(({ href, label }) => {
     const active = href === currentPath;
-    const classes = active
-      ? 'font-semibold text-white'
-      : 'text-white/80 transition-colors hover:text-white';
+    const base =
+      'rounded-full px-3.5 py-2 text-[15px] font-semibold transition-colors hover:bg-brand-100 hover:text-brand-800';
+    const classes = active ? `${base} bg-brand-100 text-brand-800` : `${base} text-neutral-800`;
     return `<a href="${href}" class="${classes}">${label}</a>`;
   }).join('\n            ');
 
   const mobileLinks = NAV_LINKS.map(
     ({ href, label }) =>
-      `<a href="${href}" class="block px-4 py-3 text-ink/80 hover:bg-paperdark">${label}</a>`
+      `<a href="${href}" class="block px-4 py-3 text-neutral-800 hover:bg-brand-100">${label}</a>`
   ).join('\n            ');
 
   return `
-    <header class="sticky top-0 z-40 border-b border-brand-700/40 bg-brand-600/95 backdrop-blur">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-        <!-- White on teal, the same treatment as the side of the locker. -->
-        <a href="/" class="text-xl font-bold uppercase tracking-tight text-white">
+    <header class="sticky top-0 z-40 border-b border-ink/[0.16] bg-paper/[0.92] backdrop-blur-[10px]">
+      <nav class="mx-auto flex max-w-[1180px] items-center gap-7 px-5 py-3.5 sm:px-8">
+        <!-- Set in the body face at its heaviest, tightly tracked — the handoff
+             does not use the display face for the wordmark. -->
+        <a href="/" class="text-[26px] font-black tracking-[-0.04em] text-brand-700">
           ${site.name}
         </a>
 
-        <div class="hidden items-center gap-8 text-sm sm:flex">
+        <div class="ml-auto hidden items-center gap-1.5 sm:flex">
             ${links}
-          <!-- Inverted: white button on the teal bar, so the one thing we want
-               people to click is the highest-contrast element up here. -->
           <a href="/signup"
-             class="rounded-full bg-white px-5 py-2 font-semibold text-brand-700 transition-colors hover:bg-sky-100">
+             class="ml-2.5 rounded-full bg-brand-500 px-5 py-2.5 text-[15px] font-extrabold text-white transition-colors hover:bg-brand-600">
             Get started
           </a>
         </div>
 
-        <!-- Mobile menu. Uses the browser's own show/hide, so no JavaScript.
-             The panel itself stays white with navy text — a teal dropdown on a
-             teal bar would have no edge. -->
-        <details class="relative sm:hidden">
-          <summary class="cursor-pointer list-none rounded-full border border-white/50 px-4 py-2 text-sm font-medium text-white">
+        <!-- Mobile menu. Uses the browser's own show/hide, so no JavaScript. -->
+        <details class="relative ml-auto sm:hidden">
+          <summary class="cursor-pointer list-none rounded-full border-2 border-brand-500 px-4 py-2 text-sm font-extrabold text-brand-800">
             Menu
           </summary>
-          <div class="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-ink/10 bg-white shadow-lg">
+          <div class="absolute right-0 mt-2 w-52 overflow-hidden rounded-2xl border border-ink/[0.16] bg-neutral-100 shadow-lg">
             ${mobileLinks}
-            <a href="/signup" class="block bg-brand-600 px-4 py-3 font-medium text-white">Get started</a>
+            <a href="/signup" class="block bg-brand-500 px-4 py-3 font-extrabold text-white">Get started</a>
           </div>
         </details>
       </nav>
@@ -95,68 +93,63 @@ function marqueeBand() {
       (word) =>
         `<span class="flex items-center gap-6 px-6">
            <span class="text-xl font-bold uppercase tracking-[0.2em] text-white sm:text-2xl">${word}</span>
-           <span class="h-2 w-2 shrink-0 rounded-full bg-sky-300" aria-hidden="true"></span>
+           <span class="h-2 w-2 shrink-0 rounded-full bg-brand-300" aria-hidden="true"></span>
          </span>`
     )
     .join('');
 
   return `
-    <div class="marquee bg-brand-600 py-4" aria-hidden="true">
+    <div class="marquee bg-brand-500 py-4" aria-hidden="true">
       <div class="marquee__track">${run}${run}</div>
     </div>`;
 }
 
+// Deep teal footer, per the handoff: brand-900 ground, brand-200 text.
 function footer() {
   const year = new Date().getFullYear();
 
+  const link = (href, label) =>
+    `<a href="${href}" class="text-[16px] text-brand-200 transition-colors hover:text-white">${label}</a>`;
+
   return `
-    <footer class="mt-24 border-t border-ink/10 bg-paperdark">
-      <div class="mx-auto max-w-6xl px-5 py-14">
-        <div class="grid gap-10 sm:grid-cols-3">
+    <footer class="bg-brand-900 text-brand-200">
+      <div class="mx-auto grid max-w-[1180px] gap-10 px-5 pb-11 pt-16 sm:grid-cols-[1.4fr_1fr_1fr] sm:px-8">
 
-          <div>
-            <div class="text-lg font-semibold tracking-tight text-ink">${site.name}</div>
-            <p class="mt-3 text-sm leading-relaxed text-ink/70">
-              Wash, dry and fold, picked up from your door and back within ${site.turnaround}.
-            </p>
-            <p class="mt-3 text-sm text-ink/70">Serving ${site.serviceArea}.</p>
-          </div>
-
-          <div>
-            <div class="text-sm font-semibold text-ink">Service</div>
-            <ul class="mt-3 space-y-2 text-sm text-ink/70">
-              <li><a href="/how-it-works" class="hover:text-brand-700">How it works</a></li>
-              <li><a href="/pricing" class="hover:text-brand-700">Pricing</a></li>
-              <li><a href="/signup" class="hover:text-brand-700">Sign up</a></li>
-              <li><a href="/contact" class="hover:text-brand-700">Contact</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <div class="text-sm font-semibold text-ink">Legal</div>
-            <ul class="mt-3 space-y-2 text-sm text-ink/70">
-              <li><a href="/privacy" class="hover:text-brand-700">Privacy policy</a></li>
-              <li><a href="/terms" class="hover:text-brand-700">Terms of service</a></li>
-              <li><a href="/sms-terms" class="hover:text-brand-700">Messaging terms</a></li>
-            </ul>
-          </div>
-
+        <div>
+          <div class="text-[30px] font-black tracking-[-0.04em] text-white">${site.name}</div>
+          <p class="mt-3.5 max-w-[30ch] text-[17px] leading-relaxed">
+            Laundry that runs on text messages. Picked up from your door,
+            back within ${site.turnaround}.
+          </p>
+          <p class="mt-3 text-[16px] text-brand-300">Serving ${site.serviceArea}.</p>
         </div>
 
-        <div class="mt-12 border-t border-ink/10 pt-6 text-sm text-ink/55">
-          <!-- Naming the operating company here is not decoration. During
-               carrier review for business texting, someone opens this page and
-               checks that the company on the registration appears on the site.
-               If it doesn't, the campaign is rejected. -->
-          <p>
-            ${site.name} is a service of ${site.legalName},
-            ${site.businessAddress}.
-          </p>
-          <p class="mt-2">&copy; ${year} ${site.legalName}. All rights reserved.</p>
-          <p class="mt-2">
-            We never sell or share your phone number with third parties for marketing.
-          </p>
+        <div class="flex flex-col items-start gap-2.5">
+          ${link('/how-it-works', 'How it works')}
+          ${link('/pricing', 'Pricing')}
+          ${link('/signup', 'Sign up')}
+          ${link('/contact', 'Contact')}
         </div>
+
+        <div class="flex flex-col items-start gap-2.5">
+          ${link('/privacy', 'Privacy policy')}
+          ${link('/terms', 'Terms of service')}
+          ${link('/sms-terms', 'Messaging terms')}
+          ${site.hasPublicPhone ? `<span class="text-[16px]">Text ${site.publicPhoneDisplay}</span>` : ''}
+        </div>
+
+      </div>
+
+      <div class="mx-auto max-w-[1180px] px-5 pb-10 text-[14px] text-brand-400 sm:px-8">
+        <!-- Naming the operating company here is not decoration. During carrier
+             review for business texting, someone opens this page and checks
+             that the company on the registration appears on the site. If it
+             doesn't, the campaign is rejected. -->
+        <p>${site.name} is a service of ${site.legalName}, ${site.businessAddress}.</p>
+        <p class="mt-2">
+          &copy; ${year} ${site.legalName}. Message and data rates may apply. Reply STOP to end.
+        </p>
+        <p class="mt-2">We never sell or share your phone number with third parties for marketing.</p>
       </div>
     </footer>`;
 }
@@ -184,14 +177,10 @@ function renderPage({ title, description, path, body, extra = {} }) {
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Two typefaces, following telnyx.com's pairing: a bold geometric face for
-       display, Inter for everything you actually read.
-
-       Telnyx uses PP Formula, which is a commercial licence. Outfit is the
-       closest free equivalent — same wide geometric bones. If the exact
-       Telnyx face is ever licensed, swap the name here and in the Tailwind
-       config below and the whole site follows. -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <!-- Caprasimo for headings, Figtree for everything you read. Both from the
+       LYNDRY design system handoff. Caprasimo ships at weight 400 only —
+       never apply a bold class to a heading, or the browser fakes it. -->
+  <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;800;900&display=swap" rel="stylesheet">
 
   <!-- Tailwind straight from a CDN, with the typography plugin for the long
        text on the legal pages. Nothing to build, nothing to compile. -->
@@ -201,61 +190,73 @@ function renderPage({ title, description, path, body, extra = {} }) {
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-            display: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            sans: ['Figtree', 'system-ui', 'sans-serif'],
+            display: ['Caprasimo', 'Figtree', 'system-ui', 'sans-serif'],
+          },
+
+          // The handoff's radii. Cards are 28px, panels 16px, controls pills.
+          borderRadius: {
+            md: '8px',
+            lg: '16px',
+            xl: '16px',
+            '2xl': '28px',
+            '3xl': '28px',
+          },
+
+          boxShadow: {
+            sm: '0 1px 2px rgba(46,43,37,.14)',
+            DEFAULT: '0 3px 10px rgba(46,43,37,.16)',
+            md: '0 3px 10px rgba(46,43,37,.16)',
+            lg: '0 12px 32px rgba(46,43,37,.22)',
           },
           colors: {
-            // The palette comes from the LYNDRY bags: teal, white, deep navy
-            // and a light blue that blends into the teal.
+            // Straight from the LYNDRY design system handoff. Warm cream
+            // ground, a deeper cream for panels, near-black ink for type.
             //
             // The names are kept from the earlier scheme on purpose — every
             // page already uses them, so the whole site re-skins by changing
             // the values here rather than editing nine HTML files.
-            paper: '#ffffff', // clean white, the default page
-            paperdark: '#eaf6f9', // light blue tint, for alternating sections
-            ink: '#10314f', // deep navy: all body text and dark panels
-            // Teal — the primary brand colour, from the lockers. brand-600 is
-            // the anchor; everything else is a lighter or darker version.
+            paper: '#f5ead8', // --color-bg
+            paperdark: '#ebddc5', // --color-surface
+            ink: '#201e1d', // --color-text
+            // Teal — the brand accent. The handoff's ramp, unchanged.
+            //
+            // Contrast note from the handoff: teal on cream only clears 3:1.
+            // Fine for large text, icons and chrome — NOT for paragraph copy.
+            // Use brand-700 or darker for any accent-coloured body text.
             brand: {
-              50:  '#effbfc',
-              100: '#d3f4f7',
-              200: '#a7e8ee',
-              300: '#6ed6e0',
-              400: '#33bccb',
-              500: '#189daf',
-              600: '#178a94',
-              700: '#16717a',
-              800: '#175c65',
-              900: '#174d55',
-              950: '#083339',
+              100: '#e8f7f8',
+              200: '#c9eaed',
+              300: '#9bd8dd',
+              400: '#5cbcc4',
+              500: '#17919b',
+              600: '#0f7a84',
+              700: '#0b606a',
+              800: '#08454c',
+              900: '#062e33',
             },
 
-            // Deep navy — the supporting contrast colour, taken from the
-            // lettering on the bags.
-            navy: {
-              50:  '#f2f6fa',
-              100: '#e2ebf3',
-              200: '#c0d5e8',
-              300: '#8fb4d5',
-              400: '#578dbd',
-              500: '#356fa3',
-              600: '#265888',
-              700: '#20476e',
-              800: '#1c3d5c',
-              900: '#10314f',
-              950: '#0a2038',
+            // Sage — the second voice, used for the quote panel.
+            sage: {
+              100: '#f0fae1',
+              200: '#e1eecc',
+              300: '#ccdbb2',
+              400: '#aebf92',
+              600: '#728157',
+              800: '#3d472b',
             },
 
-            // Light blue — the secondary accent, sitting between the teal and
-            // the navy so the two never clash.
-            sky: {
-              50:  '#f0f8fe',
-              100: '#ddeffc',
-              200: '#c3e4fa',
-              300: '#94d2f5',
-              400: '#5fb9ec',
-              500: '#399cdd',
-              600: '#247ec0',
+            // The warm neutral ramp the handoff uses for secondary text.
+            neutral: {
+              100: '#f9f4ed',
+              200: '#eee7db',
+              300: '#dcd3c4',
+              400: '#c0b6a5',
+              500: '#a19786',
+              600: '#82796a',
+              700: '#645c50',
+              800: '#474238',
+              900: '#2e2b25',
             },
           },
         },
@@ -264,14 +265,21 @@ function renderPage({ title, description, path, body, extra = {} }) {
   </script>
 
   <style>
-    /* Every heading uses the display face. Doing it here means pages don't
-       have to repeat a font class on every single heading. */
+    /* Headings are Caprasimo, which ships at weight 400 only. Forcing 400 here
+       stops the browser synthesising a fake bold if a weight class slips onto
+       a heading — faux-bold on a display face looks smeared. */
     h1, h2, h3, h4 {
-      font-family: 'Outfit', Inter, ui-sans-serif, system-ui, sans-serif;
-      letter-spacing: -0.025em;
+      font-family: 'Caprasimo', Figtree, system-ui, sans-serif;
+      font-weight: 400;
+      letter-spacing: -0.015em;
     }
     /* Long-form legal pages: keep the body text comfortable to read. */
-    .prose :where(p, li) { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    .prose :where(p, li) { font-family: Figtree, system-ui, sans-serif; }
+
+    /* The handoff replaces the browser's default focus ring everywhere. */
+    :focus { outline: none; }
+    :focus-visible { outline: 2px solid #17919b; outline-offset: 2px; }
+    ::selection { background: #c9eaed; }
 
     /* ---- The repeating band -------------------------------------------
        WASH · FOLD · DELIVER, the line printed on the bags, scrolling

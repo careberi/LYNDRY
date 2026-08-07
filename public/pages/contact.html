@@ -1,61 +1,70 @@
-<!-- Contact. Wrapped in the shared layout by src/web/layout.js. -->
+<!-- Contact. Built to the LYNDRY design handoff. Wrapped in the shared layout
+     by src/web/layout.js. -->
 
-<section class="reveal mx-auto max-w-3xl px-5 pb-6 pt-20">
-  <h1 class="text-4xl font-semibold tracking-tight text-ink sm:text-5xl">Contact</h1>
-  <p class="mt-6 text-lg leading-relaxed text-ink/70">
+<section class="reveal mx-auto max-w-[1180px] px-5 pb-14 pt-20 sm:px-8">
+  <h1 class="text-[46px] leading-[0.96] tracking-[-0.02em] text-ink sm:text-[72px]">Contact</h1>
+  <p class="mt-6 max-w-[46ch] text-[21px] leading-[1.5] text-neutral-800">
     A real person reads everything that comes in. We aim to reply the same day.
   </p>
 </section>
 
-<section class="reveal mx-auto max-w-3xl px-5 py-10">
-  <div class="grid gap-8 sm:grid-cols-2">
+<section class="reveal mx-auto max-w-[1180px] px-5 pb-[88px] sm:px-8">
+  <div class="grid gap-[22px] md:grid-cols-2">
 
-    <div class="rounded-2xl border border-ink/10 p-7">
-      <h2 class="font-semibold text-ink">Email</h2>
-      <p class="mt-3 leading-relaxed text-ink/70">
-        The best way to reach us about anything — an order, a question, or
-        getting LYNDRY into your building.
+    <div class="rounded-2xl bg-paperdark p-9 sm:p-11">
+      <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Email</div>
+      <h2 class="mb-4 mt-3.5 text-[30px] text-ink">Best for anything</h2>
+      <p class="text-[17px] leading-[1.55] text-neutral-800">
+        An order, a question, or getting LYNDRY into your building. Everything
+        reaches the same inbox.
       </p>
       <a href="mailto:{{EMAIL}}"
-         class="mt-4 inline-block font-medium text-brand-700 underline underline-offset-2 hover:text-brand-700">
+         class="mt-7 inline-block rounded-full border-2 border-brand-500 px-6 py-3 text-[16px] font-extrabold text-brand-800 transition-colors hover:bg-brand-200">
         {{EMAIL}}
       </a>
     </div>
 
-    <div class="rounded-2xl border border-ink/10 p-7">
-      <h2 class="font-semibold text-ink">Text message</h2>
-      <p class="mt-3 leading-relaxed text-ink/70">
-        Once you're signed up, texting is how you book, reschedule, cancel and
-        check on an order. {{CONTACT_SENTENCE}}
+    <div class="rounded-2xl bg-paperdark p-9 sm:p-11">
+      <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Text message</div>
+      <h2 class="mb-4 mt-3.5 text-[30px] text-ink">Best once you're set up</h2>
+      <p class="text-[17px] leading-[1.55] text-neutral-800">
+        Texting is how you book, reschedule, cancel and check on an order.
+        {{CONTACT_SENTENCE}}
       </p>
-      <div class="mt-4">{{PHONE_LINE}}</div>
+      <div class="mt-7 text-[17px] font-bold">{{PHONE_LINE}}</div>
     </div>
 
   </div>
-
-  <div class="mt-8 rounded-2xl border border-ink/10 p-7">
-    <h2 class="font-semibold text-ink">Business details</h2>
-    <p class="mt-3 leading-relaxed text-ink/70">
-      {{LEGAL_NAME}}<br>
-      {{BUSINESS_ADDRESS}}
-    </p>
-    <p class="mt-4 leading-relaxed text-ink/70">
-      Serving {{SERVICE_AREA}}.
-    </p>
-  </div>
 </section>
 
-<section class="reveal mx-auto max-w-3xl px-5 pb-16">
-  <div class="rounded-2xl bg-ink p-8 sm:p-10">
-    <h2 class="text-2xl font-semibold tracking-tight text-white">Manage a building?</h2>
-    <p class="mt-4 max-w-xl leading-relaxed text-brand-200">
-      We can offer LYNDRY to your residents as a building amenity — door-to-door
-      collection, no front-desk involvement, nothing for your staff to handle.
-      Email us and we'll walk you through it.
-    </p>
-    <a href="mailto:{{EMAIL}}"
-       class="mt-6 inline-block rounded-full bg-white px-6 py-3 font-medium text-ink transition-colors hover:bg-brand-50">
-      {{EMAIL}}
-    </a>
+{{MARQUEE}}
+
+<section class="reveal mx-auto max-w-[1180px] px-5 py-[88px] sm:px-8">
+  <div class="grid gap-[22px] lg:grid-cols-[1.15fr_0.85fr]">
+
+    <div class="rounded-2xl bg-brand-800 p-10 text-white sm:p-11">
+      <h2 class="text-[34px] leading-[1.05] text-white">Manage a building?</h2>
+      <p class="mt-5 max-w-[46ch] text-[18px] leading-[1.6] text-brand-200">
+        We can offer LYNDRY to your residents as a building amenity —
+        door-to-door collection, no front-desk involvement, nothing for your
+        staff to handle. Email us and we'll walk you through it.
+      </p>
+      <a href="mailto:{{EMAIL}}"
+         class="mt-8 inline-block rounded-full bg-white px-7 py-3.5 text-[16px] font-extrabold text-brand-800 transition-colors hover:bg-brand-100">
+        {{EMAIL}}
+      </a>
+    </div>
+
+    <div class="rounded-2xl bg-paperdark p-10 sm:p-11">
+      <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Business details</div>
+      <p class="mt-5 text-[17px] leading-[1.7] text-neutral-800">
+        {{LEGAL_NAME}}<br>
+        {{BUSINESS_ADDRESS}}
+      </p>
+      <p class="mt-5 text-[17px] leading-[1.7] text-neutral-800">
+        Serving {{SERVICE_AREA}}.
+      </p>
+    </div>
+
   </div>
 </section>

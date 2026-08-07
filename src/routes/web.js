@@ -128,10 +128,10 @@ function looksLikeEmail(value) {
 // Renders an error banner above the signup form.
 function errorBanner(message) {
   return `
-  <section class="mx-auto max-w-2xl px-5 pt-4">
-    <div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-5">
-      <p class="font-medium text-red-900">We couldn't create your account</p>
-      <p class="mt-1 text-red-800">${escapeHtml(message)}</p>
+  <section class="mx-auto max-w-[720px] px-5 pt-4 sm:px-8">
+    <div role="alert" class="rounded-2xl border-2 border-red-300 bg-red-50 p-6">
+      <p class="text-[17px] font-extrabold text-red-900">We couldn't create your account</p>
+      <p class="mt-1.5 text-[17px] leading-[1.5] text-red-800">${escapeHtml(message)}</p>
     </div>
   </section>`;
 }
@@ -169,9 +169,11 @@ function render(res, page, extra = {}, status = 200) {
 // ---------------------------------------------------------------------------
 
 // Values that only certain pages need.
-async function extraTokensFor(page) {
-  // The signup form needs empty values for its fields on a fresh visit.
-  if (page.path === '/signup') return signupTokens();
+async function extraTokensFor(page, req) {
+  // The home page's hero form hands the number over here, so someone who
+  // typed it there doesn't have to type it again. It is only ever prefilled —
+  // consent still has to be given on this page, with the unticked box.
+  if (page.path === '/signup') return signupTokens({ phone: req.query.phone });
 
   // The home page shows a QR code that opens the customer's messaging app.
   if (page.path === '/') return { QR_SVG: await textUsQrSvg() };
@@ -182,7 +184,7 @@ async function extraTokensFor(page) {
 for (const page of PAGES) {
   router.get(page.path, async (req, res, next) => {
     try {
-      render(res, page, await extraTokensFor(page));
+      render(res, page, await extraTokensFor(page, req));
     } catch (err) {
       next(err);
     }
