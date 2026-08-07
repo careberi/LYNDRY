@@ -1,0 +1,27 @@
+# Secrets — never commit these
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# Local scratch / uploads
+tmp/
+uploads/
+
+# Claude Code personal settings (machine-specific, not shared)
+.claude/settings.local.json
