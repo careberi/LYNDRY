@@ -95,6 +95,18 @@ async function post(webhook) {
 
 // --- Show what happened ----------------------------------------------------
 
+// Has the server finished with our message yet? It is recorded before any
+// reply is sent, so once the inbound row exists the work is under way.
+async function hasReplyTo(messageId) {
+  const { data } = await db
+    .from('messages')
+    .select('id')
+    .eq('provider_message_id', messageId)
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
 async function showConversation(phone) {
   const { data: customer } = await db
     .from('customers')
@@ -163,9 +175,14 @@ async function main() {
     console.log('  (the server should ignore it as a duplicate)');
   }
 
-  // Give the server a moment to do its work, since it answers the webhook
-  // before processing the message.
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  // The server answers the webhook immediately and does the real work
+  // afterwards, so wait for the reply to actually land before showing the
+  // conversation. Checking a few times beats one fixed pause — a cold start
+  // or a restart can otherwise make it look like nothing happened.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    if (await hasReplyTo(messageId)) break;
+  }
 
   await showConversation(from);
 }
