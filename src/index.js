@@ -45,6 +45,13 @@ app.get('/health', (req, res) => {
     version: pkg.version,
     env: config.env,
     model: config.anthropicModel,
+
+    // Which SMS driver is live. Just a name — no secret — and it turns
+    // "why did my text go nowhere" into something answerable from a browser
+    // instead of a log dive. 'telnyx' means real texting is on; 'disabled'
+    // means credentials are missing and every webhook is being refused.
+    sms: require('./providers/sms').name,
+
     uptimeSeconds: Math.round(process.uptime()),
   });
 });
