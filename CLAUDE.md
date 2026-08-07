@@ -1,0 +1,159 @@
+# CLAUDE.md — conventions for this codebase
+
+Read this before making changes. It exists so that work done in one session
+still makes sense in the next.
+
+## Who this is for
+
+Neil is not a developer. He owns the business and the decisions; the engineering
+is delegated. That has consequences for how code gets written here:
+
+- Explain in plain language before doing something, briefly
+- Define a term or tool once, in one sentence, the first time it appears
+- Anything Neil has to do outside the code (create an account, click something
+  in a dashboard, copy a key) gets **numbered instructions, then stop and wait**
+- Ask about business decisions; make technical calls yourself and say what you chose
+- Push back before building something that's a bad idea, not after
+- Boring and well documented beats clever
+
+## Build phases — do not build ahead
+
+Stop at the end of each phase and demonstrate it working.
+
+| Phase | Scope | Done |
+|---|---|---|
+| 1 | Express skeleton, health check, `.env.example`, `.gitignore`, README, first commit | ✅ |
+| 2 | Five tables in Supabase, seed script | |
+| 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | |
+| 4 | The brain: Claude tool-calling, seven actions, order state machine | |
+| 5 | Website, signup form, consent capture. Deploy early — the domain is needed for carrier registration | |
+| 6 | Ops endpoints, photo upload, status texts | |
+| 7 | Shelly lock integration, plus a fake lock driver | |
+
+## Explicitly not being built
+
+Don't add these; push back if asked too early.
+
+- Payment processing (flat rate, payment collected manually for now)
+- A customer app or account login
+- Multi-building routing or route optimisation
+- An admin dashboard
+- More than one deployment target
+- TypeScript, React, a bundler, Docker, or a job queue
+
+## Technical conventions
+
+**CommonJS (`require`), not ESM (`import`).** Chosen because it is the most
+documented Express combination on the internet, which matters when the person
+maintaining this is googling an error message.
+
+**Environment variables are read once, at boot, in `src/index.js`,** into a
+frozen `config` object. No other file reads `process.env` directly. This applies
+especially to the AI model: resolve it once at startup. Never try one model,
+catch an error and fall back to another per message — that was a bug in the
+previous version.
+
+**Vendors live behind adapters.** Nothing outside `src/providers/sms/` may know
+Telnyx exists; nothing outside `src/providers/locks/` may know Shelly exists.
+The adapters expose `sendMessage()` / `parseInbound()` and `unlock(lockerId, seconds)`.
+The point is being able to switch vendor in an afternoon.
+
+**Comments explain why, not what.** Assume the reader is smart but not a
+developer and has not seen this file before.
+
+## File structure
+
+```
+src/
+  index.js              boot, resolve model, start server
+  db.js
+  routes/     sms.js  ops.js  web.js
+  core/       brain.js  actions.js  orders.js  lockers.js  compliance.js
+  providers/  sms/index.js  sms/telnyx.js
+              locks/index.js  locks/shelly.js
+public/                 html, css, images
+scripts/                seed.js  simulate-sms.js
+```
+
+## The AI layer
+
+Claude's only job is to translate **one message into one structured action.** It
+holds no state, decides no prices, and never touches hardware.
+
+The seven tools:
+
+```
+create_order(service, pickup_date, pickup_method, notes)
+get_order_status()
+reschedule_order(new_date)
+cancel_order()
+open_locker()
+update_profile(field, value)
+handoff_to_human(reason)
+```
+
+Rules:
+
+- `open_locker()` **takes no arguments — never change this.** The backend works
+  out which compartment from the authenticated phone number's open order, and
+  refuses if there isn't one. Claude cannot name a locker, a building or a
+  customer, so no amount of clever texting gets someone into a locker that
+  isn't theirs.
+- Missing a required field? Ask for **that one field only**, then act.
+- A returning customer texting "laundry tomorrow" gets an order with zero
+  follow-up questions.
+- Never ask about detergent, temperature, folding or softener over SMS. Those
+  live in `preferences`, collected once on the website.
+- Uncertain, or the customer is upset? `handoff_to_human` rather than guessing.
+- Replies sound like a competent human at a small business. Short. No emoji.
+  Never "I'm an AI".
+
+## State machines — enforce these in code
+
+**Orders.** An order must not skip states.
+
+```
+REQUESTED -> ASSIGNED -> DEPOSITED -> IN_PROCESS -> OUT_FOR_DELIVERY -> DELIVERED
+```
+
+`ASSIGNED` and `DEPOSITED` are the locker path and are unused at launch.
+Residential orders go `REQUESTED -> IN_PROCESS` when the driver collects.
+
+`CANCELED` is reachable only before the laundry is in our hands — before
+`DEPOSITED` on the locker path, before collection on the residential path.
+
+**Lockers.** Unlocking is an *event*, not a state.
+
+```
+AVAILABLE -> ASSIGNED -> OCCUPIED -> AVAILABLE
+```
+
+Plus `OUT_OF_SERVICE`, set manually.
+
+## SMS rules
+
+- Verify the Telnyx webhook signature. Reject anything unsigned.
+- Check `provider_message_id` against the `messages` table and drop duplicates.
+  Carriers retry; this is what stops a text being acted on twice.
+- Return HTTP 200 **immediately**, then call Claude and reply asynchronously.
+- `STOP` / `UNSTOP` / `START` / `HELP` are handled in code, before Claude sees
+  them. These are legally required and must never depend on an AI reading them
+  correctly.
+- Unknown number → reply with a link to the signup page. Do not onboard over text.
+- Log every message, both directions.
+
+## Business facts
+
+- **Service:** wash, dry and fold only
+- **Price:** $39 per bag, flat
+- **Turnaround:** 24 hours
+- **Scheduling:** pickup whenever the customer needs — no fixed route days
+- **Model at launch:** residential home pickup. Lockers come later
+- **Cancellation:** free until the driver collects; not cancellable after
+- **Contact:** neil@lyndry.com · 201-701-0942
+- **Legal entity:** none yet. Legal pages are placeholders and need a lawyer
+
+## Git
+
+Local identity only for this repo (`neil perry` / `neil@careberi.com`). The
+global git config is deliberately left empty — do not write to it.
