@@ -77,6 +77,29 @@ function navBar(currentPath) {
     </header>`;
 }
 
+// The repeating band: the same line that's printed on the bags, scrolling.
+//
+// The list is rendered twice because the animation slides the track by
+// exactly half its width — with one copy the loop would jump.
+function marqueeBand() {
+  const words = ['Wash', 'Fold', 'Deliver'];
+  const run = Array.from({ length: 6 }, () => words)
+    .flat()
+    .map(
+      (word) =>
+        `<span class="flex items-center gap-6 px-6">
+           <span class="text-xl font-bold uppercase tracking-[0.2em] text-white sm:text-2xl">${word}</span>
+           <span class="h-2 w-2 shrink-0 rounded-full bg-sky-300" aria-hidden="true"></span>
+         </span>`
+    )
+    .join('');
+
+  return `
+    <div class="marquee bg-brand-600 py-4" aria-hidden="true">
+      <div class="marquee__track">${run}${run}</div>
+    </div>`;
+}
+
 function footer() {
   const year = new Date().getFullYear();
 
@@ -176,26 +199,57 @@ function renderPage({ title, description, path, body, extra = {} }) {
             display: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
           },
           colors: {
-            // The page itself: warm off-white with near-black type, taken
-            // from telnyx.com. Not pure white — the warmth is the point.
-            paper: '#fefdf5',
-            paperdark: '#eceadd',
-            ink: '#0a0a0a',
-            // Taken from the physical LYNDRY locker. brand-600 is the colour
-            // of the locker doors and the sign; everything else is a lighter
-            // or darker version of it, so the site and the hardware match.
+            // The palette comes from the LYNDRY bags: teal, white, deep navy
+            // and a light blue that blends into the teal.
+            //
+            // The names are kept from the earlier scheme on purpose — every
+            // page already uses them, so the whole site re-skins by changing
+            // the values here rather than editing nine HTML files.
+            paper: '#ffffff', // clean white, the default page
+            paperdark: '#eaf6f9', // light blue tint, for alternating sections
+            ink: '#10314f', // deep navy: all body text and dark panels
+            // Teal — the primary brand colour, from the lockers. brand-600 is
+            // the anchor; everything else is a lighter or darker version.
             brand: {
-              50:  '#f0fafb',
-              100: '#d5f2f4',
-              200: '#a9e4e9',
-              300: '#71cdd6',
-              400: '#39afbb',
-              500: '#1d939f',
+              50:  '#effbfc',
+              100: '#d3f4f7',
+              200: '#a7e8ee',
+              300: '#6ed6e0',
+              400: '#33bccb',
+              500: '#189daf',
               600: '#178a94',
-              700: '#15767f',
-              800: '#146068',
-              900: '#0f4249',
-              950: '#092c31',
+              700: '#16717a',
+              800: '#175c65',
+              900: '#174d55',
+              950: '#083339',
+            },
+
+            // Deep navy — the supporting contrast colour, taken from the
+            // lettering on the bags.
+            navy: {
+              50:  '#f2f6fa',
+              100: '#e2ebf3',
+              200: '#c0d5e8',
+              300: '#8fb4d5',
+              400: '#578dbd',
+              500: '#356fa3',
+              600: '#265888',
+              700: '#20476e',
+              800: '#1c3d5c',
+              900: '#10314f',
+              950: '#0a2038',
+            },
+
+            // Light blue — the secondary accent, sitting between the teal and
+            // the navy so the two never clash.
+            sky: {
+              50:  '#f0f8fe',
+              100: '#ddeffc',
+              200: '#c3e4fa',
+              300: '#94d2f5',
+              400: '#5fb9ec',
+              500: '#399cdd',
+              600: '#247ec0',
             },
           },
         },
@@ -212,6 +266,37 @@ function renderPage({ title, description, path, body, extra = {} }) {
     }
     /* Long-form legal pages: keep the body text comfortable to read. */
     .prose :where(p, li) { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+
+    /* ---- The repeating band -------------------------------------------
+       WASH · FOLD · DELIVER, the line printed on the bags, scrolling
+       forever. The track holds the same list twice and slides exactly half
+       its width, so the loop has no visible seam. */
+    .marquee { overflow: hidden; }
+    .marquee__track {
+      display: flex;
+      width: max-content;
+      animation: marquee 38s linear infinite;
+    }
+    .marquee:hover .marquee__track { animation-play-state: paused; }
+    @keyframes marquee { to { transform: translateX(-50%); } }
+
+    /* ---- Reveal on scroll ----------------------------------------------
+       Sections fade up as they come into view. The hiding is applied only
+       once JavaScript has confirmed it can un-hide them again — without
+       that, a failed script would leave a blank page. */
+    .js-anim .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+    .js-anim .reveal.is-visible { opacity: 1; transform: none; }
+
+    /* Anyone whose device asks for less motion gets none of it. */
+    @media (prefers-reduced-motion: reduce) {
+      .marquee__track { animation: none; }
+      .js-anim .reveal { opacity: 1; transform: none; transition: none; }
+      html { scroll-behavior: auto; }
+    }
   </style>
 </head>
 <body class="min-h-screen bg-paper font-sans text-ink antialiased">
@@ -220,10 +305,35 @@ ${navBar(path)}
 ${body}
 </main>
 ${footer()}
+
+<script>
+  // Reveal sections as they scroll into view.
+  //
+  // The hiding class goes on only now, from JavaScript, so a browser that
+  // never runs this — or a script that fails to load — shows the whole page
+  // normally instead of a blank one.
+  (function () {
+    if (!('IntersectionObserver' in window)) return;
+
+    document.documentElement.classList.add('js-anim');
+
+    var watcher = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('is-visible');
+        watcher.unobserve(entry.target); // reveal once, then stop watching
+      });
+    }, { rootMargin: '0px 0px -10% 0px' });
+
+    document.querySelectorAll('.reveal').forEach(function (el) { watcher.observe(el); });
+  })();
+</script>
 </body>
 </html>`;
 
-  return fillTokens(html, extra);
+  // MARQUEE is offered to every page so the repeating band can be dropped in
+  // wherever it suits, without a page having to know how it is built.
+  return fillTokens(html, { MARQUEE: marqueeBand(), ...extra });
 }
 
 module.exports = { renderPage, fillTokens };

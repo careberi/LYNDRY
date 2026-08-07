@@ -88,18 +88,41 @@ placeholders and must never hardcode any of it. Changing the price is one line.
 plus the Tailwind colour palette. Page files in `public/pages/` contain only
 their own middle section.
 
-**The visual system is telnyx.com's, with LYNDRY's own accent colour.**
+**The palette comes from the LYNDRY bags**, and there are four colours. Don't
+add a fifth.
 
-- Background `paper` (#fefdf5), a warm cream. Never plain white for a page.
-- Text `ink` (#0a0a0a). Secondary text is `text-ink/70`, not a grey scale.
-- Headings use `Outfit` (set once in the layout's `<style>`, so pages don't
-  repeat a font class). Body text is `Inter`.
-- Buttons are pills — `rounded-full`.
-- Section labels are small, bold, uppercase, widely letter-spaced.
+| Role | Class | Value |
+|---|---|---|
+| Primary — teal | `brand-600` | `#178a94` |
+| Clean background, lettering on colour | `paper` / `text-white` | `#ffffff` |
+| Supporting contrast — deep navy | `ink` | `#10314f` |
+| Secondary accent — light blue | `sky-*` | `#94d2f5` and friends |
 
-**Accent colour is `brand-600` (#178a94), taken from the physical locker.** It's
-the one colour on an otherwise black-and-cream page. Use it for buttons, icons
-and step markers; don't introduce a second accent.
+`ink` is navy, not black — all body text is navy. Secondary text is
+`text-ink/70`, never a grey scale. `paperdark` (`#eaf6f9`) is the light blue
+tint used to alternate sections.
+
+**The names are deliberately unchanged from the previous scheme**, so the whole
+site re-skins by editing the values in `layout.js` rather than nine HTML files.
+
+**Typography:** headings in `Outfit`, body in `Inter`, both set once in the
+layout. Buttons are pills. Section labels are small, bold, uppercase, widely
+letter-spaced.
+
+**Motion.** Two things, both defined once in `layout.js`:
+
+- `{{MARQUEE}}` — the repeating `Wash · Fold · Deliver` band, the line printed
+  on the bags. The list renders twice because the animation slides the track by
+  half its width; with one copy the loop jumps.
+- `class="reveal"` on a section fades it up as it scrolls into view.
+
+**The reveal must stay fail-safe.** The hiding CSS only applies under
+`.js-anim`, which JavaScript adds at runtime — so a browser that never runs the
+script shows the page normally instead of a blank one. Never move that hiding
+into plain CSS.
+
+**Everything is disabled under `prefers-reduced-motion`.** Anyone whose device
+asks for less motion gets none. Any new animation must honour it too.
 
 **In development, page HTML is re-read on every request** — edit a file in
 `public/pages/`, refresh the browser, done. In production it's cached.
