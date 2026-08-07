@@ -65,6 +65,26 @@ for testing, but worth replacing so a simulated order looks like a real one.
 
 ## Product decisions — confirmed by Neil
 
+**Lockers are shelved; apartments are served door-to-door.** The locker
+hardware isn't working, so none is being built. Apartments are now explicitly in
+scope and are handled exactly like houses: the customer puts their unit on
+`address_line2` and the driver comes to the door.
+
+What this changed, and what it deliberately didn't:
+
+- Every locker promise came off the website — the "coming soon" card, the
+  how-it-works paragraph, and the building-manager pitch on the contact page,
+  which now offers door-to-door collection as the amenity instead.
+- The `lockers` and `buildings` tables **stay**. Dropping them would be
+  destructive and irreversible, they hold no customer data, and they cost
+  nothing sitting empty.
+- `open_locker()` **stays**, still taking no arguments. It resolves the
+  caller's own order, finds no locker, and says so. Removing it would mean a
+  customer texting "open my locker" gets an unpredictable answer instead of a
+  clear one.
+- **Anything a customer can read must not mention a locker** until one exists.
+
+
 **Service area: Northern New Jersey, down to Jersey City.** This is a description,
 not a boundary. Before the signup form goes live it needs to become a concrete
 list of towns or ZIP codes, otherwise the form will accept customers who can't

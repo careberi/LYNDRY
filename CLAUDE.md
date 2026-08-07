@@ -25,10 +25,10 @@ Stop at the end of each phase and demonstrate it working.
 | 1 | Express skeleton, health check, `.env.example`, `.gitignore`, README, first commit | ✅ |
 | 2 | Five tables in Supabase, seed script | ✅ |
 | 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | ✅ |
-| 4 | The brain: Claude tool-calling, seven actions, order state machine | |
+| 4 | The brain: Claude tool-calling, seven actions, order state machine | ✅ |
 | 5 | Website, signup form, consent capture | ✅ live at lyndry.com |
 | 6 | Ops endpoints, photo upload, status texts | |
-| 7 | Shelly lock integration, plus a fake lock driver | |
+| 7 | Shelly lock integration, plus a fake lock driver | ⏸ shelved — see below |
 
 ## Explicitly not being built
 
@@ -198,7 +198,13 @@ Plus `OUT_OF_SERVICE`, set manually.
 - **Price:** $39 per bag, flat
 - **Turnaround:** 24 hours
 - **Scheduling:** pickup whenever the customer needs — no fixed route days
-- **Model at launch:** residential home pickup. Lockers come later
+- **Model:** door-to-door pickup, for **houses and apartments alike**. An
+  apartment customer puts their unit on `address_line2` and the driver comes to
+  the door — nothing else differs
+- **Lockers are shelved.** The hardware isn't working, so no locker is being
+  built. The `lockers` and `buildings` tables stay (dropping them would be
+  destructive and they cost nothing), `open_locker()` stays and refuses
+  politely, and nothing on the website promises a locker
 - **Service area:** Northern New Jersey, down to Jersey City
 - **Cancellation:** free until the driver collects; not cancellable after
 - **Public contact:** neil@lyndry.com · (201) 554-1877 (the LYNDRY Telnyx
