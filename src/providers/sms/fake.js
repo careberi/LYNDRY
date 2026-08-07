@@ -33,6 +33,24 @@ function parseInbound(body) {
   };
 }
 
+// Same shape as the real one, so delivery-receipt handling can be tested
+// without waiting for a carrier.
+function parseDeliveryReceipt(body) {
+  const event = body && body.data;
+  if (!event) return null;
+  if (!['message.sent', 'message.finalized'].includes(event.event_type)) return null;
+
+  const payload = event.payload || {};
+  const recipient = Array.isArray(payload.to) ? payload.to[0] : null;
+  const errors = [...(payload.errors || []), ...((recipient && recipient.errors) || [])];
+
+  return {
+    providerMessageId: payload.id,
+    status: (recipient && recipient.status) || null,
+    error: errors.map((e) => [e.code, e.title, e.detail].filter(Boolean).join(' — ')).join('; ') || null,
+  };
+}
+
 async function sendMessage({ to, text }) {
   counter += 1;
 
@@ -51,5 +69,6 @@ module.exports = {
   name: 'fake',
   verifySignature,
   parseInbound,
+  parseDeliveryReceipt,
   sendMessage,
 };

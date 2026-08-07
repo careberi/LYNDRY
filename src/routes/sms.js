@@ -50,6 +50,34 @@ async function recordInbound({ providerMessageId, text, from }, customerId) {
 // status texts and these replies are recorded identically.
 const reply = require('../core/notify').sendAndLog;
 
+// Writes the carrier's verdict onto the message we sent.
+//
+// A failure here is the single most useful line in the logs when someone says
+// they never got a text, so it is shouted rather than whispered.
+async function recordDelivery({ providerMessageId, status, error }) {
+  const failed = status && /fail|undeliver|reject|expired/i.test(status);
+
+  if (failed || error) {
+    console.error('');
+    console.error(`  MESSAGE NOT DELIVERED  (${providerMessageId})`);
+    console.error(`    carrier status: ${status || 'unknown'}`);
+    if (error) console.error(`    carrier said  : ${error}`);
+    console.error('');
+  } else {
+    console.log(`Delivery receipt: ${providerMessageId} -> ${status}`);
+  }
+
+  const changes = { delivery_status: status || null, delivery_error: error || null };
+  if (status === 'delivered') changes.delivered_at = new Date().toISOString();
+
+  const { error: dbError } = await db
+    .from('messages')
+    .update(changes)
+    .eq('provider_message_id', providerMessageId);
+
+  if (dbError) throw dbError;
+}
+
 // ---------------------------------------------------------------------------
 // Deciding what to say back
 // ---------------------------------------------------------------------------
@@ -208,8 +236,19 @@ router.post('/sms', (req, res) => {
     return res.sendStatus(403);
   }
 
-  // 2. Is this an actual inbound message? Delivery receipts and other events
-  //    arrive at the same URL and are ignored.
+  // 2. A delivery receipt tells us what the receiving carrier did with a
+  //    message we sent. This is the only place a blocked or filtered message
+  //    announces itself — the send looked fine at the time.
+  const receipt = sms.parseDeliveryReceipt(req.body);
+  if (receipt && receipt.providerMessageId) {
+    res.sendStatus(200);
+    recordDelivery(receipt).catch((err) =>
+      console.error('Failed to record a delivery receipt:', err.message)
+    );
+    return;
+  }
+
+  // 3. Is this an actual inbound message? Anything else is ignored.
   const inbound = sms.parseInbound(req.body);
   if (!inbound || !inbound.from || !inbound.providerMessageId) {
     return res.sendStatus(200);

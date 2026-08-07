@@ -92,6 +92,37 @@ function parseInbound(body) {
 }
 
 // ---------------------------------------------------------------------------
+// Reading a delivery receipt
+//
+// Telnyx accepting a message only means it was queued. What the receiving
+// carrier did with it arrives later, as a separate webhook to the same URL.
+// This is where blocked or filtered traffic actually shows up — an accepted
+// message that never reaches a phone looks fine until you read one of these.
+// ---------------------------------------------------------------------------
+
+function parseDeliveryReceipt(body) {
+  const event = body && body.data;
+  if (!event) return null;
+  if (!['message.sent', 'message.finalized'].includes(event.event_type)) return null;
+
+  const payload = event.payload || {};
+  const recipient = Array.isArray(payload.to) ? payload.to[0] : null;
+
+  // Errors can arrive at either level depending on where the failure happened.
+  const errors = [...(payload.errors || []), ...((recipient && recipient.errors) || [])];
+
+  const reason = errors
+    .map((e) => [e.code, e.title, e.detail].filter(Boolean).join(' — '))
+    .join('; ');
+
+  return {
+    providerMessageId: payload.id,
+    status: (recipient && recipient.status) || null,
+    error: reason || null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Sending
 // ---------------------------------------------------------------------------
 
@@ -128,5 +159,6 @@ module.exports = {
   name: 'telnyx',
   verifySignature,
   parseInbound,
+  parseDeliveryReceipt,
   sendMessage,
 };

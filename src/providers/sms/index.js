@@ -26,6 +26,7 @@ const disabled = {
   name: 'disabled',
   verifySignature: () => false,
   parseInbound: () => null,
+  parseDeliveryReceipt: () => null,
   sendMessage: async () => {
     throw new Error('SMS is not configured: TELNYX_API_KEY and TELNYX_PUBLIC_KEY are missing.');
   },
@@ -55,5 +56,6 @@ module.exports = {
   isFake: driver.name === 'fake',
   verifySignature: driver.verifySignature,
   parseInbound: driver.parseInbound,
+  parseDeliveryReceipt: driver.parseDeliveryReceipt || (() => null),
   sendMessage: driver.sendMessage,
 };
