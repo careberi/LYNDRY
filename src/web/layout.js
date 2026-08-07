@@ -33,12 +33,14 @@ function fillTokens(html, extra = {}) {
   );
 }
 
+// The navigation bar sits on brand teal, so everything inside it is white or
+// near-white. A teal chip or navy link would disappear against it.
 function navBar(currentPath) {
   const links = NAV_LINKS.map(({ href, label }) => {
     const active = href === currentPath;
     const classes = active
-      ? 'text-ink font-medium'
-      : 'text-ink/70 hover:text-brand-700 transition-colors';
+      ? 'font-semibold text-white'
+      : 'text-white/80 transition-colors hover:text-white';
     return `<a href="${href}" class="${classes}">${label}</a>`;
   }).join('\n            ');
 
@@ -48,24 +50,28 @@ function navBar(currentPath) {
   ).join('\n            ');
 
   return `
-    <header class="sticky top-0 z-40 border-b border-ink/10 bg-paper/90 backdrop-blur">
+    <header class="sticky top-0 z-40 border-b border-brand-700/40 bg-brand-600/95 backdrop-blur">
       <nav class="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-        <!-- The wordmark matches the locker: white LYNDRY on brand teal. -->
-        <a href="/" class="rounded-md bg-brand-600 px-2.5 py-1.5 text-lg font-bold uppercase tracking-tight text-white">
+        <!-- White on teal, the same treatment as the side of the locker. -->
+        <a href="/" class="text-xl font-bold uppercase tracking-tight text-white">
           ${site.name}
         </a>
 
         <div class="hidden items-center gap-8 text-sm sm:flex">
             ${links}
+          <!-- Inverted: white button on the teal bar, so the one thing we want
+               people to click is the highest-contrast element up here. -->
           <a href="/signup"
-             class="rounded-lg bg-brand-600 px-4 py-2 font-medium text-white transition-colors hover:bg-brand-700">
+             class="rounded-full bg-white px-5 py-2 font-semibold text-brand-700 transition-colors hover:bg-sky-100">
             Get started
           </a>
         </div>
 
-        <!-- Mobile menu. Uses the browser's own show/hide, so no JavaScript. -->
+        <!-- Mobile menu. Uses the browser's own show/hide, so no JavaScript.
+             The panel itself stays white with navy text — a teal dropdown on a
+             teal bar would have no edge. -->
         <details class="relative sm:hidden">
-          <summary class="cursor-pointer list-none rounded-lg border border-ink/20 px-3 py-2 text-sm text-ink/80">
+          <summary class="cursor-pointer list-none rounded-full border border-white/50 px-4 py-2 text-sm font-medium text-white">
             Menu
           </summary>
           <div class="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-ink/10 bg-white shadow-lg">
