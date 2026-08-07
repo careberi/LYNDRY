@@ -115,7 +115,15 @@ function footer() {
         </div>
 
         <div class="mt-12 border-t border-ink/10 pt-6 text-sm text-ink/55">
-          <p>&copy; ${year} ${site.legalName}. All rights reserved.</p>
+          <!-- Naming the operating company here is not decoration. During
+               carrier review for business texting, someone opens this page and
+               checks that the company on the registration appears on the site.
+               If it doesn't, the campaign is rejected. -->
+          <p>
+            ${site.name} is a service of ${site.legalName},
+            ${site.businessAddress}.
+          </p>
+          <p class="mt-2">&copy; ${year} ${site.legalName}. All rights reserved.</p>
           <p class="mt-2">
             We never sell or share your phone number with third parties for marketing.
           </p>

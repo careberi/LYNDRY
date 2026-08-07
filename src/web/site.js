@@ -10,15 +10,15 @@
 
 const { config } = require('../config');
 
-// TODO: replace with the exact legal name of the LLC once Neil confirms it,
-// as it appears on the paperwork. Carriers compare the name registered for
-// business texting against what is written on this website, so these have to
-// match. Until then the site says LYNDRY, which is truthful.
-const LEGAL_NAME = 'LYNDRY';
-
-// TODO: replace with the LLC's real business address. This is published on
-// the contact page and is also submitted during carrier registration.
-const BUSINESS_ADDRESS = 'Jersey City, New Jersey';
+// The legal entity behind LYNDRY, exactly as registered for business texting.
+//
+// These two MUST match what was submitted to the carriers. During campaign
+// review a person opens this website and checks that the company named in the
+// registration actually appears on it. A mismatch is a rejection.
+//
+// LYNDRY is the trading name; napiii LLC is the company.
+const LEGAL_NAME = 'napiii LLC';
+const BUSINESS_ADDRESS = '8 The Green, Dover, DE 19901';
 
 // The public LYNDRY texting number — the one customers text to place an order.
 //
