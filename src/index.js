@@ -8,6 +8,7 @@ const { config, warnAboutMissingEnvVars } = require('./config');
 
 const web = require('./routes/web');
 const sms = require('./routes/sms');
+const db = require('./db');
 
 // ---------------------------------------------------------------------------
 // The server
@@ -67,6 +68,27 @@ app.use((err, req, res, next) => {
 // Boot
 // ---------------------------------------------------------------------------
 
+// Actually talk to the database once, at startup.
+//
+// Having SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set is not the same as
+// them being correct. A truncated key or a wrong URL lets the server start
+// perfectly happily and then fails on the first customer who tries to sign up.
+// This turns that into an obvious line in the deploy log instead.
+async function checkDatabase() {
+  try {
+    const { error } = await db.from('customers').select('id', { head: true, count: 'exact' });
+    if (error) throw new Error(error.message);
+    console.log('  database    : connected');
+  } catch (err) {
+    console.error('');
+    console.error('  database    : CANNOT CONNECT');
+    console.error(`                ${err.message}`);
+    console.error('                Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    console.error('                Signup and SMS will fail until this is fixed.');
+    console.error('');
+  }
+}
+
 const server = app.listen(config.port, () => {
   console.log(`LYNDRY v${pkg.version} listening on port ${config.port}`);
   console.log(`  environment : ${config.env}`);
@@ -74,6 +96,7 @@ const server = app.listen(config.port, () => {
   console.log(`  ai model    : ${config.anthropicModel}`);
   console.log(`  sms provider: ${require('./providers/sms').name}`);
   warnAboutMissingEnvVars();
+  checkDatabase();
 });
 
 // When the host wants to stop or redeploy us it sends SIGTERM. Finish the
