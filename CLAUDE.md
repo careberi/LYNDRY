@@ -27,7 +27,7 @@ Stop at the end of each phase and demonstrate it working.
 | 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | ✅ |
 | 4 | The brain: Claude tool-calling, seven actions, order state machine | ✅ |
 | 5 | Website, signup form, consent capture | ✅ live at lyndry.com |
-| 6 | Ops endpoints, photo upload, status texts | |
+| 6 | Ops endpoints, photo upload, status texts | ✅ |
 | 7 | Shelly lock integration, plus a fake lock driver | ⏸ shelved — see below |
 
 ## Explicitly not being built
@@ -116,7 +116,7 @@ src/
   config.js             every environment setting, read once and frozen
   db.js                 the Supabase connection
   routes/     sms.js  ops.js  web.js
-  core/       brain.js  actions.js  orders.js  lockers.js  compliance.js
+  core/       brain.js  actions.js  orders.js  compliance.js  notify.js
   providers/  sms/index.js  sms/telnyx.js
               locks/index.js  locks/shelly.js
 supabase/
@@ -157,6 +157,37 @@ Rules:
 - Uncertain, or the customer is upset? `handoff_to_human` rather than guessing.
 - Replies sound like a competent human at a small business. Short. No emoji.
   Never "I'm an AI".
+
+## Ops endpoints
+
+Everything under `/ops` needs the `x-admin-key` header, compared in constant
+time. No login system, no accounts — it's Neil and a driver.
+
+```
+POST /ops/collected          the bag is in the van        -> IN_PROCESS
+POST /ops/weight             pounds in, price out         (sets price_cents)
+POST /ops/out-for-delivery                                -> OUT_FOR_DELIVERY
+POST /ops/delivered          multipart photo upload       -> DELIVERED
+GET  /ops/today              the driver's run sheet
+```
+
+**Every status change texts the customer**, through `src/core/notify.js`, which
+sends and logs in one step. Nothing may send a text without recording it.
+
+**Only `src/core/orders.js` may change an order's status.** The endpoints ask it
+to and turn its refusal into a 409, so a driver double-tapping cannot deliver
+an order twice or charge for it twice.
+
+**`price_cents` is set only by `/ops/weight`**, from `price_per_lb_cents` stored
+on that order — never today's rate. Changing the price must not re-price work
+already quoted.
+
+**Delivery photos go in a private Supabase Storage bucket**, and the customer
+gets a signed link that expires after 30 days. A photo of somebody's front door
+must not be publicly readable forever. **Do not put these behind a link
+shortener** — carriers treat shortened links as a spam signal in 10DLC.
+
+`npm run driver` is the ops equivalent of `npm run sms` — there is no admin UI.
 
 ## State machines — enforce these in code
 

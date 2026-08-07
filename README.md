@@ -92,6 +92,36 @@ to run as many times as you like — it reuses what's already there rather than
 making duplicates. Edit the values at the top of
 [scripts/seed.js](scripts/seed.js) to change what it creates.
 
+## Testing it without a phone or a driver
+
+Two simulators. The server must be running (`npm run dev`) in another terminal.
+
+**Pretend a customer texted you:**
+
+```bash
+npm run sms -- "laundry tomorrow"
+```
+
+It builds the exact webhook the SMS provider would send, posts it, and prints
+the conversation that resulted. Try `STOP`, `HELP`, `where's my laundry`, or
+`cancel it`.
+
+**Pretend you're the driver:**
+
+```bash
+npm run driver
+```
+
+That prints today's run sheet. Then walk an order through the day, using an id
+from the sheet:
+
+```bash
+npm run driver -- collected <order-id>
+```
+
+Followed by `weight <order-id> 18.5`, then `out <order-id>`, then
+`delivered <order-id>`. The customer gets a text at every step.
+
 ## The database
 
 The five tables are `buildings`, `customers`, `lockers`, `orders` and `messages`.

@@ -42,29 +42,9 @@ async function recordInbound({ providerMessageId, text }, customerId) {
   return true;
 }
 
-// Sends a text and writes it to the message log. One function so an outbound
-// message can never be sent without being recorded.
-async function reply(to, text, customerId) {
-  let providerMessageId = null;
-
-  try {
-    const result = await sms.sendMessage({ to, text });
-    providerMessageId = result && result.providerMessageId;
-  } catch (err) {
-    // Log the attempt anyway. A message we failed to send is exactly the kind
-    // of thing worth being able to look up afterwards.
-    console.error(`Failed to send SMS to ${to}:`, err.message);
-  }
-
-  const { error } = await db.from('messages').insert({
-    customer_id: customerId,
-    direction: 'OUTBOUND',
-    body: text,
-    provider_message_id: providerMessageId,
-  });
-
-  if (error) console.error('Failed to log outbound message:', error.message);
-}
+// Sending and logging in one step lives in src/core/notify.js, so the driver's
+// status texts and these replies are recorded identically.
+const reply = require('../core/notify').sendAndLog;
 
 // ---------------------------------------------------------------------------
 // Deciding what to say back

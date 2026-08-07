@@ -8,6 +8,7 @@ const { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials } = requir
 
 const web = require('./routes/web');
 const sms = require('./routes/sms');
+const ops = require('./routes/ops');
 const db = require('./db');
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,9 @@ app.get('/health', (req, res) => {
 
 // Inbound text messages from the SMS provider.
 app.use('/', sms.router);
+
+// Driver and admin endpoints. Everything under /ops needs the shared secret.
+app.use('/', ops.router);
 
 // The public website and the signup form.
 app.use('/', web.router);

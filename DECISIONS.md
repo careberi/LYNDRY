@@ -126,6 +126,39 @@ cancellable after that.
 
 ---
 
+## Ops decisions
+
+**`/ops/weight` is a new endpoint, not in the original brief.** Weight-based
+pricing means an order has no price until it is weighed, so something has to
+record that. It computes the charge from the rate stored on the order, so
+changing the price later cannot re-price completed work.
+
+**`/ops/processing` was folded into `/ops/collected`.** In the residential flow
+they are the same moment — the driver takes the bag and it is in process. Two
+endpoints for one transition would just be two ways to do the same thing.
+
+**Delivery photos are private, with a 30-day signed link.** A photo of a
+customer's front door is not something to leave publicly readable. The bucket
+denies everything by default and each link expires, which matches what the
+privacy policy already promises.
+
+**Deliberately not shortening those links.** They are long, and the delivery
+text runs to about four SMS segments as a result — roughly 1.6 cents. A link
+shortener would fix that and is exactly the wrong trade: carriers treat
+shortened links as a spam signal in 10DLC. If the length becomes a problem,
+serve the photo from a short path on lyndry.com instead — a branded domain is
+what carriers actually want to see.
+
+**The admin key is compared in constant time.** A plain `===` returns faster the
+sooner it finds a wrong character, which is enough to guess a secret one
+character at a time.
+
+**`scripts/simulate-driver.js` exists because there is no admin UI.** It drives
+the same endpoints a driver's phone would. Without it there is no way to test
+the operations half of the product.
+
+---
+
 ## SMS decisions
 
 **Telnyx, as originally specified.** Twilio was briefly considered because an
