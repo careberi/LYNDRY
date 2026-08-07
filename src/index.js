@@ -1,55 +1,10 @@
 'use strict';
 
-// Load variables from the .env file into process.env before anything else runs.
-require('dotenv').config({ quiet: true });
-
 const express = require('express');
 const pkg = require('../package.json');
 
-// ---------------------------------------------------------------------------
-// Configuration
-//
-// Everything this app needs from the environment is read ONCE, here, at boot,
-// and then frozen so nothing can change it later. No other file should read
-// process.env directly — they import this config instead.
-//
-// This is deliberate. The AI model in particular is resolved a single time at
-// startup rather than being guessed at on every customer message.
-// ---------------------------------------------------------------------------
-
-const port = Number(process.env.PORT) || 3000;
-
-const config = Object.freeze({
-  env: process.env.NODE_ENV || 'development',
-  port,
-  baseUrl: process.env.APP_BASE_URL || `http://localhost:${port}`,
-  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
-});
-
-// Variables that aren't used yet but will be, phase by phase. We warn about
-// them rather than crashing, so the server still boots on a fresh checkout.
-const UPCOMING_ENV_VARS = [
-  ['SUPABASE_URL', 'phase 2 - database'],
-  ['SUPABASE_SERVICE_ROLE_KEY', 'phase 2 - database'],
-  ['TELNYX_API_KEY', 'phase 3 - sms'],
-  ['TELNYX_PUBLIC_KEY', 'phase 3 - sms'],
-  ['TELNYX_MESSAGING_PROFILE_ID', 'phase 3 - sms'],
-  ['LYNDRY_PHONE_NUMBER', 'phase 3 - sms'],
-  ['ANTHROPIC_API_KEY', 'phase 4 - the brain'],
-  ['ADMIN_API_KEY', 'phase 6 - ops endpoints'],
-  ['SHELLY_SERVER_URI', 'phase 7 - lockers'],
-  ['SHELLY_AUTH_KEY', 'phase 7 - lockers'],
-];
-
-function warnAboutMissingEnvVars() {
-  const missing = UPCOMING_ENV_VARS.filter(([name]) => !process.env[name]);
-  if (missing.length === 0) return;
-
-  console.warn('Not set yet in .env (fine for now):');
-  for (const [name, why] of missing) {
-    console.warn(`  - ${name}  (${why})`);
-  }
-}
+// All environment settings are read and frozen in one place. See src/config.js.
+const { config, warnAboutMissingEnvVars } = require('./config');
 
 // ---------------------------------------------------------------------------
 // The server

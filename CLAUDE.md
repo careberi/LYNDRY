@@ -23,7 +23,7 @@ Stop at the end of each phase and demonstrate it working.
 | Phase | Scope | Done |
 |---|---|---|
 | 1 | Express skeleton, health check, `.env.example`, `.gitignore`, README, first commit | ✅ |
-| 2 | Five tables in Supabase, seed script | |
+| 2 | Five tables in Supabase, seed script | ✅ |
 | 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | |
 | 4 | The brain: Claude tool-calling, seven actions, order state machine | |
 | 5 | Website, signup form, consent capture. Deploy early — the domain is needed for carrier registration | |
@@ -47,11 +47,23 @@ Don't add these; push back if asked too early.
 documented Express combination on the internet, which matters when the person
 maintaining this is googling an error message.
 
-**Environment variables are read once, at boot, in `src/index.js`,** into a
-frozen `config` object. No other file reads `process.env` directly. This applies
+**Environment variables are read once, in `src/config.js`,** into a frozen
+`config` object. No other file reads `process.env` directly. This applies
 especially to the AI model: resolve it once at startup. Never try one model,
 catch an error and fall back to another per message — that was a bug in the
 previous version.
+
+**Database schema lives in `supabase/migrations/` as numbered SQL files.**
+Never change the schema only in the Supabase dashboard — the repo has to be the
+record of what the database looks like. Add a new numbered file and apply it.
+
+**Statuses are text columns with CHECK constraints, not Postgres ENUMs,** so
+adding a status later is a one-line change. Money is stored in whole cents as an
+integer, never as a decimal.
+
+**Every table has row level security enabled with no policies.** That denies all
+access via Supabase's public `anon` key. The server connects with the
+`service_role` key, which bypasses RLS. Any new table must do the same.
 
 **Vendors live behind adapters.** Nothing outside `src/providers/sms/` may know
 Telnyx exists; nothing outside `src/providers/locks/` may know Shelly exists.
@@ -65,12 +77,15 @@ developer and has not seen this file before.
 
 ```
 src/
-  index.js              boot, resolve model, start server
-  db.js
+  index.js              start the server, wire up routes
+  config.js             every environment setting, read once and frozen
+  db.js                 the Supabase connection
   routes/     sms.js  ops.js  web.js
   core/       brain.js  actions.js  orders.js  lockers.js  compliance.js
   providers/  sms/index.js  sms/telnyx.js
               locks/index.js  locks/shelly.js
+supabase/
+  migrations/           numbered .sql files, the record of the schema
 public/                 html, css, images
 scripts/                seed.js  simulate-sms.js
 ```
@@ -149,9 +164,11 @@ Plus `OUT_OF_SERVICE`, set manually.
 - **Turnaround:** 24 hours
 - **Scheduling:** pickup whenever the customer needs — no fixed route days
 - **Model at launch:** residential home pickup. Lockers come later
+- **Service area:** Northern New Jersey, down to Jersey City
 - **Cancellation:** free until the driver collects; not cancellable after
 - **Contact:** neil@lyndry.com · 201-701-0942
-- **Legal entity:** none yet. Legal pages are placeholders and need a lawyer
+- **Legal entity:** none, deliberately — not forming one until the concept is
+  proven. Legal pages are sole-proprietor placeholders and need a lawyer
 
 ## Git
 

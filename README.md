@@ -7,8 +7,9 @@ message — there is no app to download.
 
 ## Status
 
-**Phase 1 complete** — the server runs and answers a health check. No database,
-no text messaging and no AI yet. Those arrive in phases 2, 3 and 4.
+**Phase 2 complete** — the server runs, and the database exists with its five
+tables and test data in it. No text messaging and no AI yet; those are phases 3
+and 4.
 
 ## How it works
 
@@ -76,6 +77,30 @@ should see something like:
 ```
 
 To stop the server, press `Ctrl+C` in the terminal.
+
+## Putting test data in the database
+
+```bash
+npm run seed
+```
+
+This creates a test building, five lockers, and Neil as a customer. It is safe
+to run as many times as you like — it reuses what's already there rather than
+making duplicates. Edit the values at the top of
+[scripts/seed.js](scripts/seed.js) to change what it creates.
+
+## The database
+
+The five tables are `buildings`, `customers`, `lockers`, `orders` and `messages`.
+
+The schema is kept in this repo as numbered SQL files under
+[supabase/migrations](supabase/migrations/), which is the record of what the
+database looks like. If the schema needs to change, add a new numbered file —
+don't only change it in the Supabase dashboard, or the repo stops being true.
+
+All five tables have row level security switched on with no policies, which
+means Supabase's public key can read nothing at all. Only this server, using the
+service_role key, can touch the data.
 
 ## Deploying
 

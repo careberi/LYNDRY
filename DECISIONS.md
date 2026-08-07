@@ -33,26 +33,37 @@ truthful before it goes live for carrier registration. Decide by phase 5.
 Recommendation: launch pay-as-you-go only, sell memberships once there are
 enough customers to know what a typical month actually looks like.
 
-### 2. Service area
+### 2. Rotate the Supabase service_role key before launch
 
-Residential pickup needs a geographic boundary — towns, or a list of ZIP codes.
-Without one, the signup form will collect customers who can't be served. Needed
-for phase 5 signup and the homepage.
+The `service_role` key was pasted into a chat transcript on 2026-08-07. It
+bypasses every security rule on the database. Nothing is exposed today, but it
+should be rotated before real customer data exists: Supabase dashboard →
+Settings → API Keys. Then update `.env` and the Railway environment.
 
-### 3. Legal entity
+### 3. Neil's street address
 
-None registered yet. Two consequences:
-
-- The terms and privacy pages will carry a placeholder name and jurisdiction.
-  **A lawyer should read them before launch.**
-- Carrier registration for business texting (10DLC) generally expects a
-  registered company and an EIN. Sole proprietor registration exists but is more
-  limited. **If forming an LLC is on the list, start it now, in parallel** — it
-  may be the long pole, not the code.
+`scripts/seed.js` uses a placeholder (`1 Placeholder Ave, Jersey City`). Harmless
+for testing, but worth replacing so a simulated order looks like a real one.
 
 ---
 
 ## Product decisions — confirmed by Neil
+
+**Service area: Northern New Jersey, down to Jersey City.** This is a description,
+not a boundary. Before the signup form goes live it needs to become a concrete
+list of towns or ZIP codes, otherwise the form will accept customers who can't
+be served. Phase 5.
+
+**No legal entity until the concept is proven.** Neil's call, and a reasonable
+one. Consequences to keep in view:
+
+- Terms and privacy pages will name Neil as a sole proprietor. **A lawyer should
+  read them before launch.**
+- Carrier registration for business texting (10DLC) generally expects a
+  registered company and an EIN. Sole proprietor registration exists but carries
+  tighter limits — typically lower message throughput and no shortened links.
+  This may constrain how fast LYNDRY can send texts. Worth confirming with
+  Telnyx in phase 3 before it becomes a surprise.
 
 **Launching residential, not apartment buildings.** This is a significant change
 from the original brief, which assumed a smart locker in every building.
@@ -80,6 +91,39 @@ cancellable after that.
 ---
 
 ## Technical decisions — made without asking
+
+**Row level security is on for all five tables, with no policies.** Every
+Supabase project ships a public `anon` key meant to be embedded in web pages.
+Without RLS, anyone holding that key could read customer phone numbers and
+addresses. Enabling it with no policies denies everything; our server uses the
+`service_role` key, which bypasses RLS, so the app is unaffected.
+
+**A customer may only have one order awaiting collection at a time**, enforced by
+a database index rather than application code. This is what makes "your open
+order" unambiguous, which the security model depends on: `open_locker()` works
+out which compartment to open purely from the caller's phone number, so there
+must be exactly one answer. Orders already being washed or delivered are
+excluded, so a customer can still book again while a previous order is in
+progress. Relax this if it ever gets in the way.
+
+**Schema lives in `supabase/migrations/` as numbered SQL files**, not only in the
+dashboard. The repo has to be the record of what the database looks like,
+otherwise rebuilding it means clicking through a UI from memory.
+
+**Statuses are text columns with CHECK constraints, not Postgres ENUM types.**
+Both prevent typos; CHECK constraints make adding a status a one-line change,
+where altering an ENUM is awkward. This project is early and the statuses will move.
+
+**Money is stored as whole cents in an integer** (`price_cents`, $39.00 = 3900).
+Decimal types lose precision under arithmetic. Integers don't.
+
+**Environment settings moved to `src/config.js`.** Originally in `index.js`, but
+`scripts/seed.js` needs them too and doesn't start a web server. Same rule
+applies: read once, frozen, nothing else touches `process.env`.
+
+**The seed script is idempotent** — safe to run repeatedly. It reuses existing
+rows instead of creating duplicates, so it can't quietly fill the database with
+copies of the same test building.
 
 **Order states adapted for residential.** The locker path
 (`REQUESTED → ASSIGNED → DEPOSITED → …`) is preserved but unused. Residential
