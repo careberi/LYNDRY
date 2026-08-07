@@ -104,9 +104,38 @@ service_role key, can touch the data.
 
 ## Deploying
 
-Not set up yet — that happens in phase 5, when the website needs to be publicly
-reachable for carrier registration. It will be Railway, pointed at this repo's
-`main` branch.
+Hosted on [Railway](https://railway.app), pointed at this repo's `main` branch.
+Every push to `main` deploys automatically. There is no build step.
+
+`railway.json` holds the deploy settings. Railway pings `/health` to decide
+whether a new version came up successfully; if it doesn't answer, the old one
+stays live.
+
+### Environment variables to set in Railway
+
+Railway has its own settings screen — the `.env` file on your laptop is never
+uploaded. Set these under the service's **Variables** tab:
+
+| Variable | Value |
+|---|---|
+| `NODE_ENV` | `production` |
+| `APP_BASE_URL` | the public address, no trailing slash |
+| `SUPABASE_URL` | from `.env` |
+| `SUPABASE_SERVICE_ROLE_KEY` | from `.env` |
+| `TELNYX_API_KEY` | from `.env` |
+| `TELNYX_PUBLIC_KEY` | from the Telnyx portal |
+| `TELNYX_MESSAGING_PROFILE_ID` | from `.env` |
+| `LYNDRY_PHONE_NUMBER` | from `.env` |
+| `ADMIN_API_KEY` | a long random string |
+| `ANTHROPIC_API_KEY` | once phase 4 exists |
+| `SUPPORT_PHONE` | Neil's mobile, for handoffs |
+
+`PORT` is set by Railway automatically — don't add it.
+
+**Missing Telnyx credentials do not stop the site.** The server boots, serves
+every page, and refuses all inbound texts until both Telnyx keys are present.
+That is deliberate: the website has to be live for carrier review before
+messaging is approved.
 
 ## The other files in here
 
