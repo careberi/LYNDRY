@@ -5,6 +5,22 @@ Newest section at the top of each list. Review whenever you like.
 
 ---
 
+## Live infrastructure
+
+- **Site:** [lyndry.com](https://lyndry.com), hosted on Railway, auto-deploying
+  from `main`. Domain registered at Namecheap, DNS pointed via CNAME.
+- **Database:** Supabase project `lyndry` (`pauaemlehenfrnjvgzmc`).
+- **SMS:** Telnyx, number **(201) 554-1877**, webhook `https://lyndry.com/sms`.
+  Switched off until `TELNYX_PUBLIC_KEY` is set and 10DLC registration passes.
+
+**Norton antivirus on Neil's laptop intercepts HTTPS** and re-signs every
+certificate. It caused two separate failures during setup — Node refusing to
+reach Supabase, and Chrome refusing lyndry.com — neither of which was a real
+fault. If something works everywhere except Neil's machine, suspect this first.
+The `--use-system-ca` flag in the npm scripts is the workaround.
+
+---
+
 ## Open questions — need Neil
 
 ### 1. Pricing model: pay-as-you-go only, or memberships too?

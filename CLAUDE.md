@@ -26,7 +26,7 @@ Stop at the end of each phase and demonstrate it working.
 | 2 | Five tables in Supabase, seed script | ✅ |
 | 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | ✅ |
 | 4 | The brain: Claude tool-calling, seven actions, order state machine | |
-| 5 | Website, signup form, consent capture. Deploy early — the domain is needed for carrier registration | ✅ built, not yet deployed |
+| 5 | Website, signup form, consent capture | ✅ live at lyndry.com |
 | 6 | Ops endpoints, photo upload, status texts | |
 | 7 | Shelly lock integration, plus a fake lock driver | |
 

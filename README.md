@@ -7,9 +7,12 @@ message — there is no app to download.
 
 ## Status
 
-**Phase 2 complete** — the server runs, and the database exists with its five
-tables and test data in it. No text messaging and no AI yet; those are phases 3
-and 4.
+**Live at [lyndry.com](https://lyndry.com).** The website, signup form and
+consent capture all work against the real database. Inbound texts are handled
+end to end, but messaging is switched off until carrier registration is approved.
+
+Phases 1, 2, 3 and 5 are done. Phase 4 — the AI that reads customer messages —
+is not built yet, so a text currently gets a fixed placeholder reply.
 
 ## How it works
 
