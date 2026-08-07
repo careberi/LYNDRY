@@ -68,10 +68,21 @@ const config = Object.freeze({
 
   adminApiKey: process.env.ADMIN_API_KEY || '',
 
-  // Pricing is hardcoded on purpose — there is no payment processing yet.
-  // If this changes, change the default on orders.price_cents to match.
+  // Wash & fold is priced by weight, so the real price of an order is not
+  // known until a driver has weighed it. Everything a customer is told before
+  // that point is an estimate, and must be described as one.
   pricing: Object.freeze({
-    bagPriceCents: 3900,
+    perPoundCents: 150,
+
+    // The range quoted to someone asking "roughly what will this cost?".
+    estimateLowCents: 2500,
+    estimateHighCents: 4000,
+
+    // The most we will take in a single pickup.
+    maxOrderLb: 50,
+
+    // A typical bag, used to turn a bag count into a rough estimate.
+    typicalBagLb: 17,
   }),
 });
 

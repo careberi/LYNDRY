@@ -22,8 +22,9 @@
 
       <div class="lg:col-span-3">
         <p class="max-w-xl text-xl leading-relaxed text-ink/75">
-          Wash, dry and fold. Picked up from your door, back within
-          {{TURNAROUND}}, folded. Flat {{PRICE}} a bag.
+          Wash, dry and fold at {{PRICE_PER_LB}} a pound. Picked up from your
+          door, back within {{TURNAROUND}}, folded. Most loads land around
+          {{ESTIMATE_RANGE}}.
         </p>
         <p class="mt-4 max-w-xl text-xl leading-relaxed text-ink/75">
           No app. No account to log into. You just send a text.
@@ -165,14 +166,16 @@
             <h3 class="mt-2 text-2xl font-bold text-ink">Wash, Dry &amp; Fold</h3>
           </div>
           <div class="text-right">
-            <div class="text-4xl font-bold tracking-tight text-ink">{{PRICE}}</div>
-            <div class="text-sm text-ink/55">per bag</div>
+            <div class="text-4xl font-bold tracking-tight text-ink">{{PRICE_PER_LB}}</div>
+            <div class="text-sm text-ink/55">per pound</div>
           </div>
         </div>
 
         <p class="mt-5 leading-relaxed text-ink/70">
-          A LYNDRY bag holds roughly {{BAG_WEIGHT}} — about one full washing
-          machine. More than that is simply more bags, at {{PRICE}} each.
+          Priced by weight, so you only pay for what you send. A typical bag
+          holds {{BAG_WEIGHT}} — about one washing machine, or roughly
+          {{ESTIMATE_RANGE}}. We weigh it after collection and tell you the
+          exact figure before charging anything.
         </p>
 
         <ul class="mt-7 grid gap-3 sm:grid-cols-2">
@@ -220,8 +223,8 @@
         <div class="rounded-2xl border border-ink/10 bg-white p-7">
           <h3 class="text-lg font-semibold text-ink">No subscription</h3>
           <p class="mt-2 leading-relaxed text-ink/70">
-            No membership, no minimum, no card on file. Pay {{PRICE}} a bag when
-            you use us, nothing when you don't.
+            No membership, no minimum, no card on file. Pay {{PRICE_PER_LB}} a
+            pound when you use us, nothing when you don't.
           </p>
         </div>
 

@@ -47,9 +47,19 @@ const site = Object.freeze({
 
   serviceArea: 'Northern New Jersey, down to Jersey City',
 
-  // Pricing comes from config so the website and the database agree.
-  priceDisplay: `$${(config.pricing.bagPriceCents / 100).toFixed(0)}`,
-  bagWeight: '15–18 lb',
+  // Pricing comes from config so the website, the database and the AI all
+  // quote the same numbers.
+  //
+  // Wash & fold is priced by weight, which means we CANNOT tell a customer
+  // what their order costs before we have collected and weighed it. Anything
+  // shown before that point is an estimate and has to say so — quoting a firm
+  // price we then change is the fastest way to lose someone's trust.
+  pricePerLb: `$${(config.pricing.perPoundCents / 100).toFixed(2)}`,
+  estimateRange: `$${Math.round(config.pricing.estimateLowCents / 100)}–${Math.round(
+    config.pricing.estimateHighCents / 100
+  )}`,
+  maxOrder: `${config.pricing.maxOrderLb} lb`,
+  typicalBagWeight: '15–18 lb',
 
   turnaround: '24 hours',
 
@@ -72,8 +82,8 @@ function contactSentence() {
   return `Email us at ${site.email}. Our texting number goes live once carrier registration is approved — sign up now and we'll text you the moment it does.`;
 }
 
-// The tokens available inside public/pages/*.html files. Write {{PRICE}} in
-// the HTML and it becomes $39 when the page is served.
+// The tokens available inside public/pages/*.html files. Write
+// {{PRICE_PER_LB}} in the HTML and it becomes $1.50 when the page is served.
 const tokens = Object.freeze({
   NAME: site.name,
   PHONE: site.publicPhoneDisplay,
@@ -85,8 +95,10 @@ const tokens = Object.freeze({
   PHONE_LINE: phoneLine(),
   CONTACT_SENTENCE: contactSentence(),
   SERVICE_AREA: site.serviceArea,
-  PRICE: site.priceDisplay,
-  BAG_WEIGHT: site.bagWeight,
+  PRICE_PER_LB: site.pricePerLb,
+  ESTIMATE_RANGE: site.estimateRange,
+  MAX_ORDER: site.maxOrder,
+  BAG_WEIGHT: site.typicalBagWeight,
   TURNAROUND: site.turnaround,
   LEGAL_UPDATED: site.legalUpdated,
   BASE_URL: config.baseUrl,

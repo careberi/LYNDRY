@@ -26,7 +26,7 @@ const PAGES = [
     path: '/',
     file: 'home.html',
     title: 'Home',
-    description: `Laundry pickup and delivery in ${site.serviceArea}. Wash, dry and fold, ${site.priceDisplay} a bag, back at your door within ${site.turnaround}.`,
+    description: `Laundry pickup and delivery in ${site.serviceArea}. Wash, dry and fold at ${site.pricePerLb} a pound, back at your door within ${site.turnaround}.`,
   },
   {
     path: '/how-it-works',
@@ -38,7 +38,7 @@ const PAGES = [
     path: '/pricing',
     file: 'pricing.html',
     title: 'Pricing',
-    description: `${site.priceDisplay} per bag for wash, dry and fold. No subscription, no minimum, pickup and delivery included.`,
+    description: `${site.pricePerLb} per pound for wash, dry and fold. No subscription, no minimum, pickup and delivery included.`,
   },
   {
     path: '/signup',
