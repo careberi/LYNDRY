@@ -19,10 +19,25 @@ const port = Number(process.env.PORT) || 3000;
 // A trailing slash on the Supabase URL breaks request paths, so strip it.
 const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 
+// The public address of this app.
+//
+// Hosting dashboards show a domain without the "https://" on the front, so it
+// is easy to paste one in without it. That produces links like
+// "lyndry.com/signup", which a browser reads as a folder on the current site
+// rather than an address — quietly broken in every text message we send. So
+// we put the protocol back if it is missing, and drop any trailing slash.
+function normaliseBaseUrl(value, fallbackPort) {
+  const raw = String(value || '').trim();
+  if (!raw) return `http://localhost:${fallbackPort}`;
+
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withProtocol.replace(/\/+$/, '');
+}
+
 const config = Object.freeze({
   env: process.env.NODE_ENV || 'development',
   port,
-  baseUrl: (process.env.APP_BASE_URL || `http://localhost:${port}`).replace(/\/+$/, ''),
+  baseUrl: normaliseBaseUrl(process.env.APP_BASE_URL, port),
 
   // The AI model is resolved a single time, at startup. Never try one model,
   // catch an error, and fall back to another per message.
