@@ -29,12 +29,12 @@ Stop at the end of each phase and demonstrate it working.
 | 5 | Website, signup form, consent capture | ✅ live at lyndry.com |
 | 6 | Ops endpoints, photo upload, status texts | ✅ |
 | 7 | Shelly lock integration, plus a fake lock driver | ⏸ shelved — see below |
+| 8 | Stripe: saved cards, off-session charging, `/pay` link, webhook | 🔨 code written, untested — needs Neil's Stripe keys |
 
 ## Explicitly not being built
 
 Don't add these; push back if asked too early.
 
-- Payment processing (flat rate, payment collected manually for now)
 - A customer app or account login
 - Multi-building routing or route optimisation
 - An admin dashboard
@@ -200,10 +200,12 @@ time. No login system, no accounts — it's Neil and a driver.
 
 ```
 POST /ops/collected          the bag is in the van        -> IN_PROCESS
-POST /ops/weight             pounds in, price out         (sets price_cents)
+POST /ops/weight             pounds in, price out         (sets price_cents, CHARGES)
 POST /ops/out-for-delivery                                -> OUT_FOR_DELIVERY
 POST /ops/delivered          multipart photo upload       -> DELIVERED
-GET  /ops/today              the driver's run sheet
+POST /ops/charge             retry a declined card        (manual lever)
+POST /ops/waive              decide not to charge         -> WAIVED
+GET  /ops/today              the driver's run sheet, plus what's owed
 ```
 
 **Every status change texts the customer**, through `src/core/notify.js`, which
@@ -223,6 +225,49 @@ must not be publicly readable forever. **Do not put these behind a link
 shortener** — carriers treat shortened links as a spam signal in 10DLC.
 
 `npm run driver` is the ops equivalent of `npm run sms` — there is no admin UI.
+
+## Payments
+
+**No card number is ever stored, logged or received by this system.** Stripe
+holds them. What we keep is Stripe's *reference* to a saved card (`pm_...`),
+plus the brand and last four digits for display. Accepting a real card number
+anywhere in this codebase would put the business inside PCI DSS. Don't.
+
+**Stripe lives behind `src/providers/payments/`,** exactly like Telnyx. Nothing
+outside that folder may import the `stripe` package or know what a
+PaymentIntent is. `src/core/billing.js` decides *when* money moves; the
+provider knows *how*.
+
+**Claude never touches money.** The AI works out that someone wants a pickup.
+Code works out whether they have a card, whether to send a link, and when to
+charge. This is the same rule as `open_locker()` taking no arguments — no
+amount of clever texting should move a charge.
+
+**Charging happens automatically at `/ops/weight`,** because that is the first
+moment an amount exists. Two authorisations are already on record by then: the
+consent given on the Stripe page, and the booking confirmation naming the card.
+There is no third "reply YES to pay" step, on purpose.
+
+**A declined card never holds up a delivery.** We deliver and chase by text.
+Holding someone's clothes over a decline is a bad look and legally murky; the
+exposure is one order.
+
+**The idempotency key must include the attempt number.** Stripe caches the
+result of a key — including a decline — so a key of just order + amount would
+replay "declined" at a customer who has since fixed their card.
+
+**Links we text are always on lyndry.com.** `/pay/<token>` redirects to the
+Stripe page. Never text a `checkout.stripe.com` URL directly: carriers score a
+texted link partly by its domain, and every link should be on the domain
+registered to the brand. Same reason as the delivery-photo links.
+
+**The Stripe webhook must stay mounted before `express.json()`** in
+`src/index.js`. Its signature covers the raw bytes, and a body parser destroys
+them. That ordering is load-bearing.
+
+**Test mode is decided by the key prefix alone.** `sk_test_` is a sandbox,
+`sk_live_` moves real money. There is no separate switch. `/health` reports
+which one is live.
 
 ## State machines — enforce these in code
 

@@ -61,6 +61,17 @@ const config = Object.freeze({
   // Where handoff_to_human reaches Neil. His personal number, never published.
   supportPhone: process.env.SUPPORT_PHONE || '',
 
+  // Stripe holds the cards. Nothing outside src/providers/payments/ should
+  // read these — same rule as Telnyx, for the same reason.
+  //
+  // The secret key starts sk_test_ in test mode and sk_live_ in live mode, and
+  // that prefix is the ONLY thing that decides whether real money moves. There
+  // is no separate switch to forget to flip.
+  stripe: Object.freeze({
+    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+  }),
+
   shelly: Object.freeze({
     serverUri: process.env.SHELLY_SERVER_URI || '',
     authKey: process.env.SHELLY_AUTH_KEY || '',
@@ -99,6 +110,8 @@ const UPCOMING_ENV_VARS = [
   ['ADMIN_API_KEY', 'phase 6 - ops endpoints'],
   ['SHELLY_SERVER_URI', 'phase 7 - lockers'],
   ['SHELLY_AUTH_KEY', 'phase 7 - lockers'],
+  ['STRIPE_SECRET_KEY', 'phase 8 - payments'],
+  ['STRIPE_WEBHOOK_SECRET', 'phase 8 - payments'],
 ];
 
 // Catch credentials that were copied from a masked field.
@@ -113,6 +126,8 @@ const CREDENTIALS_TO_CHECK = [
   ['TELNYX_PUBLIC_KEY', config.telnyx.publicKey],
   ['ANTHROPIC_API_KEY', config.anthropicApiKey],
   ['ADMIN_API_KEY', config.adminApiKey],
+  ['STRIPE_SECRET_KEY', config.stripe.secretKey],
+  ['STRIPE_WEBHOOK_SECRET', config.stripe.webhookSecret],
 ];
 
 function warnAboutUnusableCredentials() {

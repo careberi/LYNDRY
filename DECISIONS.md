@@ -394,8 +394,58 @@ config, not project code.
 
 ---
 
+## Payment decisions
+
+**Stripe, using Checkout to save a card and off-session charges to bill it.**
+Neil's own proposal, and the right one. Payment processing had been deliberately
+deferred; he brought it back in scope with a specific architecture, which this
+build follows.
+
+The shape: SMS → LYNDRY → Supabase customer → Stripe customer → one Stripe
+Checkout page → saved card → every order after that is text only. The phone
+number stays the account identifier; there is still no login and no app.
+
+**No card number is stored, logged or received anywhere in this system.** Only
+Stripe's reference to a saved card, plus the brand and last four digits for
+display. Taking real card numbers would put the business inside PCI DSS, a
+compliance programme with audits attached. This design stays outside it.
+
+**The card is required before the first booking, not at signup.** Signup stays
+a website form with no payment step; `create_order` is what refuses. That check
+is in code rather than in Claude's instructions, for the same reason
+`open_locker()` takes no arguments — nothing a customer types should talk its
+way past it.
+
+**Charging happens automatically when the bag is weighed.** Chosen over waiting
+for a second "YES". By that point two authorisations are already on record: the
+consent text on the Stripe page, and the booking confirmation naming the card.
+A second confirmation would stall the order overnight with the laundry already
+washed, for no legal gain.
+
+**The consent wording has to cover a variable amount.** Wash and fold is priced
+by weight, so at the moment the customer agrees, nobody knows the figure. The
+sentence in `src/core/billing.js` says the amount is worked out after weighing
+and that we text the total every time. Read it before changing it — it is what
+makes an off-session charge authorised rather than a surprise.
+
+**A declined card does not hold up a delivery.** We deliver and chase by text.
+Holding someone's clothes over a decline is a bad look and legally murky, and
+the exposure is one order's revenue. `/ops/waive` is the lever for writing one
+off; it records WAIVED rather than marking it paid, so the books distinguish
+money that arrived from money that was let go.
+
+**The payment link is `lyndry.com/pay/<token>`, not a Stripe URL.** Carriers
+score a texted link partly by its domain. Same reasoning as the delivery-photo
+links, and the same reasoning behind not using a link shortener.
+
+**Stripe's idempotency key includes the attempt number.** Stripe caches the
+result of a key, including a decline — so a key built only from order and
+amount would replay "your card was declined" at a customer who had already
+fixed their card.
+
+---
+
 ## Deferred — deliberately not built
 
-Payment processing · customer app or login · admin dashboard · multi-building
-routing · TypeScript, React, bundlers, Docker, job queues · more than one
-deployment target.
+Customer app or login · admin dashboard · multi-building routing · TypeScript,
+React, bundlers, Docker, job queues · more than one deployment target.

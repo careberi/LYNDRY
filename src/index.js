@@ -9,6 +9,7 @@ const { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials } = requir
 const web = require('./routes/web');
 const sms = require('./routes/sms');
 const ops = require('./routes/ops');
+const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 
 // ---------------------------------------------------------------------------
@@ -22,9 +23,17 @@ const app = express();
 // because we record the customer's IP as legal proof of SMS consent.
 app.set('trust proxy', 1);
 
+// Payment routes go on FIRST, before any body parser.
+//
+// The payment provider's webhook signature covers the exact bytes it sent, and
+// that route needs to read them unparsed. Once express.json has run, the raw
+// bytes are gone and every webhook would fail its signature check. Order of
+// these two blocks is load-bearing — do not move it.
+app.use('/', paymentRoutes.router);
+
 // Keep the exact bytes of every JSON request body.
 //
-// The SMS provider signs those bytes. Re-serialising the parsed object
+// The SMS provider signs those bytes too. Re-serialising the parsed object
 // produces different bytes — a space in a different place is enough — and the
 // signature would never match. So we stash the original before parsing.
 app.use(
@@ -51,6 +60,11 @@ app.get('/health', (req, res) => {
     // instead of a log dive. 'telnyx' means real texting is on; 'disabled'
     // means credentials are missing and every webhook is being refused.
     sms: require('./providers/sms').name,
+
+    // 'off' means no payment credentials, 'test' means a sandbox key, 'live'
+    // means real money. "Why did no money arrive" is usually answered by
+    // finding 'test' here on the production server.
+    payments: require('./providers/payments').mode,
 
     uptimeSeconds: Math.round(process.uptime()),
   });
@@ -106,6 +120,7 @@ const server = app.listen(config.port, () => {
   console.log(`  base url    : ${config.baseUrl}`);
   console.log(`  ai model    : ${config.anthropicModel}`);
   console.log(`  sms provider: ${require('./providers/sms').name}`);
+  console.log(`  payments    : ${require('./providers/payments').mode}`);
   warnAboutMissingEnvVars();
   warnAboutUnusableCredentials();
   checkDatabase();

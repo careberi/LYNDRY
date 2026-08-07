@@ -2,6 +2,8 @@
 
 const db = require('../db');
 const orders = require('./orders');
+const billing = require('./billing');
+const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
 
@@ -75,6 +77,18 @@ async function createOrder(customer, input) {
     );
   }
 
+  // No card, no booking.
+  //
+  // This check is in code, not in Claude's instructions, and that is
+  // deliberate — the same reason open_locker() takes no arguments. Nothing a
+  // customer can type should be able to talk its way past it.
+  //
+  // Only enforced when payments are actually switched on, so the service still
+  // works end to end before the payment provider is configured.
+  if (payments.isConfigured && !billing.hasPaymentMethod(customer)) {
+    return billing.setupLinkMessage(customer);
+  }
+
   const prefs = customer.preferences || {};
 
   const order = await orders.create({
@@ -89,10 +103,16 @@ async function createOrder(customer, input) {
   const leaving = order.pickup_method === 'LEAVE_OUTSIDE';
   const bags = order.bag_count ? `${order.bag_count} bag${order.bag_count > 1 ? 's' : ''}` : 'your laundry';
 
+  // Naming the card in the confirmation is what makes this message the
+  // authorisation for the charge that follows. If a customer ever disputes an
+  // order, the message log shows them being told which card, before the work.
+  const card = billing.describeCard(customer);
+  const payment = card ? ` Charged to your ${card} once we weigh it.` : '';
+
   return (
     `Booked — we'll collect ${bags} on ${readableDate(order.pickup_date)}. ` +
     `${leaving ? 'Leave it outside your door.' : "We'll knock when we arrive."} ` +
-    `${site.pricePerLb} a pound, weighed after pickup, back within ${site.turnaround}.`
+    `${site.pricePerLb} a pound, weighed after pickup, back within ${site.turnaround}.${payment}`
   );
 }
 

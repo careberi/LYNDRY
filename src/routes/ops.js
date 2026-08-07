@@ -6,6 +6,7 @@ const multer = require('multer');
 
 const db = require('../db');
 const orders = require('../core/orders');
+const billing = require('../core/billing');
 const { sendAndLog } = require('../core/notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -182,12 +183,27 @@ router.post('/ops/weight', async (req, res, next) => {
     const customer = order.customers;
     const over = weight > config.pricing.maxOrderLb;
 
-    await sendAndLog(
-      customer.phone,
-      `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound. ` +
-        `We'll have it back to you within ${site.turnaround}.`,
-      customer.id
-    );
+    // Weighing is the moment the card gets charged. The customer already
+    // authorised it — once when they saved the card, and again when they
+    // confirmed this order by text — so there is nothing more to ask them.
+    //
+    // The message is written by the billing layer, because it is the only
+    // thing that knows whether the charge went through, and the customer must
+    // not be told "charged" if it didn't.
+    const charge = await billing.chargeOrder(updated, customer);
+
+    if (charge.message) {
+      await sendAndLog(customer.phone, charge.message, customer.id);
+    } else {
+      // Nothing to charge — already paid, or waived by Neil. Still tell them
+      // the weight, because that is the number they were promised.
+      await sendAndLog(
+        customer.phone,
+        `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound. ` +
+          `We'll have it back to you within ${site.turnaround}.`,
+        customer.id
+      );
+    }
 
     res.json({
       ok: true,
@@ -196,6 +212,10 @@ router.post('/ops/weight', async (req, res, next) => {
       price_cents: updated.price_cents,
       price: money(updated.price_cents),
       over_max_order: over,
+      // The driver's screen needs to show this. A declined card is not their
+      // problem to solve, but "keep going, we'll chase it" is worth knowing.
+      paid: Boolean(charge.ok),
+      payment_note: charge.ok ? null : charge.needsCard ? 'no card on file' : 'card declined',
     });
   } catch (err) {
     next(err);
@@ -281,8 +301,19 @@ router.post('/ops/delivered', upload.single('photo'), async (req, res, next) => 
     }
 
     const customer = order.customers;
-    const price = order.price_cents ? ` ${money(order.price_cents)} for this one.` : '';
     const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
+
+    // What we say about the money depends on whether we actually got it. A
+    // delivery text that reads like a receipt when the card was declined is
+    // how an unpaid order quietly becomes a forgotten one.
+    let price = '';
+    if (order.price_cents && order.payment_status === 'PAID') {
+      price = ` ${money(order.price_cents)}, paid.`;
+    } else if (order.price_cents && order.payment_status === 'FAILED') {
+      price = ` ${money(order.price_cents)} is still outstanding — the card link we sent will settle it.`;
+    } else if (order.price_cents) {
+      price = ` ${money(order.price_cents)} for this one.`;
+    }
 
     await sendAndLog(
       customer.phone,
@@ -290,7 +321,97 @@ router.post('/ops/delivered', upload.single('photo'), async (req, res, next) => 
       customer.id
     );
 
-    res.json({ ok: true, order_id: order.id, status: updated.status, photo: Boolean(photoUrl) });
+    res.json({
+      ok: true,
+      order_id: order.id,
+      status: updated.status,
+      photo: Boolean(photoUrl),
+      payment_status: order.payment_status,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/charge — try a declined card again
+//
+// For the case where a customer says "try it now, I've moved money across".
+// Charging is otherwise automatic at /ops/weight; this is the manual lever.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/charge', async (req, res, next) => {
+  try {
+    const order = await loadOrder(req, res);
+    if (!order) return;
+
+    if (order.payment_status === 'PAID') {
+      return res.status(409).json({ error: 'already_paid', paid_at: order.paid_at });
+    }
+    if (!order.price_cents) {
+      return res.status(409).json({ error: 'not_weighed', detail: 'Record the weight first.' });
+    }
+
+    const customer = order.customers;
+    const charge = await billing.chargeOrder(order, customer);
+
+    if (charge.message) await sendAndLog(customer.phone, charge.message, customer.id);
+
+    res.json({
+      ok: Boolean(charge.ok),
+      order_id: order.id,
+      price: money(order.price_cents),
+      detail: charge.ok ? 'charged' : charge.needsCard ? 'no card on file' : 'declined',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/waive — decide not to charge for an order
+//
+// A redo, a complaint, a goodwill gesture. Recorded as WAIVED rather than
+// silently marked paid, so the books show the difference between money that
+// arrived and money that was let go.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/waive', async (req, res, next) => {
+  try {
+    const order = await loadOrder(req, res);
+    if (!order) return;
+
+    if (order.payment_status === 'PAID') {
+      return res.status(409).json({
+        error: 'already_paid',
+        detail: 'That one has been charged. A refund has to be issued in the payment dashboard.',
+      });
+    }
+
+    const reason = String(req.body.reason || '').trim();
+
+    const { error } = await db
+      .from('orders')
+      .update({
+        payment_status: 'WAIVED',
+        payment_failure_reason: reason ? `Waived: ${reason}`.slice(0, 500) : 'Waived.',
+      })
+      .eq('id', order.id);
+
+    if (error) throw error;
+
+    // Only tell the customer if there was a charge hanging over them. Someone
+    // who never knew they owed anything doesn't need a message about it.
+    if (order.payment_status === 'FAILED' && order.price_cents) {
+      const customer = order.customers;
+      await sendAndLog(
+        customer.phone,
+        `We've cleared the ${money(order.price_cents)} on your last order — nothing owing. Sorry for the trouble.`,
+        customer.id
+      );
+    }
+
+    res.json({ ok: true, order_id: order.id, payment_status: 'WAIVED' });
   } catch (err) {
     next(err);
   }
@@ -312,6 +433,16 @@ router.get('/ops/today', async (req, res, next) => {
 
     if (error) throw error;
 
+    // Orders where the money never arrived. Separate query because these are
+    // usually DELIVERED — already off the in-flight list, still owed.
+    const { data: unpaidRows, error: unpaidError } = await db
+      .from('orders')
+      .select('*, customers(name, phone, address_line1, address_line2, city, state, postal_code, preferences)')
+      .eq('payment_status', 'FAILED')
+      .order('pickup_date', { ascending: true });
+
+    if (unpaidError) throw unpaidError;
+
     const describe = (o) => {
       const c = o.customers || {};
       const address = [c.address_line1, c.address_line2, c.city && `${c.city} ${c.postal_code}`]
@@ -329,6 +460,7 @@ router.get('/ops/today', async (req, res, next) => {
         weight_lb: o.weight_lb,
         price: o.price_cents ? money(o.price_cents) : null,
         notes: o.notes || null,
+        payment_status: o.payment_status,
         // The driver needs the standing instructions too — a gate code the
         // customer gave once at signup is no use sitting in the database.
         standing_instructions: (c.preferences || {}).special_instructions || null,
@@ -337,6 +469,7 @@ router.get('/ops/today', async (req, res, next) => {
     };
 
     const all = (data || []).map(describe);
+    const unpaid = unpaidRows || [];
 
     res.json({
       date: today,
@@ -347,6 +480,9 @@ router.get('/ops/today', async (req, res, next) => {
       awaiting_weight: all.filter((o) => o.status === 'IN_PROCESS' && !o.weight_lb),
       washing: all.filter((o) => o.status === 'IN_PROCESS' && o.weight_lb),
       out_for_delivery: all.filter((o) => o.status === 'OUT_FOR_DELIVERY'),
+      // Money we're owed. Deliberately not filtered by date — an unpaid order
+      // from last week is exactly the one worth seeing.
+      unpaid: unpaid.map(describe),
     });
   } catch (err) {
     next(err);
