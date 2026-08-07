@@ -168,7 +168,9 @@ mounted beside the locker: a large phone number, a QR code that opens the
 customer's messaging app with the number filled in, the three steps, then the
 services list.
 
-**The published phone number is (201) 389-9218** — the LYNDRY business number.
+**The published phone number is (201) 554-1877** — the LYNDRY Telnyx number,
+bought 2026-08-07. (It replaced an earlier Twilio number that was briefly on the
+site.)
 **Neil's personal number is not on the website anywhere.** Note that this number
 cannot actually receive customer texts until business messaging registration is
 approved. Blanking the two constants at the top of `src/web/site.js` hides the

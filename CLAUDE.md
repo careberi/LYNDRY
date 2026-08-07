@@ -201,7 +201,7 @@ Plus `OUT_OF_SERVICE`, set manually.
 - **Model at launch:** residential home pickup. Lockers come later
 - **Service area:** Northern New Jersey, down to Jersey City
 - **Cancellation:** free until the driver collects; not cancellable after
-- **Public contact:** neil@lyndry.com · (201) 389-9218 (the LYNDRY business
+- **Public contact:** neil@lyndry.com · (201) 554-1877 (the LYNDRY Telnyx
   number). **Neil's personal number is never published on the website** — it
   belongs in `.env` only, for `handoff_to_human`
 - **Legal entity:** none, deliberately — not forming one until the concept is

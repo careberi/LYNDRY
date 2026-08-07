@@ -29,8 +29,8 @@ const BUSINESS_ADDRESS = 'Jersey City, New Jersey';
 // cannot actually receive customer texts until business messaging registration
 // is approved. Blank both of these out to hide the number everywhere on the
 // site — the pages fall back to "sign up and we'll text you" on their own.
-const PUBLIC_PHONE_DISPLAY = '(201) 389-9218';
-const PUBLIC_PHONE_LINK = '+12013899218';
+const PUBLIC_PHONE_DISPLAY = '(201) 554-1877';
+const PUBLIC_PHONE_LINK = '+12015541877';
 
 const site = Object.freeze({
   name: 'LYNDRY',
