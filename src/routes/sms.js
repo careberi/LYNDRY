@@ -6,6 +6,9 @@ const db = require('../db');
 const { config } = require('../config');
 const sms = require('../providers/sms');
 const compliance = require('../core/compliance');
+const brain = require('../core/brain');
+const actions = require('../core/actions');
+const orders = require('../core/orders');
 const { site } = require('../web/site');
 
 const router = express.Router();
@@ -70,9 +73,12 @@ async function reply(to, text, customerId) {
 async function handleInbound(inbound) {
   const { from, text } = inbound;
 
+  // The whole row, not a few columns: the brain needs the address and the
+  // saved wash preferences to answer "laundry tomorrow" without asking
+  // anything back.
   const { data: customer, error } = await db
     .from('customers')
-    .select('id, name, phone, status')
+    .select('*')
     .eq('phone', from)
     .maybeSingle();
 
@@ -136,16 +142,74 @@ async function handleInbound(inbound) {
 
   // --- A real customer, with something to say ------------------------------
   //
-  // PHASE 3 PLACEHOLDER. In phase 4 this is where Claude reads the message and
-  // returns one structured action. For now it is a fixed reply, so we can
-  // prove the pipe works before adding an AI to it.
-  await reply(
-    from,
-    `Thanks ${customer.name ? customer.name.split(' ')[0] : ''}, we got your message. ` +
-      `Booking by text is being switched on shortly. In the meantime email ${site.email} ` +
-      `and we'll arrange your pickup.`.replace(/\s+/g, ' '),
-    customer.id
-  );
+  // Claude reads the message and picks ONE action. Our code then carries it
+  // out and writes the reply, so the price and the dates in a confirmation are
+  // always real values from the database rather than something a model wrote.
+  await answerWithBrain(customer, text, from);
+}
+
+async function answerWithBrain(customer, text, from) {
+  // What we hand Claude: the customer's profile, their current order, and the
+  // last few messages so "same as last time" and "yes" mean something.
+  const [order, recentMessages] = await Promise.all([
+    orders.findLatestInFlight(customer.id),
+    recentConversation(customer.id),
+  ]);
+
+  let decision;
+  try {
+    decision = await brain.decide({ customer, order, recentMessages, message: text });
+  } catch (err) {
+    // The AI being unreachable must never look like LYNDRY ignoring someone.
+    console.error('Claude call failed:', err.message);
+    await reply(
+      from,
+      `Sorry — something went wrong on our end. Email ${site.email} and we'll pick it up from there.`,
+      customer.id
+    );
+    return;
+  }
+
+  if (decision.type === 'text') {
+    // Claude needs one detail before it can act.
+    console.log(`ASK     ${from}: ${decision.text}`);
+    await reply(from, decision.text, customer.id);
+    return;
+  }
+
+  console.log(`ACTION  ${from}: ${decision.name} ${JSON.stringify(decision.input)}`);
+
+  let message;
+  try {
+    message = await actions.run(decision.name, decision.input, customer, {
+      // How an action reaches Neil when it needs a human. Passed in rather
+      // than imported so nothing in core/ needs to know about SMS at all.
+      notify: (to, body) => sms.sendMessage({ to, text: body }),
+    });
+  } catch (err) {
+    console.error(`Action ${decision.name} failed:`, err.message);
+    message = `Sorry — I couldn't do that. Email ${site.email} and we'll sort it out.`;
+  }
+
+  await reply(from, message, customer.id);
+}
+
+// The last few messages either way, oldest first. Enough for a follow-up like
+// "make it Friday" to make sense, without sending the whole history.
+async function recentConversation(customerId) {
+  const { data, error } = await db
+    .from('messages')
+    .select('direction, body')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  if (error) {
+    console.error('Could not read recent messages:', error.message);
+    return [];
+  }
+
+  return (data || []).reverse();
 }
 
 // ---------------------------------------------------------------------------
