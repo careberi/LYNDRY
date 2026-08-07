@@ -26,9 +26,13 @@ const UNIQUE_VIOLATION = '23505';
 // This is the whole reason provider_message_id is UNIQUE. Carriers retry
 // webhooks — a slow response, a blip, and the same text arrives twice. Without
 // this check a customer saying "laundry tomorrow" could get two orders.
-async function recordInbound({ providerMessageId, text }, customerId) {
+async function recordInbound({ providerMessageId, text, from }, customerId) {
   const { error } = await db.from('messages').insert({
     customer_id: customerId,
+    // Always recorded, even for a number we don't recognise. Someone who
+    // texted once and never signed up is the warmest lead the business gets;
+    // losing their number loses them.
+    phone: from,
     direction: 'INBOUND',
     body: text,
     provider_message_id: providerMessageId,

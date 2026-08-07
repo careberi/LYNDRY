@@ -26,6 +26,9 @@ async function sendAndLog(to, text, customerId) {
 
   const { error } = await db.from('messages').insert({
     customer_id: customerId || null,
+    // Recorded even when there is no customer row, so a conversation with
+    // someone who never signed up is still traceable to a number.
+    phone: to,
     direction: 'OUTBOUND',
     body: text,
     provider_message_id: providerMessageId,
