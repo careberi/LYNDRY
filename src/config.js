@@ -90,6 +90,42 @@ const UPCOMING_ENV_VARS = [
   ['SHELLY_AUTH_KEY', 'phase 7 - lockers'],
 ];
 
+// Catch credentials that were copied from a masked field.
+//
+// Dashboards hide secrets behind dots. Copying one of those gives you a value
+// full of bullet characters (•) that looks vaguely right and fails deep inside
+// an HTTP library with a message about ByteStrings that means nothing to
+// anyone. This says what actually happened instead.
+const CREDENTIALS_TO_CHECK = [
+  ['SUPABASE_SERVICE_ROLE_KEY', config.supabase.serviceRoleKey],
+  ['TELNYX_API_KEY', config.telnyx.apiKey],
+  ['TELNYX_PUBLIC_KEY', config.telnyx.publicKey],
+  ['ANTHROPIC_API_KEY', config.anthropicApiKey],
+  ['ADMIN_API_KEY', config.adminApiKey],
+];
+
+function warnAboutUnusableCredentials() {
+  for (const [name, value] of CREDENTIALS_TO_CHECK) {
+    if (!value) continue;
+
+    // Anything outside plain ASCII cannot go in an HTTP header, and has no
+    // business being in an API key.
+    const bad = [...value].find((ch) => ch.charCodeAt(0) > 126 || ch.charCodeAt(0) < 32);
+    if (!bad) continue;
+
+    const isBullet = bad === '•' || bad === '·' || bad === '*';
+    console.error('');
+    console.error(`  ${name} is not a usable value.`);
+    console.error(
+      isBullet
+        ? '    It contains bullet characters, which means it was copied from a'
+        : `    It contains the character ${JSON.stringify(bad)}, which cannot be sent in a request.`
+    );
+    if (isBullet) console.error('    masked field. Reveal the real value first, then copy it.');
+    console.error('');
+  }
+}
+
 function warnAboutMissingEnvVars() {
   const missing = UPCOMING_ENV_VARS.filter(([name]) => !process.env[name]);
   if (missing.length === 0) return;
@@ -100,4 +136,4 @@ function warnAboutMissingEnvVars() {
   }
 }
 
-module.exports = { config, warnAboutMissingEnvVars };
+module.exports = { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials };

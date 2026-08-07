@@ -4,7 +4,7 @@ const express = require('express');
 const pkg = require('../package.json');
 
 // All environment settings are read and frozen in one place. See src/config.js.
-const { config, warnAboutMissingEnvVars } = require('./config');
+const { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials } = require('./config');
 
 const web = require('./routes/web');
 const sms = require('./routes/sms');
@@ -96,6 +96,7 @@ const server = app.listen(config.port, () => {
   console.log(`  ai model    : ${config.anthropicModel}`);
   console.log(`  sms provider: ${require('./providers/sms').name}`);
   warnAboutMissingEnvVars();
+  warnAboutUnusableCredentials();
   checkDatabase();
 });
 
