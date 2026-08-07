@@ -189,6 +189,55 @@ for (const page of PAGES) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// GET /p/:orderId — a customer's delivery photo
+//
+// Texted as https://lyndry.com/p/<id>. Two reasons it isn't a direct storage
+// link: carriers distrust links to domains that aren't yours, which matters
+// for business messaging registration; and a signed storage URL is enormous
+// and stops working the day its signature expires.
+//
+// The order id is a random UUID, which is what makes the link private — it
+// cannot realistically be guessed, and nothing else on the page reveals one.
+// ---------------------------------------------------------------------------
+
+const PHOTO_LINK_MINUTES = 60;
+
+router.get('/p/:orderId', async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+
+    // Anything that isn't a UUID can't be one of ours — don't touch the
+    // database for it.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+      return notFound(req, res);
+    }
+
+    const { data: order, error } = await db
+      .from('orders')
+      .select('delivery_photo_path')
+      .eq('id', orderId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!order || !order.delivery_photo_path) return notFound(req, res);
+
+    // Signed fresh on every visit, so the link we texted never goes stale.
+    const { data: signed, error: signError } = await db.storage
+      .from('delivery-photos')
+      .createSignedUrl(order.delivery_photo_path, PHOTO_LINK_MINUTES * 60);
+
+    if (signError) throw signError;
+
+    // Short-lived redirect. Never cached, so a shared or forwarded page can't
+    // hand someone a working link after the signature has expired.
+    res.set('Cache-Control', 'no-store, private');
+    return res.redirect(302, signed.signedUrl);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${config.baseUrl}/sitemap.xml\n`);
 });

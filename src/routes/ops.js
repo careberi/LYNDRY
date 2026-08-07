@@ -246,24 +246,24 @@ router.post('/ops/delivered', upload.single('photo'), async (req, res, next) => 
     const order = await loadOrder(req, res);
     if (!order) return;
 
+    let photoPath = null;
     let photoUrl = null;
 
     if (req.file) {
       const extension = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-      const path = `${order.id}/${Date.now()}.${extension}`;
+      photoPath = `${order.id}/${Date.now()}.${extension}`;
 
       const { error: uploadError } = await db.storage
         .from(PHOTO_BUCKET)
-        .upload(path, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+        .upload(photoPath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
 
       if (uploadError) throw new Error(`Photo upload failed: ${uploadError.message}`);
 
-      const { data: signed, error: signError } = await db.storage
-        .from(PHOTO_BUCKET)
-        .createSignedUrl(path, PHOTO_LINK_DAYS * 24 * 60 * 60);
-
-      if (signError) throw new Error(`Could not create photo link: ${signError.message}`);
-      photoUrl = signed.signedUrl;
+      // The customer gets a short link on our own domain, not a signed
+      // storage URL. Carriers distrust links to domains that aren't yours,
+      // and a signature with an expiry date in it would eventually break the
+      // photo. We sign on demand instead, when someone opens the link.
+      photoUrl = `${config.baseUrl}/p/${order.id}`;
     }
 
     let updated;
@@ -274,7 +274,10 @@ router.post('/ops/delivered', upload.single('photo'), async (req, res, next) => 
     }
 
     if (photoUrl) {
-      await db.from('orders').update({ delivery_photo_url: photoUrl }).eq('id', order.id);
+      await db
+        .from('orders')
+        .update({ delivery_photo_url: photoUrl, delivery_photo_path: photoPath })
+        .eq('id', order.id);
     }
 
     const customer = order.customers;
