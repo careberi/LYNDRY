@@ -90,6 +90,48 @@ cancellable after that.
 
 ---
 
+## SMS decisions
+
+**Telnyx, as originally specified.** Twilio was briefly considered because an
+account already existed with a Northern NJ number, but Neil had not been able to
+get it working and asked for Telnyx. All Telnyx code is confined to
+`src/providers/sms/telnyx.js`; nothing else in the codebase knows the name.
+
+**Registration is a carrier requirement, not a provider one.** Switching from
+Twilio to Telnyx does not avoid 10DLC brand and campaign registration — the
+carriers demand it regardless of who sells you the number. Worth knowing before
+the same wall appears twice.
+
+**A fake SMS driver runs automatically when Telnyx credentials are absent.**
+It prints outbound messages to the terminal instead of sending them, which is
+what makes `npm run sms` useful before registration is approved. It accepts
+unsigned webhooks, so `src/providers/sms/index.js` refuses to load it when
+`NODE_ENV=production` — running it on a public server would let anyone
+impersonate a customer.
+
+**CANCEL is deliberately NOT treated as an opt-out keyword.** It appears on the
+standard carrier list, but for a laundry service a customer texting "cancel"
+almost always means "cancel my order", not "never text me again". Treating it as
+an opt-out would silently break the product for anyone using the word naturally.
+STOP — the keyword actually required — is handled, and Telnyx enforces opt-out
+keywords at the platform level as a second line of defence. **Worth reviewing if
+a carrier ever objects.**
+
+**Keyword matching is strict: the whole message must be the keyword.** "STOP"
+opts out; "stop by at 5" is a message about a pickup time and must not
+unsubscribe anyone.
+
+**Someone who has opted out gets no reply at all** until they text START.
+Verified: a normal message sent while unsubscribed is logged but not answered.
+
+**`npm run test:signature` proves the webhook signature check works.** In normal
+development we run without Telnyx credentials, so that code never executes — a
+mistake in it would sit unnoticed until launch. The script makes its own key
+pair and checks that good signatures pass and tampered, foreign-key, missing,
+stale and replayed ones all fail.
+
+---
+
 ## Website decisions
 
 **Brand colour is the locker teal (#178a94).** Taken from the photo of the

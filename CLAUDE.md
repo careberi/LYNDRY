@@ -24,7 +24,7 @@ Stop at the end of each phase and demonstrate it working.
 |---|---|---|
 | 1 | Express skeleton, health check, `.env.example`, `.gitignore`, README, first commit | ✅ |
 | 2 | Five tables in Supabase, seed script | ✅ |
-| 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | |
+| 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | ✅ |
 | 4 | The brain: Claude tool-calling, seven actions, order state machine | |
 | 5 | Website, signup form, consent capture. Deploy early — the domain is needed for carrier registration | ✅ built, not yet deployed |
 | 6 | Ops endpoints, photo upload, status texts | |

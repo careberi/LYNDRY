@@ -7,6 +7,7 @@ const pkg = require('../package.json');
 const { config, warnAboutMissingEnvVars } = require('./config');
 
 const web = require('./routes/web');
+const sms = require('./routes/sms');
 
 // ---------------------------------------------------------------------------
 // The server
@@ -19,7 +20,18 @@ const app = express();
 // because we record the customer's IP as legal proof of SMS consent.
 app.set('trust proxy', 1);
 
-app.use(express.json());
+// Keep the exact bytes of every JSON request body.
+//
+// The SMS provider signs those bytes. Re-serialising the parsed object
+// produces different bytes — a space in a different place is enough — and the
+// signature would never match. So we stash the original before parsing.
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Health check. Hosting platforms ping this to decide whether the app is
@@ -34,6 +46,9 @@ app.get('/health', (req, res) => {
     uptimeSeconds: Math.round(process.uptime()),
   });
 });
+
+// Inbound text messages from the SMS provider.
+app.use('/', sms.router);
 
 // The public website and the signup form.
 app.use('/', web.router);
@@ -57,6 +72,7 @@ const server = app.listen(config.port, () => {
   console.log(`  environment : ${config.env}`);
   console.log(`  base url    : ${config.baseUrl}`);
   console.log(`  ai model    : ${config.anthropicModel}`);
+  console.log(`  sms provider: ${require('./providers/sms').name}`);
   warnAboutMissingEnvVars();
 });
 

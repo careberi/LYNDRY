@@ -34,12 +34,17 @@ const config = Object.freeze({
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   }),
 
+  // Telnyx sends and receives the text messages. Nothing outside
+  // src/providers/sms/ should read these — see that folder for why.
   telnyx: Object.freeze({
     apiKey: process.env.TELNYX_API_KEY || '',
     publicKey: process.env.TELNYX_PUBLIC_KEY || '',
     messagingProfileId: process.env.TELNYX_MESSAGING_PROFILE_ID || '',
     phoneNumber: process.env.LYNDRY_PHONE_NUMBER || '',
   }),
+
+  // Where handoff_to_human reaches Neil. His personal number, never published.
+  supportPhone: process.env.SUPPORT_PHONE || '',
 
   shelly: Object.freeze({
     serverUri: process.env.SHELLY_SERVER_URI || '',

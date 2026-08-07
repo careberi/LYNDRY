@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --use-system-ca --watch src/index.js",
-    "seed": "node --use-system-ca scripts/seed.js"
+    "seed": "node --use-system-ca scripts/seed.js",
+    "sms": "node --use-system-ca scripts/simulate-sms.js",
+    "test:signature": "node scripts/test-signature.js"
   },
   "engines": {
     "node": ">=20"
