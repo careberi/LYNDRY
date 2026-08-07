@@ -39,7 +39,7 @@ const site = Object.freeze({
 
   tagline: 'Laundry, handled.',
 
-  email: 'neil@lyndry.com',
+  email: 'info@lyndry.com',
 
   publicPhoneDisplay: PUBLIC_PHONE_DISPLAY,
   publicPhoneLink: PUBLIC_PHONE_LINK,
