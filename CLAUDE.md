@@ -26,7 +26,7 @@ Stop at the end of each phase and demonstrate it working.
 | 2 | Five tables in Supabase, seed script | ✅ |
 | 3 | `/sms` webhook: signature check, dedupe, logging, STOP/START, hardcoded reply, `simulate-sms.js`. **No AI** | |
 | 4 | The brain: Claude tool-calling, seven actions, order state machine | |
-| 5 | Website, signup form, consent capture. Deploy early — the domain is needed for carrier registration | |
+| 5 | Website, signup form, consent capture. Deploy early — the domain is needed for carrier registration | ✅ built, not yet deployed |
 | 6 | Ops endpoints, photo upload, status texts | |
 | 7 | Shelly lock integration, plus a fake lock driver | |
 
@@ -72,6 +72,32 @@ The point is being able to switch vendor in an afternoon.
 
 **Comments explain why, not what.** Assume the reader is smart but not a
 developer and has not seen this file before.
+
+**Never bulk edit files with PowerShell string replacement.** PowerShell 5.1
+reads files as ANSI, so a `Get-Content` / `Set-Content` round trip destroys
+every em dash and curly quote in the file. Use the editing tools, or
+`[System.IO.File]::ReadAllText` with an explicit UTF-8 encoding.
+
+## The website
+
+**Everything that appears on more than one page lives in `src/web/site.js`** —
+price, phone number, service area, legal name. Page files use `{{TOKEN}}`
+placeholders and must never hardcode any of it. Changing the price is one line.
+
+**`src/web/layout.js` holds the single shared layout** — head, nav, footer —
+plus the Tailwind colour palette. Page files in `public/pages/` contain only
+their own middle section.
+
+**Brand colour is `brand-600` (#178a94), taken from the physical locker.** The
+rest of the `brand` scale is lighter and darker versions of it. Use it; don't
+introduce a second accent colour.
+
+**In development, page HTML is re-read on every request** — edit a file in
+`public/pages/`, refresh the browser, done. In production it's cached.
+
+**Anything a visitor typed that gets shown back to them must go through
+`escapeHtml()`.** The signup form redisplays what you typed after a validation
+error, and without escaping that is a route to injecting markup into the page.
 
 ## File structure
 
@@ -166,7 +192,9 @@ Plus `OUT_OF_SERVICE`, set manually.
 - **Model at launch:** residential home pickup. Lockers come later
 - **Service area:** Northern New Jersey, down to Jersey City
 - **Cancellation:** free until the driver collects; not cancellable after
-- **Contact:** neil@lyndry.com · 201-701-0942
+- **Public contact:** neil@lyndry.com · (201) 389-9218 (the LYNDRY business
+  number). **Neil's personal number is never published on the website** — it
+  belongs in `.env` only, for `handoff_to_human`
 - **Legal entity:** none, deliberately — not forming one until the concept is
   proven. Legal pages are sole-proprietor placeholders and need a lawyer
 

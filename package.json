@@ -6,8 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "seed": "node scripts/seed.js"
+    "dev": "node --use-system-ca --watch src/index.js",
+    "seed": "node --use-system-ca scripts/seed.js"
   },
   "engines": {
     "node": ">=20"
@@ -15,6 +15,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
     "dotenv": "^17.2.3",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "qrcode": "^1.5.4"
   }
 }

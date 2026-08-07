@@ -90,7 +90,54 @@ cancellable after that.
 
 ---
 
+## Website decisions
+
+**Brand colour is the locker teal (#178a94).** Taken from the photo of the
+physical LYNDRY locker so the website and the hardware match. The whole palette
+is lighter and darker versions of that one colour. The wordmark in the header is
+white on teal, the same as the locker.
+
+**The home page is built around "text us to get started"**, matching the sign
+mounted beside the locker: a large phone number, a QR code that opens the
+customer's messaging app with the number filled in, the three steps, then the
+services list.
+
+**The published phone number is (201) 389-9218** — the LYNDRY business number.
+**Neil's personal number is not on the website anywhere.** Note that this number
+cannot actually receive customer texts until business messaging registration is
+approved. Blanking the two constants at the top of `src/web/site.js` hides the
+number across every page, and the copy falls back to "sign up and we'll text
+you" on its own.
+
+**The QR code is generated in memory at first use**, not fetched from a QR
+service and not stored as an image file. Nothing to manage, nothing to go stale,
+no third party involved.
+
+**Signup does not overwrite an existing customer.** Anyone can type any phone
+number into a public form, so allowing an update there would let a stranger
+change a real customer's delivery address. A number that already exists gets a
+message directing them to email instead.
+
+**Site-wide values live in one file** (`src/web/site.js`) and pages reference
+them as `{{TOKEN}}`. Changing the price, the phone number or the service area is
+a one-line edit rather than a hunt through nine HTML files.
+
+**The legal pages are placeholders.** They accurately describe how LYNDRY
+operates and are written to survive carrier review, but **a lawyer has not read
+them.** The clauses most worth a professional eye are unattended pickup and
+delivery, and the limitation of liability — those are the ones that matter when
+something disappears from a doorstep.
+
+---
+
 ## Technical decisions — made without asking
+
+**`--use-system-ca` added to the npm scripts.** Something on Neil's machine
+intercepts TLS connections (antivirus or network filtering), and Node does not
+trust the Windows certificate store by default, so every request to Supabase
+failed with "unable to verify the first certificate". This flag tells Node to
+use the system store. Harmless on Linux, where the system store is the standard
+one anyway.
 
 **Row level security is on for all five tables, with no policies.** Every
 Supabase project ships a public `anon` key meant to be embedded in web pages.

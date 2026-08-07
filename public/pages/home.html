@@ -1,0 +1,320 @@
+<!-- Home page. Wrapped in the shared layout by src/web/layout.js.
+
+     The design follows the physical LYNDRY locker: brand teal, white
+     wordmark, and the same three steps that appear on the sign beside it. -->
+
+<!-- ===================================================================== -->
+<!-- Hero — text us to get started                                          -->
+<!-- ===================================================================== -->
+<section class="bg-brand-600">
+  <div class="mx-auto max-w-6xl px-5 py-20 sm:py-28">
+    <div class="grid items-center gap-14 lg:grid-cols-5">
+
+      <div class="lg:col-span-3">
+        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-brand-100">
+          {{SERVICE_AREA}}
+        </p>
+
+        <h1 class="mt-5 text-5xl font-bold leading-[1.05] tracking-tight text-white sm:text-6xl">
+          Laundry,<br>handled.
+        </h1>
+
+        <p class="mt-7 max-w-xl text-lg leading-relaxed text-brand-50">
+          Wash, dry and fold. Picked up from your door, back within
+          {{TURNAROUND}}, folded. Flat {{PRICE}} a bag.
+        </p>
+
+        <p class="mt-3 max-w-xl text-lg leading-relaxed text-brand-50">
+          No app. No account to log into. You just send a text.
+        </p>
+
+        <div class="mt-10 flex flex-wrap items-center gap-4">
+          <a href="{{SMS_LINK}}"
+             class="rounded-lg bg-white px-7 py-3.5 text-lg font-semibold text-brand-700 shadow-sm transition-colors hover:bg-brand-50">
+            Text {{PHONE}}
+          </a>
+          <a href="/signup"
+             class="rounded-lg border border-brand-300/60 px-7 py-3.5 text-lg font-medium text-white transition-colors hover:border-white">
+            Sign up first
+          </a>
+        </div>
+
+        <p class="mt-5 text-sm text-brand-100">
+          New to LYNDRY? <a href="/signup" class="underline underline-offset-4 hover:text-white">Sign up</a>
+          so we know your address and how you like things washed — after that, it's one text.
+        </p>
+      </div>
+
+      <!-- QR code -->
+      <div class="lg:col-span-2 lg:justify-self-end">
+        <div class="inline-block rounded-2xl bg-white p-6 shadow-lg">
+          <div class="flex items-center gap-2 text-brand-700">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span class="text-sm font-semibold uppercase tracking-wider">Scan to text</span>
+          </div>
+
+          <div class="mt-4" role="img" aria-label="QR code that opens a text message to LYNDRY">
+            {{QR_SVG}}
+          </div>
+
+          <p class="mt-4 text-center text-lg font-semibold text-brand-900">{{PHONE}}</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- How it works — the three steps from the locker sign                    -->
+<!-- ===================================================================== -->
+<section class="border-b border-slate-200 bg-white">
+  <div class="mx-auto max-w-6xl px-5 py-20">
+    <h2 class="text-3xl font-bold tracking-tight text-brand-900">How it works</h2>
+    <p class="mt-3 max-w-2xl text-lg text-slate-600">
+      Three steps, then it's off your plate.
+    </p>
+
+    <div class="mt-14 grid gap-10 sm:grid-cols-3">
+
+      <div>
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <span class="text-sm font-bold uppercase tracking-widest text-brand-600">Step 01</span>
+        </div>
+        <h3 class="mt-5 text-xl font-semibold text-brand-900">Text LYNDRY</h3>
+        <p class="mt-2 leading-relaxed text-slate-600">
+          Send one message — <span class="font-medium text-brand-900">&ldquo;laundry tomorrow&rdquo;</span>
+          is enough. We already know your address and how you like it washed, so
+          we don't ask again.
+        </p>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <span class="text-sm font-bold uppercase tracking-widest text-brand-600">Step 02</span>
+        </div>
+        <h3 class="mt-5 text-xl font-semibold text-brand-900">Drop &amp; go</h3>
+        <p class="mt-2 leading-relaxed text-slate-600">
+          Leave your bag by the door at the agreed time and carry on with your
+          day. Prefer to hand it over? Say so and we'll knock.
+        </p>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+              <path d="M3 6h18"></path>
+              <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+          </div>
+          <span class="text-sm font-bold uppercase tracking-widest text-brand-600">Step 03</span>
+        </div>
+        <h3 class="mt-5 text-xl font-semibold text-brand-900">Back in {{TURNAROUND}}</h3>
+        <p class="mt-2 leading-relaxed text-slate-600">
+          Washed, dried and folded, returned to your door — with a photo so you
+          know exactly when it arrived and where we left it.
+        </p>
+      </div>
+
+    </div>
+
+    <a href="/how-it-works"
+       class="mt-14 inline-block font-medium text-brand-700 underline underline-offset-4 hover:text-brand-900">
+      See the full process
+    </a>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- Services                                                               -->
+<!-- ===================================================================== -->
+<section class="bg-slate-50">
+  <div class="mx-auto max-w-6xl px-5 py-20">
+    <h2 class="text-3xl font-bold tracking-tight text-brand-900">Services</h2>
+    <p class="mt-3 max-w-2xl text-lg text-slate-600">
+      One thing, done properly. No confusing menu.
+    </p>
+
+    <div class="mt-12 grid gap-6 lg:grid-cols-3">
+
+      <!-- Main service -->
+      <div class="rounded-2xl border-2 border-brand-600 bg-white p-8 lg:col-span-2">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-widest text-brand-600">Our service</span>
+            <h3 class="mt-2 text-2xl font-bold text-brand-900">Wash, Dry &amp; Fold</h3>
+          </div>
+          <div class="text-right">
+            <div class="text-4xl font-bold tracking-tight text-brand-900">{{PRICE}}</div>
+            <div class="text-sm text-slate-500">per bag</div>
+          </div>
+        </div>
+
+        <p class="mt-5 leading-relaxed text-slate-600">
+          A LYNDRY bag holds roughly {{BAG_WEIGHT}} — about one full washing
+          machine. More than that is simply more bags, at {{PRICE}} each.
+        </p>
+
+        <ul class="mt-7 grid gap-3 sm:grid-cols-2">
+          <li class="flex gap-3 text-slate-700">
+            <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+            Pickup from your door, included
+          </li>
+          <li class="flex gap-3 text-slate-700">
+            <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+            Delivery back to your door, included
+          </li>
+          <li class="flex gap-3 text-slate-700">
+            <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+            Your temperature, detergent and softener
+          </li>
+          <li class="flex gap-3 text-slate-700">
+            <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+            Dried and neatly folded
+          </li>
+          <li class="flex gap-3 text-slate-700">
+            <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+            Photo confirmation on delivery
+          </li>
+          <li class="flex gap-3 text-slate-700">
+            <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"></span>
+            Free cancellation until we collect
+          </li>
+        </ul>
+
+        <div class="mt-8 flex flex-wrap gap-4">
+          <a href="{{SMS_LINK}}"
+             class="rounded-lg bg-brand-600 px-6 py-3 font-medium text-white transition-colors hover:bg-brand-700">
+            Text {{PHONE}}
+          </a>
+          <a href="/pricing"
+             class="rounded-lg border border-slate-300 px-6 py-3 font-medium text-slate-700 transition-colors hover:border-slate-400 hover:text-brand-900">
+            Pricing detail
+          </a>
+        </div>
+      </div>
+
+      <!-- Secondary column -->
+      <div class="space-y-6">
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-7">
+          <h3 class="text-lg font-semibold text-brand-900">No subscription</h3>
+          <p class="mt-2 leading-relaxed text-slate-600">
+            No membership, no minimum, no card on file. Pay {{PRICE}} a bag when
+            you use us, nothing when you don't.
+          </p>
+        </div>
+
+        <div class="rounded-2xl bg-brand-900 p-7">
+          <span class="text-xs font-bold uppercase tracking-widest text-brand-300">Coming soon</span>
+          <h3 class="mt-2 text-lg font-semibold text-white">LYNDRY lockers</h3>
+          <p class="mt-2 leading-relaxed text-brand-100">
+            Smart lockers in apartment buildings. Residents drop laundry at any
+            hour, we collect on our own route, and nobody has to think about
+            timing at all.
+          </p>
+          <a href="/contact"
+             class="mt-4 inline-block font-medium text-white underline underline-offset-4 hover:text-brand-200">
+            For building managers
+          </a>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-7">
+          <h3 class="text-lg font-semibold text-brand-900">Not offered yet</h3>
+          <p class="mt-2 leading-relaxed text-slate-600">
+            No dry cleaning, pressing or alterations. If something needs special
+            care, tell us when you book and we'll handle it separately.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- You don't have to be home                                              -->
+<!-- ===================================================================== -->
+<section class="mx-auto max-w-6xl px-5 py-20">
+  <div class="grid gap-14 lg:grid-cols-2">
+
+    <div>
+      <h2 class="text-3xl font-bold tracking-tight text-brand-900">
+        You don't have to be home
+      </h2>
+      <p class="mt-5 leading-relaxed text-slate-600">
+        Most laundry services hand you a two-hour window and expect you to
+        arrange your day around it. We don't. You choose whether to leave your
+        bag out or hand it over, and the rest happens without you.
+      </p>
+      <p class="mt-4 leading-relaxed text-slate-600">
+        That's the entire point of the service. Everything else is built
+        around it.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-3xl font-bold tracking-tight text-brand-900">
+        We ask once, then stop asking
+      </h2>
+      <p class="mt-5 leading-relaxed text-slate-600">
+        Water temperature, detergent, fabric softener, anything that needs
+        special handling — you tell us when you sign up, and we remember. You
+        will never get a text asking you to confirm your detergent preference.
+      </p>
+      <p class="mt-4 leading-relaxed text-slate-600">
+        After that, arranging a pickup takes one message.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<!-- Closing call to action                                                 -->
+<!-- ===================================================================== -->
+<section class="bg-brand-900">
+  <div class="mx-auto max-w-6xl px-5 py-20">
+    <div class="flex flex-col items-start justify-between gap-10 lg:flex-row lg:items-center">
+      <div>
+        <h2 class="text-3xl font-bold tracking-tight text-white">
+          Ready when you are
+        </h2>
+        <p class="mt-4 max-w-xl leading-relaxed text-brand-100">
+          We serve {{SERVICE_AREA}}. Just outside the area? Sign up anyway and
+          we'll let you know the moment we reach you.
+        </p>
+      </div>
+
+      <div class="flex flex-wrap gap-4">
+        <a href="{{SMS_LINK}}"
+           class="rounded-lg bg-white px-7 py-3.5 text-lg font-semibold text-brand-700 transition-colors hover:bg-brand-50">
+          Text {{PHONE}}
+        </a>
+        <a href="/signup"
+           class="rounded-lg border border-brand-600 px-7 py-3.5 text-lg font-medium text-white transition-colors hover:border-brand-300">
+          Sign up
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

@@ -6,6 +6,8 @@ const pkg = require('../package.json');
 // All environment settings are read and frozen in one place. See src/config.js.
 const { config, warnAboutMissingEnvVars } = require('./config');
 
+const web = require('./routes/web');
+
 // ---------------------------------------------------------------------------
 // The server
 // ---------------------------------------------------------------------------
@@ -33,15 +35,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// The real website arrives in phase 5. Until then, a plain placeholder.
-app.get('/', (req, res) => {
-  res.type('text/plain').send('LYNDRY — laundry pickup and delivery. Site coming soon.');
-});
+// The public website and the signup form.
+app.use('/', web.router);
 
-// Anything else is a 404.
-app.use((req, res) => {
-  res.status(404).json({ error: 'not_found' });
-});
+// Anything that matched nothing above.
+app.use(web.notFound);
 
 // Last line of defence. If any route throws, we log the real error for
 // ourselves and return something generic to the caller.
