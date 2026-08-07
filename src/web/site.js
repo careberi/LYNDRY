@@ -60,7 +60,7 @@ const site = Object.freeze({
 // have a public number yet. Pages use {{PHONE_LINE}} and don't have to care.
 function phoneLine() {
   if (!site.hasPublicPhone) return '';
-  return `<a href="tel:${site.publicPhoneLink}" class="text-brand-700 underline underline-offset-2 hover:text-brand-900">${site.publicPhoneDisplay}</a>`;
+  return `<a href="tel:${site.publicPhoneLink}" class="text-brand-700 underline underline-offset-2 hover:text-brand-700">${site.publicPhoneDisplay}</a>`;
 }
 
 // A sentence telling people how to reach us, which reads correctly whether or

@@ -134,6 +134,30 @@ stale and replayed ones all fail.
 
 ## Website decisions
 
+**The design follows telnyx.com, with LYNDRY's teal kept as the accent.** Neil
+asked for two things that partly conflict — match the locker, and match
+telnyx.com. The resolution: take the *structure and typography* from Telnyx and
+the *colour* from the locker.
+
+Inspected telnyx.com directly rather than guessing, and copied the system:
+
+| | Telnyx | LYNDRY |
+|---|---|---|
+| Background | `#fefdf5` warm cream | same |
+| Text | pure black | `#0a0a0a` |
+| Display face | PP Formula, weight 800 | Outfit, weight 700–800 |
+| Body face | Inter | Inter |
+| Accent | — | locker teal `#178a94` |
+
+**PP Formula is a commercial licence** from Pangram Pangram, so it is not used
+here. Outfit is the closest free equivalent — same wide geometric bones. If the
+real face is ever licensed, change the name in two places in
+`src/web/layout.js` and the whole site follows.
+
+Buttons are pills, headings are large and tightly tracked, section labels are
+small bold uppercase with wide letter-spacing. All of that is lifted from
+Telnyx's system.
+
 **Brand colour is the locker teal (#178a94).** Taken from the photo of the
 physical LYNDRY locker so the website and the hardware match. The whole palette
 is lighter and darker versions of that one colour. The wordmark in the header is

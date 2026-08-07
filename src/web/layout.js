@@ -37,18 +37,18 @@ function navBar(currentPath) {
   const links = NAV_LINKS.map(({ href, label }) => {
     const active = href === currentPath;
     const classes = active
-      ? 'text-brand-900 font-medium'
-      : 'text-slate-600 hover:text-brand-900 transition-colors';
+      ? 'text-ink font-medium'
+      : 'text-ink/70 hover:text-brand-700 transition-colors';
     return `<a href="${href}" class="${classes}">${label}</a>`;
   }).join('\n            ');
 
   const mobileLinks = NAV_LINKS.map(
     ({ href, label }) =>
-      `<a href="${href}" class="block px-4 py-3 text-slate-700 hover:bg-slate-50">${label}</a>`
+      `<a href="${href}" class="block px-4 py-3 text-ink/80 hover:bg-paperdark">${label}</a>`
   ).join('\n            ');
 
   return `
-    <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+    <header class="sticky top-0 z-40 border-b border-ink/10 bg-paper/90 backdrop-blur">
       <nav class="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
         <!-- The wordmark matches the locker: white LYNDRY on brand teal. -->
         <a href="/" class="rounded-md bg-brand-600 px-2.5 py-1.5 text-lg font-bold uppercase tracking-tight text-white">
@@ -65,10 +65,10 @@ function navBar(currentPath) {
 
         <!-- Mobile menu. Uses the browser's own show/hide, so no JavaScript. -->
         <details class="relative sm:hidden">
-          <summary class="cursor-pointer list-none rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
+          <summary class="cursor-pointer list-none rounded-lg border border-ink/20 px-3 py-2 text-sm text-ink/80">
             Menu
           </summary>
-          <div class="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div class="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-ink/10 bg-white shadow-lg">
             ${mobileLinks}
             <a href="/signup" class="block bg-brand-600 px-4 py-3 font-medium text-white">Get started</a>
           </div>
@@ -81,40 +81,40 @@ function footer() {
   const year = new Date().getFullYear();
 
   return `
-    <footer class="mt-24 border-t border-slate-200 bg-slate-50">
+    <footer class="mt-24 border-t border-ink/10 bg-paperdark">
       <div class="mx-auto max-w-6xl px-5 py-14">
         <div class="grid gap-10 sm:grid-cols-3">
 
           <div>
-            <div class="text-lg font-semibold tracking-tight text-brand-900">${site.name}</div>
-            <p class="mt-3 text-sm leading-relaxed text-slate-600">
+            <div class="text-lg font-semibold tracking-tight text-ink">${site.name}</div>
+            <p class="mt-3 text-sm leading-relaxed text-ink/70">
               Wash, dry and fold, picked up from your door and back within ${site.turnaround}.
             </p>
-            <p class="mt-3 text-sm text-slate-600">Serving ${site.serviceArea}.</p>
+            <p class="mt-3 text-sm text-ink/70">Serving ${site.serviceArea}.</p>
           </div>
 
           <div>
-            <div class="text-sm font-semibold text-brand-900">Service</div>
-            <ul class="mt-3 space-y-2 text-sm text-slate-600">
-              <li><a href="/how-it-works" class="hover:text-brand-900">How it works</a></li>
-              <li><a href="/pricing" class="hover:text-brand-900">Pricing</a></li>
-              <li><a href="/signup" class="hover:text-brand-900">Sign up</a></li>
-              <li><a href="/contact" class="hover:text-brand-900">Contact</a></li>
+            <div class="text-sm font-semibold text-ink">Service</div>
+            <ul class="mt-3 space-y-2 text-sm text-ink/70">
+              <li><a href="/how-it-works" class="hover:text-brand-700">How it works</a></li>
+              <li><a href="/pricing" class="hover:text-brand-700">Pricing</a></li>
+              <li><a href="/signup" class="hover:text-brand-700">Sign up</a></li>
+              <li><a href="/contact" class="hover:text-brand-700">Contact</a></li>
             </ul>
           </div>
 
           <div>
-            <div class="text-sm font-semibold text-brand-900">Legal</div>
-            <ul class="mt-3 space-y-2 text-sm text-slate-600">
-              <li><a href="/privacy" class="hover:text-brand-900">Privacy policy</a></li>
-              <li><a href="/terms" class="hover:text-brand-900">Terms of service</a></li>
-              <li><a href="/sms-terms" class="hover:text-brand-900">Messaging terms</a></li>
+            <div class="text-sm font-semibold text-ink">Legal</div>
+            <ul class="mt-3 space-y-2 text-sm text-ink/70">
+              <li><a href="/privacy" class="hover:text-brand-700">Privacy policy</a></li>
+              <li><a href="/terms" class="hover:text-brand-700">Terms of service</a></li>
+              <li><a href="/sms-terms" class="hover:text-brand-700">Messaging terms</a></li>
             </ul>
           </div>
 
         </div>
 
-        <div class="mt-12 border-t border-slate-200 pt-6 text-sm text-slate-500">
+        <div class="mt-12 border-t border-ink/10 pt-6 text-sm text-ink/55">
           <p>&copy; ${year} ${site.legalName}. All rights reserved.</p>
           <p class="mt-2">
             We never sell or share your phone number with third parties for marketing.
@@ -147,7 +147,14 @@ function renderPage({ title, description, path, body, extra = {} }) {
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Two typefaces, following telnyx.com's pairing: a bold geometric face for
+       display, Inter for everything you actually read.
+
+       Telnyx uses PP Formula, which is a commercial licence. Outfit is the
+       closest free equivalent — same wide geometric bones. If the exact
+       Telnyx face is ever licensed, swap the name here and in the Tailwind
+       config below and the whole site follows. -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <!-- Tailwind straight from a CDN, with the typography plugin for the long
        text on the legal pages. Nothing to build, nothing to compile. -->
@@ -158,8 +165,14 @@ function renderPage({ title, description, path, body, extra = {} }) {
         extend: {
           fontFamily: {
             sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            display: ['Outfit', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
           },
           colors: {
+            // The page itself: warm off-white with near-black type, taken
+            // from telnyx.com. Not pure white — the warmth is the point.
+            paper: '#fefdf5',
+            paperdark: '#eceadd',
+            ink: '#0a0a0a',
             // Taken from the physical LYNDRY locker. brand-600 is the colour
             // of the locker doors and the sign; everything else is a lighter
             // or darker version of it, so the site and the hardware match.
@@ -181,8 +194,19 @@ function renderPage({ title, description, path, body, extra = {} }) {
       },
     };
   </script>
+
+  <style>
+    /* Every heading uses the display face. Doing it here means pages don't
+       have to repeat a font class on every single heading. */
+    h1, h2, h3, h4 {
+      font-family: 'Outfit', Inter, ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: -0.025em;
+    }
+    /* Long-form legal pages: keep the body text comfortable to read. */
+    .prose :where(p, li) { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  </style>
 </head>
-<body class="min-h-screen bg-white font-sans text-slate-800 antialiased">
+<body class="min-h-screen bg-paper font-sans text-ink antialiased">
 ${navBar(path)}
 <main>
 ${body}

@@ -88,9 +88,18 @@ placeholders and must never hardcode any of it. Changing the price is one line.
 plus the Tailwind colour palette. Page files in `public/pages/` contain only
 their own middle section.
 
-**Brand colour is `brand-600` (#178a94), taken from the physical locker.** The
-rest of the `brand` scale is lighter and darker versions of it. Use it; don't
-introduce a second accent colour.
+**The visual system is telnyx.com's, with LYNDRY's own accent colour.**
+
+- Background `paper` (#fefdf5), a warm cream. Never plain white for a page.
+- Text `ink` (#0a0a0a). Secondary text is `text-ink/70`, not a grey scale.
+- Headings use `Outfit` (set once in the layout's `<style>`, so pages don't
+  repeat a font class). Body text is `Inter`.
+- Buttons are pills — `rounded-full`.
+- Section labels are small, bold, uppercase, widely letter-spaced.
+
+**Accent colour is `brand-600` (#178a94), taken from the physical locker.** It's
+the one colour on an otherwise black-and-cream page. Use it for buttons, icons
+and step markers; don't introduce a second accent.
 
 **In development, page HTML is re-read on every request** — edit a file in
 `public/pages/`, refresh the browser, done. In production it's cached.
