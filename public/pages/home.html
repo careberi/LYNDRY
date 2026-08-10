@@ -78,6 +78,32 @@
             </div>
           </div>
 
+          <!-- Consent, under the field, on every form that takes a number.
+               The wording is the design handoff's, verbatim — it is what
+               carriers read during registration, so it does not get reworded.
+
+               Ticking this gates the button, but it is NOT the consent record.
+               That has to be captured with a timestamp and an IP address at
+               the moment the account is created, which happens on /signup. The
+               box there is asked again and starts unticked — pre-ticking a
+               consent box is the single fastest way to fail carrier review. -->
+          <label class="check" style="margin-top:18px;max-width:540px;">
+            <!-- No name attribute on purpose: `required` still gates the form,
+                 but an unnamed control is not submitted, so the URL stays a
+                 clean ?phone=... rather than carrying a tick that means
+                 nothing once it gets there. -->
+            <input type="checkbox" required>
+            <span class="check-box">{{ICON_CHECK}}</span>
+            <span class="check-text" style="color:var(--ink-800);">
+              By checking this box you agree to receive text messages from
+              lyndry at the number provided, including messages sent by
+              autodialer. Consent is not a condition of purchase. Message and
+              data rates may apply. Message frequency varies. Reply HELP for
+              help, STOP to cancel. See our <a href="/privacy">Privacy Policy</a>
+              and <a href="/sms-terms">SMS Terms</a>.
+            </span>
+          </label>
+
           <p class="helper helper-brand">One text back &middot; no spam &middot; reply STOP any time</p>
         </form>
       </div>
