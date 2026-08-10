@@ -1,6 +1,7 @@
 'use strict';
 
 const { site, tokens } = require('./site');
+const { CSS_BASE } = require('./assets');
 
 // ---------------------------------------------------------------------------
 // The page layout.
@@ -240,9 +241,13 @@ function renderPage({ title, description, path, body, extra = {} }) {
        next time the system is replaced. -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grandstander:wght@900&display=swap">
 
-  <link rel="stylesheet" href="/css/ds/styles.css">
-  <link rel="stylesheet" href="/css/icons.css">
-  <link rel="stylesheet" href="/css/lyndry.css">
+  <!-- The /css/<hash>/ path is a fingerprint of the stylesheets. It changes
+       whenever any of them changes, which is what makes a deploy visible
+       immediately instead of a returning visitor keeping a week-old cached
+       copy. See src/web/assets.js. -->
+  <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
+  <link rel="stylesheet" href="${CSS_BASE}/icons.css">
+  <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
 </head>
 <body>
 ${navBar(path)}

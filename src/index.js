@@ -7,6 +7,7 @@ const pkg = require('../package.json');
 // All environment settings are read and frozen in one place. See src/config.js.
 const { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials } = require('./config');
 
+const assets = require('./web/assets');
 const web = require('./routes/web');
 const sms = require('./routes/sms');
 const ops = require('./routes/ops');
@@ -49,12 +50,26 @@ app.use(express.urlencoded({ extended: true }));
 // Stylesheets. Only public/css is served — public/pages holds page templates
 // with {{TOKEN}} holes in them, which must never be reachable directly.
 //
-// Cached hard in production because the filenames never change; in
-// development they aren't, so editing a stylesheet and refreshing is enough.
+// Served from a fingerprinted path (/css/<hash>/...). Because the hash changes
+// whenever any stylesheet changes, a given URL's content can never change, so
+// it is safe to cache forever — and a deploy is picked up instantly instead of
+// a returning visitor being stuck with a week-old stylesheet. See
+// src/web/assets.js for the full reasoning.
+app.use(
+  assets.CSS_BASE,
+  express.static(assets.CSS_DIR, {
+    maxAge: config.env === 'production' ? '1y' : 0,
+    immutable: config.env === 'production',
+  })
+);
+
+// The unfingerprinted path stays mounted so that a link from an older cached
+// page, or a bookmark, still resolves. Deliberately NOT cached: this is the
+// path that can go stale.
 app.use(
   '/css',
-  express.static(path.join(__dirname, '..', 'public', 'css'), {
-    maxAge: config.env === 'production' ? '7d' : 0,
+  express.static(assets.CSS_DIR, {
+    setHeaders: (res) => res.set('Cache-Control', 'no-cache'),
   })
 );
 

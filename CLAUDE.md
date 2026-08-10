@@ -100,6 +100,24 @@ design system below. Styling is three stylesheets, linked in this order:
 Only `public/css` is served statically. `public/pages` holds templates with
 `{{TOKEN}}` holes and must never be reachable directly.
 
+**Stylesheets are served from a fingerprinted path, `/css/<hash>/…`,** built by
+`src/web/assets.js` from the contents of every file in `public/css`. Change any
+stylesheet and every URL changes, so a deploy is picked up immediately; because
+a given URL's content can then never change, it is cached for a year.
+
+**Never link `/css/…` directly from a page** — use `CSS_BASE`. The
+unfingerprinted path stays mounted for old bookmarks and is served `no-cache`,
+which is exactly the staleness the fingerprint exists to avoid.
+
+The fingerprint is a directory, not a `?query`, because the design system's
+`styles.css` pulls in its tokens with relative `@import` — those resolve under
+whatever directory the stylesheet came from, so versioning the directory
+versions the imports too. A query string would leave the tokens stale.
+
+This is not theoretical: the logo shipped as unstyled markup on every phone
+that had visited before, because the HTML was new and a seven-day cached
+stylesheet had no `.ly-logo` rules in it.
+
 ### The visual system
 
 **One sentence: everything is a line drawing on cream paper, and it casts a
