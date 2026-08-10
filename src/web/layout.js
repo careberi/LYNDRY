@@ -62,6 +62,10 @@ const TAIL_SVG =
 
 // The logo: the wordmark inside a chunky message bubble, because the whole
 // service is a text thread. Variant is 'nav', 'footer', 'compact' or 'offset'.
+//
+// The handoff's version carries a "wash & fold" kicker under the wordmark in
+// Space Mono. Neil asked for it out. The styling for it is still in
+// lyndry.css, so putting it back is one line here.
 function logo(variant, { href = '/', label = 'LYNDRY — home' } = {}) {
   const tag = href ? 'a' : 'span';
   const attrs = href ? ` href="${href}" aria-label="${label}"` : '';
@@ -69,7 +73,6 @@ function logo(variant, { href = '/', label = 'LYNDRY — home' } = {}) {
   return `<${tag}${attrs} class="ly-logo ly-logo--${variant}">
           <span class="ly-logo__bubble">
             <span class="ly-logo__word">${site.name}</span>
-            <span class="ly-logo__kicker">wash &amp; fold</span>
           </span>
           <span class="ly-logo__tail">${TAIL_SVG}</span>
         </${tag}>`;

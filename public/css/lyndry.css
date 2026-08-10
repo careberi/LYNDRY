@@ -53,7 +53,7 @@
   background: var(--paper-050);
   border: var(--ly-bw, 5px) solid var(--ink-900);
   border-radius: var(--ly-radius, 40px);
-  padding: var(--ly-pad, 24px 34px 26px);
+  padding: var(--ly-pad, 24px 34px);
   text-align: center;
 }
 
@@ -65,8 +65,27 @@
   line-height: 0.95;
   letter-spacing: -0.045em;
   color: var(--ink-900);
+
+  /* Optically centre the caps in the bubble.
+
+     LYNDRY is all capitals, so it never uses the descender space the font
+     reserves below the baseline. With symmetric padding the letters therefore
+     sit visibly high — measured at 5.5px above and 8.5px below in the nav.
+     Grandstander's metrics put that imbalance at 0.19em, so the ink needs
+     nudging down by half of it.
+
+     `position/top` rather than padding or margin, deliberately: padding would
+     make the element taller and push the bubble's bottom edge down by the
+     same amount, which moves the text and the box together and centres
+     nothing. This moves the ink without touching layout.
+
+     In em, so it holds at every --ly-size. */
+  position: relative;
+  top: 0.095em;
 }
 
+/* The "wash & fold" kicker. Neil asked for it off the mark, so layout.js no
+   longer emits it — this is kept so putting it back is one line there. */
 .ly-logo__kicker {
   display: block;
   margin-top: 0.08em;
@@ -104,7 +123,7 @@
   --ly-size: 20px;
   --ly-bw: 3px;
   --ly-radius: 14px;
-  --ly-pad: 5px 13px 6px;
+  --ly-pad: 5px 13px;
   --ly-tail-x: 19px;
   --ly-tail-w: 22px;
   --ly-tail-h: 13px;
@@ -115,14 +134,15 @@
   --ly-size: 32px;
   --ly-bw: 3px;
   --ly-radius: 20px;
-  --ly-pad: 8px 18px 10px;
+  --ly-pad: 8px 18px;
   --ly-tail-x: 25px;
   --ly-tail-w: 34px;
   --ly-tail-h: 19px;
 }
 
-/* Below about 18px the kicker stops being legible, so it goes. */
-.ly-logo--compact { --ly-size: 18px; --ly-bw: 3px; --ly-radius: 12px; --ly-pad: 4px 10px 5px; --ly-tail-x: 14px; --ly-tail-w: 18px; --ly-tail-h: 11px; }
+/* The smallest lockup. Also hides the kicker, which stops being legible below
+   about 18px — relevant only if the kicker is ever switched back on. */
+.ly-logo--compact { --ly-size: 18px; --ly-bw: 3px; --ly-radius: 12px; --ly-pad: 4px 10px; --ly-tail-x: 14px; --ly-tail-w: 18px; --ly-tail-h: 11px; }
 .ly-logo--compact .ly-logo__kicker { display: none; }
 
 /* The avatar — the L in a Suds bubble. Used in the phone mock. */
@@ -141,6 +161,12 @@
   line-height: 1;
   letter-spacing: -0.045em;
   color: var(--ink-900);
+  /* Same optical correction as the wordmark — the "L" is a cap too.
+     Padding works here where it doesn't on the wordmark: this box has a fixed
+     height, so padding shrinks the content area instead of growing the box,
+     and a centred glyph moves down by half the padding. Hence 0.19em to buy
+     the same 0.095em nudge. */
+  padding-top: 0.19em;
 }
 .ly-avatar__tail {
   position: absolute;
