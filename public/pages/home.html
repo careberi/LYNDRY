@@ -102,13 +102,16 @@
 
     <div class="hero-row">
 
-      <div data-parallax="0.14">
+      <div class="hero-copy" data-parallax="0.14">
         <!-- Written in sentence case; the .eyebrow class uppercases it. That
              is the design system's rule — uppercase lives in the Space Mono
              label treatment, never in the copy itself. -->
         <p class="eyebrow eyebrow-brand">Wash &amp; fold &middot; pickup &amp; drop-off</p>
 
-        <h1 class="display-1">Text us your laundry.</h1>
+        <!-- Break at the full stop, not wherever the line happens to run out.
+             text-wrap:balance on its own put "We" alone at the end of the
+             first line, which reads as a stumble. -->
+        <h1 class="display-1">Text us.<br>We got your laundry.</h1>
 
         <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:40ch;margin:0 0 30px;">
           Leave it at your door. It comes back washed, folded and on time.

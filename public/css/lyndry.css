@@ -118,6 +118,34 @@
 .ly-logo--offset .ly-logo__bubble { box-shadow: 11px 11px 0 var(--ink-900); }
 .ly-logo--offset .ly-logo__tail { filter: drop-shadow(11px 11px 0 var(--ink-900)); }
 
+/* ---- The tail on ink chrome ------------------------------------------------
+   On the ink header and footer the tail is a plain unstroked triangle, which
+   is what the handoff prescribes for these two placements: the ink outline is
+   invisible against ink anyway, so drawing it buys nothing.
+
+   It also fixes a real artifact. The stroked version overlaps the bubble's
+   bottom border by exactly the border width, and the join lands on a half
+   pixel — the logo is 36.3px tall centred in a 68px bar. On a 2x or 3x screen
+   that edge antialiases against the ink border underneath and shows as a thin
+   dark line between the bubble and the tail. It was clearly visible on an
+   iPhone and invisible on a 1x desktop display.
+
+   With no stroke, overlapping further costs nothing visually — the extra sits
+   inside the bubble, cream on cream — so the tail is pulled up an additional
+   2px and made 2px taller to keep its point in the same place. Antialiasing at
+   the top edge then blends cream into cream and there is nothing to see. */
+.ly-logo--nav .ly-logo__tail,
+.ly-logo--footer .ly-logo__tail,
+.ly-logo--compact .ly-logo__tail {
+  background: var(--paper-050);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  height: calc(var(--ly-tail-h, 26px) + 2px);
+  bottom: calc(var(--ly-tail-h, 26px) * -1 + var(--ly-bw, 5px));
+}
+.ly-logo--nav .ly-logo__tail svg,
+.ly-logo--footer .ly-logo__tail svg,
+.ly-logo--compact .ly-logo__tail svg { display: none; }
+
 /* Nav — the 68px ink header. */
 .ly-logo--nav {
   --ly-size: 20px;
@@ -229,8 +257,18 @@
   line-height: 0.9;
   letter-spacing: -0.045em;
   color: var(--ink-900);
-  text-wrap: balance;
   margin: 0 0 22px;
+}
+
+/* The hero headline holds its two-line break at every width.
+   It is sized from the COLUMN it sits in, not the viewport, because on
+   desktop that column is only about half the screen — a viewport-based size
+   overflows it and wraps to a third line, which is what "Text us. We got your
+   laundry." did at 1280px while looking fine at 800px.
+   10.8cqi is the largest size at which the longer line still fits. */
+@supports (font-size: 1cqi) {
+  .hero-copy { container-type: inline-size; }
+  .hero-copy .display-1 { font-size: clamp(30px, 10.8cqi, 96px); }
 }
 .display-2 {
   font-family: var(--font-display);
@@ -957,6 +995,11 @@
   .sticky-col { position: static !important; }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 600px) {
   .btn-lg { min-height: var(--control-h-md); padding: 0 var(--control-pad-md); font-size: 16px; }
+
+  /* Fallback for browsers without container query units — the rule above
+     handles this properly everywhere else. Without it the base clamp bottoms
+     out at 58px, at which the longer line needs more width than a phone has. */
+  .display-1 { font-size: clamp(30px, 9.6vw, 58px); }
 }
