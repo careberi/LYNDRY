@@ -1,0 +1,825 @@
+/* ===========================================================================
+   LYNDRY — the component layer.
+
+   The design system in css/ds/ gives us the tokens: colours, type sizes,
+   spacing, border weights, shadows, easings. This file turns those into the
+   handful of things the website actually puts on a page.
+
+   THE ONE-SENTENCE RULE, from the design system:
+   everything is a line drawing on cream paper, and it casts a hard shadow.
+   If an element has no ink outline, it is either type, a divider, or wrong.
+
+   Three rules that are easy to break by accident:
+
+     1. There is ONE outline colour, --ink-900. Never grey, never a tint of
+        the fill.
+     2. Shadows are hard offsets in pure ink. No blur, no transparency.
+        (--shadow-float is the single exception and is for overlays only.)
+     3. Text is ink on every brand colour. Suds green, Sunbeam yellow and
+        Lilac are all light enough that white text on them is a bug. The only
+        light-on-dark pairing is paper on ink.
+
+   Everything here is a plain CSS class, on purpose. The alternative was
+   Tailwind utility strings, which for a system this opinionated turn into
+   forty characters of border-and-shadow noise on every element.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Page furniture
+   --------------------------------------------------------------------------- */
+
+.container {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding-left: var(--gutter-desktop);
+  padding-right: var(--gutter-desktop);
+}
+
+.container-narrow {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-left: var(--gutter-desktop);
+  padding-right: var(--gutter-desktop);
+}
+
+/* Section rhythm. The design calls for 88–104px; these are the two sizes. */
+.section { padding-top: 88px; padding-bottom: 96px; }
+.section-lg { padding-top: 104px; padding-bottom: 112px; }
+
+/* A full-width 3px ink rule is one of the two ways sections are separated
+   (the other is the scallop). */
+.rule-top { border-top: var(--border-2); }
+.rule-bottom { border-bottom: var(--border-2); }
+
+/* The recurring stack at the top of nearly every section:
+   mono eyebrow -> Outfit headline -> Schibsted paragraph. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  line-height: var(--leading-label);
+  text-transform: uppercase;
+  color: var(--ink-500);
+  margin: 0 0 18px;
+}
+.eyebrow-brand { color: var(--suds-700); }
+.eyebrow-lilac { color: var(--lilac-600); }
+.eyebrow-paper { color: var(--ink-400); }
+
+/* Display headlines. Outfit 900, set almost too big and almost too tight. */
+.display-1 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(58px, 6.6vw, 96px);
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  color: var(--ink-900);
+  text-wrap: balance;
+  margin: 0 0 22px;
+}
+.display-2 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(46px, 5.4vw, 76px);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  color: var(--ink-900);
+  text-wrap: balance;
+  margin: 0 0 20px;
+}
+.display-3 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(40px, 4.4vw, 60px);
+  line-height: 0.94;
+  letter-spacing: -0.035em;
+  color: var(--ink-900);
+  margin: 0 0 24px;
+}
+.display-4 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(36px, 4vw, 54px);
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+  color: var(--ink-900);
+  margin: 0 0 20px;
+}
+
+.lead {
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ink-800);
+  max-width: 46ch;
+  margin: 0 0 30px;
+}
+
+.measure-narrow { max-width: 38ch; }
+.measure { max-width: 52ch; }
+
+/* ---------------------------------------------------------------------------
+   Button
+   --------------------------------------------------------------------------- */
+/* The signature interaction, on every filled button and interactive card:
+   hover lifts up-and-left and deepens the shadow; press pushes it down-and-
+   right onto a 1px shadow. It should feel like a latch closing. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--control-h-md);
+  padding: 0 var(--control-pad-md);
+  font-family: var(--font-display);
+  font-weight: var(--weight-extrabold);
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  text-decoration: none;
+  border: var(--border-w-2) solid var(--ink-900);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop-sm);
+  cursor: pointer;
+  transition: var(--transition-control);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:hover { transform: var(--lift-hover); box-shadow: var(--shadow-pop-md); filter: brightness(1.06); }
+.btn:active { transform: var(--lift-press); box-shadow: var(--shadow-pop-pressed); filter: none; }
+.btn:disabled, .btn[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+/* LYNDRY never greys out a control's colour — disabled is opacity only. */
+.btn:disabled:hover { transform: none; box-shadow: var(--shadow-pop-sm); filter: none; }
+
+.btn-sm { min-height: var(--control-h-sm); padding: 0 var(--control-pad-sm); font-size: 14px; gap: 6px; box-shadow: 3px 3px 0 var(--ink-900); }
+.btn-lg { min-height: var(--control-h-lg); padding: 0 var(--control-pad-lg); font-size: 18px; gap: 10px; box-shadow: var(--shadow-pop-md); }
+.btn-lg:hover { box-shadow: var(--shadow-pop-lg); }
+
+.btn-primary   { background: var(--suds-500);    color: var(--ink-900); }
+.btn-accent    { background: var(--sunbeam-500); color: var(--ink-900); }
+.btn-secondary { background: var(--lilac-500);   color: var(--ink-900); }
+.btn-ink       { background: var(--ink-900);     color: var(--paper-050); }
+.btn-outline   { background: var(--paper-050);   color: var(--ink-900); }
+
+/* Ghost is the one exception to the whole signature: no border, no shadow,
+   no lift. It underlines on hover and that is all. */
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-900);
+  border-color: transparent;
+  box-shadow: none;
+}
+.btn-ghost:hover { transform: none; box-shadow: none; filter: none; text-decoration: underline; text-underline-offset: 4px; }
+.btn-ghost:active { transform: none; box-shadow: none; }
+
+.btn-full { display: flex; width: 100%; }
+
+/* ---------------------------------------------------------------------------
+   Card
+   --------------------------------------------------------------------------- */
+
+.card {
+  background: var(--paper-050);
+  color: var(--ink-900);
+  border: var(--border-w-2) solid var(--ink-900);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop-md);
+  padding: var(--space-6);
+}
+
+.card-sm { box-shadow: var(--shadow-pop-sm); }
+.card-lg { box-shadow: var(--shadow-pop-lg); }
+.card-xl { border-radius: var(--radius-xl); }
+
+.card-sunken    { background: var(--paper-200); }
+.card-brand     { background: var(--suds-500); }
+.card-brandsoft { background: var(--suds-100); }
+.card-accent    { background: var(--sunbeam-500); }
+.card-lilac     { background: var(--lilac-300); }
+.card-ink       { background: var(--ink-900); color: var(--paper-050); }
+
+/* A card sitting ON ink needs a coloured offset, because an ink shadow on an
+   ink ground is invisible. These three tokens are the only permitted
+   non-ink shadows in the system. */
+.card-on-ink { box-shadow: var(--shadow-pop-brand); }
+
+/* ---------------------------------------------------------------------------
+   Input, and the consent checkbox
+   --------------------------------------------------------------------------- */
+/* Pure white is reserved for input fields, so a field reads as a hole punched
+   in the cream page. It is the one place --paper-000 is used. */
+
+.field { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+
+.field-label {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-700);
+}
+
+.field-hint { font-size: var(--text-caption); color: var(--ink-500); }
+
+.input, .select, .textarea {
+  display: block;
+  width: 100%;
+  min-height: var(--control-h-md);
+  padding: 10px 14px;
+  background: var(--paper-000);
+  border: var(--border-w-1) solid var(--ink-900);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: var(--text-body-md);
+  font-weight: 500;
+  color: var(--ink-900);
+  transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.input-lg { min-height: var(--control-h-lg); font-size: var(--text-body-lg); }
+.textarea { min-height: 0; line-height: 1.5; resize: vertical; }
+
+.input::placeholder, .textarea::placeholder { color: var(--ink-400); }
+
+/* The error state is the only place Stain red appears. */
+.input-error { border-color: var(--stain-500); box-shadow: 2px 2px 0 var(--stain-500); }
+
+/* A real checkbox, visually hidden, with a drawn box beside it. Hiding it with
+   opacity rather than display:none keeps it reachable by keyboard and by
+   screen readers — and it still gates form submission, which is the whole
+   point of the consent box. */
+.check { display: inline-flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.check input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.check-box {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  background: var(--paper-000);
+  border: var(--border-w-1) solid var(--ink-900);
+  border-radius: var(--radius-xs);
+  transition: var(--transition-control);
+}
+.check-box .icon { opacity: 0; }
+.check input:checked + .check-box { background: var(--suds-500); box-shadow: var(--shadow-pop-xs); }
+.check input:checked + .check-box .icon { opacity: 1; }
+.check input:focus-visible + .check-box { box-shadow: var(--focus-ring); }
+
+/* Radios use the same drawn box, rounded. The tick reads clearly enough at
+   this size that a separate filled-dot state is not worth the extra rule. */
+.check-box-round { border-radius: var(--radius-circle); }
+
+.check-text { font-size: 13px; line-height: 1.5; color: var(--ink-700); }
+.check-text a { color: var(--suds-700); text-decoration: underline; }
+
+/* Links sitting ON Suds green are ink, not the usual --suds-700.
+   ONE DEPARTURE FROM THE SPEC, and a deliberate one: the handoff asks for
+   --suds-700 links on the green consent block, which measures 2.39:1 against
+   --suds-500. That fails WCAG AA for body text by a wide margin. Ink on the
+   same green is 5.92:1 and passes. The underline stays, so the link is still
+   obviously a link. */
+.hero a,
+.card-brand a { color: var(--ink-900); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.hero a:hover,
+.card-brand a:hover { color: var(--suds-700); }
+/* Buttons inside those areas are not links in this sense. */
+.hero a.btn, .card-brand a.btn { text-decoration: none; }
+
+/* ---------------------------------------------------------------------------
+   Badge
+   --------------------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-label-sm);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  border: var(--border-w-1) solid var(--ink-900);
+  border-radius: var(--radius-pill);
+  background: var(--paper-050);
+  color: var(--ink-900);
+}
+.badge-ink { background: var(--ink-900); color: var(--paper-050); }
+.badge-accent { background: var(--sunbeam-500); }
+
+/* ---------------------------------------------------------------------------
+   Icons
+   --------------------------------------------------------------------------- */
+/* Lucide glyphs, applied as a CSS mask so they inherit their colour from
+   surrounding text and need no per-colour variants. See css/icons.css — every
+   glyph the site uses is in that one file, so swapping icon sets is a
+   one-file change. */
+
+.icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.icon-16 { width: 16px; height: 16px; }
+.icon-22 { width: 22px; height: 22px; }
+.icon-26 { width: 26px; height: 26px; }
+.icon-30 { width: 30px; height: 30px; }
+
+/* The recurring pattern for feature icons: an outlined square, filled with
+   the palest Suds, glyph centred in ink. */
+.icon-tile {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  background: var(--suds-100);
+  border: var(--border-w-2) solid var(--ink-900);
+  border-radius: 16px;
+  color: var(--ink-900);
+}
+.icon-tile-52 { width: 52px; height: 52px; border-radius: 14px; }
+.icon-tile-lilac { background: var(--lilac-300); }
+.icon-tile-suds { background: var(--suds-200); }
+
+/* ---------------------------------------------------------------------------
+   The scallop
+   --------------------------------------------------------------------------- */
+/* A half-circle mask hanging off the bottom of a coloured field, with a 3px
+   ink lip. 58px repeat, 28px radius. ONE PER PAGE — it is a full stop, and a
+   page with two of them has two endings. */
+
+.scallop { position: relative; height: 30px; }
+.scallop i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 30px;
+  -webkit-mask: radial-gradient(circle at 50% 0, #000 28px, transparent 29px) 0 0 / 58px 30px repeat-x;
+  mask: radial-gradient(circle at 50% 0, #000 28px, transparent 29px) 0 0 / 58px 30px repeat-x;
+}
+.scallop .scallop-lip { top: 3px; background: var(--ink-900); }
+.scallop .scallop-fill { top: 0; background: var(--suds-500); }
+
+/* ---------------------------------------------------------------------------
+   The lilac dot grid
+   --------------------------------------------------------------------------- */
+/* The single repeating texture in the whole system. No gradients anywhere. */
+
+.dotfield {
+  background-color: var(--lilac-100);
+  background-image: radial-gradient(var(--ink-200) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+  border-top: var(--border-2);
+  border-bottom: var(--border-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Chrome: the ink header and footer
+   --------------------------------------------------------------------------- */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--ink-900);
+}
+.site-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  height: 68px;
+}
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 25px;
+  letter-spacing: -0.05em;
+  color: var(--paper-050);
+  text-decoration: none;
+}
+.site-nav { display: flex; align-items: center; gap: 26px; margin-right: auto; }
+.site-nav a {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--paper-200);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.site-nav a:hover, .site-nav a[aria-current='page'] { color: var(--suds-300); }
+
+/* Mobile menu, built on <details> so it needs no JavaScript at all. */
+.nav-toggle { display: none; margin-left: auto; position: relative; }
+.nav-toggle > summary { list-style: none; cursor: pointer; }
+.nav-toggle > summary::-webkit-details-marker { display: none; }
+.nav-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 220px;
+  background: var(--paper-050);
+  border: var(--border-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop-md);
+  overflow: hidden;
+}
+.nav-panel a {
+  display: block;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ink-100);
+}
+.nav-panel a:last-child { border-bottom: none; background: var(--suds-500); }
+
+.site-footer { background: var(--ink-900); color: var(--paper-200); }
+.footer-head {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-label-sm);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-400);
+  margin: 0 0 14px;
+}
+.site-footer a { color: var(--paper-200); text-decoration: none; font-size: 15px; font-weight: 600; }
+.site-footer a:hover { color: var(--suds-300); }
+.footer-legal {
+  font-family: var(--font-mono);
+  font-size: var(--text-label-sm);
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  color: var(--ink-400);
+}
+
+/* ---------------------------------------------------------------------------
+   The hero, and its bubbles
+   --------------------------------------------------------------------------- */
+
+.hero { background: var(--suds-500); position: relative; overflow: hidden; }
+.hero-inner {
+  min-height: calc(100vh - 68px);
+  padding-top: 44px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.hero-row {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 56px;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* The fact rail pinned to the bottom of the green. */
+.fact-rail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 40px;
+  padding: 22px 0 34px;
+  border-top: var(--border-2);
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-900);
+}
+.fact-rail span { display: inline-flex; align-items: center; gap: 14px; }
+.fact-rail span::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-900);
+}
+.fact-rail span:last-child::after { display: none; }
+
+/* Rising soap bubbles. Decorative, so the layer is aria-hidden and cannot be
+   clicked through. Each bubble starts with a NEGATIVE animation delay, which
+   is what makes the field already full when the page loads instead of
+   filling up over the first half minute. */
+.bubbles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.bubbles span {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(16, 18, 16, 0.3);
+  background: rgba(255, 255, 255, 0.22);
+  animation-name: lyRise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes lyRise {
+  from { transform: translateY(0) scale(0.4); }
+  to   { transform: translateY(-104vh) scale(1); }
+}
+
+/* ---------------------------------------------------------------------------
+   The phone mock
+   --------------------------------------------------------------------------- */
+/* Laid out at real iPhone size (402 x 874) and scaled down as one piece.
+   Building it small instead would mean shrinking every font, radius and
+   bubble by hand and getting them wrong.
+
+   It is deliberately static. An animated version was built, reviewed and
+   removed during the design. Do not reintroduce motion here. */
+
+.phone-wrap { display: flex; justify-content: center; }
+.phone-bezel {
+  width: 402px;
+  background: var(--ink-900);
+  padding: 12px;
+  border-radius: 60px;
+  box-shadow: var(--shadow-pop-xl);
+  line-height: 0;
+  /* Scaled from its centre, which leaves 20% of the height as empty space
+     above and below. The negative margins claim that space back so the hero
+     row lays out around what you can actually see. Changing the scale means
+     recalculating the margin: it is (height x (1 - scale)) / 2. */
+  transform: scale(0.6);
+  margin: -175px 0;
+}
+.phone-screen {
+  position: relative;
+  height: 874px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 48px;
+  background: var(--paper-050);
+  line-height: var(--leading-body);
+}
+.phone-island {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  width: 126px;
+  height: 37px;
+  border-radius: 20px;
+  background: var(--ink-900);
+  z-index: 2;
+}
+.phone-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 30px 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+.phone-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px 12px;
+  background: var(--paper-100);
+  border-bottom: var(--border-2);
+}
+.phone-avatar {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--suds-500);
+  border: var(--border-w-2) solid var(--ink-900);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 24px;
+  color: var(--paper-050);
+  line-height: 1;
+}
+.phone-name {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-900);
+}
+/* Bottom-anchored, so the thread sits at the base of the screen the way a
+   real conversation does. The bottom padding clears the home indicator. */
+.phone-thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 16px 40px;
+}
+.phone-day {
+  align-self: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-400);
+  padding-bottom: 4px;
+}
+.bubble {
+  max-width: 82%;
+  padding: 9px 14px;
+  border: var(--border-w-1) solid var(--ink-900);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink-900);
+}
+.bubble-out { align-self: flex-end; max-width: 78%; background: var(--suds-500); border-radius: 18px 18px 4px 18px; }
+.bubble-in  { align-self: flex-start; background: var(--paper-200); border-radius: 18px 18px 18px 4px; }
+.phone-receipt {
+  align-self: flex-end;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-label);
+  color: var(--ink-400);
+}
+.phone-home {
+  width: 140px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--ink-900);
+  align-self: center;
+  margin-top: 10px;
+}
+
+/* ---------------------------------------------------------------------------
+   Small repeated pieces
+   --------------------------------------------------------------------------- */
+
+/* Grid ratios are classes, not inline styles, on purpose: an inline
+   grid-template-columns beats the media query below and the page then refuses
+   to collapse on a phone. If you need a new ratio, add it here. */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+
+.grid-2-wide { grid-template-columns: 1.1fr 0.9fr; }   /* copy left, panel right */
+.grid-2-narrow { grid-template-columns: 0.75fr 1.25fr; } /* sticky heading, content */
+.grid-3-address { display: grid; grid-template-columns: 2fr 0.8fr 1.2fr; gap: 16px; }
+
+.stack > * + * { margin-top: 18px; }
+
+/* A question-and-answer list, used on the FAQ-shaped sections. */
+.qa { padding: 28px 0; border-top: 1px solid var(--ink-200); }
+.qa:first-of-type { border-top: var(--border-2); }
+.qa:last-of-type { border-bottom: var(--border-2); }
+.qa h3 { font-family: var(--font-display); font-weight: 800; font-size: 22px; margin: 0 0 10px; }
+.qa p { font-size: 16px; line-height: 1.55; color: var(--ink-700); max-width: 58ch; margin: 0; }
+
+/* A price row: label left, figure right. */
+.price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ink-100);
+}
+.price-row:last-child { border-bottom: none; }
+.price-row .amount { font-family: var(--font-display); font-weight: 800; font-size: 22px; color: var(--ink-900); }
+
+.helper {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-500);
+  margin: 18px 0 0;
+}
+.helper-brand { color: var(--suds-700); }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Long-form legal pages
+   --------------------------------------------------------------------------- */
+
+.prose { max-width: 68ch; }
+.prose h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  margin: 44px 0 14px;
+}
+.prose h3 { font-size: 21px; margin: 32px 0 10px; }
+.prose p, .prose li { font-size: 17px; line-height: 1.7; color: var(--ink-800); }
+.prose ul, .prose ol { padding-left: 22px; margin: 0 0 16px; }
+.prose li { margin-bottom: 8px; }
+.prose blockquote {
+  margin: 20px 0;
+  padding: 16px 22px;
+  background: var(--paper-200);
+  border: var(--border-w-1) solid var(--ink-900);
+  border-radius: var(--radius-md);
+  font-style: italic;
+}
+.prose a { color: var(--suds-700); }
+
+/* ---------------------------------------------------------------------------
+   Motion
+   --------------------------------------------------------------------------- */
+/* Scroll reveal. The hiding is applied by JavaScript at runtime, never in
+   plain CSS — a browser that never runs the script must show the page
+   normally rather than a blank one. See the script in src/web/layout.js. */
+
+.js-anim [data-reveal] {
+  opacity: 0.4;
+  transform: translate3d(0, 26px, 0);
+}
+.js-anim [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+  transition: opacity var(--dur-entrance) var(--ease-pop), transform var(--dur-entrance) var(--ease-pop);
+}
+
+/* Anyone whose device asks for less motion gets none of it. This kills the
+   bubbles, the parallax and the reveal in one go. Any new animation must be
+   listed here too. */
+@media (prefers-reduced-motion: reduce) {
+  .bubbles span { animation: none; }
+  [data-parallax], [data-parallax-x] { transform: none !important; }
+  .js-anim [data-reveal] { opacity: 1 !important; transform: none !important; }
+  html { scroll-behavior: auto; }
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------------------- */
+/* The design was drawn desktop-only and every grid was a fixed column count.
+   These breakpoints are ours, not the designer's — a service sold on "the
+   tool you already have is your phone" deserves a proper mobile pass, and
+   this is a sound collapse rather than that pass. */
+
+@media (max-width: 1080px) {
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 900px) {
+  .container, .container-narrow { padding-left: 20px; padding-right: 20px; }
+  .section { padding-top: 64px; padding-bottom: 68px; }
+  .section-lg { padding-top: 72px; padding-bottom: 76px; }
+
+  /* The nav collapses to the Menu button. The :not() matters — the Menu
+     control is itself a .btn, and without it the header would end up with
+     nothing in it at all. */
+  .site-nav { display: none; }
+  .site-header .btn:not(summary) { display: none; }
+  .nav-toggle { display: block; }
+
+  .hero-row { grid-template-columns: 1fr; gap: 32px; }
+  /* The phone mock is the first thing to go: it is decorative, and at this
+     width it would be a 240px-wide illegible sliver. */
+  .phone-wrap { display: none; }
+  .hero-inner { min-height: 0; padding-bottom: 0; }
+
+  .fact-rail { font-size: 11px; gap: 10px; margin-top: 28px; padding: 18px 0 28px; }
+  .fact-rail span::after { display: none; }
+
+  /* The hero form stacks. Side by side, a 375px screen leaves the field about
+     150px wide, which is not enough to see a phone number in. */
+  .hero-form { flex-direction: column; }
+  .hero-form > * { width: 100%; }
+  .hero-form .btn { width: 100%; }
+
+  .grid-2, .grid-3, .grid-4,
+  .grid-2-wide, .grid-2-narrow, .grid-3-address { grid-template-columns: 1fr; }
+  .sticky-col { position: static !important; }
+}
+
+@media (max-width: 560px) {
+  .btn-lg { min-height: var(--control-h-md); padding: 0 var(--control-pad-md); font-size: 16px; }
+}

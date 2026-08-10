@@ -36,12 +36,11 @@ function simplePage(res, { status, title, heading, body }) {
       description: 'LYNDRY payment.',
       path: '/pay',
       body: `
-<section class="mx-auto max-w-[720px] px-5 pb-28 pt-24 sm:px-8">
-  <h1 class="text-[38px] leading-[0.98] tracking-[-0.02em] text-ink sm:text-[54px]">${heading}</h1>
-  <div class="mt-6 space-y-4 text-[19px] leading-[1.55] text-neutral-800">${body}</div>
-  <a href="/" class="mt-10 inline-block rounded-full bg-brand-500 px-7 py-3.5 text-[16px] font-extrabold text-white transition-colors hover:bg-brand-600">
-    Back to LYNDRY
-  </a>
+<section class="container" style="max-width:760px;padding-top:96px;padding-bottom:112px;">
+  <p class="eyebrow eyebrow-brand">Payment</p>
+  <h1 class="display-2">${heading}</h1>
+  <div style="font-size:19px;line-height:1.55;color:var(--ink-800);max-width:46ch;">${body}</div>
+  <a href="/" class="btn btn-primary btn-lg" style="margin-top:36px;">Back to LYNDRY</a>
 </section>`,
     })
   );

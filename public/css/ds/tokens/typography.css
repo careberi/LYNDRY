@@ -1,0 +1,48 @@
+/* LYNDRY typography.
+   Three families, three jobs. Outfit shouts, Schibsted Grotesk explains,
+   Space Mono labels. Never use Outfit below 20px or Space Mono above 14px. */
+:root{
+  --font-display:"Outfit","Helvetica Neue",Arial,sans-serif;
+  --font-body:"Schibsted Grotesk","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"Space Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+
+  --weight-regular:400;
+  --weight-medium:500;
+  --weight-semibold:600;
+  --weight-bold:700;
+  --weight-extrabold:800;
+  --weight-black:900;
+
+  /* Display — Outfit 900, set tight and optically kerned in. */
+  --text-display-1:clamp(56px,8.5vw,112px);
+  --text-display-2:clamp(44px,6vw,76px);
+  --text-display-3:clamp(34px,4vw,54px);
+  --leading-display:0.9;
+  --tracking-display:-0.035em;
+
+  /* Headings — Outfit 800/700 */
+  --text-h1:40px;
+  --text-h2:32px;
+  --text-h3:24px;
+  --text-h4:20px;
+  --leading-heading:1.08;
+  --tracking-heading:-0.02em;
+
+  /* Body — Schibsted Grotesk */
+  --text-body-lg:18px;
+  --text-body-md:16px;
+  --text-body-sm:14px;
+  --text-caption:13px;
+  --leading-body:1.55;
+  --leading-tight:1.35;
+  --tracking-body:0em;
+
+  /* Label — Space Mono, uppercase, wide. Order numbers, tags, eyebrows. */
+  --text-label:12px;
+  --text-label-sm:11px;
+  --tracking-label:0.14em;
+  --leading-label:1.1;
+
+  --measure-narrow:38ch;
+  --measure-body:62ch;
+}

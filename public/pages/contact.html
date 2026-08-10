@@ -1,67 +1,69 @@
-<!-- Contact. Built to the LYNDRY design handoff. Wrapped in the shared layout
-     by src/web/layout.js. -->
+<!-- Contact. Built to the LYNDRY design handoff (v2). -->
 
-<section class="reveal mx-auto max-w-[1180px] px-5 pb-14 pt-20 sm:px-8">
-  <h1 class="text-[46px] leading-[0.96] tracking-[-0.02em] text-ink sm:text-[72px]">Contact</h1>
-  <p class="mt-6 max-w-[46ch] text-[21px] leading-[1.5] text-neutral-800">
-    A real person reads everything that comes in. We aim to reply the same day.
-  </p>
+<section class="container" style="padding:88px 40px 56px;">
+  <p class="eyebrow eyebrow-brand">Contact</p>
+  <h1 class="display-2">Talk to a person.</h1>
+  <p class="lead">A real person reads everything that comes in. We aim to reply the same day.</p>
 </section>
 
-<section class="reveal mx-auto max-w-[1180px] px-5 pb-[88px] sm:px-8">
-  <div class="grid gap-[22px] md:grid-cols-2">
+<section class="container" style="padding-bottom:88px;">
+  <div class="grid-2">
 
-    <div class="rounded-2xl bg-paperdark p-9 sm:p-11">
-      <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Email</div>
-      <h2 class="mb-4 mt-3.5 text-[30px] text-ink">Best for anything</h2>
-      <p class="text-[17px] leading-[1.55] text-neutral-800">
-        An order, a question, or getting LYNDRY into your building. Everything
+    <div class="card card-xl" style="padding:36px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+        <span class="icon-tile icon-tile-52">{{ICON_MESSAGE}}</span>
+        <span class="eyebrow" style="margin:0;">Email</span>
+      </div>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:32px;letter-spacing:-0.03em;margin:0 0 14px;">Best for anything</h2>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 26px;">
+        An order, a question, or getting LYNDRY into your building. It all
         reaches the same inbox.
       </p>
-      <a href="mailto:{{EMAIL}}"
-         class="mt-7 inline-block rounded-full border-2 border-brand-500 px-6 py-3 text-[16px] font-extrabold text-brand-800 transition-colors hover:bg-brand-200">
-        {{EMAIL}}
-      </a>
+      <a href="mailto:{{EMAIL}}" class="btn btn-outline">{{EMAIL}}</a>
     </div>
 
-    <div class="rounded-2xl bg-paperdark p-9 sm:p-11">
-      <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Text message</div>
-      <h2 class="mb-4 mt-3.5 text-[30px] text-ink">Best once you're set up</h2>
-      <p class="text-[17px] leading-[1.55] text-neutral-800">
+    <div class="card card-xl" style="padding:36px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+        <span class="icon-tile icon-tile-52 icon-tile-lilac">{{ICON_TRUCK}}</span>
+        <span class="eyebrow" style="margin:0;">Text message</span>
+      </div>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:32px;letter-spacing:-0.03em;margin:0 0 14px;">Best once you're set up</h2>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 26px;">
         Texting is how you book, reschedule, cancel and check on an order.
         {{CONTACT_SENTENCE}}
       </p>
-      <div class="mt-7 text-[17px] font-bold">{{PHONE_LINE}}</div>
+      <p style="font-size:18px;font-weight:600;margin:0;">{{PHONE_LINE}}</p>
     </div>
 
   </div>
 </section>
 
-{{MARQUEE}}
+<!-- ===================================================================== -->
+<!-- Buildings                                                              -->
+<!-- ===================================================================== -->
+<section style="background:var(--ink-900);padding:88px 0 96px;" class="rule-top">
+  <div class="container grid-2 grid-2-wide" style="gap:56px;align-items:center;">
 
-<section class="reveal mx-auto max-w-[1180px] px-5 py-[88px] sm:px-8">
-  <div class="grid gap-[22px] lg:grid-cols-[1.15fr_0.85fr]">
-
-    <div class="rounded-2xl bg-brand-800 p-10 text-white sm:p-11">
-      <h2 class="text-[34px] leading-[1.05] text-white">Manage a building?</h2>
-      <p class="mt-5 max-w-[46ch] text-[18px] leading-[1.6] text-brand-200">
+    <div data-reveal>
+      <p class="eyebrow eyebrow-paper">For buildings</p>
+      <h2 class="display-4" style="color:var(--paper-050);max-width:14ch;">Manage a building?</h2>
+      <p style="font-size:18px;line-height:1.55;color:var(--paper-300);max-width:46ch;margin:0 0 30px;">
         We can offer LYNDRY to your residents as a building amenity —
         door-to-door collection, no front-desk involvement, nothing for your
         staff to handle. Email us and we'll walk you through it.
       </p>
-      <a href="mailto:{{EMAIL}}"
-         class="mt-8 inline-block rounded-full bg-white px-7 py-3.5 text-[16px] font-extrabold text-brand-800 transition-colors hover:bg-brand-100">
-        {{EMAIL}}
+      <a href="mailto:{{EMAIL}}" class="btn btn-primary btn-lg">
+        {{EMAIL}} {{ICON_ARROW}}
       </a>
     </div>
 
-    <div class="rounded-2xl bg-paperdark p-10 sm:p-11">
-      <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Business details</div>
-      <p class="mt-5 text-[17px] leading-[1.7] text-neutral-800">
+    <div class="card card-xl card-on-ink" style="padding:32px;" data-parallax="0.06">
+      <p class="eyebrow" style="margin-bottom:16px;">Business details</p>
+      <p style="font-size:17px;line-height:1.7;color:var(--ink-800);margin:0 0 16px;">
         {{LEGAL_NAME}}<br>
         {{BUSINESS_ADDRESS}}
       </p>
-      <p class="mt-5 text-[17px] leading-[1.7] text-neutral-800">
+      <p style="font-size:17px;line-height:1.7;color:var(--ink-800);margin:0;">
         Serving {{SERVICE_AREA}}.
       </p>
     </div>

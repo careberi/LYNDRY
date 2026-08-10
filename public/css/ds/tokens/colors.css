@@ -1,0 +1,96 @@
+/* LYNDRY color system.
+   Base ramps first, semantic aliases second. Always reach for the aliases in
+   product code; the ramps exist so the aliases have somewhere to point. */
+:root{
+  /* Ink — the outline color. Everything on LYNDRY is drawn, not floated. */
+  --ink-900:#101210;
+  --ink-800:#1C201C;
+  --ink-700:#2E332E;
+  --ink-500:#5B635B;
+  --ink-400:#7C857B;
+  --ink-300:#9AA39A;
+  --ink-200:#C4CBC2;
+  --ink-100:#D8DDD6;
+  --ink-050:#EDF0EB;
+
+  /* Paper — warm cream, never pure grey */
+  --paper-000:#FFFFFF;
+  --paper-050:#FFFDF7;
+  --paper-100:#FFF8EC;
+  --paper-200:#F7EFDE;
+  --paper-300:#EDE2CB;
+
+  /* Suds — primary. Fresh, wet, clean. */
+  --suds-700:#056046;
+  --suds-600:#087F5E;
+  --suds-500:#0EA47A;
+  --suds-400:#35C79B;
+  --suds-300:#6FDCBB;
+  --suds-200:#A9EBD4;
+  --suds-100:#DFF7EC;
+
+  /* Sunbeam — the "it's ready" yellow. Highlights, tags, sold-out energy. */
+  --sunbeam-600:#D9A600;
+  --sunbeam-500:#FFD23F;
+  --sunbeam-300:#FFE68A;
+  --sunbeam-100:#FFF6D6;
+
+  /* Lilac — softener. Secondary surfaces, illustration fields, info. */
+  --lilac-600:#8A5CD6;
+  --lilac-500:#C9A7F5;
+  --lilac-300:#E0CCFA;
+  --lilac-100:#F2EAFE;
+
+  /* Stain — the only red. Errors, destructive, "we missed it". */
+  --stain-600:#C22F1F;
+  --stain-500:#E8412F;
+  --stain-100:#FDE4E0;
+
+  /* ---- Semantic text ---- */
+  --text-strong:var(--ink-900);
+  --text-body:var(--ink-800);
+  --text-muted:var(--ink-500);
+  --text-faint:var(--ink-400);
+  --text-inverse:var(--paper-050);
+  --text-brand:var(--suds-700);
+  --text-link:var(--suds-700);
+  --text-link-hover:var(--ink-900);
+  --text-danger:var(--stain-600);
+
+  /* ---- Semantic surfaces ---- */
+  --surface-page:var(--paper-100);
+  --surface-card:var(--paper-050);
+  --surface-raised:var(--paper-000);
+  --surface-sunken:var(--paper-200);
+  --surface-ink:var(--ink-900);
+  --surface-brand:var(--suds-500);
+  --surface-brand-soft:var(--suds-100);
+  --surface-accent:var(--sunbeam-500);
+  --surface-accent-soft:var(--sunbeam-100);
+  --surface-secondary:var(--lilac-500);
+  --surface-secondary-soft:var(--lilac-100);
+  --surface-danger-soft:var(--stain-100);
+
+  /* ---- Borders + focus ---- */
+  --border-color:var(--ink-900);
+  --border-color-soft:var(--ink-200);
+  --border-color-brand:var(--suds-700);
+  --focus-ring-color:var(--lilac-600);
+
+  /* ---- Status ---- */
+  --status-success:var(--suds-500);
+  --status-success-soft:var(--suds-100);
+  --status-warning:var(--sunbeam-500);
+  --status-warning-soft:var(--sunbeam-100);
+  --status-danger:var(--stain-500);
+  --status-danger-soft:var(--stain-100);
+  --status-info:var(--lilac-500);
+  --status-info-soft:var(--lilac-100);
+
+  /* ---- Order lifecycle. LYNDRY's one domain-specific color set. ---- */
+  --stage-scheduled:var(--lilac-500);
+  --stage-collected:var(--sunbeam-500);
+  --stage-washing:var(--suds-300);
+  --stage-ready:var(--suds-500);
+  --stage-delivered:var(--ink-900);
+}

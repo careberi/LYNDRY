@@ -7,10 +7,20 @@ const { site, tokens } = require('./site');
 //
 // Every page on the site is the same wrapper — head, navigation bar, footer —
 // with a different middle. That wrapper lives here, once, so a change to the
-// navigation or the footer happens in a single place instead of eight.
+// navigation or the footer happens in a single place instead of nine.
 //
-// Tailwind is loaded from a CDN, which means there is nothing to build or
-// compile. Editing a page is: save the file, refresh the browser.
+// Styling comes from three stylesheets, in this order:
+//
+//   css/ds/styles.css   the LYNDRY design system, vendored unmodified.
+//                       Colours, type, spacing, borders, shadows, motion.
+//                       Do not edit — replace it wholesale if it is updated.
+//   css/icons.css       the Lucide glyphs the site uses, as CSS masks.
+//   css/lyndry.css      ours. Buttons, cards, inputs, the scallop, the
+//                       phone mock, page furniture, the responsive rules.
+//
+// There is no build step and no CSS framework. Everything is a plain class,
+// which for a system this opinionated is far easier to read than forty
+// characters of border-and-shadow utilities on every element.
 // ---------------------------------------------------------------------------
 
 const NAV_LINKS = [
@@ -33,123 +43,122 @@ function fillTokens(html, extra = {}) {
   );
 }
 
-// Sticky chrome on the cream ground, per the handoff: teal wordmark in Figtree
-// 900, ghost pill links that fill with the palest teal on hover, and one solid
-// pill for the action we actually want.
+// An icon. Always goes through here rather than inline SVG, so swapping icon
+// sets stays a change to css/icons.css and nothing else.
+function icon(name, size) {
+  const sizeClass = size ? ` icon-${size}` : '';
+  return `<span class="icon icon-${name}${sizeClass}" aria-hidden="true"></span>`;
+}
+
+// The glyphs page files can drop in. Anything new goes here and in
+// public/css/icons.css, and nowhere else.
+const ICON_TOKENS = Object.freeze({
+  ICON_ARROW: icon('arrow-right', '22'),
+  ICON_ARROW_SM: icon('arrow-right', '16'),
+  ICON_CHECK: icon('check', '16'),
+  ICON_MESSAGE: icon('message-circle', '26'),
+  ICON_PACKAGE: icon('package', '26'),
+  ICON_PACKAGE_CHECK: icon('package-check', '26'),
+  ICON_TRUCK: icon('truck', '26'),
+  ICON_MAP_PIN: icon('map-pin', '26'),
+  ICON_SHIRT: icon('shirt', '26'),
+  ICON_DROPLETS: icon('droplets', '26'),
+  ICON_CLOCK: icon('clock', '26'),
+  ICON_CARD: icon('credit-card', '26'),
+  ICON_CALENDAR: icon('calendar', '26'),
+  ICON_USER: icon('user', '26'),
+});
+
+// Sticky ink header. The design system pins exactly one thing on the site and
+// this is it — 68px of ink, and the hero is sized to fill what's left.
 function navBar(currentPath) {
   const links = NAV_LINKS.map(({ href, label }) => {
-    const active = href === currentPath;
-    const base =
-      'rounded-full px-3.5 py-2 text-[15px] font-semibold transition-colors hover:bg-brand-100 hover:text-brand-800';
-    const classes = active ? `${base} bg-brand-100 text-brand-800` : `${base} text-neutral-800`;
-    return `<a href="${href}" class="${classes}">${label}</a>`;
-  }).join('\n            ');
+    const current = href === currentPath ? ' aria-current="page"' : '';
+    return `<a href="${href}"${current}>${label}</a>`;
+  }).join('\n          ');
 
   const mobileLinks = NAV_LINKS.map(
-    ({ href, label }) =>
-      `<a href="${href}" class="block px-4 py-3 text-neutral-800 hover:bg-brand-100">${label}</a>`
+    ({ href, label }) => `<a href="${href}">${label}</a>`
   ).join('\n            ');
 
   return `
-    <header class="sticky top-0 z-40 border-b border-ink/[0.16] bg-paper/[0.92] backdrop-blur-[10px]">
-      <nav class="mx-auto flex max-w-[1180px] items-center gap-7 px-5 py-3.5 sm:px-8">
-        <!-- Set in the body face at its heaviest, tightly tracked — the handoff
-             does not use the display face for the wordmark. -->
-        <a href="/" class="text-[26px] font-black tracking-[-0.04em] text-brand-700">
-          ${site.name}
-        </a>
+    <header class="site-header">
+      <div class="container site-header-bar">
+        <!-- No logo was ever supplied. The wordmark is Outfit 900 at -5%
+             tracking, which the design system names as the stand-in. -->
+        <a href="/" class="wordmark">${site.name}</a>
 
-        <div class="ml-auto hidden items-center gap-1.5 sm:flex">
-            ${links}
-          <a href="/signup"
-             class="ml-2.5 rounded-full bg-brand-500 px-5 py-2.5 text-[15px] font-extrabold text-white transition-colors hover:bg-brand-600">
-            Get started
-          </a>
-        </div>
+        <nav class="site-nav">
+          ${links}
+        </nav>
 
-        <!-- Mobile menu. Uses the browser's own show/hide, so no JavaScript. -->
-        <details class="relative ml-auto sm:hidden">
-          <summary class="cursor-pointer list-none rounded-full border-2 border-brand-500 px-4 py-2 text-sm font-extrabold text-brand-800">
-            Menu
-          </summary>
-          <div class="absolute right-0 mt-2 w-52 overflow-hidden rounded-2xl border border-ink/[0.16] bg-neutral-100 shadow-lg">
+        <a href="/signup" class="btn btn-primary btn-sm">Get started</a>
+
+        <!-- Mobile menu. Built on <details> so it needs no JavaScript. -->
+        <details class="nav-toggle">
+          <summary class="btn btn-primary btn-sm" aria-label="Menu">Menu</summary>
+          <div class="nav-panel">
             ${mobileLinks}
-            <a href="/signup" class="block bg-brand-500 px-4 py-3 font-extrabold text-white">Get started</a>
+            <a href="/signup">Get started</a>
           </div>
         </details>
-      </nav>
+      </div>
     </header>`;
 }
 
-// The repeating band: the same line that's printed on the bags, scrolling.
-//
-// The list is rendered twice because the animation slides the track by
-// exactly half its width — with one copy the loop would jump.
-function marqueeBand() {
-  const words = ['Wash', 'Fold', 'Deliver'];
-  const run = Array.from({ length: 6 }, () => words)
-    .flat()
-    .map(
-      (word) =>
-        `<span class="flex items-center gap-6 px-6">
-           <span class="text-xl font-bold uppercase tracking-[0.2em] text-white sm:text-2xl">${word}</span>
-           <span class="h-2 w-2 shrink-0 rounded-full bg-brand-300" aria-hidden="true"></span>
-         </span>`
-    )
-    .join('');
-
-  return `
-    <div class="marquee bg-brand-500 py-4" aria-hidden="true">
-      <div class="marquee__track">${run}${run}</div>
-    </div>`;
-}
-
-// Deep teal footer, per the handoff: brand-900 ground, brand-200 text.
 function footer() {
   const year = new Date().getFullYear();
 
-  const link = (href, label) =>
-    `<a href="${href}" class="text-[16px] text-brand-200 transition-colors hover:text-white">${label}</a>`;
-
   return `
-    <footer class="bg-brand-900 text-brand-200">
-      <div class="mx-auto grid max-w-[1180px] gap-10 px-5 pb-11 pt-16 sm:grid-cols-[1.4fr_1fr_1fr] sm:px-8">
+    <footer class="site-footer">
+      <div class="container" style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap;padding-top:72px;padding-bottom:44px;">
+
+        <div style="max-width:32ch;">
+          <div style="font-family:var(--font-display);font-weight:900;font-size:34px;letter-spacing:-0.05em;color:var(--paper-050);line-height:1;">${site.name}</div>
+          <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:var(--paper-300);">
+            Laundry that runs on text messages. Picked up from your door, back
+            within ${site.turnaround}.
+          </p>
+          <p style="margin:10px 0 0;font-size:15px;line-height:1.55;color:var(--ink-400);">
+            Serving ${site.serviceArea}.
+          </p>
+        </div>
 
         <div>
-          <div class="text-[30px] font-black tracking-[-0.04em] text-white">${site.name}</div>
-          <p class="mt-3.5 max-w-[30ch] text-[17px] leading-relaxed">
-            Laundry that runs on text messages. Picked up from your door,
-            back within ${site.turnaround}.
-          </p>
-          <p class="mt-3 text-[16px] text-brand-300">Serving ${site.serviceArea}.</p>
+          <p class="footer-head">Service</p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <a href="/how-it-works">How it works</a>
+            <a href="/pricing">Pricing</a>
+            <a href="/signup">Sign up</a>
+          </div>
         </div>
 
-        <div class="flex flex-col items-start gap-2.5">
-          ${link('/how-it-works', 'How it works')}
-          ${link('/pricing', 'Pricing')}
-          ${link('/signup', 'Sign up')}
-          ${link('/contact', 'Contact')}
+        <div>
+          <p class="footer-head">Company</p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <a href="/contact">Contact</a>
+            <a href="/privacy">Privacy policy</a>
+            <a href="/terms">Terms of service</a>
+            <a href="/sms-terms">Messaging terms</a>
+          </div>
         </div>
 
-        <div class="flex flex-col items-start gap-2.5">
-          ${link('/privacy', 'Privacy policy')}
-          ${link('/terms', 'Terms of service')}
-          ${link('/sms-terms', 'Messaging terms')}
-          ${site.hasPublicPhone ? `<span class="text-[16px]">Text ${site.publicPhoneDisplay}</span>` : ''}
-        </div>
+        <a href="/signup" class="btn btn-primary btn-lg">
+          Get started ${icon('arrow-right', '22')}
+        </a>
 
       </div>
 
-      <div class="mx-auto max-w-[1180px] px-5 pb-10 text-[14px] text-brand-400 sm:px-8">
-        <!-- Naming the operating company here is not decoration. During carrier
-             review for business texting, someone opens this page and checks
-             that the company on the registration appears on the site. If it
-             doesn't, the campaign is rejected. -->
-        <p>${site.name} is a service of ${site.legalName}, ${site.businessAddress}.</p>
-        <p class="mt-2">
-          &copy; ${year} ${site.legalName}. Message and data rates may apply. Reply STOP to end.
+      <div class="container" style="padding-bottom:40px;">
+        <!-- Naming the operating company here is not decoration. During
+             carrier review for business texting, someone opens this page and
+             checks that the company on the registration appears on the site.
+             If it doesn't, the campaign is rejected. -->
+        <p class="footer-legal">
+          ${site.name} is a service of ${site.legalName}, ${site.businessAddress}<br>
+          &copy; ${year} ${site.legalName} &middot; Message and data rates may apply. Reply STOP to end.<br>
+          We never sell or share your phone number with third parties for marketing.
         </p>
-        <p class="mt-2">We never sell or share your phone number with third parties for marketing.</p>
       </div>
     </footer>`;
 }
@@ -160,7 +169,7 @@ function renderPage({ title, description, path, body, extra = {} }) {
   const fullTitle = path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`;
 
   const html = `<!doctype html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -171,149 +180,22 @@ function renderPage({ title, description, path, body, extra = {} }) {
   <meta property="og:description" content="${description}">
   <meta property="og:type" content="website">
 
-  <!-- Favicon drawn inline so there is no image file to manage. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23178a94'/%3E%3Ctext x='16' y='23' font-family='sans-serif' font-size='19' font-weight='700' fill='white' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
-  <meta name="theme-color" content="#178a94">
+  <!-- Favicon drawn inline so there is no image file to manage. Suds green
+       field, ink outline, paper letter — the phone avatar, shrunk. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='8' fill='%230EA47A' stroke='%23101210' stroke-width='2'/%3E%3Ctext x='16' y='23' font-family='Outfit,Arial,sans-serif' font-size='19' font-weight='900' fill='%23FFFDF7' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+  <meta name="theme-color" content="#101210">
 
+  <!-- The design system's font file @imports Google Fonts, and an @import
+       inside a stylesheet does not start resolving until that stylesheet has
+       loaded. Opening the connections early takes a round trip off it. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Caprasimo for headings, Figtree for everything you read. Both from the
-       LYNDRY design system handoff. Caprasimo ships at weight 400 only —
-       never apply a bold class to a heading, or the browser fakes it. -->
-  <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;800;900&display=swap" rel="stylesheet">
 
-  <!-- Tailwind straight from a CDN, with the typography plugin for the long
-       text on the legal pages. Nothing to build, nothing to compile. -->
-  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Figtree', 'system-ui', 'sans-serif'],
-            display: ['Caprasimo', 'Figtree', 'system-ui', 'sans-serif'],
-          },
-
-          // The handoff's radii. Cards are 28px, panels 16px, controls pills.
-          borderRadius: {
-            md: '8px',
-            lg: '16px',
-            xl: '16px',
-            '2xl': '28px',
-            '3xl': '28px',
-          },
-
-          boxShadow: {
-            sm: '0 1px 2px rgba(46,43,37,.14)',
-            DEFAULT: '0 3px 10px rgba(46,43,37,.16)',
-            md: '0 3px 10px rgba(46,43,37,.16)',
-            lg: '0 12px 32px rgba(46,43,37,.22)',
-          },
-          colors: {
-            // Straight from the LYNDRY design system handoff. Warm cream
-            // ground, a deeper cream for panels, near-black ink for type.
-            //
-            // The names are kept from the earlier scheme on purpose — every
-            // page already uses them, so the whole site re-skins by changing
-            // the values here rather than editing nine HTML files.
-            paper: '#f5ead8', // --color-bg
-            paperdark: '#ebddc5', // --color-surface
-            ink: '#201e1d', // --color-text
-            // Teal — the brand accent. The handoff's ramp, unchanged.
-            //
-            // Contrast note from the handoff: teal on cream only clears 3:1.
-            // Fine for large text, icons and chrome — NOT for paragraph copy.
-            // Use brand-700 or darker for any accent-coloured body text.
-            brand: {
-              100: '#e8f7f8',
-              200: '#c9eaed',
-              300: '#9bd8dd',
-              400: '#5cbcc4',
-              500: '#17919b',
-              600: '#0f7a84',
-              700: '#0b606a',
-              800: '#08454c',
-              900: '#062e33',
-            },
-
-            // Sage — the second voice, used for the quote panel.
-            sage: {
-              100: '#f0fae1',
-              200: '#e1eecc',
-              300: '#ccdbb2',
-              400: '#aebf92',
-              600: '#728157',
-              800: '#3d472b',
-            },
-
-            // The warm neutral ramp the handoff uses for secondary text.
-            neutral: {
-              100: '#f9f4ed',
-              200: '#eee7db',
-              300: '#dcd3c4',
-              400: '#c0b6a5',
-              500: '#a19786',
-              600: '#82796a',
-              700: '#645c50',
-              800: '#474238',
-              900: '#2e2b25',
-            },
-          },
-        },
-      },
-    };
-  </script>
-
-  <style>
-    /* Headings are Caprasimo, which ships at weight 400 only. Forcing 400 here
-       stops the browser synthesising a fake bold if a weight class slips onto
-       a heading — faux-bold on a display face looks smeared. */
-    h1, h2, h3, h4 {
-      font-family: 'Caprasimo', Figtree, system-ui, sans-serif;
-      font-weight: 400;
-      letter-spacing: -0.015em;
-    }
-    /* Long-form legal pages: keep the body text comfortable to read. */
-    .prose :where(p, li) { font-family: Figtree, system-ui, sans-serif; }
-
-    /* The handoff replaces the browser's default focus ring everywhere. */
-    :focus { outline: none; }
-    :focus-visible { outline: 2px solid #17919b; outline-offset: 2px; }
-    ::selection { background: #c9eaed; }
-
-    /* ---- The repeating band -------------------------------------------
-       WASH · FOLD · DELIVER, the line printed on the bags, scrolling
-       forever. The track holds the same list twice and slides exactly half
-       its width, so the loop has no visible seam. */
-    .marquee { overflow: hidden; }
-    .marquee__track {
-      display: flex;
-      width: max-content;
-      animation: marquee 38s linear infinite;
-    }
-    .marquee:hover .marquee__track { animation-play-state: paused; }
-    @keyframes marquee { to { transform: translateX(-50%); } }
-
-    /* ---- Reveal on scroll ----------------------------------------------
-       Sections fade up as they come into view. The hiding is applied only
-       once JavaScript has confirmed it can un-hide them again — without
-       that, a failed script would leave a blank page. */
-    .js-anim .reveal {
-      opacity: 0;
-      transform: translateY(18px);
-      transition: opacity .7s ease, transform .7s ease;
-    }
-    .js-anim .reveal.is-visible { opacity: 1; transform: none; }
-
-    /* Anyone whose device asks for less motion gets none of it. */
-    @media (prefers-reduced-motion: reduce) {
-      .marquee__track { animation: none; }
-      .js-anim .reveal { opacity: 1; transform: none; transition: none; }
-      html { scroll-behavior: auto; }
-    }
-  </style>
+  <link rel="stylesheet" href="/css/ds/styles.css">
+  <link rel="stylesheet" href="/css/icons.css">
+  <link rel="stylesheet" href="/css/lyndry.css">
 </head>
-<body class="min-h-screen bg-paper font-sans text-ink antialiased">
+<body>
 ${navBar(path)}
 <main>
 ${body}
@@ -321,33 +203,118 @@ ${body}
 ${footer()}
 
 <script>
-  // Reveal sections as they scroll into view.
-  //
-  // The hiding class goes on only now, from JavaScript, so a browser that
-  // never runs this — or a script that fails to load — shows the whole page
-  // normally instead of a blank one.
+  // ---------------------------------------------------------------------
+  // Motion. Two systems, both off entirely under prefers-reduced-motion.
+  // ---------------------------------------------------------------------
   (function () {
-    if (!('IntersectionObserver' in window)) return;
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) return;
 
-    document.documentElement.classList.add('js-anim');
+    // --- Scroll reveal ---------------------------------------------------
+    //
+    // The hiding class goes on from JavaScript, never from plain CSS. A
+    // browser that never runs this — or a script that fails to load — then
+    // shows the whole page normally instead of a page of invisible sections.
+    if ('IntersectionObserver' in window) {
+      document.documentElement.classList.add('js-anim');
 
-    var watcher = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add('is-visible');
-        watcher.unobserve(entry.target); // reveal once, then stop watching
+      var hidden = [];
+      var reveal = document.querySelectorAll('[data-reveal]');
+
+      // Anything already on screen at load is shown immediately. Only what is
+      // below the fold gets hidden and waits for its turn.
+      for (var i = 0; i < reveal.length; i++) {
+        if (reveal[i].getBoundingClientRect().top < window.innerHeight * 0.9) {
+          reveal[i].classList.add('is-in');
+        } else {
+          hidden.push(reveal[i]);
+        }
+      }
+
+      var watcher = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-in');
+          watcher.unobserve(entry.target);
+        });
+      }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+
+      hidden.forEach(function (el) { watcher.observe(el); });
+
+      // A fast scroll or a jump to an anchor can carry an element past the
+      // viewport without the observer ever firing, which would strand it
+      // dimmed and 26px out of place. This sweep is what stops that.
+      var sweep = function () {
+        for (var i = hidden.length - 1; i >= 0; i--) {
+          var el = hidden[i];
+          if (el.classList.contains('is-in')) { hidden.splice(i, 1); continue; }
+          if (el.getBoundingClientRect().top < window.innerHeight * 0.92) {
+            el.classList.add('is-in');
+            watcher.unobserve(el);
+            hidden.splice(i, 1);
+          }
+        }
+      };
+      window.addEventListener('scroll', sweep, { passive: true });
+    }
+
+    // --- Parallax --------------------------------------------------------
+    //
+    // Each element's untransformed document position is measured once, then
+    // displacement accumulates only from the moment it enters the viewport —
+    // so nothing is shifted at page load, only as you scroll past it.
+    //
+    // An element never carries both data-parallax and data-reveal: they both
+    // write transform and would fight over it.
+    // Parallax is a desktop effect. On a narrow screen the layout is a single
+    // column with no room for anything to drift, and moving blocks around
+    // under a thumb is just noise.
+    if (window.innerWidth < 900) return;
+
+    var items = [].slice.call(document.querySelectorAll('[data-parallax],[data-parallax-x]'));
+    if (!items.length) return;
+
+    var measure = function () {
+      items.forEach(function (el) {
+        el.style.transform = 'none';
+        el.__base = el.getBoundingClientRect().top + window.scrollY;
       });
-    }, { rootMargin: '0px 0px -10% 0px' });
+    };
 
-    document.querySelectorAll('.reveal').forEach(function (el) { watcher.observe(el); });
+    var frame = null;
+    var apply = function () {
+      frame = null;
+      var y = window.scrollY;
+      items.forEach(function (el) {
+        // The scroll position at which this element first entered the
+        // viewport. Clamped at zero: an element that is already on screen when
+        // the page loads has a threshold of 0, so it starts undisplaced and
+        // moves only once you actually scroll. Without the clamp, everything
+        // above the fold is thrown out of place before you touch anything.
+        var threshold = Math.max(0, el.__base - window.innerHeight);
+        var d = Math.max(0, y - threshold);
+        var sy = parseFloat(el.getAttribute('data-parallax')) || 0;
+        var sx = parseFloat(el.getAttribute('data-parallax-x')) || 0;
+        el.style.transform = 'translate3d(' + (-d * sx).toFixed(1) + 'px,' + (d * sy).toFixed(1) + 'px,0)';
+      });
+    };
+
+    var onScroll = function () {
+      if (frame === null) frame = window.requestAnimationFrame(apply);
+    };
+
+    measure();
+    apply();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', function () { measure(); apply(); });
   })();
 </script>
 </body>
 </html>`;
 
-  // MARQUEE is offered to every page so the repeating band can be dropped in
-  // wherever it suits, without a page having to know how it is built.
-  return fillTokens(html, { MARQUEE: marqueeBand(), ...extra });
+  // Icons are offered to every page as tokens, so a page file never has to
+  // know how a glyph is built — it writes {{ICON_ARROW}} and gets one.
+  return fillTokens(html, { ...ICON_TOKENS, ...extra });
 }
 
-module.exports = { renderPage, fillTokens };
+module.exports = { renderPage, fillTokens, icon };

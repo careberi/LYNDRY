@@ -1,60 +1,51 @@
-<!-- Shown after a successful signup. Built to the LYNDRY design handoff. -->
+<!-- Shown after a successful signup. Built to the LYNDRY design handoff (v2). -->
 
-<section class="reveal mx-auto max-w-[720px] px-5 pb-20 pt-24 sm:px-8">
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:760px;padding-top:88px;padding-bottom:80px;">
+    <p class="eyebrow eyebrow-brand">Done</p>
+    <h1 class="display-2">You're all set.</h1>
+    <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:46ch;margin:0;">
+      Your account is created and your wash preferences are saved. We won't ask
+      you about any of that again.
+    </p>
+  </div>
+</section>
 
-  <div class="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500">
-    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.75"
-         stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5"></path>
-    </svg>
+<section class="container" style="max-width:760px;padding-top:64px;padding-bottom:104px;">
+
+  <div class="card card-xl" style="padding:34px;margin-bottom:26px;">
+    <p class="eyebrow" style="margin-bottom:6px;">Next</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:30px;margin:0 0 26px;">What happens now</h2>
+
+    <div style="display:flex;flex-direction:column;gap:22px;">
+      <div style="display:flex;gap:18px;align-items:flex-start;">
+        <span class="icon-tile icon-tile-52">{{ICON_MESSAGE}}</span>
+        <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0;padding-top:6px;">{{CONTACT_SENTENCE}}</p>
+      </div>
+      <div style="display:flex;gap:18px;align-items:flex-start;">
+        <span class="icon-tile icon-tile-52 icon-tile-lilac">{{ICON_CARD}}</span>
+        <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0;padding-top:6px;">
+          Before your first pickup we'll text you a secure link to add a card.
+          It's handled by Stripe — we never see the number.
+        </p>
+      </div>
+      <div style="display:flex;gap:18px;align-items:flex-start;">
+        <span class="icon-tile icon-tile-52 icon-tile-suds">{{ICON_PACKAGE_CHECK}}</span>
+        <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0;padding-top:6px;">
+          To book, text us something like &ldquo;laundry tomorrow&rdquo;. Leave
+          the bag out and it's back washed, dried and folded within
+          {{TURNAROUND}}.
+        </p>
+      </div>
+    </div>
   </div>
 
-  <h1 class="mt-8 text-[44px] leading-[0.98] tracking-[-0.02em] text-ink sm:text-[62px]">
-    You're all set.
-  </h1>
-
-  <p class="mt-6 text-[19px] leading-[1.55] text-neutral-800">
-    Your account is created and your wash preferences are saved. We won't ask
-    you about any of that again.
+  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 30px;">
+    Questions in the meantime? Email <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>.
   </p>
 
-  <div class="mt-11 rounded-2xl bg-paperdark p-8 sm:p-10">
-    <h2 class="text-[28px] text-ink">What happens next</h2>
-    <ol class="mt-6 space-y-5">
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[15px] font-black text-white">1</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">{{CONTACT_SENTENCE}}</span>
-      </li>
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[15px] font-black text-white">2</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">
-          To book, text us something like &ldquo;laundry tomorrow&rdquo;. We'll
-          confirm and tell you when we're coming.
-        </span>
-      </li>
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[15px] font-black text-white">3</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">
-          Leave your bag out at the agreed time, and it's back washed, dried and
-          folded within {{TURNAROUND}}.
-        </span>
-      </li>
-    </ol>
-  </div>
-
-  <p class="mt-8 text-[17px] leading-[1.6] text-neutral-800">
-    Questions in the meantime? Email
-    <a href="mailto:{{EMAIL}}" class="font-semibold text-brand-800 underline underline-offset-2">{{EMAIL}}</a>.
-  </p>
-
-  <div class="mt-10 flex flex-wrap gap-3.5">
-    <a href="/how-it-works"
-       class="rounded-full bg-brand-500 px-7 py-3.5 text-[16px] font-extrabold text-white transition-colors hover:bg-brand-600">
-      How it works
-    </a>
-    <a href="/pricing"
-       class="rounded-full border-2 border-brand-500 px-7 py-3.5 text-[16px] font-extrabold text-brand-800 transition-colors hover:bg-brand-200">
-      Pricing
-    </a>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;">
+    <a href="/how-it-works" class="btn btn-primary btn-lg">How it works {{ICON_ARROW}}</a>
+    <a href="/pricing" class="btn btn-outline btn-lg">Pricing</a>
   </div>
 </section>

@@ -84,49 +84,89 @@ every em dash and curly quote in the file. Use the editing tools, or
 price, phone number, service area, legal name. Page files use `{{TOKEN}}`
 placeholders and must never hardcode any of it. Changing the price is one line.
 
-**`src/web/layout.js` holds the single shared layout** — head, nav, footer —
-plus the Tailwind colour palette. Page files in `public/pages/` contain only
-their own middle section.
+**`src/web/layout.js` holds the single shared layout** — head, nav, footer, and
+the motion scripts. Page files in `public/pages/` contain only their own middle
+section.
 
-**The visual system is the LYNDRY design handoff** — the "Organic" system,
-retinted to the LYNDRY teal. Every value below comes from it. If you need a
-value the palette doesn't carry, that's a signal to ask, not to hard-code a hex.
+**There is no CSS framework.** Tailwind was removed when the site moved to the
+design system below. Styling is three stylesheets, linked in this order:
 
-| Role | Class | Value |
+| File | What it is |
+|---|---|
+| `public/css/ds/` | The LYNDRY design system, **vendored unmodified**. Tokens only. Don't edit — replace wholesale if it's updated. |
+| `public/css/icons.css` | Every Lucide glyph the site uses, as CSS masks |
+| `public/css/lyndry.css` | Ours. Buttons, cards, inputs, scallop, phone mock, page furniture, responsive rules |
+
+Only `public/css` is served statically. `public/pages` holds templates with
+`{{TOKEN}}` holes and must never be reachable directly.
+
+### The visual system
+
+**One sentence: everything is a line drawing on cream paper, and it casts a
+hard shadow.** If an element has no ink outline, it is either type, a divider,
+or wrong.
+
+| Role | Token | Value |
 |---|---|---|
-| Page ground — warm cream | `paper` | `#f5ead8` |
-| Card and panel fill | `paperdark` | `#ebddc5` |
-| Text | `ink` | `#201e1d` |
-| Brand teal | `brand-500` | `#17919b` (full 100–900 ramp) |
-| Second voice — sage | `sage-*` | used once, on the quote panel |
-| Secondary text | `neutral-700` / `-800` | a warm grey ramp, not slate |
+| Page ground | `--paper-100` | `#FFF8EC` warm cream, never grey |
+| Card fill | `--paper-050` | `#FFFDF7` |
+| Input fill | `--paper-000` | pure white — **only** for fields, so they read as holes punched in the page |
+| Outline and most text | `--ink-900` | `#101210` |
+| Suds — primary | `--suds-500` | `#0EA47A` |
+| Sunbeam — good news, money | `--sunbeam-500` | `#FFD23F` |
+| Lilac — secondary, focus ring | `--lilac-500` | `#C9A7F5` |
+| Stain — errors only | `--stain-500` | `#E8412F` |
 
-**Teal on cream only clears 3:1.** Fine for large text, icons and chrome; not
-for paragraph copy. Accent-coloured body text uses `brand-700` or darker. Never
-`text-brand-500` on a paragraph.
+Rules that are easy to break by accident:
 
-**The names are deliberately unchanged from the previous scheme**, so the whole
-site re-skins by editing the values in `layout.js` rather than nine HTML files.
+- **One outline colour, `--ink-900`.** Never grey, never a tint of the fill.
+- **Shadows are hard offsets in pure ink** — 2/4/6/10/14px, no blur, no
+  transparency. `--shadow-float` is the single blurred exception, for overlays.
+  A card sitting *on* ink uses a coloured offset instead (`.card-on-ink`),
+  because an ink shadow on ink is invisible.
+- **Text is ink on every brand colour.** Suds, Sunbeam and Lilac are all light
+  enough that white text on them is a bug. The only light-on-dark pairing is
+  paper on ink.
+- **No gradients anywhere.** The one repeating texture is the 18px lilac dot
+  grid (`.dotfield`), used for pricing bands.
+- **Three type families, three jobs.** Outfit 900/800 headlines (never below
+  20px), Schibsted Grotesk body, Space Mono 700 uppercase 11–13px for labels
+  and eyebrows (never above 14px). The recurring stack is mono eyebrow →
+  Outfit headline → Schibsted paragraph.
+- **Controls come in three heights only** — 36/46/56px, and never below 44px
+  for a touch target.
+- **The hover/press signature** is on every filled button and interactive card:
+  hover lifts `translate(-2px,-2px)` onto a deeper shadow, press pushes
+  `translate(3px,3px)` onto a 1px shadow. Ghost buttons are the one exception —
+  they just underline. Focus is a lilac halo plus an ink edge, never removed.
+- **The scallop is a full stop. One per page.** The home page has it; nothing
+  else should.
 
-**Typography:** headings in `Caprasimo`, body in `Figtree`, both set once in the
-layout. **Caprasimo ships at weight 400 only** — never put a bold class on a
-heading, or the browser fakes it and the display face looks smeared. The layout
-forces weight 400 on `h1`–`h4` to stop that happening by accident. A `<legend>`
-or other non-heading that should look like a heading needs `font-display`.
+**Grid ratios must be classes, never inline `grid-template-columns`.** An
+inline style beats the media query and the page then refuses to collapse on a
+phone. Add a modifier to `lyndry.css` instead — `.grid-2-wide`,
+`.grid-2-narrow` and so on.
 
-**Everything is round.** Panels 16px (`rounded-lg`/`xl`), cards 28px
-(`rounded-2xl`), and every button and input is a full pill (`rounded-full`).
-Sharp corners are out.
+**Icons go through `{{ICON_*}}` tokens or `icon()` in `layout.js`.** Never
+inline SVG path data in a page. Adding a glyph means editing `icons.css` and
+the token list, and nothing else.
 
-Section labels ("kickers") are 14px, weight 800, uppercase, `tracking-[0.08em]`,
-in `brand-700`. Content max-width is 1180px; section padding is `88px 32px`.
+### Motion
 
-**Motion.** Two things, both defined once in `layout.js`:
+Three things, all defined in `layout.js` and `lyndry.css`:
 
-- `{{MARQUEE}}` — the repeating `Wash · Fold · Deliver` band, the line printed
-  on the bags. The list renders twice because the animation slides the track by
-  half its width; with one copy the loop jumps.
-- `class="reveal"` on a section fades it up as it scrolls into view.
+- **Bubbles** — the rising soap field in the hero. Every bubble has a *negative*
+  animation delay so the field is already full at page load.
+- **`data-reveal`** on an element fades and lifts it into view.
+- **`data-parallax="<speed>"`** drifts an element as you scroll past. Positive
+  lags, negative leads.
+
+**An element must never carry both `data-reveal` and `data-parallax`** — they
+both write `transform` and will fight.
+
+**Parallax displacement is clamped to start at zero.** The threshold is
+`max(0, elementTop - viewportHeight)`. Without the clamp, everything above the
+fold is thrown out of position before the visitor has scrolled at all.
 
 **The reveal must stay fail-safe.** The hiding CSS only applies under
 `.js-anim`, which JavaScript adds at runtime — so a browser that never runs the

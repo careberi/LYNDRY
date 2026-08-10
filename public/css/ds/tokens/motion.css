@@ -1,0 +1,23 @@
+/* LYNDRY motion. Short, springy, mechanical. Things snap into place like a
+   latch closing. Nothing fades in from nothing; nothing eases for 600ms. */
+:root{
+  --dur-instant:80ms; /* @kind other */
+  --dur-fast:140ms; /* @kind other */
+  --dur-base:200ms; /* @kind other */
+  --dur-slow:320ms; /* @kind other */
+  --dur-entrance:420ms; /* @kind other */
+
+  --ease-pop:cubic-bezier(0.2,0.9,0.3,1.25); /* @kind other */
+  --ease-out:cubic-bezier(0.2,0.7,0.3,1); /* @kind other */
+  --ease-in:cubic-bezier(0.6,0,0.9,0.4); /* @kind other */
+  --ease-linear:linear; /* @kind other */
+
+  --transition-control:transform var(--dur-fast) var(--ease-pop),box-shadow var(--dur-fast) var(--ease-pop),background-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out); /* @kind other */
+
+  /* The signature move: hover lifts up-left, press drops down-right. */
+  --lift-hover:translate(-2px,-2px); /* @kind other */
+  --lift-press:translate(3px,3px); /* @kind other */
+}
+@media (prefers-reduced-motion:reduce){
+  :root{--dur-fast:0ms; /* @kind other */ --dur-base:0ms; /* @kind other */ --dur-slow:0ms; /* @kind other */ --dur-entrance:0ms; /* @kind other */ --lift-hover:none; /* @kind other */ --lift-press:none /* @kind other */}
+}

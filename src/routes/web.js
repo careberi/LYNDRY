@@ -127,11 +127,13 @@ function looksLikeEmail(value) {
 
 // Renders an error banner above the signup form.
 function errorBanner(message) {
+  // Stain red is the only red in the design system, and errors are the only
+  // thing it is for.
   return `
-  <section class="mx-auto max-w-[720px] px-5 pt-4 sm:px-8">
-    <div role="alert" class="rounded-2xl border-2 border-red-300 bg-red-50 p-6">
-      <p class="text-[17px] font-extrabold text-red-900">We couldn't create your account</p>
-      <p class="mt-1.5 text-[17px] leading-[1.5] text-red-800">${escapeHtml(message)}</p>
+  <section class="container" style="max-width:760px;padding-top:32px;">
+    <div role="alert" class="card card-xl" style="padding:26px;background:var(--stain-100);box-shadow:6px 6px 0 var(--stain-500);">
+      <p class="eyebrow" style="margin-bottom:8px;color:var(--stain-600);">We couldn't create your account</p>
+      <p style="font-size:17px;line-height:1.5;color:var(--ink-900);margin:0;">${escapeHtml(message)}</p>
     </div>
   </section>`;
 }

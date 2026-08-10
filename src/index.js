@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const express = require('express');
 const pkg = require('../package.json');
 
@@ -44,6 +45,18 @@ app.use(
   })
 );
 app.use(express.urlencoded({ extended: true }));
+
+// Stylesheets. Only public/css is served — public/pages holds page templates
+// with {{TOKEN}} holes in them, which must never be reachable directly.
+//
+// Cached hard in production because the filenames never change; in
+// development they aren't, so editing a stylesheet and refreshing is enough.
+app.use(
+  '/css',
+  express.static(path.join(__dirname, '..', 'public', 'css'), {
+    maxAge: config.env === 'production' ? '7d' : 0,
+  })
+);
 
 // Health check. Hosting platforms ping this to decide whether the app is
 // alive; you can also just open it in a browser to confirm things work.

@@ -1,0 +1,5 @@
+/* LYNDRY webfonts.
+   No brand font binaries were supplied, so these are the nearest Google Fonts
+   matches, served from Google's CDN. Swap this file for local @font-face rules
+   if licensed brand files arrive. See readme.md > Typography. */
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap");

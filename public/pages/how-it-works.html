@@ -1,239 +1,202 @@
-<!-- How it works. Built to the LYNDRY design handoff. Wrapped in the shared
-     layout by src/web/layout.js.
+<!-- How it works. Built to the LYNDRY design handoff (v2).
 
-     The handoff's version of this page offers two ways to hand over a bag:
-     a locker and a door pickup. We don't have lockers at launch, so the two
-     options here are the two we really do — leave it out, or hand it over. -->
+     The handoff's version offers two ways to hand a bag over: a locker and a
+     door pickup. We have no lockers, so the two options here are the two we
+     really do — leave it out, or hand it to the driver. -->
 
-<section class="reveal mx-auto max-w-[1180px] px-5 pb-14 pt-20 sm:px-8">
-  <h1 class="text-[46px] leading-[0.96] tracking-[-0.02em] text-ink sm:text-[72px]">How it works</h1>
-  <p class="mt-6 max-w-[46ch] text-[21px] leading-[1.5] text-neutral-800">
-    Two ways to hand off your laundry. Both of them start and end in a text
-    message.
-  </p>
+<section class="container" style="padding:88px 40px 56px;">
+  <p class="eyebrow eyebrow-brand">How it works</p>
+  <h1 class="display-2">Two ways to hand it over.</h1>
+  <p class="lead">Both of them start and end in a text message.</p>
 </section>
 
 <!-- ===================================================================== -->
 <!-- The two options                                                        -->
 <!-- ===================================================================== -->
-<section class="reveal mx-auto grid max-w-[1180px] gap-[22px] px-5 pb-[88px] sm:px-8 md:grid-cols-2">
+<section class="container" style="padding-bottom:96px;">
+  <div class="grid-2">
 
-  <div class="rounded-2xl bg-paperdark p-9 sm:p-11">
-    <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Option one</div>
-    <h2 class="mb-4 mt-3.5 text-[32px] leading-[1.05] text-ink sm:text-[38px]">Leave it out</h2>
-    <p class="text-[17px] leading-[1.55] text-neutral-800">
-      Put the bag by your door before you go. Nobody needs to be home, awake or
-      anywhere nearby.
-    </p>
-    <ol class="mt-7 space-y-4">
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[14px] font-black text-white">1</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">Text us the day you want it collected.</span>
-      </li>
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[14px] font-black text-white">2</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">Leave the bag outside. We text you when it's collected.</span>
-      </li>
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[14px] font-black text-white">3</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">It comes back to the same spot, folded, with a photo.</span>
-      </li>
-    </ol>
+    <div class="card card-xl" style="padding:36px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+        <span class="icon-tile icon-tile-52 icon-tile-suds">{{ICON_PACKAGE}}</span>
+        <span class="eyebrow" style="margin:0;">Option one</span>
+      </div>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:36px;letter-spacing:-0.03em;margin:0 0 14px;">Leave it out</h2>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
+        Put the bag by your door before you go. Nobody needs to be home, awake
+        or anywhere nearby.
+      </p>
+      <ol style="font-size:16px;line-height:1.9;color:var(--ink-800);margin:0;padding-left:20px;">
+        <li>Text us the day you want it collected.</li>
+        <li>Leave the bag outside. We text you when it's collected.</li>
+        <li>It comes back to the same spot, folded, with a photo.</li>
+      </ol>
+    </div>
+
+    <div class="card card-xl" style="padding:36px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+        <span class="icon-tile icon-tile-52 icon-tile-lilac">{{ICON_TRUCK}}</span>
+        <span class="eyebrow" style="margin:0;">Option two</span>
+      </div>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:36px;letter-spacing:-0.03em;margin:0 0 14px;">Hand it over</h2>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
+        If you'd rather pass the bag to a person, say so when you book and the
+        driver will knock.
+      </p>
+      <ol style="font-size:16px;line-height:1.9;color:var(--ink-800);margin:0;padding-left:20px;">
+        <li>Tell us you'd like to hand it over — we'll agree a time.</li>
+        <li>The driver knocks and takes the bag from you.</li>
+        <li>Choose the same again on delivery, or a doorstep drop.</li>
+      </ol>
+    </div>
+
   </div>
-
-  <div class="rounded-2xl bg-paperdark p-9 sm:p-11">
-    <div class="text-[14px] font-extrabold uppercase tracking-[0.08em] text-brand-700">Option two</div>
-    <h2 class="mb-4 mt-3.5 text-[32px] leading-[1.05] text-ink sm:text-[38px]">Hand it over</h2>
-    <p class="text-[17px] leading-[1.55] text-neutral-800">
-      If you'd rather pass the bag to a person, say so when you book and the
-      driver will knock.
-    </p>
-    <ol class="mt-7 space-y-4">
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[14px] font-black text-white">1</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">Tell us you'd like to hand it over — we'll agree a time.</span>
-      </li>
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[14px] font-black text-white">2</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">The driver knocks and takes the bag from you.</span>
-      </li>
-      <li class="flex gap-4">
-        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[14px] font-black text-white">3</span>
-        <span class="text-[17px] leading-[1.55] text-neutral-800">You choose the same again on delivery, or a doorstep drop.</span>
-      </li>
-    </ol>
-  </div>
-
 </section>
-
-{{MARQUEE}}
 
 <!-- ===================================================================== -->
 <!-- What we wash                                                           -->
 <!-- ===================================================================== -->
-<section class="reveal mx-auto max-w-[1180px] px-5 py-[88px] sm:px-8">
-  <h2 class="text-[36px] leading-[1.02] text-ink sm:text-[42px]">What we wash</h2>
-  <p class="mt-5 max-w-[62ch] text-[18px] leading-[1.6] text-neutral-800">
-    Everyday laundry, by the pound. Anything that needs special handling gets
+<section class="container" style="padding-bottom:96px;">
+  <h2 class="display-4" data-reveal>What we wash</h2>
+  <p style="font-size:17px;line-height:1.55;color:var(--ink-800);max-width:52ch;margin:0 0 40px;" data-reveal>
+    Everyday laundry by the pound. Anything that needs special handling is
     confirmed by text before we touch it.
   </p>
 
-  <div class="mt-11 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-    <div class="rounded-lg bg-brand-100 px-[26px] py-6">
-      <h3 class="text-[22px] text-ink">By the pound</h3>
-      <p class="mt-2.5 text-[16px] leading-[1.55] text-neutral-800">
-        Shirts, jeans, socks, underwear, workout gear, kids' clothes, towels,
-        sheets.
+  <div class="grid-4">
+    <div class="card card-sm card-brandsoft" style="padding:24px;" data-reveal>
+      <p class="eyebrow" style="margin-bottom:12px;color:var(--ink-900);">By the pound</p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0;">
+        Shirts, jeans, socks, underwear, workout gear, kids' clothes, towels, sheets.
       </p>
     </div>
-
-    <div class="rounded-lg bg-brand-100 px-[26px] py-6">
-      <h3 class="text-[22px] text-ink">No sorting</h3>
-      <p class="mt-2.5 text-[16px] leading-[1.55] text-neutral-800">
-        Put it all in one bag. We separate whites, colours and delicates on
-        this end.
+    <div class="card card-sm card-brandsoft" style="padding:24px;" data-reveal>
+      <p class="eyebrow" style="margin-bottom:12px;color:var(--ink-900);">No sorting</p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0;">
+        Put it all in one bag. We separate whites, colours and delicates on this end.
       </p>
     </div>
-
-    <div class="rounded-lg bg-brand-100 px-[26px] py-6">
-      <h3 class="text-[22px] text-ink">Special care</h3>
-      <p class="mt-2.5 text-[16px] leading-[1.55] text-neutral-800">
-        Mention it when you book — a delicate top, a stain, something that
-        can't go in the dryer — and it's handled separately.
+    <div class="card card-sm card-brandsoft" style="padding:24px;" data-reveal>
+      <p class="eyebrow" style="margin-bottom:12px;color:var(--ink-900);">Special care</p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0;">
+        A delicate top, a stain, something that can't go in the dryer — mention
+        it when you book and it's handled separately.
       </p>
     </div>
-
-    <div class="rounded-lg bg-neutral-200 px-[26px] py-6">
-      <h3 class="text-[22px] text-ink">Not yet</h3>
-      <p class="mt-2.5 text-[16px] leading-[1.55] text-neutral-800">
-        Dry cleaning, pressing and alterations. Wash, dry and fold is the
-        whole service today.
+    <div class="card card-sm card-sunken" style="padding:24px;" data-reveal>
+      <p class="eyebrow" style="margin-bottom:12px;color:var(--ink-900);">Not yet</p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0;">
+        Dry cleaning, pressing and alterations. Wash, dry and fold is the whole
+        service today.
       </p>
     </div>
-
   </div>
 </section>
 
 <!-- ===================================================================== -->
-<!-- The three numbers                                                      -->
+<!-- The three numbers — on ink                                             -->
 <!-- ===================================================================== -->
-<section class="reveal mx-auto max-w-[1180px] px-5 pb-[88px] sm:px-8">
-  <h2 class="text-[36px] leading-[1.02] text-ink sm:text-[42px]">The short version</h2>
+<section style="background:var(--ink-900);padding:88px 0 96px;" class="rule-top">
+  <div class="container">
+    <p class="eyebrow eyebrow-paper" data-reveal>The short version</p>
+    <h2 class="display-4" style="color:var(--paper-050);margin-bottom:44px;" data-reveal>Three numbers.</h2>
 
-  <div class="mt-11 grid gap-[22px] md:grid-cols-3">
+    <div class="grid-3">
+      <!-- A card sitting on ink needs a coloured offset — an ink shadow on an
+           ink ground is invisible. These are the only non-ink shadows the
+           system permits. -->
+      <div class="card card-xl card-on-ink" style="padding:32px;" data-reveal>
+        <div style="font-family:var(--font-display);font-weight:900;font-size:56px;line-height:0.9;letter-spacing:-0.04em;">{{TURNAROUND}}</div>
+        <p class="eyebrow" style="margin:16px 0 10px;color:var(--ink-900);">Turnaround</p>
+        <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
+          Collected today, back at your door tomorrow. That's the standard, not an upgrade.
+        </p>
+      </div>
 
-    <div class="rounded-2xl border-2 border-ink/[0.16] p-8">
-      <div class="text-[44px] leading-none text-brand-700">{{TURNAROUND}}</div>
-      <div class="mb-2 mt-4 text-[17px] font-extrabold text-ink">Turnaround</div>
-      <p class="text-[16px] leading-[1.55] text-neutral-800">
-        Collected today, back at your door tomorrow. That's the standard, not
-        an upgrade.
-      </p>
+      <div class="card card-xl card-on-ink card-accent" style="padding:32px;" data-reveal>
+        <div style="font-family:var(--font-display);font-weight:900;font-size:56px;line-height:0.9;letter-spacing:-0.04em;">{{PRICE_PER_LB}}</div>
+        <p class="eyebrow" style="margin:16px 0 10px;color:var(--ink-900);">A pound</p>
+        <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
+          Weighed after pickup. Pickup and delivery are in the price — there is no second number.
+        </p>
+      </div>
+
+      <div class="card card-xl card-on-ink" style="padding:32px;" data-reveal>
+        <div style="font-family:var(--font-display);font-weight:900;font-size:56px;line-height:0.9;letter-spacing:-0.04em;">0</div>
+        <p class="eyebrow" style="margin:16px 0 10px;color:var(--ink-900);">Apps to download</p>
+        <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
+          No account, no login, no slot picker. One text and it's booked.
+        </p>
+      </div>
     </div>
-
-    <div class="rounded-2xl border-2 border-ink/[0.16] p-8">
-      <div class="text-[44px] leading-none text-brand-700">{{PRICE_PER_LB}}</div>
-      <div class="mb-2 mt-4 text-[17px] font-extrabold text-ink">A pound</div>
-      <p class="text-[16px] leading-[1.55] text-neutral-800">
-        Weighed after pickup. Pickup and delivery are in the price — there is
-        no second number.
-      </p>
-    </div>
-
-    <div class="rounded-2xl border-2 border-ink/[0.16] p-8">
-      <div class="text-[44px] leading-none text-brand-700">0</div>
-      <div class="mb-2 mt-4 text-[17px] font-extrabold text-ink">Apps to download</div>
-      <p class="text-[16px] leading-[1.55] text-neutral-800">
-        No account, no login, no slot picker. One text and it's booked.
-      </p>
-    </div>
-
   </div>
 </section>
 
 <!-- ===================================================================== -->
 <!-- You never need to be home                                              -->
 <!-- ===================================================================== -->
-<section class="reveal bg-brand-100">
-  <div class="mx-auto max-w-[1180px] px-5 py-[72px] sm:px-8">
-    <h2 class="max-w-[18ch] text-[36px] leading-[1.02] text-ink sm:text-[46px]">
-      You never need to be home
-    </h2>
-    <div class="mt-7 grid gap-8 md:grid-cols-2">
-      <p class="text-[18px] leading-[1.6] text-neutral-800">
+<section class="dotfield" style="padding:88px 0 96px;">
+  <div class="container grid-2" style="gap:56px;align-items:start;">
+    <div data-reveal>
+      <p class="eyebrow eyebrow-lilac">The point</p>
+      <h2 class="display-4" style="max-width:16ch;">You never need to be home.</h2>
+    </div>
+    <div data-reveal>
+      <p style="font-size:18px;line-height:1.55;color:var(--ink-800);margin:0 0 18px;">
         This is the part that matters, and every other step is designed around
         it. You don't wait in for a window. You don't rearrange a meeting. You
         put a bag down before you leave and it's back, folded, by this time
         tomorrow.
       </p>
-      <p class="text-[18px] leading-[1.6] text-neutral-800">
+      <p style="font-size:18px;line-height:1.55;color:var(--ink-800);margin:0;">
         It works the same in a house or an apartment — put your unit number on
         the signup form and the driver comes to your door. If you manage a
         building and want this offered to your residents,
-        <a href="/contact" class="font-semibold text-brand-800 underline underline-offset-2">talk to us</a>.
+        <a href="/contact">talk to us</a>.
       </p>
     </div>
   </div>
 </section>
 
 <!-- ===================================================================== -->
-<!-- Practical questions                                                    -->
+<!-- Questions                                                              -->
 <!-- ===================================================================== -->
-<section class="reveal mx-auto grid max-w-[1180px] gap-14 px-5 py-[88px] sm:px-8 lg:grid-cols-[0.8fr_1.2fr]">
-
+<section class="container grid-2 grid-2-narrow" style="padding-top:88px;padding-bottom:96px;gap:56px;align-items:start;">
   <div>
-    <h2 class="text-[44px] leading-[1.02] text-ink sm:text-[56px] lg:sticky lg:top-[100px]">Questions</h2>
+    <div class="sticky-col" style="position:sticky;top:108px;">
+      <p class="eyebrow eyebrow-brand">Help</p>
+      <h2 class="display-3" style="margin:0;">Questions</h2>
+    </div>
   </div>
 
   <div>
-    <div class="border-t border-ink/[0.16] py-[26px]">
-      <p class="text-[21px] font-extrabold text-ink">What if I need to cancel?</p>
-      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
-        Text us. Cancelling is free right up until your bag is collected. Once
-        it's with us it's already being processed, so it can't be cancelled
-        after that.
-      </p>
+    <div class="qa">
+      <h3>What if I need to cancel?</h3>
+      <p>Text us. Cancelling is free right up until your bag is collected. Once it's with us it's already being processed, so it can't be cancelled after that.</p>
+    </div>
+    <div class="qa">
+      <h3>How much fits in a bag?</h3>
+      <p>A typical bag holds {{BAG_WEIGHT}} — about one full washing machine, which comes to roughly {{ESTIMATE_RANGE}} at {{PRICE_PER_LB}} a pound. We take up to {{MAX_ORDER}} in one pickup. See <a href="/pricing">pricing</a>.</p>
+    </div>
+    <div class="qa">
+      <h3>Can I set detergent or drying preferences?</h3>
+      <p>Yes, once. You set them at signup, and you can change them any time by text. We keep them on file so you only say it once.</p>
+    </div>
+    <div class="qa">
+      <h3>Do I need my own bag?</h3>
+      <p>Any bag works. Use whatever you have — a laundry sack, a duffel, a sturdy tote.</p>
+    </div>
+    <div class="qa">
+      <h3>How do I pay?</h3>
+      <p>Before your first pickup we text you a secure link to add a card. It's handled by Stripe, our payment processor — the card number never touches this website. After that it's charged after each wash, and you get the weight and the total before the charge lands.</p>
+    </div>
+    <div class="qa">
+      <h3>Do you serve my area?</h3>
+      <p>We cover {{SERVICE_AREA}}. Sign up even if you're just outside it and we'll tell you when we reach you.</p>
     </div>
 
-    <div class="border-t border-ink/[0.16] py-[26px]">
-      <p class="text-[21px] font-extrabold text-ink">How much fits in a bag?</p>
-      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
-        A typical bag holds {{BAG_WEIGHT}} — about one full washing machine,
-        which comes to roughly {{ESTIMATE_RANGE}} at {{PRICE_PER_LB}} a pound.
-        We can take up to {{MAX_ORDER}} in one pickup. See
-        <a href="/pricing" class="font-semibold text-brand-800 underline underline-offset-2">pricing</a>.
-      </p>
-    </div>
-
-    <div class="border-t border-ink/[0.16] py-[26px]">
-      <p class="text-[21px] font-extrabold text-ink">Can I change my wash preferences?</p>
-      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
-        Yes, any time. Text us what you'd like changed and it applies from your
-        next order onward — we keep it on file so you only say it once.
-      </p>
-    </div>
-
-    <div class="border-t border-ink/[0.16] py-[26px]">
-      <p class="text-[21px] font-extrabold text-ink">Do I need my own bag?</p>
-      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
-        Any bag works. Use whatever you have — a laundry sack, a duffel, a
-        sturdy tote.
-      </p>
-    </div>
-
-    <div class="border-y border-ink/[0.16] py-[26px]">
-      <p class="text-[21px] font-extrabold text-ink">Do you serve my area?</p>
-      <p class="mt-3 max-w-[58ch] text-[17px] leading-[1.6] text-neutral-800">
-        We cover {{SERVICE_AREA}}. Sign up even if you're just outside it and
-        we'll tell you when we reach you.
-      </p>
-    </div>
-
-    <a href="/signup"
-       class="mt-11 inline-block rounded-full bg-brand-500 px-8 py-4 text-[17px] font-extrabold text-white transition-colors hover:bg-brand-600">
-      Get started
+    <a href="/signup" class="btn btn-primary btn-lg" style="margin-top:36px;">
+      Get started {{ICON_ARROW}}
     </a>
   </div>
-
 </section>

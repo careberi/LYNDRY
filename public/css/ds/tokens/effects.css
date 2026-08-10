@@ -1,0 +1,42 @@
+/* LYNDRY borders, radii and shadows.
+   The whole system is a line drawing: a 2-3px ink outline and a hard offset
+   shadow in the same ink. There is exactly one blurred shadow in the system
+   and it is only for elements that float over content (menus, sheets). */
+:root{
+  --border-w-hair:1px;
+  --border-w-1:2px;   /* default: inputs, chips, small cards */
+  --border-w-2:3px;   /* buttons, feature cards, anything clickable */
+  --border-w-3:4px;   /* hero panels, section frames */
+
+  --border-1:var(--border-w-1) solid var(--border-color);
+  --border-2:var(--border-w-2) solid var(--border-color);
+  --border-3:var(--border-w-3) solid var(--border-color);
+
+  --radius-xs:4px;
+  --radius-sm:8px;
+  --radius-md:14px;
+  --radius-lg:22px;
+  --radius-xl:32px;
+  --radius-2xl:44px;
+  --radius-pill:999px;
+  --radius-circle:50%;
+
+  /* Hard offset shadows — always pure ink, never blurred, never transparent */
+  --shadow-pop-xs:2px 2px 0 var(--ink-900);
+  --shadow-pop-sm:4px 4px 0 var(--ink-900);
+  --shadow-pop-md:6px 6px 0 var(--ink-900);
+  --shadow-pop-lg:10px 10px 0 var(--ink-900);
+  --shadow-pop-xl:14px 14px 0 var(--ink-900);
+  --shadow-pop-pressed:1px 1px 0 var(--ink-900);
+
+  /* Colored offsets — used sparingly, for stacked/overlapping cards */
+  --shadow-pop-brand:6px 6px 0 var(--suds-500);
+  --shadow-pop-accent:6px 6px 0 var(--sunbeam-500);
+  --shadow-pop-secondary:6px 6px 0 var(--lilac-500);
+
+  /* The only soft shadow. Overlays only. */
+  --shadow-float:0 18px 40px -12px rgba(16,18,16,0.35);
+
+  --focus-ring:0 0 0 4px var(--lilac-300),0 0 0 6px var(--ink-900);
+  --overlay-scrim:rgba(16,18,16,0.55);
+}

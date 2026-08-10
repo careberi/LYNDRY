@@ -203,44 +203,62 @@ stale and replayed ones all fail.
 
 ## Website decisions
 
-**The design is the LYNDRY design handoff — the "Organic" system, retinted to
-the LYNDRY teal.** Neil supplied a four-file bundle (an implementation brief, a
-README of tokens and copy, a stylesheet, and an iPhone frame component) and
-asked for the whole site to match it. It replaces the earlier telnyx.com-derived
-look entirely.
+**The design is the LYNDRY design system handoff (v2).** Neil supplied a bundle
+— an implementation brief, a screen spec, the design file, an iPhone frame
+component, and a complete CSS design system — and asked for the whole site to
+match it. It is the third look this site has had and it replaces both earlier
+ones outright.
 
-| | Was (Telnyx-derived) | Now (handoff) |
+| | Was (v1 "Organic") | Now (v2 design system) |
 |---|---|---|
-| Background | `#fefdf5` near-white cream | `#f5ead8` warm cream |
-| Panels | white / light grey | `#ebddc5` deeper cream |
-| Text | `#0a0a0a` | `#201e1d` |
-| Display face | Outfit, weight 700–800 | Caprasimo, weight 400 |
-| Body face | Inter | Figtree, 400–900 |
-| Accent | `#178a94` | `#17919b`, with a full 100–900 ramp |
-| Header | teal bar, white wordmark | cream, teal wordmark |
-| Radii | 12–16px | 16px panels, 28px cards, pills |
+| Ground | `#f5ead8` warm cream | `#FFF8EC` warm cream |
+| Accent | teal `#17919b` | Suds green `#0EA47A`, plus Sunbeam yellow and Lilac |
+| Text and outlines | `#201e1d`, no outlines | ink `#101210`, **everything outlined** |
+| Display face | Caprasimo 400 | Outfit 900 |
+| Body face | Figtree | Schibsted Grotesk |
+| Labels | Figtree 800 uppercase | Space Mono 700 uppercase |
+| Shadows | soft, blurred | hard offsets in pure ink, no blur |
+| Header | cream, teal wordmark | ink bar, paper wordmark |
+| Corners | pills everywhere | 14/22/32px, pills only on badges |
 
-**Caprasimo ships at weight 400 only.** Applying a bold class to a heading makes
-the browser synthesise a fake bold, which on a display face looks smeared. The
-layout forces `font-weight: 400` on `h1`–`h4` so that can't happen by accident.
+**Tailwind was removed.** The previous two looks were Tailwind-via-CDN with an
+inline config. This system is opinionated enough — a 3px ink outline, a hard
+offset shadow, and a hover/press transform on every clickable thing — that as
+utility classes it becomes forty characters of noise on every element. It is
+plain CSS classes now, in `public/css/lyndry.css`, and the site has no CSS
+framework and still no build step.
 
-**Teal on cream only clears 3:1 contrast.** That is fine for large text, icons
-and chrome, and not fine for paragraph copy — the handoff says so explicitly.
-Accent-coloured body text uses `brand-700` or darker throughout.
+Tailwind's CDN build also carries a warning against production use, so this
+removes a dependency rather than adding one.
 
-**The palette lives in `src/web/layout.js` under the same colour names as
-before.** Keeping the names (`brand`, `paper`, `ink`) meant the whole site
-re-skinned by changing values in one file rather than editing nine HTML files.
+**The design system's own CSS is vendored unmodified** into `public/css/ds/`.
+The handoff calls it production-ready and says to adopt it rather than
+reimplement it, which is right — it means a future update to the system is a
+file copy, not a re-derivation. Everything LYNDRY-specific sits one level up.
 
-**The home page is the handoff's layout A** — eyebrow pill, an 82px headline, a
-phone field, and an iPhone showing a real LYNDRY message thread. Layout B and
-the A/B toggle in the prototype were not built; the handoff says to ship A.
+**Icons are embedded, not fetched from a CDN.** The design system loads each
+Lucide glyph at runtime from unpkg.com. We inline them in `public/css/icons.css`
+instead. A CSS mask that fails to load does not degrade to "no icon" — it
+degrades to a solid coloured rectangle, and this site's links get texted to
+customers. The rule the handoff actually cares about — that swapping icon sets
+is a one-file change — still holds.
 
 **The phone mock is laid out at real iPhone size (402 × 874) and scaled to
-0.73** as one piece, exactly as the handoff specifies. Building it small instead
-would mean shrinking every font, radius and bubble by hand and getting them
-wrong. It is static — the handoff records that animation was added, reviewed and
+0.6** as one piece, as the handoff specifies. Building it small instead would
+mean shrinking every font, radius and bubble by hand and getting them wrong.
+It is static: the handoff records that animation was added, reviewed and
 removed on purpose.
+
+**Grid ratios are classes, not inline styles.** Found the hard way: an inline
+`grid-template-columns` beats the responsive media query, so the pricing band
+stayed two columns on a phone and pushed 14px of horizontal scroll onto every
+page. Ratios now live in `lyndry.css` as modifiers.
+
+**Parallax displacement is clamped to start at zero.** The spec's formula,
+taken literally, displaces everything above the fold before the visitor
+scrolls at all. The threshold is `max(0, elementTop - viewportHeight)`.
+Parallax is also switched off below 900px — on a single-column phone layout
+there is nothing for it to do.
 
 ### Where this build departs from the handoff, and why
 
@@ -254,14 +272,24 @@ twice.
 **The invented customer testimonial is not on the site.** The handoff's own
 notes list "Dani R. — customer since March" under placeholder content that is
 not real business data. A made-up customer quote on a live site is not something
-to ship. The panel keeps its shape and sage colour and says something true
+to ship. The panel keeps its shape and its Sunbeam fill and says something true
 instead.
 
 **Handoff content that is factually wrong for LYNDRY was dropped, not
 reproduced:** lockers, dry cleaning, standing orders, rush service, $2.25/lb,
-20 lb minimums, free delivery over $40, card-on-file, and the fake number
-(555) 018-2240. The handoff flags all of it as placeholder written to make the
-design reviewable.
+20 lb minimums, free delivery over $40, and the fake number (555) 018-2240. The
+handoff flags all of it as placeholder written to make the design reviewable.
+
+**Links on Suds green are ink, not `--suds-700`.** The spec asks for suds-700
+links on the green consent block. Measured, that is 2.39:1 against suds-500 —
+it fails WCAG AA for body text by a wide margin. Ink on the same green is
+5.92:1. The underline stays, so a link still reads as a link. This is the only
+place the build knowingly overrides a stated colour in the spec.
+
+**The consent checkbox copy is the handoff's, verbatim, and must stay that
+way.** It is what carriers read during registration and it is the evidence if
+anyone ever disputes opting in. The server already refuses the form without the
+box ticked, which the handoff lists as a production requirement.
 
 **Three of the handoff's seven pages were not built** — Business accounts, FAQ
 and About. Business accounts exists to quote a volume rate we have not set;
@@ -276,6 +304,11 @@ decisions, so the three cards became: the price, what's in it, what isn't.
 **The QR code is still generated but no longer placed on the home page.** The
 handoff's home page has no QR block. `textUsQrSvg()` in `src/web/site.js` is
 unchanged and `{{QR_SVG}}` still resolves, so it can be dropped onto any page.
+
+**The `Wash · Fold · Deliver` marquee is gone.** It was the repeating band from
+the previous look, and the new design has no place for it — the rising bubbles
+and the fact rail carry that job now. If Neil wants it back it is a small piece
+of CSS, but two competing repeating motifs on one page is one too many.
 
 **The published phone number is (201) 554-1877** — the LYNDRY Telnyx number,
 bought 2026-08-07. (It replaced an earlier Twilio number that was briefly on the
