@@ -151,12 +151,37 @@ phone. Add a modifier to `lyndry.css` instead — `.grid-2-wide`,
 inline SVG path data in a page. Adding a glyph means editing `icons.css` and
 the token list, and nothing else.
 
+### The logo
+
+A speech bubble, because the whole service is a text thread. `logo(variant)`
+in `layout.js` builds it; the CSS is at the top of `lyndry.css`. Variants:
+`nav` (header), `footer`, `compact` (below ~18px, drops the kicker), `offset`
+(the hard ink shadow, for marketing placements). `avatar()` is the "L" in a
+Suds bubble, used in the phone mock and as the favicon.
+
+**The tail is one shape whose top overlaps the bubble's bottom border by
+exactly the border width**, so the outline opens where the tail joins and no
+hairline shows through. It was tried as a rotated square and as a big ink
+triangle stacked behind — both left visible artifacts. Don't rebuild it.
+
+**Both wrappers carry `line-height: 0; font-size: 0`.** Without that a stray
+line box drops the tail a few pixels and the bubble's border shows as a line
+above it.
+
+**The wordmark is Grandstander 900**, loaded by a `<link>` in `layout.js`
+rather than added to `css/ds/tokens/fonts.css` — that folder is the design
+system vendored unmodified, and an edit there is lost the next time it's
+replaced.
+
 ### Motion
 
 Three things, all defined in `layout.js` and `lyndry.css`:
 
-- **Bubbles** — the rising soap field in the hero. Every bubble has a *negative*
-  animation delay so the field is already full at page load.
+- **Bubbles** — 72 rising soap bubbles in the hero, tinted from five palette
+  colours. Every bubble has a *negative* animation delay so the field is
+  already full at page load, and rises are slow (16–52s) because a faster pass
+  read as fizzing. The markup is generated, not hand-written — the snippet is
+  in `DECISIONS.md`.
 - **`data-reveal`** on an element fades and lifts it into view.
 - **`data-parallax="<speed>"`** drifts an element as you scroll past. Positive
   lags, negative leads.

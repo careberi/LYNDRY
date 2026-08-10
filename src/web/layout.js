@@ -50,6 +50,40 @@ function icon(name, size) {
   return `<span class="icon icon-${name}${sizeClass}" aria-hidden="true"></span>`;
 }
 
+// The tail of the speech bubble, shared by the logo and the avatar.
+//
+// An OPEN path — the two diagonals are stroked, the top edge is not, so no
+// square corners poke out either side of the join. `vector-effect` keeps the
+// stroke a constant width even though preserveAspectRatio="none" is squashing
+// the viewBox to whatever the variant asked for.
+const TAIL_SVG =
+  '<svg viewBox="0 0 44 26" preserveAspectRatio="none" aria-hidden="true">' +
+  '<path d="M0 0 L22 26 L44 0" vector-effect="non-scaling-stroke"></path></svg>';
+
+// The logo: the wordmark inside a chunky message bubble, because the whole
+// service is a text thread. Variant is 'nav', 'footer', 'compact' or 'offset'.
+function logo(variant, { href = '/', label = 'LYNDRY — home' } = {}) {
+  const tag = href ? 'a' : 'span';
+  const attrs = href ? ` href="${href}" aria-label="${label}"` : '';
+
+  return `<${tag}${attrs} class="ly-logo ly-logo--${variant}">
+          <span class="ly-logo__bubble">
+            <span class="ly-logo__word">${site.name}</span>
+            <span class="ly-logo__kicker">wash &amp; fold</span>
+          </span>
+          <span class="ly-logo__tail">${TAIL_SVG}</span>
+        </${tag}>`;
+}
+
+// The avatar variant — the L in a Suds bubble. Used in the phone mock.
+function avatar(size) {
+  const style = size ? ` style="--ly-av:${size}px"` : '';
+  return `<span class="ly-avatar"${style} aria-hidden="true">
+            <span class="ly-avatar__box">L</span>
+            <span class="ly-avatar__tail">${TAIL_SVG}</span>
+          </span>`;
+}
+
 // The glyphs page files can drop in. Anything new goes here and in
 // public/css/icons.css, and nowhere else.
 const ICON_TOKENS = Object.freeze({
@@ -67,6 +101,9 @@ const ICON_TOKENS = Object.freeze({
   ICON_CARD: icon('credit-card', '26'),
   ICON_CALENDAR: icon('calendar', '26'),
   ICON_USER: icon('user', '26'),
+
+  // The logo's avatar variant, for the phone mock's conversation header.
+  AVATAR: avatar(52),
 });
 
 // Sticky ink header. The design system pins exactly one thing on the site and
@@ -84,9 +121,7 @@ function navBar(currentPath) {
   return `
     <header class="site-header">
       <div class="container site-header-bar">
-        <!-- No logo was ever supplied. The wordmark is Outfit 900 at -5%
-             tracking, which the design system names as the stand-in. -->
-        <a href="/" class="wordmark">${site.name}</a>
+        ${logo('nav')}
 
         <nav class="site-nav">
           ${links}
@@ -114,7 +149,7 @@ function footer() {
       <div class="container" style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap;padding-top:72px;padding-bottom:44px;">
 
         <div style="max-width:32ch;">
-          <div style="font-family:var(--font-display);font-weight:900;font-size:34px;letter-spacing:-0.05em;color:var(--paper-050);line-height:1;">${site.name}</div>
+          <div style="margin-bottom:22px;">${logo('footer')}</div>
           <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:var(--paper-300);">
             Laundry that runs on text messages. Picked up from your door, back
             within ${site.turnaround}.
@@ -180,9 +215,12 @@ function renderPage({ title, description, path, body, extra = {} }) {
   <meta property="og:description" content="${description}">
   <meta property="og:type" content="website">
 
-  <!-- Favicon drawn inline so there is no image file to manage. Suds green
-       field, ink outline, paper letter — the phone avatar, shrunk. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='8' fill='%230EA47A' stroke='%23101210' stroke-width='2'/%3E%3Ctext x='16' y='23' font-family='Outfit,Arial,sans-serif' font-size='19' font-weight='900' fill='%23FFFDF7' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
+  <!-- Favicon: the logo's avatar variant, drawn inline so there is no image
+       file to manage. The tail is drawn first and the box painted over it, so
+       the box's outline closes across the top of the tail exactly as it does
+       in CSS. The L is a stroked path rather than text, because a webfont
+       never loads inside a data-URI favicon. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 20 L14 28 L19 20' fill='%230EA47A' stroke='%23101210' stroke-width='2.5' stroke-linejoin='miter'/%3E%3Crect x='2.25' y='2.25' width='27.5' height='19.5' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.5'/%3E%3Cpath d='M12 7.5 V16.5 H21' fill='none' stroke='%23101210' stroke-width='3.2'/%3E%3C/svg%3E">
   <meta name="theme-color" content="#101210">
 
   <!-- The design system's font file @imports Google Fonts, and an @import
@@ -190,6 +228,12 @@ function renderPage({ title, description, path, body, extra = {} }) {
        loaded. Opening the connections early takes a round trip off it. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Grandstander is the logo face, and only the logo uses it. It is loaded
+       here rather than added to css/ds/tokens/fonts.css because that folder is
+       the design system vendored unmodified — editing it would be lost the
+       next time the system is replaced. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grandstander:wght@900&display=swap">
 
   <link rel="stylesheet" href="/css/ds/styles.css">
   <link rel="stylesheet" href="/css/icons.css">
@@ -317,4 +361,4 @@ ${footer()}
   return fillTokens(html, { ...ICON_TOKENS, ...extra });
 }
 
-module.exports = { renderPage, fillTokens, icon };
+module.exports = { renderPage, fillTokens, icon, logo, avatar };

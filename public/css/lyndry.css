@@ -25,6 +25,134 @@
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
+   The logo
+   --------------------------------------------------------------------------- */
+/* A speech bubble, because the whole service is a text thread. Ported from the
+   handoff's logo/lyndry-logo-1d.html — don't re-derive it.
+
+   THE TAIL IS THE FIDDLY PART. It is one shape whose top overlaps the bubble's
+   bottom border by exactly the border width, so the bubble's outline opens
+   where the tail joins and no hairline shows through. It was tried as a
+   rotated square and as a large ink triangle stacked behind; both left visible
+   artifacts. Leave it alone.
+
+   Scale any lockup with --ly-size; everything else is proportional. */
+
+.ly-logo {
+  position: relative;
+  display: inline-block;
+  /* Without these a stray line box drops the tail a few pixels and the
+     bubble's border shows as a line above it. */
+  line-height: 0;
+  font-size: 0;
+  text-decoration: none;
+}
+
+.ly-logo__bubble {
+  display: block;
+  background: var(--paper-050);
+  border: var(--ly-bw, 5px) solid var(--ink-900);
+  border-radius: var(--ly-radius, 40px);
+  padding: var(--ly-pad, 24px 34px 26px);
+  text-align: center;
+}
+
+.ly-logo__word {
+  display: block;
+  font-family: 'Grandstander', var(--font-display), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: var(--ly-size, 58px);
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  color: var(--ink-900);
+}
+
+.ly-logo__kicker {
+  display: block;
+  margin-top: 0.08em;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: calc(var(--ly-size, 58px) * 0.207);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--suds-700);
+}
+
+.ly-logo__tail {
+  position: absolute;
+  left: var(--ly-tail-x, 44px);
+  bottom: calc(var(--ly-tail-h, 26px) * -1 + var(--ly-bw, 5px));
+  width: var(--ly-tail-w, 44px);
+  height: var(--ly-tail-h, 26px);
+}
+.ly-logo__tail svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* An OPEN path: the two diagonals are stroked, the top edge is not, so no
+   square corners poke out either side. */
+.ly-logo__tail path {
+  fill: var(--paper-050);
+  stroke: var(--ink-900);
+  stroke-width: var(--ly-bw, 5px);
+  stroke-linejoin: miter;
+}
+
+/* The hard ink offset, for hero and marketing placements. Dropped in chrome. */
+.ly-logo--offset .ly-logo__bubble { box-shadow: 11px 11px 0 var(--ink-900); }
+.ly-logo--offset .ly-logo__tail { filter: drop-shadow(11px 11px 0 var(--ink-900)); }
+
+/* Nav — the 68px ink header. */
+.ly-logo--nav {
+  --ly-size: 20px;
+  --ly-bw: 3px;
+  --ly-radius: 14px;
+  --ly-pad: 5px 13px 6px;
+  --ly-tail-x: 19px;
+  --ly-tail-w: 22px;
+  --ly-tail-h: 13px;
+}
+
+/* Footer and secondary placements. */
+.ly-logo--footer {
+  --ly-size: 32px;
+  --ly-bw: 3px;
+  --ly-radius: 20px;
+  --ly-pad: 8px 18px 10px;
+  --ly-tail-x: 25px;
+  --ly-tail-w: 34px;
+  --ly-tail-h: 19px;
+}
+
+/* Below about 18px the kicker stops being legible, so it goes. */
+.ly-logo--compact { --ly-size: 18px; --ly-bw: 3px; --ly-radius: 12px; --ly-pad: 4px 10px 5px; --ly-tail-x: 14px; --ly-tail-w: 18px; --ly-tail-h: 11px; }
+.ly-logo--compact .ly-logo__kicker { display: none; }
+
+/* The avatar — the L in a Suds bubble. Used in the phone mock. */
+.ly-avatar { position: relative; display: inline-block; line-height: 0; font-size: 0; }
+.ly-avatar__box {
+  display: grid;
+  place-items: center;
+  width: var(--ly-av, 52px);
+  height: var(--ly-av, 52px);
+  background: var(--suds-500);
+  border: 3px solid var(--ink-900);
+  border-radius: calc(var(--ly-av, 52px) * 0.35);
+  font-family: 'Grandstander', var(--font-display), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: calc(var(--ly-av, 52px) * 0.5);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: var(--ink-900);
+}
+.ly-avatar__tail {
+  position: absolute;
+  left: calc(var(--ly-av, 52px) * 0.23);
+  bottom: calc(var(--ly-av, 52px) * -0.19 + 3px);
+  width: calc(var(--ly-av, 52px) * 0.31);
+  height: calc(var(--ly-av, 52px) * 0.19);
+}
+.ly-avatar__tail svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ly-avatar__tail path { fill: var(--suds-500); stroke: var(--ink-900); stroke-width: 3px; stroke-linejoin: miter; }
+
+/* ---------------------------------------------------------------------------
    Page furniture
    --------------------------------------------------------------------------- */
 
@@ -403,14 +531,6 @@
   gap: 36px;
   height: 68px;
 }
-.wordmark {
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 25px;
-  letter-spacing: -0.05em;
-  color: var(--paper-050);
-  text-decoration: none;
-}
 .site-nav { display: flex; align-items: center; gap: 26px; margin-right: auto; }
 .site-nav a {
   font-family: var(--font-body);
@@ -481,7 +601,10 @@
   box-sizing: border-box;
 }
 .hero-row {
-  flex: 1;
+  /* `1 0 auto`, not `1`. With a plain `flex: 1` the row is allowed to shrink
+     below its own content on a short viewport, and the vertically centred
+     column then overflows down into the fact rail. */
+  flex: 1 0 auto;
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 56px;
@@ -602,20 +725,8 @@
   background: var(--paper-100);
   border-bottom: var(--border-2);
 }
-.phone-avatar {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--suds-500);
-  border: var(--border-w-2) solid var(--ink-900);
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 24px;
-  color: var(--paper-050);
-  line-height: 1;
-}
+/* The conversation header uses the logo's .ly-avatar, defined at the top of
+   this file — there is no separate phone-only avatar. */
 .phone-name {
   font-family: var(--font-mono);
   font-weight: 700;

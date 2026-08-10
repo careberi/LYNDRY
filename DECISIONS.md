@@ -254,6 +254,61 @@ removed on purpose.
 stayed two columns on a phone and pushed 14px of horizontal scroll onto every
 page. Ratios now live in `lyndry.css` as modifiers.
 
+### There is a logo now
+
+A later revision of the handoff added one, and it replaced the plain Outfit
+wordmark in the header and footer. It is the wordmark inside a chunky speech
+bubble — chosen, per the handoff, because the whole service is a text thread.
+Set in **Grandstander 900**, cream fill, ink outline, with a `wash & fold`
+kicker in Space Mono.
+
+Ported from the handoff's `logo/lyndry-logo-1d.html` rather than re-derived.
+`logo(variant)` in `layout.js` builds it; the CSS sits at the top of
+`lyndry.css`.
+
+**The tail took the design several passes and is easy to break.** It is one
+shape whose top overlaps the bubble's bottom border by exactly the border
+width, so the outline opens at the join and no hairline shows through. The
+handoff records that a rotated square and a stacked ink triangle were both
+tried and both left artifacts. Both wrappers also carry `line-height: 0;
+font-size: 0` — without it a stray line box drops the tail a few pixels and the
+border reappears as a line above it.
+
+**Grandstander is loaded by a `<link>` in `layout.js`,** not by editing
+`css/ds/tokens/fonts.css`. That folder is the design system vendored
+unmodified; an edit there would be lost the next time it is replaced.
+
+**The favicon is the avatar variant, drawn as paths.** A webfont never loads
+inside a data-URI favicon, so the "L" is a stroked path rather than text. The
+tail is painted first and the box over it, which reproduces the same overlap
+the CSS does.
+
+**Caveat worth passing on:** the mark is set in an existing display typeface,
+not hand-drawn. It is usable as-is. Matching hand-lettered references properly
+means paying a letterer to redraw the word.
+
+### The bubble field
+
+Now 72 bubbles rather than 30, tinted from five palette colours (paper,
+sunbeam, lilac, suds-200, sunbeam-100), all semi-transparent so they never
+compete with the headline. Rises are 16–52s — deliberately slow, because the
+handoff records that a faster pass read as fizzing.
+
+The markup is **generated, not hand-written.** To change the count or the
+palette, run this from the repo root and paste the result into the `.bubbles`
+layer in `public/pages/home.html`:
+
+```bash
+node -e "const T=['rgba(255,253,247,0.55)','rgba(255,210,63,0.62)','rgba(201,167,245,0.62)','rgba(169,235,212,0.70)','rgba(255,246,214,0.58)'];const N=72;const j=i=>{const x=Math.sin(i*12.9898)*43758.5453;return x-Math.floor(x)};for(let i=0;i<N;i++){const l=Math.min(99,Math.max(1,1+(i/(N-1))*98+(j(i)-0.5)*2.6)).toFixed(1);const s=Math.round(9+j(i+100)*19);const d=Math.round(16+j(i+200)*36);console.log('    <span style=\"left:'+l+'%;bottom:-'+(s+20)+'px;width:'+s+'px;height:'+s+'px;background:'+T[i%5]+';animation-duration:'+d+'s;animation-delay:-'+(i*2.4).toFixed(1)+'s\"></span>')}"
+```
+
+The jitter is a deterministic `sin` hash rather than `Math.random`, so
+regenerating produces the same field and the diff stays readable.
+
+**The hero content row is `flex: 1 0 auto`, not `flex: 1`.** With a plain
+`flex: 1` the row may shrink below its own content on a short viewport, and the
+vertically centred column then overflows into the fact rail.
+
 **Parallax displacement is clamped to start at zero.** The spec's formula,
 taken literally, displaces everything above the fold before the visitor
 scrolls at all. The threshold is `max(0, elementTop - viewportHeight)`.
