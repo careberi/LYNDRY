@@ -26,6 +26,7 @@ const { site, tokens } = require('./site');
 const NAV_LINKS = [
   { href: '/how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
+  { href: '/partners', label: 'Partners' },
   { href: '/contact', label: 'Contact' },
 ];
 
@@ -174,6 +175,7 @@ function footer() {
         <div>
           <p class="footer-head">Company</p>
           <div style="display:flex;flex-direction:column;gap:10px;">
+            <a href="/partners">Partners</a>
             <a href="/contact">Contact</a>
             <a href="/privacy">Privacy policy</a>
             <a href="/terms">Terms of service</a>

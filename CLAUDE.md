@@ -204,6 +204,25 @@ asks for less motion gets none. Any new animation must honour it too.
 **In development, page HTML is re-read on every request** — edit a file in
 `public/pages/`, refresh the browser, done. In production it's cached.
 
+**`/partners` takes enquiries from laundromats and property managers.** One
+form, one `partner_enquiries` table, a `partner_type` of `LAUNDROMAT` or
+`PROPERTY`. The row is saved first and Neil is texted second — the row is the
+durable record and the text is a best-effort nudge, so an enquiry survives
+texting being down. There is no admin UI; read it with a query:
+
+```sql
+select created_at, partner_type, company, contact_name, email, phone, city, size_note, message
+from partner_enquiries where status = 'NEW' order by created_at desc;
+```
+
+**There are no commercial terms on that page, deliberately** — no revenue
+share, no per-pound rate to a laundromat, no fee or discount for a building,
+no promise about volume. None of it has been decided. Don't invent it.
+
+**Public forms carry a honeypot field.** A hidden input a person never sees;
+anything that fills it gets a 303 to the thank-you page and is dropped without
+being saved, so whatever submitted it gets no signal that it was caught.
+
 **Anything a visitor typed that gets shown back to them must go through
 `escapeHtml()`.** The signup form redisplays what you typed after a validation
 error, and without escaping that is a route to injecting markup into the page.

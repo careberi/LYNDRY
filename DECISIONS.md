@@ -254,6 +254,41 @@ removed on purpose.
 stayed two columns on a phone and pushed 14px of horizontal scroll onto every
 page. Ratios now live in `lyndry.css` as modifiers.
 
+### The partners page
+
+Neil asked for a page where laundromats can ask to work with us and property
+managers can ask to have LYNDRY offered to their residents.
+
+**One page and one form, not two.** The two audiences want opposite things —
+one has capacity to sell, the other has demand to serve — but the fields are
+identical and the only question that really differs is what "how big?" means.
+A single `partner_type` radio splits them, and the copy above the form
+explains each in its own panel.
+
+**Enquiries go to a database table, not an email inbox.** There is no email
+sending in this system and adding a provider for one form would be a new
+vendor, a new key and a new failure mode. `partner_enquiries` is the durable
+record; Neil also gets a text through `notify.js`, because SMS is
+infrastructure we already have. The row is written first and the text sent
+second, so an enquiry survives texting being down — which it is until carrier
+registration clears.
+
+**No commercial terms are on the page.** No revenue share, no per-pound rate
+to a laundromat, no fee or discount for a building, no promise about volume.
+None of that has been decided, and putting numbers on a public page would be
+inventing business decisions. The page's job is to start a conversation. The
+copy says rates are "worked out per site" and leaves it there.
+
+**The form has a honeypot.** A public form with no CAPTCHA will be filled by
+scrapers. A hidden field that a person never sees catches the obvious ones;
+they get a 303 to the thank-you page and nothing is saved, so whatever
+submitted it has no signal that it was caught. It is not real bot protection —
+if the volume becomes a problem, that is a rate limit or a challenge, not more
+honeypots.
+
+**`/contact`'s "Manage a building?" panel now points here** rather than opening
+a mail client, so building enquiries land in the table with the rest.
+
 ### There is a logo now
 
 A later revision of the handoff added one, and it replaced the plain Outfit

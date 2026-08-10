@@ -5,6 +5,7 @@ const path = require('path');
 const express = require('express');
 
 const db = require('../db');
+const notify = require('../core/notify');
 const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
 const { renderPage } = require('../web/layout');
@@ -74,7 +75,20 @@ const PAGES = [
     path: '/contact',
     file: 'contact.html',
     title: 'Contact',
-    description: `Get in touch with LYNDRY. Email ${site.email}, or ask about smart lockers for your building.`,
+    description: `Get in touch with LYNDRY. Email ${site.email}, or ask about offering LYNDRY in your building.`,
+  },
+  {
+    path: '/partners',
+    file: 'partners.html',
+    title: 'Partners',
+    description:
+      'Work with LYNDRY. Laundromats with spare capacity, and property managers who want laundry offered to their residents.',
+  },
+  {
+    path: '/partners/thanks',
+    file: 'partners-thanks.html',
+    title: 'Thanks',
+    description: 'We have your details and will come back to you.',
   },
 ];
 
@@ -125,14 +139,14 @@ function looksLikeEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || '').trim());
 }
 
-// Renders an error banner above the signup form.
-function errorBanner(message) {
+// Renders an error banner above a form.
+function errorBanner(message, heading = "We couldn't create your account") {
   // Stain red is the only red in the design system, and errors are the only
   // thing it is for.
   return `
   <section class="container" style="max-width:760px;padding-top:32px;">
     <div role="alert" class="card card-xl" style="padding:26px;background:var(--stain-100);box-shadow:6px 6px 0 var(--stain-500);">
-      <p class="eyebrow" style="margin-bottom:8px;color:var(--stain-600);">We couldn't create your account</p>
+      <p class="eyebrow" style="margin-bottom:8px;color:var(--stain-600);">${escapeHtml(heading)}</p>
       <p style="font-size:17px;line-height:1.5;color:var(--ink-900);margin:0;">${escapeHtml(message)}</p>
     </div>
   </section>`;
@@ -151,6 +165,22 @@ function signupTokens(form = {}, errorMessage = '') {
     V_STATE: escapeHtml(form.state || 'NJ'),
     V_ZIP: escapeHtml(form.postal_code),
     V_INSTRUCTIONS: escapeHtml(form.special_instructions),
+  };
+}
+
+// The values the partner form needs in order to redisplay what someone typed.
+function partnerTokens(form = {}, errorMessage = '') {
+  return {
+    FORM_ERROR: errorMessage ? errorBanner(errorMessage, "We couldn't send that") : '',
+    SEL_LAUNDROMAT: form.partner_type === 'LAUNDROMAT' ? 'checked' : '',
+    SEL_PROPERTY: form.partner_type === 'PROPERTY' ? 'checked' : '',
+    V_COMPANY: escapeHtml(form.company),
+    V_CONTACT: escapeHtml(form.contact_name),
+    V_PEMAIL: escapeHtml(form.email),
+    V_PPHONE: escapeHtml(form.phone),
+    V_PCITY: escapeHtml(form.city),
+    V_SIZE: escapeHtml(form.size_note),
+    V_PMESSAGE: escapeHtml(form.message),
   };
 }
 
@@ -176,6 +206,9 @@ async function extraTokensFor(page, req) {
   // typed it there doesn't have to type it again. It is only ever prefilled —
   // consent still has to be given on this page, with the unticked box.
   if (page.path === '/signup') return signupTokens({ phone: req.query.phone });
+
+  // The partner form needs empty values for its fields on a fresh visit.
+  if (page.path === '/partners') return partnerTokens();
 
   // The home page shows a QR code that opens the customer's messaging app.
   if (page.path === '/') return { QR_SVG: await textUsQrSvg() };
@@ -359,6 +392,89 @@ router.post('/signup', async (req, res, next) => {
     // Redirect rather than rendering directly, so refreshing the confirmation
     // page doesn't try to sign the customer up a second time.
     return res.redirect(303, '/signup/thanks');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The partner form.
+//
+// Laundromats with spare capacity, and property managers who want LYNDRY
+// offered to their residents. Both land in the same table.
+//
+// The enquiry is saved first and Neil is texted second, on purpose: the row is
+// the durable record, and the text is a best-effort nudge. If texting is down —
+// which it is until carrier registration clears — the enquiry is still safe.
+// ---------------------------------------------------------------------------
+
+const PARTNERS_PAGE = PAGES.find((p) => p.path === '/partners');
+
+const PARTNER_TYPES = { LAUNDROMAT: 'a laundromat', PROPERTY: 'a property manager' };
+
+router.post('/partners', async (req, res, next) => {
+  const form = req.body || {};
+
+  const fail = (message) => render(res, PARTNERS_PAGE, partnerTokens(form, message), 400);
+
+  try {
+    // The honeypot. A person never sees this field; something filling every
+    // input in the form does. Answer 303 as though it worked, so whatever
+    // submitted it has no signal that it was caught.
+    if (String(form.website || '').trim()) {
+      console.warn('Dropped a partner enquiry that filled the honeypot field.');
+      return res.redirect(303, '/partners/thanks');
+    }
+
+    const partnerType = String(form.partner_type || '');
+    if (!PARTNER_TYPES[partnerType]) {
+      return fail('Please tell us whether you run a laundromat or manage a property.');
+    }
+
+    const company = String(form.company || '').trim();
+    const contactName = String(form.contact_name || '').trim();
+    const email = String(form.email || '').trim();
+
+    if (!company) return fail('Please tell us the name of your company.');
+    if (!contactName) return fail('Please tell us your name.');
+    if (!looksLikeEmail(email)) return fail('That email address does not look right.');
+
+    // Long enough to be a real message, short enough not to be an essay
+    // someone pasted to fill the database.
+    const message = String(form.message || '').trim().slice(0, 4000);
+
+    const { error } = await db.from('partner_enquiries').insert({
+      partner_type: partnerType,
+      company,
+      contact_name: contactName,
+      email,
+      phone: String(form.phone || '').trim() || null,
+      city: String(form.city || '').trim() || null,
+      size_note: String(form.size_note || '').trim().slice(0, 300) || null,
+      message: message || null,
+      // req.ip is the visitor's real address because index.js sets
+      // 'trust proxy'. It is the only evidence of origin if this gets abused.
+      source_ip: req.ip,
+      status: 'NEW',
+    });
+
+    if (error) throw error;
+
+    // Tell Neil. Best effort — a failure here must not lose the enquiry, so it
+    // is caught and logged rather than thrown.
+    if (config.supportPhone) {
+      await notify
+        .sendAndLog(
+          config.supportPhone,
+          `LYNDRY partner enquiry — ${company} (${PARTNER_TYPES[partnerType]}). ` +
+            `${contactName}, ${email}. Check the partner_enquiries table.`,
+          null
+        )
+        .catch((err) => console.error('Could not text the partner enquiry:', err.message));
+    }
+
+    // Redirect rather than rendering, so a refresh doesn't send it twice.
+    return res.redirect(303, '/partners/thanks');
   } catch (err) {
     return next(err);
   }
