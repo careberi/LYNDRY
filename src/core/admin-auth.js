@@ -182,7 +182,12 @@ async function requestCode(rawPhone, req) {
   const text = `${code} is your LYNDRY sign-in code. It expires in ${CODE_TTL_MINUTES} minutes.`;
 
   try {
-    await sms.sendMessage({ to: phone, text });
+    await sms.sendMessage({
+      to: phone,
+      text,
+      // Blank unless a short code or second number is configured.
+      from: config.telnyx.codeNumber || undefined,
+    });
   } catch (err) {
     // Texting is not working yet — carrier registration is still pending — so
     // without this the dashboard would be unreachable. The code goes to the

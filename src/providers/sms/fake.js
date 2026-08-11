@@ -51,11 +51,11 @@ function parseDeliveryReceipt(body) {
   };
 }
 
-async function sendMessage({ to, text }) {
+async function sendMessage({ to, text, from }) {
   counter += 1;
 
   console.log('');
-  console.log('  ┌─ TEXT TO ' + to);
+  console.log('  ┌─ TEXT TO ' + to + (from ? `  (from ${from})` : ''));
   for (const line of text.split('\n')) {
     console.log('  │  ' + line);
   }

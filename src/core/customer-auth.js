@@ -167,6 +167,8 @@ async function requestCode(rawPhone, req) {
     await sms.sendMessage({
       to: phone,
       text: `${code} is your LYNDRY code. It expires in ${CODE_TTL_MINUTES} minutes.`,
+      // Blank unless a short code or second number is configured.
+      from: config.telnyx.codeNumber || undefined,
     });
   } catch (err) {
     // Unlike the staff sign-in, a customer's code is NOT written to the log as

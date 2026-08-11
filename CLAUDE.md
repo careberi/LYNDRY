@@ -577,3 +577,12 @@ the single record of what a customer was told, however they booked.
 
 **Nothing here writes an order status directly** — cancelling goes through
 `orders.transition()` exactly as the ops endpoints do.
+
+**Sign-in codes can send from a different number.** `LYNDRY_CODE_NUMBER`, if
+set, is used as the `from` for sign-in codes only — that is where a short code
+or a dedicated second number plugs in. Blank by default, which sends everything
+from the main number: one number, one thread the customer can reply to.
+
+**Only sign-in codes may use it.** Order confirmations and the AI's replies must
+keep coming from `LYNDRY_PHONE_NUMBER`, because customers reply to those and a
+short code is not where that conversation lives.

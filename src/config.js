@@ -56,6 +56,16 @@ const config = Object.freeze({
     publicKey: process.env.TELNYX_PUBLIC_KEY || '',
     messagingProfileId: process.env.TELNYX_MESSAGING_PROFILE_ID || '',
     phoneNumber: process.env.LYNDRY_PHONE_NUMBER || '',
+
+    // Optional. Where sign-in codes are sent FROM — a short code, or a second
+    // number kept separate from the conversation. Left blank, codes go from
+    // LYNDRY_PHONE_NUMBER like everything else, which is the sensible default:
+    // one number, one thread.
+    //
+    // Only sign-in codes use this. Order confirmations and the AI's replies
+    // must keep coming from the main number, because a customer replies to
+    // those and a short code is not where that conversation lives.
+    codeNumber: process.env.LYNDRY_CODE_NUMBER || '',
   }),
 
   // Where handoff_to_human reaches Neil. His personal number, never published.

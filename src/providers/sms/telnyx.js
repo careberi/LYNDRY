@@ -126,15 +126,21 @@ function parseDeliveryReceipt(body) {
 // Sending
 // ---------------------------------------------------------------------------
 
-async function sendMessage({ to, text }) {
+// `from` is optional. Left off, everything sends from the main LYNDRY number,
+// which is what a two-way conversation needs. Passed in, it overrides the
+// sender for that one message — that is how sign-in codes can come from a
+// short code or a second number while the conversation stays where it is.
+async function sendMessage({ to, text, from }) {
+  const sender = from || config.telnyx.phoneNumber;
+
   const body = {
     to,
     text,
     // Prefer the messaging profile if we have one — it is what carrier
     // registration is attached to. Otherwise send from the number directly.
     ...(config.telnyx.messagingProfileId
-      ? { messaging_profile_id: config.telnyx.messagingProfileId, from: config.telnyx.phoneNumber }
-      : { from: config.telnyx.phoneNumber }),
+      ? { messaging_profile_id: config.telnyx.messagingProfileId, from: sender }
+      : { from: sender }),
   };
 
   const response = await fetch(API_URL, {
