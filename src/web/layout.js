@@ -29,6 +29,9 @@ const NAV_LINKS = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/partners', label: 'Partners' },
   { href: '/contact', label: 'Contact' },
+  // The way back in for an existing customer. Sits last, next to Get started,
+  // because it is the returning-customer action rather than a page to read.
+  { href: '/account', label: 'Schedule online' },
 ];
 
 // Replaces every {{TOKEN}} in a chunk of HTML with its value.
@@ -182,7 +185,7 @@ function footer() {
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
             <a href="/signup">Sign up</a>
-            <a href="/account">Book a pickup</a>
+            <a href="/account">Schedule online</a>
           </div>
         </div>
 
