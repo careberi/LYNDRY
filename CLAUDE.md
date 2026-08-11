@@ -288,6 +288,13 @@ Rules:
   refuses if there isn't one. Claude cannot name a locker, a building or a
   customer, so no amount of clever texting gets someone into a locker that
   isn't theirs.
+- **Customers text like they are texting a friend, and that is the product.**
+  "hey can you grab my laundry tomorrow at 6", lowercase, half a sentence. The
+  AI handles all of it without comment. **Never send a menu, a numbered list of
+  options, or "reply 1 for…".** If a reply looks like a phone tree it is wrong —
+  the entire reason for the AI is that the customer does not have to learn a
+  format. This survived a proposal to add scripted step-by-step flows; don't
+  reintroduce them.
 - Missing a required field? Ask for **that one field only**, then act.
 - A returning customer texting "laundry tomorrow" gets an order with zero
   follow-up questions.
@@ -519,6 +526,23 @@ Plus `OUT_OF_SERVICE`, set manually.
 - Unknown number → reply with a link to the signup page. Do not onboard over text.
 - Log every message, both directions.
 
+**Every outbound text is plain ASCII.** SMS has two encodings: the basic GSM
+alphabet fits 160 characters in a segment, and *one* character outside it forces
+the whole message into UCS-2, where a segment is 70. So a single em dash, curly
+quote or emoji can turn one text into three, and carriers bill per segment.
+Worse, heavy Unicode and emoji are a spam signal in 10DLC scoring, and a
+filtered message never arrives at all.
+
+Write messages with plain hyphens and straight quotes. `src/core/notify.js` is
+the single choke point every text passes through: it swaps typographic
+characters for their ASCII twins before sending *and* before logging, so the
+`messages` table records exactly what was sent, then warns about anything left
+that has no plain equivalent. The swap exists because Claude writes the reply to
+any question and reaches for en dashes however firmly the prompt asks it not to.
+
+Em dashes in comments and on web pages are fine and are the house style. This
+rule is only about text messages.
+
 ## Business facts
 
 - **Service:** wash, dry and fold only
@@ -560,6 +584,24 @@ GET  /account/login            mobile number  } the only two pages
 GET  /account/login/code       six-digit code } reachable signed out
 ```
 
+**A customer may name a time, and gets a window back.** `orders.pickup_time` is
+the time they *asked for*, nullable because "tomorrow" with no time is a real
+answer and must not be turned into one. The window we promise is arithmetic
+around it — 30 minutes before, 60 after — and those two numbers live in one
+constant in `src/core/booking.js`. Widening the window is a one-line change and
+never needs a backfill, which is exactly why the asked-for time is stored rather
+than the quoted window. The window is clamped to the same calendar day so a
+late-evening pickup can't quote a time on Tuesday for a Monday booking.
+
+This is **not** a menu of slots. There are still no fixed route days and no list
+to choose from; the customer says when suits them, or says nothing.
+
+**Anything about "when" uses New Jersey's clock, via `booking.today()` and
+`booking.nowInService()`.** Never `new Date().toISOString()` — that is UTC, and
+from 8pm Eastern onward it has already rolled to tomorrow, which used to make
+"pickup today" impossible every evening. Nobody caught it because nobody tested
+after 8pm.
+
 **`src/core/booking.js` holds the booking rules, and both front doors use it.**
 The AI's `create_order` and the web form both call `bookPickup()`; each only
 formats the result its own way. If they each had their own copy of the rules
@@ -573,7 +615,10 @@ Staff can read the server log as a way back in; a customer cannot, so it would
 be a live credential sitting in a log for nobody's benefit.
 
 **Booking on the web still texts the confirmation.** The `messages` table stays
-the single record of what a customer was told, however they booked.
+the single record of what a customer was told, however they booked — and the
+wording itself comes from `booking.confirmationMessage()` / `rescheduledMessage()`
+rather than being written out at each call site, so the two doors cannot produce
+two different sentences for the same event. They already had, briefly.
 
 **Nothing here writes an order status directly** — cancelling goes through
 `orders.transition()` exactly as the ops endpoints do.

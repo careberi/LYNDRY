@@ -11,6 +11,7 @@ const { sendAndLog } = require('../core/notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
 const { readableDate } = require('../core/actions');
+const booking = require('../core/booking');
 
 const router = express.Router();
 
@@ -297,7 +298,7 @@ router.post('/ops/delivered', upload.single('photo'), async (req, res, next) => 
 
     await sendAndLog(
       customer.phone,
-      `Delivered — your laundry is at your door.${price}${photo}`,
+      `Delivered. Your laundry is at your door.${price}${photo}`,
       customer.id
     );
 
@@ -386,7 +387,7 @@ router.post('/ops/waive', async (req, res, next) => {
       const customer = order.customers;
       await sendAndLog(
         customer.phone,
-        `We've cleared the ${money(order.price_cents)} on your last order — nothing owing. Sorry for the trouble.`,
+        `We've cleared the ${money(order.price_cents)} on your last order, nothing owing. Sorry for the trouble.`,
         customer.id
       );
     }
@@ -403,13 +404,20 @@ router.post('/ops/waive', async (req, res, next) => {
 
 router.get('/ops/today', async (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    // New Jersey's date, not the server's — see src/core/booking.js. A run
+    // sheet that flips to tomorrow at 8pm is worse than useless to a driver
+    // still finishing today's round.
+    const today = booking.today();
 
     const { data, error } = await db
       .from('orders')
       .select('*, customers(name, phone, address_line1, address_line2, city, state, postal_code, preferences)')
       .in('status', orders.IN_FLIGHT)
-      .order('pickup_date', { ascending: true });
+      // Within a day, earliest requested time first, so the run sheet is in the
+      // order the van should drive it. Orders with no time asked for sort last
+      // — they are the ones with the most freedom to slot in anywhere.
+      .order('pickup_date', { ascending: true })
+      .order('pickup_time', { ascending: true, nullsFirst: false });
 
     if (error) throw error;
 
@@ -435,6 +443,13 @@ router.get('/ops/today', async (req, res, next) => {
         phone: c.phone,
         address,
         pickup_date: o.pickup_date,
+
+        // Both forms on purpose: the raw time for anything that sorts or
+        // filters, and the window the customer was actually promised, so the
+        // driver is working to the same words the customer read.
+        pickup_time: o.pickup_time ? booking.normaliseTime(o.pickup_time) : null,
+        pickup_window: booking.arrivalWindow(o.pickup_time),
+
         pickup_method: o.pickup_method,
         bag_count: o.bag_count,
         weight_lb: o.weight_lb,

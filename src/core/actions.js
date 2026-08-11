@@ -27,7 +27,7 @@ const { site } = require('../web/site');
 
 // readableDate, dateProblem and hasAddress live in src/core/booking.js now,
 // so the AI and the website apply identical rules.
-const { readableDate, dateProblem, hasAddress } = booking;
+const { readableDate, dateProblem, timeProblem, normaliseTime, hasAddress } = booking;
 
 // --- create_order -----------------------------------------------------------
 
@@ -36,6 +36,7 @@ async function createOrder(customer, input) {
   // that happens here is turning the result into a sentence.
   const result = await booking.bookPickup(customer, {
     pickupDate: input.pickup_date,
+    pickupTime: input.pickup_time,
     pickupMethod: input.pickup_method,
     bagCount: input.bag_count,
     notes: input.notes,
@@ -46,10 +47,11 @@ async function createOrder(customer, input) {
       case 'no_address':
         return `I don't have an address on file for you. Send your street address and I'll get it saved.`;
       case 'bad_date':
+      case 'bad_time':
         return result.detail;
       case 'already_booked':
         return (
-          `You've already got a pickup booked for ${readableDate(result.order.pickup_date)}. ` +
+          `You've already got a pickup booked for ${booking.whenLine(result.order)}. ` +
           `Want me to move it, or add a second one after that?`
         );
       case 'needs_card':
@@ -59,22 +61,9 @@ async function createOrder(customer, input) {
     }
   }
 
-  const order = result.order;
-
-  const leaving = order.pickup_method === 'LEAVE_OUTSIDE';
-  const bags = order.bag_count ? `${order.bag_count} bag${order.bag_count > 1 ? 's' : ''}` : 'your laundry';
-
-  // Naming the card in the confirmation is what makes this message the
-  // authorisation for the charge that follows. If a customer ever disputes an
-  // order, the message log shows them being told which card, before the work.
-  const card = billing.describeCard(customer);
-  const payment = card ? ` Charged to your ${card} once we weigh it.` : '';
-
-  return (
-    `Booked — we'll collect ${bags} on ${readableDate(order.pickup_date)}. ` +
-    `${leaving ? 'Leave it outside your door.' : "We'll knock when we arrive."} ` +
-    `${site.pricePerLb} a pound, weighed after pickup, back within ${site.turnaround}.${payment}`
-  );
+  // The wording lives in src/core/booking.js so that booking by text and
+  // booking on the website produce the identical confirmation.
+  return booking.confirmationMessage(customer, result.order);
 }
 
 // --- get_order_status -------------------------------------------------------
@@ -86,25 +75,25 @@ async function getOrderStatus(customer) {
     return `You haven't got anything booked with us yet. Say the word and I'll arrange a pickup.`;
   }
 
-  const day = readableDate(order.pickup_date);
+  const when = booking.whenLine(order);
 
   switch (order.status) {
     case 'REQUESTED':
-      return `You're booked in for ${day}. Nothing to do until then.`;
+      return `You're all set for ${when}. Nothing to do until then.`;
     case 'ASSIGNED':
-      return `You're booked for ${day} and your locker is ready.`;
+      return `You're down for ${when} and your locker's ready.`;
     case 'DEPOSITED':
-      return `We've got your laundry in the locker and it's on the next collection.`;
+      return `Got your laundry in the locker, it's on the next collection.`;
     case 'IN_PROCESS':
-      return `We've collected it and it's being washed. Back with you within ${site.turnaround}.`;
+      return `Got it, it's being washed now. Back with you within ${site.turnaround}.`;
     case 'OUT_FOR_DELIVERY':
-      return `It's washed, folded and out for delivery today.`;
+      return `Washed, folded and out for delivery today.`;
     case 'DELIVERED': {
       const cost = order.price_cents ? ` It came to $${(order.price_cents / 100).toFixed(2)}.` : '';
-      return `That one's been delivered.${cost} Want another pickup?`;
+      return `That one's back with you already.${cost} Want another pickup?`;
     }
     case 'CANCELED':
-      return `Your last order was cancelled. Want me to book a new one?`;
+      return `That one was cancelled. Want me to book a new one?`;
     default:
       return `Let me check on that and come back to you.`;
   }
@@ -116,6 +105,9 @@ async function rescheduleOrder(customer, input) {
   const problem = dateProblem(input.new_date);
   if (problem) return problem;
 
+  const timeIssue = timeProblem(input.new_time, input.new_date);
+  if (timeIssue) return timeIssue;
+
   const order = await orders.findAwaitingCollection(customer.id);
 
   if (!order) {
@@ -126,12 +118,20 @@ async function rescheduleOrder(customer, input) {
     return `You haven't got a pickup booked to move. What day would suit you?`;
   }
 
-  if (order.pickup_date === input.new_date) {
-    return `You're already down for ${readableDate(order.pickup_date)}.`;
+  // undefined, not null, when the AI didn't mention a time — otherwise every
+  // plain "move it to Friday" would wipe the time they asked for last week.
+  const newTime = input.new_time === undefined ? undefined : normaliseTime(input.new_time);
+
+  // Only a no-op if the day AND the time are both what's already on the order.
+  // Checking the date alone would refuse "same day but make it 4 instead of 6".
+  const sameDay = order.pickup_date === input.new_date;
+  const sameTime = !newTime || newTime === normaliseTime(order.pickup_time);
+  if (sameDay && sameTime) {
+    return `You're already down for ${booking.whenLine(order)}.`;
   }
 
-  const updated = await orders.reschedule(order, input.new_date);
-  return `Moved — we'll come on ${readableDate(updated.pickup_date)} instead.`;
+  const updated = await orders.reschedule(order, input.new_date, newTime);
+  return booking.rescheduledMessage(updated);
 }
 
 // --- cancel_order -----------------------------------------------------------
@@ -160,8 +160,8 @@ async function openLocker(customer) {
 
   if (!order || !order.locker_id) {
     return (
-      `You haven't got a locker assigned. We collect from your door at the moment — ` +
-      `say when you'd like a pickup and I'll book it.`
+      `You haven't got a locker assigned. We collect from your door at the moment. ` +
+      `Say when you'd like a pickup and I'll book it.`
     );
   }
 
@@ -202,7 +202,7 @@ async function updateProfile(customer, input) {
 
     const { error } = await db.from('customers').update({ preferences }).eq('id', customer.id);
     if (error) throw error;
-    return `Updated — I'll use that from your next pickup.`;
+    return `Updated. I'll use that from your next pickup.`;
   }
 
   // Claude asked to change something we don't store. Hand over rather than
@@ -220,7 +220,7 @@ async function handoffToHuman(customer, input, { notify }) {
   if (config.supportPhone && notify) {
     await notify(
       config.supportPhone,
-      `LYNDRY handoff: ${customer.name || customer.phone} — ${reason}`
+      `LYNDRY handoff: ${customer.name || customer.phone}: ${reason}`
     ).catch((err) => console.error('Could not notify support:', err.message));
   }
 

@@ -3,6 +3,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const { site } = require('../web/site');
+const booking = require('./booking');
 
 // ---------------------------------------------------------------------------
 // The brain.
@@ -48,6 +49,14 @@ const TOOLS = [
             'The day to collect, as YYYY-MM-DD. Work this out from today\'s date, ' +
             'given below. Never guess a year.',
         },
+        pickup_time: {
+          type: 'string',
+          description:
+            'The time of day they asked for, as 24-hour HH:MM. Set this whenever ' +
+            'they mention one at all — "at 6" in the evening is "18:00", "sixish" ' +
+            'is "18:00", "first thing" is "08:00", "after work" is "17:30". Leave ' +
+            'it out entirely if they said nothing about time; do not ask for it.',
+        },
         pickup_method: {
           type: 'string',
           enum: ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'],
@@ -81,13 +90,22 @@ const TOOLS = [
 
   {
     name: 'reschedule_order',
-    description: 'Move an existing pickup to a different day.',
+    description:
+      'Move an existing pickup to a different day, or to a different time on the ' +
+      'same day, or both.',
     input_schema: {
       type: 'object',
       properties: {
         new_date: {
           type: 'string',
           description: 'The new day, as YYYY-MM-DD, worked out from today\'s date below.',
+        },
+        new_time: {
+          type: 'string',
+          description:
+            'The new time of day, as 24-hour HH:MM. Only set this if they asked to ' +
+            'change the time. Leaving it out keeps whatever time is already on the ' +
+            'order, which is what "move it to Friday" means.',
         },
       },
       required: ['new_date'],
@@ -181,19 +199,35 @@ Today is ${today}. Work out any date the customer mentions from that, and always
 WHAT LYNDRY DOES
 Wash, dry and fold only. No dry cleaning, pressing or alterations.
 Charged by weight at ${site.pricePerLb} per pound, weighed after collection, so you can never state an exact price before a bag has been weighed. A typical bag is ${site.typicalBagWeight}, around ${site.estimateRange}. Maximum ${site.maxOrder} per pickup.
-Back within ${site.turnaround}. Pickup happens whenever the customer needs — there are no fixed days or time windows, so never offer one.
+Back within ${site.turnaround}. Pickup happens whenever the customer needs: no fixed route days, and no menu of time slots to pick from. If they name a time, take it. If they don't, don't ask — plenty of people genuinely don't mind.
 Cancelling is free until the driver collects, and impossible after.
+
+HOW PEOPLE WILL TEXT YOU
+Like they are texting a friend who happens to do their laundry. "hey can you grab my laundry tomorrow at 6", "same as last time?", "actually make it friday", "you got my stuff?". Sloppy punctuation, no capitals, half a sentence. That is normal and you should handle all of it without comment.
+Never send a menu, a numbered list of options, or a form to fill in. Never ask them to reply with a number or an option in capitals. If you find yourself writing "reply 1 for" anything, you have got it wrong. They are texting a person, so behave like one.
 
 HOW TO BEHAVE
 Do one thing per message. Either call one tool or ask one short question — never both, never two questions.
 A returning customer texting "laundry tomorrow" gets an order booked with no follow-up questions at all. Their address, wash preferences and usual pickup method are already saved; use them.
+If they mention a time — "at 6", "sixish", "after work", "first thing" — put your best reading of it in pickup_time and book. Do not ask them to confirm the exact minute, and never ask for a time they did not bring up. We quote a window back to them afterwards, so a rough reading is fine.
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
 Never ask about detergent, water temperature, fabric softener or folding. Those were collected on the website and are shown to you below.
 Never state a price as a fact. If asked what it will cost, say it is ${site.pricePerLb} a pound and a typical bag runs about ${site.estimateRange}, weighed after pickup.
 If the customer is upset, something has gone wrong, or you are unsure what they mean, hand off to a human rather than guessing.
 
 HOW TO WRITE
-Like a competent person at a small business who is busy but not curt. Short — this is a text message. No emoji. No exclamation marks. Never say you are an AI, an assistant, or a bot. Do not greet them by name every time.`;
+Like a friendly person at a small local business who knows them. Warm, easy, and short — this is a text message, not a letter. Contractions always. "Of course", "no problem", "got it", "sure thing" are all the right register.
+Read these as the house voice:
+  Them: hey can you pick up my laundry tomorrow at 6?
+  You:  Of course. Leave it outside between 5:30 and 7 and we'll text you when we've got it.
+
+  Them: you get my stuff today
+  You:  Got it this morning, it's being washed now. Back with you tomorrow.
+
+  Them: actually can we do friday instead
+  You:  No problem, moved to Friday.
+Plain keyboard characters only: straight quotes and plain hyphens. No emoji, no en or em dashes, no curly quotes, no "..." character. Anything fancier than a typewriter would produce costs us triple to send and gets our messages filtered by the phone networks. Write "15 to 18 lb" rather than "15-18 lb", and start a new sentence where you would reach for a dash.
+Go easy on exclamation marks. Warm, not perky, and never more than one in a message. Never say you are an AI, an assistant, or a bot, and never mention tools, systems or bookings "in the system". Do not open with their name every time — you would not text a friend that way.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +264,9 @@ function customerContext(customer, order, recentMessages) {
       'THEIR CURRENT ORDER',
       `Status: ${order.status}`,
       `Pickup day: ${order.pickup_date}`,
+      order.pickup_time
+        ? `Pickup time they asked for: ${booking.readableTime(order.pickup_time)}`
+        : 'Pickup time: they did not ask for one',
       order.bag_count ? `Bags: ${order.bag_count}` : null,
       order.weight_lb ? `Weighed: ${order.weight_lb} lb` : null,
       order.notes ? `Notes: ${order.notes}` : null
@@ -254,7 +291,9 @@ function customerContext(customer, order, recentMessages) {
 
 // Returns either { type: 'tool', name, input } or { type: 'text', text }.
 async function decide({ customer, order, recentMessages, message }) {
-  const today = new Date().toISOString().slice(0, 10);
+  // New Jersey's date, not the server's. After 8pm ET the two disagree, and
+  // telling Claude it is already tomorrow makes "pickup today" impossible.
+  const today = booking.today();
 
   const response = await client.messages.create({
     model: MODEL,

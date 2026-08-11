@@ -475,7 +475,7 @@ router.post('/partners', async (req, res, next) => {
       await notify
         .sendAndLog(
           config.supportPhone,
-          `LYNDRY partner enquiry — ${company} (${PARTNER_TYPES[partnerType]}). ` +
+          `LYNDRY partner enquiry: ${company} (${PARTNER_TYPES[partnerType]}). ` +
             `${contactName}, ${email}. Check the partner_enquiries table.`,
           null
         )

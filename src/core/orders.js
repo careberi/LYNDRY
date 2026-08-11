@@ -106,7 +106,7 @@ async function findMostRecent(customerId) {
 // Changing orders
 // ---------------------------------------------------------------------------
 
-async function create({ customerId, pickupDate, pickupMethod, bagCount, notes }) {
+async function create({ customerId, pickupDate, pickupTime, pickupMethod, bagCount, notes }) {
   const { data, error } = await db
     .from('orders')
     .insert({
@@ -114,6 +114,11 @@ async function create({ customerId, pickupDate, pickupMethod, bagCount, notes })
       status: 'REQUESTED',
       service: 'WASH_DRY_FOLD',
       pickup_date: pickupDate,
+
+      // Null is a real answer here — plenty of people just say "tomorrow" and
+      // don't care what time. Only set when they actually named one.
+      pickup_time: pickupTime || null,
+
       pickup_method: pickupMethod || null,
       bag_count: bagCount || null,
       notes: notes || null,
@@ -159,14 +164,23 @@ async function transition(order, to) {
   return data;
 }
 
-async function reschedule(order, newDate) {
+async function reschedule(order, newDate, newTime) {
   if (!isCancellable(order.status)) {
     throw new Error('That order has already been collected, so it cannot be rescheduled.');
   }
 
+  const changes = { pickup_date: newDate };
+
+  // Three different things, and they must not be confused:
+  //   undefined -> the time was not mentioned. Leave it alone. "Move it to
+  //                Friday" means the same time on a different day.
+  //   null      -> they cleared it. Any time now works.
+  //   'HH:MM'   -> a new time.
+  if (newTime !== undefined) changes.pickup_time = newTime;
+
   const { data, error } = await db
     .from('orders')
-    .update({ pickup_date: newDate })
+    .update(changes)
     .eq('id', order.id)
     .in('status', AWAITING_COLLECTION)
     .select('*')

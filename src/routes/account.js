@@ -289,13 +289,13 @@ function currentOrderCard(order) {
       <span class="badge" style="background:${STATUS_TONE[order.status]};${
         order.status === 'DELIVERED' ? 'color:var(--paper-050);' : ''
       }">${escapeHtml(words)}</span>
-      <span class="eyebrow" style="margin:0;">${escapeHtml(booking.readableDate(order.pickup_date))}</span>
+      <span class="eyebrow" style="margin:0;">${escapeHtml(booking.whenLine(order))}</span>
     </div>
 
     <h2 style="font-family:var(--font-display);font-weight:800;font-size:30px;letter-spacing:-0.02em;margin:0 0 12px;">
       ${
         canChange
-          ? `We're coming ${escapeHtml(booking.readableDate(order.pickup_date))}.`
+          ? `We're coming ${escapeHtml(booking.whenLine(order))}.`
           : order.status === 'IN_PROCESS'
             ? "We've got it."
             : order.status === 'OUT_FOR_DELIVERY'
@@ -372,11 +372,21 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
         <p class="eyebrow" style="margin-bottom:6px;">Change the day</p>
         <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;margin:0 0 22px;">Move your pickup</h2>
         <form method="post" action="/account/reschedule">
-          <div class="field">
-            <label class="field-label" for="new_date">New day</label>
-            <input class="input input-lg" type="date" id="new_date" name="new_date" required
-                   min="${min}" max="${max}" value="${escapeHtml(inFlight.pickup_date)}">
+          <div class="stack">
+            <div class="field">
+              <label class="field-label" for="new_date">New day</label>
+              <input class="input input-lg" type="date" id="new_date" name="new_date" required
+                     min="${min}" max="${max}" value="${escapeHtml(inFlight.pickup_date)}">
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="new_time">What time? <span style="font-weight:400;color:var(--ink-500);">Optional</span></label>
+              <input class="input input-lg" type="time" id="new_time" name="new_time"
+                     value="${escapeHtml(booking.normaliseTime(inFlight.pickup_time) || '')}">
+              <span class="field-hint">We'll aim for a window around it. Leave it blank if any time works.</span>
+            </div>
           </div>
+
           <button type="submit" class="btn btn-primary btn-lg" style="margin-top:20px;">
             Move it {{ICON_ARROW}}
           </button>
@@ -397,6 +407,12 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
               <input class="input input-lg" type="date" id="pickup_date" name="pickup_date" required
                      min="${min}" max="${max}" value="${min}">
               <span class="field-hint">Any day that suits — there are no fixed route days.</span>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="pickup_time">What time? <span style="font-weight:400;color:var(--ink-500);">Optional</span></label>
+              <input class="input input-lg" type="time" id="pickup_time" name="pickup_time">
+              <span class="field-hint">We'll aim for a window around it. Leave it blank if any time works.</span>
             </div>
 
             <fieldset style="border:0;padding:0;margin:0;">
@@ -512,6 +528,7 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
 
     const result = await booking.bookPickup(customer, {
       pickupDate: String(form.pickup_date || ''),
+      pickupTime: String(form.pickup_time || ''),
       pickupMethod: String(form.pickup_method || ''),
       notes: String(form.notes || '').trim().slice(0, 500) || null,
     });
@@ -520,6 +537,7 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
       const message = {
         no_address: 'We need your address before we can collect. Email us and we’ll add it.',
         bad_date: result.detail,
+        bad_time: result.detail,
         already_booked: 'You already have a pickup booked. Move it rather than booking a second.',
         needs_card: 'We need a card on file first — check your texts for the link.',
       }[result.reason];
@@ -536,16 +554,12 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
       return back(res, `?error=${encodeURIComponent(message || 'That did not work.')}`);
     }
 
-    // Confirm by text, exactly as a booking made over SMS would be. The
-    // message log stays the single record of what the customer was told.
-    const order = result.order;
-    const card = billing.describeCard(customer);
+    // Confirm by text, exactly as a booking made over SMS would be — same
+    // wording, from the same function, so the messages table reads the same
+    // whichever door they came through.
     await sendAndLog(
       customer.phone,
-      `Booked — we'll collect your laundry on ${booking.readableDate(order.pickup_date)}. ` +
-        `${order.pickup_method === 'LEAVE_OUTSIDE' ? 'Leave it outside your door.' : "We'll knock when we arrive."} ` +
-        `${site.pricePerLb} a pound, weighed after pickup, back within ${site.turnaround}.` +
-        (card ? ` Charged to your ${card} once we weigh it.` : ''),
+      booking.confirmationMessage(customer, result.order),
       customer.id
     );
 
@@ -559,24 +573,28 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
   try {
     const customer = req.customer;
     const newDate = String((req.body || {}).new_date || '');
+    const newTime = booking.normaliseTime((req.body || {}).new_time);
 
     const problem = booking.dateProblem(newDate);
     if (problem) return back(res, `?error=${encodeURIComponent(problem)}`);
+
+    const timeIssue = booking.timeProblem(newTime, newDate);
+    if (timeIssue) return back(res, `?error=${encodeURIComponent(timeIssue)}`);
 
     const order = await orders.findAwaitingCollection(customer.id);
     if (!order) {
       return back(res, `?error=${encodeURIComponent('There is no pickup to move.')}`);
     }
 
-    if (order.pickup_date === newDate) return back(res, '');
+    // Nothing to do only if the day AND the time are both unchanged — otherwise
+    // "same day, but make it 4 instead of 6" would silently do nothing.
+    if (order.pickup_date === newDate && newTime === booking.normaliseTime(order.pickup_time)) {
+      return back(res, '');
+    }
 
-    const updated = await orders.reschedule(order, newDate);
+    const updated = await orders.reschedule(order, newDate, newTime);
 
-    await sendAndLog(
-      customer.phone,
-      `Moved — we'll come on ${booking.readableDate(updated.pickup_date)} instead.`,
-      customer.id
-    );
+    await sendAndLog(customer.phone, booking.rescheduledMessage(updated), customer.id);
 
     return back(res, '?moved=1');
   } catch (err) {

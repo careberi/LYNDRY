@@ -235,13 +235,13 @@ async function handleEvent(event) {
         const total = settled.reduce((sum, s) => sum + s.order.price_cents, 0);
         await sendAndLog(
           customer.phone,
-          `Card saved — ${card}. We've settled the ${billing.money(total)} outstanding. Thanks.`,
+          `Card saved: ${card}. We've settled the ${billing.money(total)} outstanding. Thanks.`,
           customer.id
         );
       } else {
         await sendAndLog(
           customer.phone,
-          `Card saved — ${card}. Text us whenever you want a pickup.`,
+          `Card saved: ${card}. Text us whenever you want a pickup.`,
           customer.id
         );
       }

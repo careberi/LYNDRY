@@ -40,7 +40,7 @@ function consentText() {
   return (
     `You're authorising ${site.legalName} (LYNDRY) to save this card and charge it for ` +
     `each order you confirm by text. Wash and fold is ${site.pricePerLb} a pound, so the ` +
-    `amount is worked out after we weigh your bag — we text you the weight and the total ` +
+    `amount is worked out after we weigh your bag. We text you the weight and the total ` +
     `every time. No subscription and no recurring charge. Reply STOP any time.`
   );
 }
@@ -132,7 +132,7 @@ async function setupLinkMessage(customer) {
 
   return (
     `Before your first pickup we need a card on file. It takes a minute and it's ` +
-    `handled by our payment provider — we never see the number: ${url}\n\n` +
+    `handled by our payment provider, we never see the number: ${url}\n\n` +
     `${site.pricePerLb} a pound, charged after we weigh your bag. Nothing recurring.`
   );
 }
@@ -205,7 +205,7 @@ async function chargeOrder(order, customer) {
       needsCard: true,
       message:
         `Your laundry weighed ${order.weight_lb} lb, so that's ${money(order.price_cents)}. ` +
-        `We don't have a card on file — add one here and we'll settle it: ${url}`,
+        `We don't have a card on file. Add one here and we'll settle it: ${url}`,
     };
   }
 
@@ -239,7 +239,7 @@ async function chargeOrder(order, customer) {
     return {
       ok: true,
       message:
-        `Your laundry weighed ${order.weight_lb} lb — that's ${money(order.price_cents)} at ` +
+        `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)} at ` +
         `${site.pricePerLb} a pound, charged to your ${describeCard(customer)}. ` +
         `Back with you within ${site.turnaround}.`,
     };
@@ -260,7 +260,7 @@ async function chargeOrder(order, customer) {
     ok: false,
     declined: true,
     message:
-      `Your laundry weighed ${order.weight_lb} lb — that's ${money(order.price_cents)}. ` +
+      `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)}. ` +
       `Your ${card} was declined, so nothing has been taken. ` +
       `We'll still deliver today. Update your card here and we'll settle it: ${url}`,
   };

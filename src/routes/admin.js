@@ -10,6 +10,7 @@ const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const roles = require('../core/roles');
+const booking = require('../core/booking');
 
 const router = express.Router();
 
@@ -465,7 +466,7 @@ const may = (permission) => roles.requirePermission(permission, refuse);
 // ---------------------------------------------------------------------------
 
 const ORDER_FIELDS =
-  'id, status, pickup_date, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
+  'id, status, pickup_date, pickup_time, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
   'delivery_photo_url, notes, created_at, customers(id, name, phone, address_line1, address_line2, city, postal_code)';
 
 router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
@@ -473,7 +474,8 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
     const { data, error } = await db
       .from('orders')
       .select(ORDER_FIELDS)
-      .order('pickup_date', { ascending: false });
+      .order('pickup_date', { ascending: false })
+      .order('pickup_time', { ascending: true, nullsFirst: false });
 
     if (error) throw error;
 
@@ -505,7 +507,13 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
       return [
         `<a href="/ops/orders/${o.id}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
          <div style="font-size:13px;color:var(--ink-500);">${escapeHtml(addressOf(c))}</div>`,
-        shortDate(o.pickup_date),
+        // The window under the day, because "Wednesday" is not enough to plan a
+        // round with once customers start naming times.
+        `${shortDate(o.pickup_date)}${
+          o.pickup_time
+            ? `<div style="font-size:13px;color:var(--ink-500);">${escapeHtml(booking.arrivalWindow(o.pickup_time))}</div>`
+            : ''
+        }`,
         statusBadge(o.status),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
         ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
@@ -608,6 +616,12 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading('The order', 'Details')}
           ${detail('Pickup', shortDate(order.pickup_date))}
+          ${detail(
+            'Window',
+            order.pickup_time
+              ? escapeHtml(booking.arrivalWindow(order.pickup_time))
+              : 'no time asked for'
+          )}
           ${detail('Method', escapeHtml((order.pickup_method || '').replace(/_/g, ' ').toLowerCase() || '—'))}
           ${detail('Bags', order.bag_count || '—')}
           ${detail('Weight', order.weight_lb ? `${order.weight_lb} lb` : 'not weighed yet')}
