@@ -89,21 +89,6 @@ const config = Object.freeze({
 
   adminApiKey: process.env.ADMIN_API_KEY || '',
 
-  // Write sign-in codes to the server log.
-  //
-  // ON UNTIL CARRIER REGISTRATION IS APPROVED, then turn it off.
-  //
-  // Telnyx accepts every message we send and answers 200; the carrier drops it
-  // afterwards and tells us in a separate delivery receipt. So "did the text
-  // arrive" is not something the send call can report, and a fallback that
-  // logs the code only when sending throws never fires. Without this flag
-  // nobody can sign in to a deployed LYNDRY at all.
-  //
-  // A code in a log is a real credential in a real place. This is why it is an
-  // explicit switch with a loud warning at boot rather than something clever
-  // that guesses.
-  logLoginCodes: /^(1|true|yes)$/i.test(process.env.LOG_LOGIN_CODES || ''),
-
   // Wash & fold is priced by weight, so the real price of an order is not
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.

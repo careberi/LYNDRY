@@ -161,18 +161,6 @@ const server = app.listen(config.port, () => {
   console.log(`  payments    : ${require('./providers/payments').mode}`);
   warnAboutMissingEnvVars();
   warnAboutUnusableCredentials();
-
-  // Loud on purpose. A sign-in code in a log is a real credential in a real
-  // place, and this is only meant to be on until carrier registration lands.
-  if (config.logLoginCodes) {
-    console.warn('');
-    console.warn('  ***  LOG_LOGIN_CODES IS ON  ***');
-    console.warn('  Sign-in codes are being written to this log in plain text.');
-    console.warn('  That is how you get in while texting is still blocked.');
-    console.warn('  TURN IT OFF the day carrier registration is approved.');
-    console.warn('');
-  }
-
   checkDatabase();
 });
 

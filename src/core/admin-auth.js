@@ -189,21 +189,13 @@ async function requestCode(rawPhone, req) {
       from: config.telnyx.codeNumber || undefined,
     });
   } catch (err) {
+    // Texting is not working yet — carrier registration is still pending — so
+    // without this the dashboard would be unreachable. The code goes to the
+    // server log ONLY when the send failed, so it can be read from the hosting
+    // dashboard as a way back in. Nothing is written to the messages table:
+    // a live credential does not belong in a database row.
     console.error(`Could not text an ops sign-in code to ${phone}: ${err.message}`);
-  }
-
-  // Deliberately NOT inside the catch above.
-  //
-  // Telnyx answers 200 for a message it has accepted; the carrier drops it
-  // afterwards and says so in a separate delivery receipt. So sending never
-  // throws for an undelivered text, and a fallback hung off the catch would
-  // never run — which is exactly the bug that made a deployed LYNDRY
-  // impossible to sign in to. This is an explicit switch instead.
-  //
-  // Never written to the messages table: a live credential does not belong in
-  // a database row.
-  if (config.logLoginCodes) {
-    console.warn(`  LOGIN CODE for ${user.name} (${phone}): ${code}  — valid ${CODE_TTL_MINUTES} minutes`);
+    console.error(`  Sign-in code for ${user.name}: ${code}  (valid ${CODE_TTL_MINUTES} minutes)`);
   }
 
   return { ok: true, phone };
@@ -227,8 +219,7 @@ async function verifyCode(rawPhone, rawCode, req) {
 
   if (!user || user.status !== 'ACTIVE') return { ok: false, reason: 'bad' };
 
-  // EVERY live code, not just the newest — asking for another one must not
-  // invalidate the one already sitting in their messages.
+  // The most recent code for this person that is still alive.
   const { data: rows } = await db
     .from('ops_login_codes')
     .select('id, code_hash, expires_at, attempts, consumed_at')
@@ -236,17 +227,20 @@ async function verifyCode(rawPhone, rawCode, req) {
     .is('consumed_at', null)
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(1);
 
-  const live = (rows || []).filter((r) => r.attempts < MAX_CODE_ATTEMPTS);
-  if (!live.length) return { ok: false, reason: 'bad' };
+  const record = (rows || [])[0];
+  if (!record) return { ok: false, reason: 'bad' };
 
-  const record = live.find((r) => sameSecret(hmac(`code.${user.id}.${code}`), r.code_hash));
+  if (record.attempts >= MAX_CODE_ATTEMPTS) return { ok: false, reason: 'bad' };
 
-  if (!record) {
-    for (const r of live) {
-      await db.from('ops_login_codes').update({ attempts: r.attempts + 1 }).eq('id', r.id);
-    }
+  if (!sameSecret(hmac(`code.${user.id}.${code}`), record.code_hash)) {
+    // Count the miss. Enough of them and this code is dead regardless of its
+    // expiry, which is what stops someone working through all million.
+    await db
+      .from('ops_login_codes')
+      .update({ attempts: record.attempts + 1 })
+      .eq('id', record.id);
     return { ok: false, reason: 'bad' };
   }
 

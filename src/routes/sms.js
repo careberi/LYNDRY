@@ -265,12 +265,4 @@ router.post('/sms', (req, res) => {
   });
 });
 
-// Exported for the ops test console ONLY.
-//
-// It calls the same handleInbound() a real webhook does, so a simulated text
-// exercises the identical path: dedupe, compliance keywords, the AI, the seven
-// actions, the reply. What it does NOT do is go through the /sms route, which
-// means the Telnyx signature check on that route stays exactly as strict as it
-// is — the console is not a hole in it, because there is no way to reach this
-// without already being signed in as an admin.
-module.exports = { router, handleInbound };
+module.exports = { router };
