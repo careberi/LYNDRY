@@ -3,6 +3,7 @@
 const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
+const booking = require('./booking');
 const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -24,81 +25,41 @@ const { site } = require('../web/site');
 
 // --- Small helpers ----------------------------------------------------------
 
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-// Formats 2026-08-08 as "Saturday 8 Aug".
-//
-// Built from the string's own parts rather than a Date object on purpose: a
-// date-only string parsed as a Date is treated as UTC midnight, which shows as
-// the previous day for anyone in New Jersey.
-function readableDate(iso) {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dayName = DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${dayName} ${d} ${MONTHS[m - 1]}`;
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Returns an error message if the date is unusable, or null if it's fine.
-function dateProblem(iso) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) {
-    return "I didn't catch which day you meant. What day works?";
-  }
-  if (iso < today()) {
-    return `${readableDate(iso)} has already passed. What day did you mean?`;
-  }
-  return null;
-}
-
-function hasAddress(customer) {
-  return Boolean(customer.address_line1 && customer.city && customer.postal_code);
-}
+// readableDate, dateProblem and hasAddress live in src/core/booking.js now,
+// so the AI and the website apply identical rules.
+const { readableDate, dateProblem, hasAddress } = booking;
 
 // --- create_order -----------------------------------------------------------
 
 async function createOrder(customer, input) {
-  if (!hasAddress(customer)) {
-    return `I don't have an address on file for you. Send your street address and I'll get it saved.`;
-  }
-
-  const problem = dateProblem(input.pickup_date);
-  if (problem) return problem;
-
-  // One order awaiting collection at a time. The database enforces this too;
-  // catching it here means the customer gets a sentence instead of an error.
-  const existing = await orders.findAwaitingCollection(customer.id);
-  if (existing) {
-    return (
-      `You've already got a pickup booked for ${readableDate(existing.pickup_date)}. ` +
-      `Want me to move it, or add a second one after that?`
-    );
-  }
-
-  // No card, no booking.
-  //
-  // This check is in code, not in Claude's instructions, and that is
-  // deliberate — the same reason open_locker() takes no arguments. Nothing a
-  // customer can type should be able to talk its way past it.
-  //
-  // Only enforced when payments are actually switched on, so the service still
-  // works end to end before the payment provider is configured.
-  if (payments.isConfigured && !billing.hasPaymentMethod(customer)) {
-    return billing.setupLinkMessage(customer);
-  }
-
-  const prefs = customer.preferences || {};
-
-  const order = await orders.create({
-    customerId: customer.id,
+  // The rules live in src/core/booking.js so the website and this agree. All
+  // that happens here is turning the result into a sentence.
+  const result = await booking.bookPickup(customer, {
     pickupDate: input.pickup_date,
-    // Their saved default, unless they said otherwise in this message.
-    pickupMethod: input.pickup_method || prefs.default_pickup_method || 'LEAVE_OUTSIDE',
+    pickupMethod: input.pickup_method,
     bagCount: input.bag_count,
     notes: input.notes,
   });
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'no_address':
+        return `I don't have an address on file for you. Send your street address and I'll get it saved.`;
+      case 'bad_date':
+        return result.detail;
+      case 'already_booked':
+        return (
+          `You've already got a pickup booked for ${readableDate(result.order.pickup_date)}. ` +
+          `Want me to move it, or add a second one after that?`
+        );
+      case 'needs_card':
+        return billing.setupLinkMessage(customer);
+      default:
+        return `Let me get a person on this. Someone will come back to you shortly.`;
+    }
+  }
+
+  const order = result.order;
 
   const leaving = order.pickup_method === 'LEAVE_OUTSIDE';
   const bags = order.bag_count ? `${order.bag_count} bag${order.bag_count > 1 ? 's' : ''}` : 'your laundry';

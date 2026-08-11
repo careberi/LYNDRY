@@ -522,7 +522,7 @@ Plus `OUT_OF_SERVICE`, set manually.
 ## Business facts
 
 - **Service:** wash, dry and fold only
-- **Price:** $39 per bag, flat
+- **Price:** $2.50 per pound, weighed after pickup
 - **Turnaround:** 24 hours
 - **Scheduling:** pickup whenever the customer needs — no fixed route days
 - **Model:** door-to-door pickup, for **houses and apartments alike**. An
@@ -544,3 +544,36 @@ Plus `OUT_OF_SERVICE`, set manually.
 
 Local identity only for this repo (`neil perry` / `neil@careberi.com`). The
 global git config is deliberately left empty — do not write to it.
+
+## Booking on the website
+
+`/account` is where a customer books a pickup without texting. Same phone-and-
+code sign-in as `/ops`, kept in `src/core/customer-auth.js` — separate from the
+staff one on purpose, so one bug can never hand a customer a staff session.
+
+```
+GET  /account                  current order, booking form, past pickups
+POST /account/book             book a pickup
+POST /account/reschedule       move it
+POST /account/cancel           cancel it
+GET  /account/login            mobile number  } the only two pages
+GET  /account/login/code       six-digit code } reachable signed out
+```
+
+**`src/core/booking.js` holds the booking rules, and both front doors use it.**
+The AI's `create_order` and the web form both call `bookPickup()`; each only
+formats the result its own way. If they each had their own copy of the rules
+they would drift, and the database would end up in a state neither expects.
+
+**Customer sessions are signed with a key derived from `ADMIN_API_KEY`**, not
+the key itself, so a customer cookie can never be replayed as a staff one.
+
+**A customer's sign-in code is never written to the log**, unlike a staff one.
+Staff can read the server log as a way back in; a customer cannot, so it would
+be a live credential sitting in a log for nobody's benefit.
+
+**Booking on the web still texts the confirmation.** The `messages` table stays
+the single record of what a customer was told, however they booked.
+
+**Nothing here writes an order status directly** — cancelling goes through
+`orders.transition()` exactly as the ops endpoints do.

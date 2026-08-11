@@ -12,6 +12,7 @@ const web = require('./routes/web');
 const sms = require('./routes/sms');
 const ops = require('./routes/ops');
 const admin = require('./routes/admin');
+const account = require('./routes/account');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 
@@ -108,6 +109,10 @@ app.use('/', admin.router);
 
 // Driver and admin endpoints. Everything under /ops needs the shared secret.
 app.use('/', ops.router);
+
+// Where a customer signs in and books a pickup. Before the website router so
+// /account/... is never mistaken for a marketing page.
+app.use('/', account.router);
 
 // The public website and the signup form.
 app.use('/', web.router);

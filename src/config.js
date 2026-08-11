@@ -83,11 +83,14 @@ const config = Object.freeze({
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.
   pricing: Object.freeze({
-    perPoundCents: 150,
+    perPoundCents: 250,
 
     // The range quoted to someone asking "roughly what will this cost?".
-    estimateLowCents: 2500,
-    estimateHighCents: 4000,
+    // Derived from the rate above and a typical 15–18 lb bag, so if the rate
+    // changes these have to change with it or the site quotes a range the
+    // arithmetic doesn't support.
+    estimateLowCents: 3750, // 15 lb
+    estimateHighCents: 4500, // 18 lb
 
     // The most we will take in a single pickup.
     maxOrderLb: 50,

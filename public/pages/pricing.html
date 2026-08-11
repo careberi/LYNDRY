@@ -16,7 +16,9 @@
 <!-- The plan band                                                          -->
 <!-- ===================================================================== -->
 <section class="dotfield" style="padding:80px 0 88px;">
-  <div class="container grid-3" style="align-items:start;">
+  <!-- No align-items:start here: the default stretch is what makes all three
+       cards the same height regardless of how much copy each holds. -->
+  <div class="container grid-3">
 
     <div class="card card-xl" style="padding:30px;" data-reveal>
       <p class="eyebrow" style="margin-bottom:18px;">In the price</p>
@@ -45,8 +47,10 @@
       </ul>
     </div>
 
-    <!-- The emphasis card: Sunbeam fill, lifted, with the badge. -->
-    <div class="card card-lg card-xl card-accent" style="padding:30px;transform:translateY(-14px);" data-reveal>
+    <!-- The emphasis card: Sunbeam fill, lifted, with the badge. A flex column
+         so the button sits on the bottom edge however tall the row grows. -->
+    <div class="card card-lg card-xl card-accent"
+         style="padding:30px;transform:translateY(-14px);display:flex;flex-direction:column;" data-reveal>
       <span class="badge badge-ink" style="margin-bottom:18px;">One price</span>
       <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Wash &amp; fold</p>
       <div style="display:flex;align-items:baseline;gap:8px;">

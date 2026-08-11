@@ -182,6 +182,7 @@ function footer() {
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
             <a href="/signup">Sign up</a>
+            <a href="/account">Book a pickup</a>
           </div>
         </div>
 
@@ -218,7 +219,7 @@ function footer() {
 
 // ---------------------------------------------------------------------------
 
-function renderPage({ title, description, path, body, extra = {} }) {
+function renderPage({ title, description, path, body, extra = {}, noindex = false }) {
   const fullTitle = path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`;
 
   const html = `<!doctype html>
@@ -232,6 +233,9 @@ function renderPage({ title, description, path, body, extra = {} }) {
   <meta property="og:title" content="${fullTitle}">
   <meta property="og:description" content="${description}">
   <meta property="og:type" content="website">
+  <!-- Signed-in pages carry someone's address and order history. They are
+       behind a sign-in, but there is no reason for a crawler to try. -->
+  ${noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
 
   <!-- Favicon: the logo's avatar variant, drawn inline so there is no image
        file to manage. The tail is drawn first and the box painted over it, so

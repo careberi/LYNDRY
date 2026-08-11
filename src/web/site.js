@@ -83,7 +83,7 @@ function contactSentence() {
 }
 
 // The tokens available inside public/pages/*.html files. Write
-// {{PRICE_PER_LB}} in the HTML and it becomes $1.50 when the page is served.
+// {{PRICE_PER_LB}} in the HTML and it becomes $2.50 when the page is served.
 const tokens = Object.freeze({
   NAME: site.name,
   PHONE: site.publicPhoneDisplay,

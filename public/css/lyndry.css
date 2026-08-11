@@ -354,6 +354,26 @@
 .btn-ink       { background: var(--ink-900);     color: var(--paper-050); }
 .btn-outline   { background: var(--paper-050);   color: var(--ink-900); }
 
+/* The ink button gets a LILAC offset instead of an ink one.
+   An ink shadow behind an ink button reads as part of the button rather than
+   under it — the whole shape becomes one black blob and the lift is lost.
+
+   Lilac specifically, out of the design system's three permitted coloured
+   offsets, because .btn-ink appears on four different grounds: the Suds hero,
+   the cream cards, the Lilac-100 pricing band, and inside the Sunbeam plan
+   card. Suds would vanish on the hero and Sunbeam would vanish on the plan
+   card. Lilac is the only one visible against all four.
+
+   These come after the .btn rules on purpose — same specificity, later wins. */
+.btn-ink { box-shadow: 4px 4px 0 var(--lilac-500); }
+.btn-ink.btn-sm { box-shadow: 3px 3px 0 var(--lilac-500); }
+.btn-ink.btn-lg { box-shadow: 6px 6px 0 var(--lilac-500); }
+.btn-ink:hover { box-shadow: 6px 6px 0 var(--lilac-500); }
+.btn-ink.btn-lg:hover { box-shadow: 10px 10px 0 var(--lilac-500); }
+.btn-ink:active,
+.btn-ink.btn-lg:active { box-shadow: 1px 1px 0 var(--lilac-500); }
+.btn-ink:disabled:hover { box-shadow: 4px 4px 0 var(--lilac-500); }
+
 /* Ghost is the one exception to the whole signature: no border, no shadow,
    no lift. It underlines on hover and that is all. */
 .btn-ghost {
