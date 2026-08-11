@@ -276,7 +276,11 @@ router.get('/p/:orderId', async (req, res, next) => {
 });
 
 router.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\nSitemap: ${config.baseUrl}/sitemap.xml\n`);
+  // /ops is the internal tool. It is behind a sign-in anyway, but there is no
+  // reason for a crawler to be knocking on it.
+  res
+    .type('text/plain')
+    .send(`User-agent: *\nAllow: /\nDisallow: /ops\nSitemap: ${config.baseUrl}/sitemap.xml\n`);
 });
 
 router.get('/sitemap.xml', (req, res) => {

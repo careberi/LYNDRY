@@ -37,9 +37,11 @@ Don't add these; push back if asked too early.
 
 - A customer app or account login
 - Multi-building routing or route optimisation
-- An admin dashboard
 - More than one deployment target
 - TypeScript, React, a bundler, Docker, or a job queue
+
+*(An admin dashboard was on this list until Neil asked for one — see "The ops
+screens" below. Everything else here still stands.)*
 
 ## Technical conventions
 
@@ -326,7 +328,51 @@ gets a signed link that expires after 30 days. A photo of somebody's front door
 must not be publicly readable forever. **Do not put these behind a link
 shortener** — carriers treat shortened links as a spam signal in 10DLC.
 
-`npm run driver` is the ops equivalent of `npm run sms` — there is no admin UI.
+`npm run driver` is the terminal equivalent, and still the fastest way to test
+an order through its whole day.
+
+## The ops screens
+
+Browser screens for Neil, at `/ops`. Built in `src/routes/admin.js`, which
+renders HTML only — `src/routes/ops.js` stays the JSON API. Both share one
+sign-in check in `src/core/admin-auth.js`, so they cannot drift apart.
+
+```
+GET  /ops                    orders board: active, upcoming, past
+GET  /ops/orders/:id         one order, plus the message thread
+GET  /ops/customers          everyone, with order counts and lifetime billed
+GET  /ops/customers/:id      profile, preferences, consent record, history
+GET  /ops/partners           enquiries from /partners, newest first
+POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
+GET  /ops/login              the only page reachable signed out
+```
+
+**There are no accounts.** One shared code — `ADMIN_API_KEY`, the same secret
+the API uses. Two ways in: the `x-admin-key` header for scripts, or the
+`ly_ops` cookie a browser gets after signing in.
+
+**The cookie is not the key.** It is an HMAC of an expiry, signed with the key.
+A leaked cookie expires on its own and never contained the secret. Changing
+`ADMIN_API_KEY` invalidates every cookie ever issued — that is the whole
+revocation story, and it is enough for two people.
+
+**`src/routes/admin.js` must stay mounted before `src/routes/ops.js`** in
+`index.js`. The API router blocks everything under `/ops`, so if it ran first
+nobody could reach the sign-in page.
+
+**Every ops page is `noindex` and `/ops` is disallowed in robots.txt.** They
+carry names, phone numbers and home addresses.
+
+**Anything from the database goes through `escapeHtml()`** before it reaches an
+ops page, exactly as on the public forms. A customer's name is untrusted input.
+
+**`?next=` on the sign-in page only accepts paths starting `/ops`.** Without
+that check the sign-in page becomes an open redirector, which is a ready-made
+phishing link on our own domain.
+
+The sign-in page throttles to 10 attempts per IP per 15 minutes. It is an
+in-memory counter, so it resets on restart and is per-instance — fine for one
+small server, and it must move into the database if this ever runs on two.
 
 ## Payments
 

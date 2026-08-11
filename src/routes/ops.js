@@ -1,12 +1,12 @@
 'use strict';
 
-const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 
 const db = require('../db');
 const orders = require('../core/orders');
 const billing = require('../core/billing');
+const auth = require('../core/admin-auth');
 const { sendAndLog } = require('../core/notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -34,31 +34,11 @@ const PHOTO_LINK_DAYS = 30;
 // people using these endpoints are Neil and his driver.
 // ---------------------------------------------------------------------------
 
-function requireAdminKey(req, res, next) {
-  const provided = req.get('x-admin-key') || '';
-  const expected = config.adminApiKey;
-
-  if (!expected) {
-    console.error('ADMIN_API_KEY is not set — ops endpoints are refusing everything.');
-    return res.status(503).json({ error: 'ops_not_configured' });
-  }
-
-  // Compare in constant time. A plain === leaks how much of the key was
-  // correct through how long the comparison took, which is enough to guess a
-  // secret one character at a time.
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-
-  if (!ok) {
-    console.warn('Rejected an ops request with a bad admin key.');
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-
-  return next();
-}
-
-router.use('/ops', requireAdminKey);
+// The check itself lives in src/core/admin-auth.js so the JSON API and the
+// browser screens can't drift apart. It accepts either the x-admin-key header
+// (scripts, the driver simulator) or the signed cookie the sign-in page sets,
+// which is what lets a button on an ops screen call these endpoints.
+router.use('/ops', auth.requireAdminApi);
 
 // ---------------------------------------------------------------------------
 // Helpers

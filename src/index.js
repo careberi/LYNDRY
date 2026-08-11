@@ -11,6 +11,7 @@ const assets = require('./web/assets');
 const web = require('./routes/web');
 const sms = require('./routes/sms');
 const ops = require('./routes/ops');
+const admin = require('./routes/admin');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 
@@ -100,6 +101,10 @@ app.get('/health', (req, res) => {
 
 // Inbound text messages from the SMS provider.
 app.use('/', sms.router);
+
+// The ops screens. Mounted BEFORE the ops API so that /ops/login is reachable
+// without being signed in — the API router blocks everything under /ops.
+app.use('/', admin.router);
 
 // Driver and admin endpoints. Everything under /ops needs the shared secret.
 app.use('/', ops.router);

@@ -632,6 +632,18 @@
 }
 .nav-panel a:last-child { border-bottom: none; background: var(--suds-500); }
 
+/* The ops header. Same ink bar, but its nav must never collapse into a
+   hamburger — it is three short links and a driver is holding a phone. It
+   wraps to a second row instead. */
+.site-header-bar.ops-bar {
+  height: auto;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.ops-bar .site-nav { gap: 18px; }
+
 .site-footer { background: var(--ink-900); color: var(--paper-200); }
 .footer-head {
   font-family: var(--font-mono);
@@ -974,6 +986,11 @@
   .site-nav { display: none; }
   .site-header .btn:not(summary) { display: none; }
   .nav-toggle { display: block; }
+
+  /* …except in the ops bar, which keeps its links and its sign-out button at
+     every width. There is no hamburger there to fall back to. */
+  .ops-bar .site-nav { display: flex; }
+  .ops-bar .btn:not(summary) { display: inline-flex; }
 
   .hero-row { grid-template-columns: 1fr; gap: 32px; }
   /* The phone mock is the first thing to go: it is decorative, and at this

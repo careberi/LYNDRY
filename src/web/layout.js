@@ -45,6 +45,18 @@ function fillTokens(html, extra = {}) {
   );
 }
 
+// Turns text into something safe to put inside HTML. Without this, anything a
+// visitor typed — or any customer name in the ops screens — could inject
+// markup or script into a page.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // An icon. Always goes through here rather than inline SVG, so swapping icon
 // sets stays a change to css/icons.css and nothing else.
 function icon(name, size) {
@@ -371,4 +383,4 @@ ${footer()}
   return fillTokens(html, { ...ICON_TOKENS, ...extra });
 }
 
-module.exports = { renderPage, fillTokens, icon, logo, avatar };
+module.exports = { renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE };

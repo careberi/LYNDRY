@@ -254,6 +254,46 @@ removed on purpose.
 stayed two columns on a phone and pushed 14px of horizontal scroll onto every
 page. Ratios now live in `lyndry.css` as modifiers.
 
+### There is an admin dashboard now
+
+"An admin dashboard" was on the do-not-build list from the original plan, and
+it was held for a long time — the answer to "where do I see my orders" was a
+SQL query and a terminal script. Neil asked for screens, correctly. The rule
+outlived its usefulness and has been struck from the list.
+
+**Screens at `/ops`, separate from the API.** `src/routes/admin.js` renders
+HTML; `src/routes/ops.js` stays the JSON API the driver script talks to. The
+sign-in check moved into `src/core/admin-auth.js` so both use exactly the same
+one and cannot drift.
+
+**One shared code, no accounts.** It is Neil and a driver. `ADMIN_API_KEY` is
+already the API secret, so it is the sign-in code too — a second credential
+would be a second thing to lose.
+
+**The cookie is not the key.** It is an HMAC of an expiry signed with the key,
+so a leaked cookie expires by itself and never held the secret. Rotating
+`ADMIN_API_KEY` invalidates every session ever issued. No session table, no
+store to keep, and revocation that actually works.
+
+**Deliberately not a single-page app.** Plain server-rendered HTML with real
+forms and real redirects, reusing the site's own stylesheets. It is a handful
+of tables read a few times a day; a build step and a JSON API for it would be
+cost with no return, and the do-not-build list still rules out React.
+
+**Views are grouped the way the day works, not the way the database is.**
+Active means "we have it, or we're collecting today" — that is
+`IN_PROCESS`/`OUT_FOR_DELIVERY` plus anything awaiting collection dated today
+or earlier. Upcoming is booked for later. Past is delivered or cancelled. An
+overdue pickup therefore appears under Active rather than quietly ageing in a
+list of future work.
+
+**The customers list runs two queries, not N+1.** Every order is fetched once
+and counted in memory. At this size that is faster than a query per customer
+and keeps the page to two round trips.
+
+**Partner enquiries got a screen too**, with NEW / CONTACTED / CLOSED. A list
+of enquiries you cannot mark as handled is a list you stop trusting.
+
 ### The partners page
 
 Neil asked for a page where laundromats can ask to work with us and property
