@@ -363,6 +363,36 @@ A script cannot receive a text, which is why the machine key stays.
 re-reads the row every time rather than trusting the cookie for 30 days.
 Deleting them would lose the record of who did what.
 
+### Roles
+
+**`src/core/roles.js` is the whole answer to "who can see what."** If you find
+yourself writing `if (user.role === 'ADMIN')` in a page, stop and add a
+permission there instead — role checks scattered through templates are how a
+screen ends up showing a driver something it shouldn't.
+
+| | orders | customers | partners | team | money |
+|---|---|---|---|---|---|
+| **Admin** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Driver** | ✓ | — | — | — | — |
+| **Sales** | ✓ | ✓ | ✓ | — | — |
+
+Every page takes two middlewares: `guard` proves who you are, `may('...')`
+proves you're allowed. **Adding a page means adding both.**
+
+**`money.view` is separate from `orders.view`** so a driver can work the round
+without seeing the books. Prices are left out of the markup entirely rather
+than hidden with CSS — a value that never reaches the page cannot leak from it.
+
+**New people default to `DRIVER`**, the least privileged role, and an
+unrecognised role posted to the form falls back to it too. Promoting is
+deliberate.
+
+**Nobody can change their own role or switch themselves off.** Both would let
+an admin lock themselves — and possibly everyone — out of team management.
+
+**The `x-admin-key` machine credential bypasses roles entirely.** It is our own
+scripts, it has no person attached, and it gets everything.
+
 **The code is never stored.** `ops_login_codes` holds an HMAC of it keyed with
 `ADMIN_API_KEY`. Six digits is small enough to brute-force offline, which is
 exactly why the plaintext never lands in a row and why five wrong guesses kill

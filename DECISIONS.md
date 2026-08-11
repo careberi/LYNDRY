@@ -284,6 +284,29 @@ minutes.
 **An unknown number gets the same answer as a real one.** Saying "no such user"
 would turn the sign-in page into a way to find out who works here.
 
+**Roles, not per-person checkboxes.** Three kinds of people work here and they
+want completely different screens; picking one from a list is something Neil
+can do without thinking about it. `src/core/roles.js` maps role to permission
+once, and pages ask `can(user, 'money.view')` rather than checking the role
+directly — role checks scattered through templates are exactly how a screen
+ends up showing a driver something it shouldn't.
+
+Admin sees everything. Driver sees the orders and nothing else — no customer
+list, no prices, no team. Sales sees customers and partner enquiries, but not
+the money and not the team.
+
+**`money.view` is its own permission.** A driver needs the stop in front of
+them; they do not need the books. Prices are omitted from the markup entirely
+rather than hidden with CSS, because a value that never reaches the page cannot
+be read out of it.
+
+**New people default to the least privileged role**, and an unrecognised role
+posted to the form falls back to it rather than to whatever was sent.
+
+**Nobody can change their own role or switch themselves off.** Either would let
+the only admin lock everyone out of team management. The page hides the
+controls and the routes refuse them anyway.
+
 **Disabling takes effect on the next request, not in thirty days.** The guard
 re-reads the `ops_users` row every time rather than trusting the cookie. A
 cookie that stays valid for a month after someone is switched off is not

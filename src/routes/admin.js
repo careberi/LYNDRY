@@ -9,6 +9,7 @@ const { config } = require('../config');
 const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
+const roles = require('../core/roles');
 
 const router = express.Router();
 
@@ -124,16 +125,20 @@ function adminPage({ title, active = '', body, user = null }) {
   <header class="site-header">
     <div class="container site-header-bar ops-bar">
       ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
+      <!-- Only the tabs this person may actually open. A driver never sees a
+           Customers link they would be refused at. -->
       <nav class="site-nav">
-        ${tab('/ops', 'Orders')}
-        ${tab('/ops/customers', 'Customers')}
-        ${tab('/ops/partners', 'Partners')}
-        ${tab('/ops/team', 'Team')}
+        ${roles.can(user, 'orders.view') ? tab('/ops', 'Orders') : ''}
+        ${roles.can(user, 'customers.view') ? tab('/ops/customers', 'Customers') : ''}
+        ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
+        ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
       </nav>
       <form method="post" action="/ops/logout" style="margin:0;display:flex;align-items:center;gap:12px;">
         ${
           user
-            ? `<span class="eyebrow" style="margin:0;color:var(--paper-300);">${escapeHtml(user.name)}</span>`
+            ? `<span class="eyebrow" style="margin:0;color:var(--paper-300);">${escapeHtml(
+                user.name
+              )} &middot; ${escapeHtml(roles.labelFor(roles.roleOf(user)))}</span>`
             : ''
         }
         <button type="submit" class="btn btn-outline btn-sm">Sign out</button>
@@ -429,6 +434,32 @@ router.post('/ops/logout', (req, res) => {
 // of a clean 401. ADDING A PAGE BELOW MEANS ADDING `guard` TO IT.
 const guard = auth.requireAdminPage;
 
+// Signed in, but not allowed here. A plain refusal rather than a redirect to
+// the sign-in page — they ARE signed in, and bouncing them would be a
+// confusing lie about what went wrong.
+function refuse(req, res) {
+  return res.status(403).type('html').send(
+    adminPage({
+      title: 'Not for you',
+      user: req.opsUser,
+      body: `
+      <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0 0 12px;">
+        Not your department
+      </h1>
+      <p style="font-size:17px;line-height:1.55;color:var(--ink-700);max-width:46ch;">
+        You're signed in as <strong>${escapeHtml(req.opsUser.name)}</strong>
+        (${escapeHtml(roles.labelFor(roles.roleOf(req.opsUser)))}), and that
+        page isn't part of this role. Ask an admin if you need it.
+      </p>
+      <a href="/ops" class="btn btn-primary" style="margin-top:22px;">Back to work</a>`,
+    })
+  );
+}
+
+// `guard` proves who you are; `may(...)` proves you're allowed. Every page
+// below takes both.
+const may = (permission) => roles.requirePermission(permission, refuse);
+
 // ---------------------------------------------------------------------------
 // GET /ops — the orders board
 // ---------------------------------------------------------------------------
@@ -437,7 +468,7 @@ const ORDER_FIELDS =
   'id, status, pickup_date, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
   'delivery_photo_url, notes, created_at, customers(id, name, phone, address_line1, address_line2, city, postal_code)';
 
-router.get('/ops', guard, async (req, res, next) => {
+router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('orders')
@@ -464,6 +495,11 @@ router.get('/ops', guard, async (req, res, next) => {
     const owed = all.filter((o) => o.payment_status === 'FAILED');
     const owedTotal = owed.reduce((sum, o) => sum + (o.price_cents || 0), 0);
 
+    // A driver does the round; they have no business seeing the books. The
+    // money columns are dropped from the markup entirely rather than hidden
+    // with CSS — a value that never reaches the page cannot leak from it.
+    const showMoney = roles.can(req.opsUser, 'money.view');
+
     const row = (o) => {
       const c = o.customers || {};
       return [
@@ -472,15 +508,17 @@ router.get('/ops', guard, async (req, res, next) => {
         shortDate(o.pickup_date),
         statusBadge(o.status),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
-        money(o.price_cents),
-        paymentBadge(o),
+        ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
       ];
     };
+
+    const headings = ['Customer', 'Pickup', 'Status', 'Weight'];
+    if (showMoney) headings.push('Price', 'Payment');
 
     const board = (eyebrow, heading, list) => `
       <section style="margin-bottom:56px;">
         ${sectionHeading(eyebrow, heading, list.length)}
-        ${table(['Customer', 'Pickup', 'Status', 'Weight', 'Price', 'Payment'], list.map(row))}
+        ${table(headings, list.map(row))}
       </section>`;
 
     const body = `
@@ -489,7 +527,7 @@ router.get('/ops', guard, async (req, res, next) => {
         ${statCard('Upcoming', upcoming.length)}
         ${statCard('Completed', past.filter((o) => o.status === 'DELIVERED').length)}
         ${
-          owed.length
+          showMoney && owed.length
             ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)')
             : ''
         }
@@ -520,7 +558,7 @@ function statCard(label, value, bg = 'var(--paper-050)', fg = 'var(--ink-900)') 
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-router.get('/ops/orders/:id', guard, async (req, res, next) => {
+router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That order id is not valid.');
 
@@ -537,6 +575,7 @@ router.get('/ops/orders/:id', guard, async (req, res, next) => {
     if (!order) return notFoundPage(res, 'No order with that id.');
 
     const c = order.customers || {};
+    const showMoney = roles.can(req.opsUser, 'money.view');
 
     // The conversation around this order. There is no order id on a message,
     // so this is the customer's recent thread rather than a per-order log.
@@ -572,10 +611,20 @@ router.get('/ops/orders/:id', guard, async (req, res, next) => {
           ${detail('Method', escapeHtml((order.pickup_method || '').replace(/_/g, ' ').toLowerCase() || '—'))}
           ${detail('Bags', order.bag_count || '—')}
           ${detail('Weight', order.weight_lb ? `${order.weight_lb} lb` : 'not weighed yet')}
-          ${detail('Rate', money(order.price_per_lb_cents) + ' / lb')}
-          ${detail('Price', `<strong>${money(order.price_cents)}</strong>`)}
-          ${detail('Payment', escapeHtml(order.payment_status) + (order.paid_at ? ` on ${dateTime(order.paid_at)}` : ''))}
-          ${order.payment_failure_reason ? detail('Decline reason', escapeHtml(order.payment_failure_reason)) : ''}
+          ${
+            showMoney
+              ? detail('Rate', money(order.price_per_lb_cents) + ' / lb') +
+                detail('Price', `<strong>${money(order.price_cents)}</strong>`) +
+                detail(
+                  'Payment',
+                  escapeHtml(order.payment_status) +
+                    (order.paid_at ? ` on ${dateTime(order.paid_at)}` : '')
+                ) +
+                (order.payment_failure_reason
+                  ? detail('Decline reason', escapeHtml(order.payment_failure_reason))
+                  : '')
+              : ''
+          }
           ${detail('Booked', dateTime(order.created_at))}
           ${order.notes ? detail('Notes', escapeHtml(order.notes)) : ''}
           ${
@@ -596,7 +645,11 @@ router.get('/ops/orders/:id', guard, async (req, res, next) => {
             ${detail('Phone', `<a href="tel:${escapeHtml(c.phone)}">${escapeHtml(c.phone || '—')}</a>`)}
             ${detail('Address', escapeHtml(addressOf(c)) || '—')}
             <div style="padding-top:20px;">
-              <a href="/ops/customers/${c.id}" class="btn btn-outline">Full profile ${icon('arrow-right', '16')}</a>
+              ${
+                roles.can(req.opsUser, 'customers.view')
+                  ? `<a href="/ops/customers/${c.id}" class="btn btn-outline">Full profile ${icon('arrow-right', '16')}</a>`
+                  : ''
+              }
             </div>
           </div>
 
@@ -632,7 +685,7 @@ router.get('/ops/orders/:id', guard, async (req, res, next) => {
 // GET /ops/customers — everyone
 // ---------------------------------------------------------------------------
 
-router.get('/ops/customers', guard, async (req, res, next) => {
+router.get('/ops/customers', guard, may('customers.view'), async (req, res, next) => {
   try {
     const { data: people, error } = await db
       .from('customers')
@@ -653,6 +706,8 @@ router.get('/ops/customers', guard, async (req, res, next) => {
       byCustomer.set(o.customer_id, seen);
     }
 
+    const showMoney = roles.can(req.opsUser, 'money.view');
+
     const rows = (people || []).map((p) => {
       const stats = byCustomer.get(p.id) || { count: 0, spent: 0 };
       return [
@@ -660,16 +715,20 @@ router.get('/ops/customers', guard, async (req, res, next) => {
         `<a href="tel:${escapeHtml(p.phone)}">${escapeHtml(p.phone)}</a>`,
         escapeHtml(p.city || '—'),
         String(stats.count),
-        money(stats.spent),
+        ...(showMoney ? [money(stats.spent)] : []),
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : `<span class="badge">${escapeHtml(p.status)}</span>`,
       ];
     });
 
+    const headings = ['Name', 'Phone', 'City', 'Orders'];
+    if (showMoney) headings.push('Billed');
+    headings.push('Status');
+
     const body = `
       ${sectionHeading('Everyone', 'Customers', (people || []).length)}
-      ${table(['Name', 'Phone', 'City', 'Orders', 'Billed', 'Status'], rows)}`;
+      ${table(headings, rows)}`;
 
     res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser }));
   } catch (err) {
@@ -681,7 +740,7 @@ router.get('/ops/customers', guard, async (req, res, next) => {
 // GET /ops/customers/:id — one profile, with their whole order history
 // ---------------------------------------------------------------------------
 
-router.get('/ops/customers/:id', guard, async (req, res, next) => {
+router.get('/ops/customers/:id', guard, may('customers.view'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
 
@@ -700,6 +759,7 @@ router.get('/ops/customers/:id', guard, async (req, res, next) => {
       .eq('customer_id', person.id)
       .order('pickup_date', { ascending: false });
 
+    const showMoney = roles.can(req.opsUser, 'money.view');
     const prefs = person.preferences || {};
     const billed = (history || [])
       .filter((o) => o.payment_status !== 'WAIVED')
@@ -734,8 +794,7 @@ router.get('/ops/customers/:id', guard, async (req, res, next) => {
           ${detail('Address', escapeHtml(addressOf(person)) || '—')}
           ${detail('Signed up', dateTime(person.created_at))}
           ${detail('Texting consent', person.sms_consent_at ? dateTime(person.sms_consent_at) : 'not recorded')}
-          ${detail('Card', card)}
-          ${detail('Lifetime billed', `<strong>${money(billed)}</strong>`)}
+          ${showMoney ? detail('Card', card) + detail('Lifetime billed', `<strong>${money(billed)}</strong>`) : ''}
         </div>
 
         <div class="card card-xl" style="padding:28px;">
@@ -755,13 +814,14 @@ router.get('/ops/customers/:id', guard, async (req, res, next) => {
 
       ${sectionHeading('Everything they have sent us', 'Order history', (history || []).length)}
       ${table(
-        ['Pickup', 'Status', 'Weight', 'Price', 'Payment', ''],
+        showMoney
+          ? ['Pickup', 'Status', 'Weight', 'Price', 'Payment', '']
+          : ['Pickup', 'Status', 'Weight', ''],
         (history || []).map((o) => [
           shortDate(o.pickup_date),
           statusBadge(o.status),
           o.weight_lb ? `${o.weight_lb} lb` : '—',
-          money(o.price_cents),
-          paymentBadge(o),
+          ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
           `<a href="/ops/orders/${o.id}" style="font-weight:600;">Open</a>`,
         ])
       )}`;
@@ -778,7 +838,7 @@ router.get('/ops/customers/:id', guard, async (req, res, next) => {
 
 const PARTNER_LABEL = { LAUNDROMAT: 'Laundromat', PROPERTY: 'Property' };
 
-router.get('/ops/partners', guard, async (req, res, next) => {
+router.get('/ops/partners', guard, may('partners.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('partner_enquiries')
@@ -881,7 +941,7 @@ router.get('/ops/partners', guard, async (req, res, next) => {
   }
 });
 
-router.post('/ops/partners/:id/status', guard, async (req, res, next) => {
+router.post('/ops/partners/:id/status', guard, may('partners.manage'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That enquiry id is not valid.');
 
@@ -904,20 +964,53 @@ router.post('/ops/partners/:id/status', guard, async (req, res, next) => {
 // GET /ops/team — who can sign in
 // ---------------------------------------------------------------------------
 
-router.get('/ops/team', guard, async (req, res, next) => {
+router.get('/ops/team', guard, may('team.manage'), async (req, res, next) => {
   try {
     const { data: people, error } = await db
       .from('ops_users')
-      .select('id, name, phone, status, last_login_at, created_at')
+      .select('id, name, phone, status, role, last_login_at, created_at')
       .order('created_at', { ascending: true });
 
     if (error) throw error;
+
+    const ROLE_TONE = {
+      ADMIN: 'var(--sunbeam-500)',
+      DRIVER: 'var(--suds-300)',
+      SALES: 'var(--lilac-300)',
+    };
+
+    const roleControl = (p, isMe) => {
+      // You cannot change your own role, for the same reason you cannot switch
+      // yourself off: demoting yourself out of team management locks the door
+      // behind you.
+      if (isMe) {
+        return `<span class="badge" style="background:${ROLE_TONE[p.role]};">${escapeHtml(
+          roles.labelFor(p.role)
+        )}</span>`;
+      }
+
+      return `
+        <form method="post" action="/ops/team/${p.id}/role" style="margin:0;display:flex;gap:8px;">
+          <select class="select" name="role" style="min-height:36px;padding:4px 10px;font-size:14px;">
+            ${Object.keys(roles.ROLES)
+              .map(
+                (key) =>
+                  `<option value="${key}"${key === p.role ? ' selected' : ''}>${escapeHtml(
+                    roles.labelFor(key)
+                  )}</option>`
+              )
+              .join('')}
+          </select>
+          <button class="btn btn-sm btn-outline">Save</button>
+        </form>`;
+    };
 
     const rows = (people || []).map((p) => {
       const isMe = p.id === req.opsUser.id;
       return [
         `${escapeHtml(p.name)}${isMe ? ' <span style="color:var(--ink-400);">(you)</span>' : ''}`,
         escapeHtml(formatPhone(p.phone)),
+        roleControl(p, isMe),
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : '<span class="badge">DISABLED</span>',
@@ -953,27 +1046,59 @@ router.get('/ops/team', guard, async (req, res, next) => {
           : ''
       }
 
-      ${table(['Name', 'Mobile', 'Status', 'Last signed in', ''], rows)}
+      ${table(['Name', 'Mobile', 'Role', 'Status', 'Last signed in', ''], rows)}
 
-      <div class="card card-xl" style="padding:28px;margin-top:44px;max-width:560px;">
-        ${sectionHeading('Add someone', 'New person')}
-        <form method="post" action="/ops/team">
-          <div class="stack">
-            <div class="field">
-              <label class="field-label" for="t_name">Name</label>
-              <input class="input input-lg" type="text" id="t_name" name="name" required>
+      <div class="grid-2" style="align-items:start;margin-top:44px;">
+
+        <div class="card card-xl" style="padding:28px;">
+          ${sectionHeading('Add someone', 'New person')}
+          <form method="post" action="/ops/team">
+            <div class="stack">
+              <div class="field">
+                <label class="field-label" for="t_name">Name</label>
+                <input class="input input-lg" type="text" id="t_name" name="name" required>
+              </div>
+              <div class="field">
+                <label class="field-label" for="t_phone">Mobile number</label>
+                <input class="input input-lg" type="tel" id="t_phone" name="phone" required
+                       inputmode="tel" placeholder="(201) 555-0142">
+                <span class="field-hint">They sign in with this. It has to receive texts.</span>
+              </div>
+              <div class="field">
+                <label class="field-label" for="t_role">Role</label>
+                <select class="select input-lg" id="t_role" name="role">
+                  ${Object.entries(roles.ROLES)
+                    .map(
+                      ([key, r]) =>
+                        `<option value="${key}"${
+                          key === roles.DEFAULT_ROLE ? ' selected' : ''
+                        }>${escapeHtml(r.label)} — ${escapeHtml(r.description)}</option>`
+                    )
+                    .join('')}
+                </select>
+              </div>
             </div>
-            <div class="field">
-              <label class="field-label" for="t_phone">Mobile number</label>
-              <input class="input input-lg" type="tel" id="t_phone" name="phone" required
-                     inputmode="tel" placeholder="(201) 555-0142">
-              <span class="field-hint">They sign in with this. It has to receive texts.</span>
-            </div>
-          </div>
-          <button type="submit" class="btn btn-ink btn-lg" style="margin-top:20px;">
-            Add them ${icon('arrow-right', '22')}
-          </button>
-        </form>
+            <button type="submit" class="btn btn-ink btn-lg" style="margin-top:20px;">
+              Add them ${icon('arrow-right', '22')}
+            </button>
+          </form>
+        </div>
+
+        <div class="card card-xl card-sunken" style="padding:28px;">
+          ${sectionHeading('Reference', 'What each role sees')}
+          ${Object.entries(roles.ROLES)
+            .map(
+              ([key, r]) => `
+            <div style="padding:14px 0;border-bottom:1px solid var(--ink-100);">
+              <span class="badge" style="background:${ROLE_TONE[key]};">${escapeHtml(r.label)}</span>
+              <p style="font-size:15px;line-height:1.5;color:var(--ink-700);margin:10px 0 0;">
+                ${escapeHtml(r.description)}
+              </p>
+            </div>`
+            )
+            .join('')}
+        </div>
+
       </div>`;
 
     res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser }));
@@ -982,7 +1107,7 @@ router.get('/ops/team', guard, async (req, res, next) => {
   }
 });
 
-router.post('/ops/team', guard, async (req, res, next) => {
+router.post('/ops/team', guard, may('team.manage'), async (req, res, next) => {
   try {
     const name = String((req.body || {}).name || '').trim();
     const phone = normalisePhone((req.body || {}).phone);
@@ -995,7 +1120,13 @@ router.post('/ops/team', guard, async (req, res, next) => {
       );
     }
 
-    const { error } = await db.from('ops_users').insert({ name, phone, status: 'ACTIVE' });
+    // Anything unrecognised falls back to the least privileged role rather
+    // than to whatever was posted.
+    const role = roles.ROLES[String((req.body || {}).role || '')]
+      ? String((req.body || {}).role)
+      : roles.DEFAULT_ROLE;
+
+    const { error } = await db.from('ops_users').insert({ name, phone, role, status: 'ACTIVE' });
 
     if (error) {
       // The unique index on phone is what catches a duplicate.
@@ -1011,7 +1142,32 @@ router.post('/ops/team', guard, async (req, res, next) => {
   }
 });
 
-router.post('/ops/team/:id/status', guard, async (req, res, next) => {
+router.post('/ops/team/:id/role', guard, may('team.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That person id is not valid.');
+
+    const role = String((req.body || {}).role || '');
+    if (!roles.ROLES[role]) return notFoundPage(res, 'That is not a role.');
+
+    // Same reasoning as switching yourself off: demoting yourself out of team
+    // management locks the door behind you.
+    if (req.params.id === req.opsUser.id) {
+      return res.redirect(
+        303,
+        '/ops/team?error=' + encodeURIComponent('You cannot change your own role.')
+      );
+    }
+
+    const { error } = await db.from('ops_users').update({ role }).eq('id', req.params.id);
+    if (error) throw error;
+
+    return res.redirect(303, '/ops/team');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/team/:id/status', guard, may('team.manage'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That person id is not valid.');
 

@@ -28,7 +28,7 @@ const DEFAULT_MESSAGE = 'laundry tomorrow';
 
 // Who it appears to come from. This is Neil from the seed script — change it
 // to any number to test how we treat someone we don't recognise.
-const DEFAULT_FROM = '+12017010942';
+const DEFAULT_FROM = '+14437452665';
 
 // ---------------------------------------------------------------------------
 

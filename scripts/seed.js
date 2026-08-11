@@ -28,7 +28,7 @@ const LOCKER_LABELS = ['A1', 'A2', 'A3', 'A4', 'A5'];
 const CUSTOMER = {
   // Phone numbers are always stored in +1XXXXXXXXXX form. This is the identity
   // of a customer — it is how an inbound text is matched to a person.
-  phone: '+12017010942',
+  phone: '+14437452665',
   name: 'Neil Perry',
   email: 'neil@lyndry.com',
 

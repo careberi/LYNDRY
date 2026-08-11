@@ -153,7 +153,7 @@ async function requestCode(rawPhone, req) {
 
   const { data: user, error } = await db
     .from('ops_users')
-    .select('id, name, phone, status')
+    .select('id, name, phone, status, role')
     .eq('phone', phone)
     .maybeSingle();
 
@@ -306,7 +306,7 @@ async function requireAdminPage(req, res, next) {
     // to take effect immediately, not in thirty days when their cookie lapses.
     const { data: user } = await db
       .from('ops_users')
-      .select('id, name, phone, status')
+      .select('id, name, phone, status, role')
       .eq('id', userId)
       .maybeSingle();
 

@@ -38,8 +38,8 @@ Watch terminal 1 while you do it. It prints the action the AI chose, so you can
 see *why* it answered the way it did:
 
 ```
-SMS in  +12017010942: laundry tomorrow
-ACTION  +12017010942: create_order {"pickup_date":"2026-08-11"}
+SMS in  +14437452665: laundry tomorrow
+ACTION  +14437452665: create_order {"pickup_date":"2026-08-11"}
 ```
 
 `ACTION` means it ran one of the seven tools. `ASK` means it just replied with
