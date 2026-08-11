@@ -8,6 +8,7 @@ const auth = require('../core/admin-auth');
 const { config } = require('../config');
 const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
+const { normalisePhone, formatPhone } = require('../core/phone');
 
 const router = express.Router();
 
@@ -99,7 +100,7 @@ function addressOf(c) {
 // and a legal footer, which is wrong on an internal tool. Same stylesheets and
 // the same design language, different furniture.
 
-function adminPage({ title, active = '', body }) {
+function adminPage({ title, active = '', body, user = null }) {
   const tab = (href, label) =>
     `<a href="${href}"${href === active ? ' aria-current="page"' : ''}>${label}</a>`;
 
@@ -127,8 +128,14 @@ function adminPage({ title, active = '', body }) {
         ${tab('/ops', 'Orders')}
         ${tab('/ops/customers', 'Customers')}
         ${tab('/ops/partners', 'Partners')}
+        ${tab('/ops/team', 'Team')}
       </nav>
-      <form method="post" action="/ops/logout" style="margin:0;">
+      <form method="post" action="/ops/logout" style="margin:0;display:flex;align-items:center;gap:12px;">
+        ${
+          user
+            ? `<span class="eyebrow" style="margin:0;color:var(--paper-300);">${escapeHtml(user.name)}</span>`
+            : ''
+        }
         <button type="submit" class="btn btn-outline btn-sm">Sign out</button>
       </form>
     </div>
@@ -196,7 +203,8 @@ function safeNext(value) {
   return /^\/ops(\/|$)/.test(wanted) ? wanted : '/ops';
 }
 
-function loginPage({ error = '', next = '/ops' } = {}) {
+// The shell both sign-in steps share.
+function loginShell({ heading, intro, error = '', form }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -214,15 +222,13 @@ function loginPage({ error = '', next = '/ops' } = {}) {
 </head>
 <body>
   <main class="hero" style="min-height:100vh;display:flex;align-items:center;">
-    <div class="container" style="max-width:460px;">
+    <div class="container" style="max-width:460px;padding-top:48px;padding-bottom:48px;">
 
       <div style="margin-bottom:32px;">${logo('offset', { href: null })}</div>
 
       <p class="eyebrow eyebrow-brand">Operations</p>
-      <h1 class="display-4" style="margin-bottom:10px;">Sign in.</h1>
-      <p style="font-size:17px;line-height:1.5;color:var(--ink-800);margin:0 0 28px;">
-        Enter the access code. You'll stay signed in on this device.
-      </p>
+      <h1 class="display-4" style="margin-bottom:10px;">${escapeHtml(heading)}</h1>
+      <p style="font-size:17px;line-height:1.5;color:var(--ink-800);margin:0 0 28px;">${intro}</p>
 
       ${
         error
@@ -232,17 +238,7 @@ function loginPage({ error = '', next = '/ops' } = {}) {
           : ''
       }
 
-      <form method="post" action="/ops/login" class="card card-xl" style="padding:28px;">
-        <input type="hidden" name="next" value="${escapeHtml(next)}">
-        <div class="field">
-          <label class="field-label" for="code">Access code</label>
-          <input class="input input-lg" type="password" id="code" name="code" required
-                 autocomplete="current-password" autofocus>
-        </div>
-        <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
-          Sign in ${icon('arrow-right', '22')}
-        </button>
-      </form>
+      ${form}
 
     </div>
   </main>
@@ -250,46 +246,177 @@ function loginPage({ error = '', next = '/ops' } = {}) {
 </html>`;
 }
 
+function phoneStep({ error = '', next = '/ops', phone = '' } = {}) {
+  return loginShell({
+    heading: 'Sign in.',
+    intro: "Enter your mobile number and we'll text you a code.",
+    error,
+    form: `
+      <form method="post" action="/ops/login" class="card card-xl" style="padding:28px;">
+        <input type="hidden" name="next" value="${escapeHtml(next)}">
+        <div class="field">
+          <label class="field-label" for="phone">Mobile number</label>
+          <input class="input input-lg" type="tel" id="phone" name="phone" required
+                 autocomplete="tel" inputmode="tel" placeholder="(201) 555-0142"
+                 value="${escapeHtml(phone)}" autofocus>
+        </div>
+        <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
+          Text me a code ${icon('arrow-right', '22')}
+        </button>
+      </form>`,
+  });
+}
+
+function codeStep({ error = '', next = '/ops', phone = '' } = {}) {
+  return loginShell({
+    heading: 'Check your phone.',
+    intro: `We texted a six-digit code to <strong>${escapeHtml(
+      formatPhone(phone)
+    )}</strong>. It expires in ${auth.CODE_TTL_MINUTES} minutes.`,
+    error,
+    form: `
+      <form method="post" action="/ops/login/code" class="card card-xl" style="padding:28px;">
+        <input type="hidden" name="next" value="${escapeHtml(next)}">
+        <div class="field">
+          <label class="field-label" for="code">Six-digit code</label>
+          <input class="input input-lg" type="text" id="code" name="code" required
+                 inputmode="numeric" pattern="[0-9]*" maxlength="6"
+                 autocomplete="one-time-code" autofocus
+                 style="letter-spacing:0.4em;font-size:24px;text-align:center;">
+        </div>
+        <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
+          Sign in ${icon('arrow-right', '22')}
+        </button>
+      </form>
+
+      <form method="post" action="/ops/login" style="margin-top:18px;">
+        <input type="hidden" name="next" value="${escapeHtml(next)}">
+        <input type="hidden" name="phone" value="${escapeHtml(phone)}">
+        <button type="submit" class="btn btn-ghost">Send another code</button>
+      </form>`,
+  });
+}
+
+// The number being verified is carried between the two steps in its own
+// short-lived cookie rather than in the URL — a phone number has no business
+// sitting in a browser history or a server log line.
+const PENDING_COOKIE = 'ly_ops_pending';
+
+function setPending(res, phone) {
+  res.cookie(PENDING_COOKIE, phone, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: config.env === 'production',
+    path: '/ops',
+    maxAge: (auth.CODE_TTL_MINUTES + 5) * 60 * 1000,
+  });
+}
+
+function readPending(req) {
+  const header = req.headers.cookie || '';
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i !== -1 && part.slice(0, i).trim() === PENDING_COOKIE) {
+      return decodeURIComponent(part.slice(i + 1).trim());
+    }
+  }
+  return '';
+}
+
 router.get('/ops/login', (req, res) => {
   // Already signed in? Don't make them do it again.
   if (auth.isAuthed(req)) return res.redirect(302, safeNext(req.query.next));
 
-  res.type('html').send(loginPage({ next: safeNext(req.query.next) }));
+  res.type('html').send(phoneStep({ next: safeNext(req.query.next) }));
 });
 
-router.post('/ops/login', (req, res) => {
-  const next = safeNext((req.body || {}).next);
+// Step one: they gave us a number. Send a code.
+router.post('/ops/login', async (req, res, next) => {
+  const wanted = safeNext((req.body || {}).next);
+  const phone = (req.body || {}).phone;
 
-  if (!auth.hasKey()) {
-    return res
-      .status(503)
-      .type('html')
-      .send(loginPage({ error: 'ADMIN_API_KEY is not set on the server.', next }));
+  try {
+    if (!auth.hasKey()) {
+      return res
+        .status(503)
+        .type('html')
+        .send(phoneStep({ error: 'ADMIN_API_KEY is not set on the server.', next: wanted }));
+    }
+
+    const result = await auth.requestCode(phone, req);
+
+    if (!result.ok && result.reason === 'invalid') {
+      return res
+        .status(400)
+        .type('html')
+        .send(phoneStep({ error: 'That does not look like a US mobile number.', next: wanted, phone }));
+    }
+
+    if (!result.ok && result.reason === 'throttled') {
+      return res
+        .status(429)
+        .type('html')
+        .send(
+          phoneStep({
+            error: 'Too many codes requested. Wait fifteen minutes and try again.',
+            next: wanted,
+            phone,
+          })
+        );
+    }
+
+    // Deliberately identical whether or not that number belongs to anyone.
+    // Saying "no such user" would turn this page into a way to find out who
+    // works here.
+    setPending(res, result.phone);
+    return res.redirect(303, `/ops/login/code?next=${encodeURIComponent(wanted)}`);
+  } catch (err) {
+    return next(err);
   }
+});
 
-  if (auth.tooManyAttempts(req)) {
-    return res
-      .status(429)
-      .type('html')
-      .send(loginPage({ error: 'Too many attempts. Wait fifteen minutes and try again.', next }));
+router.get('/ops/login/code', (req, res) => {
+  if (auth.isAuthed(req)) return res.redirect(302, safeNext(req.query.next));
+
+  const phone = readPending(req);
+  if (!phone) return res.redirect(302, '/ops/login');
+
+  res.type('html').send(codeStep({ next: safeNext(req.query.next), phone }));
+});
+
+// Step two: they gave us the code.
+router.post('/ops/login/code', async (req, res, next) => {
+  const wanted = safeNext((req.body || {}).next);
+  const phone = readPending(req);
+
+  try {
+    if (!phone) return res.redirect(303, '/ops/login');
+
+    const result = await auth.verifyCode(phone, (req.body || {}).code, req);
+
+    if (!result.ok) {
+      const message =
+        result.reason === 'throttled'
+          ? 'Too many attempts. Wait fifteen minutes and try again.'
+          : 'That code is wrong or has expired. Ask for a new one.';
+      return res
+        .status(result.reason === 'throttled' ? 429 : 401)
+        .type('html')
+        .send(codeStep({ error: message, next: wanted, phone }));
+    }
+
+    res.clearCookie(PENDING_COOKIE, { path: '/ops' });
+    auth.setSessionCookie(res, result.user.id);
+    console.log(`Ops sign-in: ${result.user.name}`);
+    return res.redirect(303, wanted);
+  } catch (err) {
+    return next(err);
   }
-
-  if (!auth.sameSecret((req.body || {}).code, config.adminApiKey)) {
-    auth.recordFailure(req);
-    console.warn('Failed ops sign-in attempt.');
-    return res
-      .status(401)
-      .type('html')
-      .send(loginPage({ error: "That code isn't right.", next }));
-  }
-
-  auth.clearFailures(req);
-  auth.setSessionCookie(res);
-  return res.redirect(303, next);
 });
 
 router.post('/ops/logout', (req, res) => {
   auth.clearSessionCookie(res);
+  res.clearCookie(PENDING_COOKIE, { path: '/ops' });
   res.redirect(303, '/ops/login');
 });
 
@@ -373,7 +500,7 @@ router.get('/ops', guard, async (req, res, next) => {
       ${board('Finished', 'Past', past)}
     `;
 
-    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body }));
+    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser }));
   } catch (err) {
     next(err);
   }
@@ -495,7 +622,7 @@ router.get('/ops/orders/:id', guard, async (req, res, next) => {
 
       </div>`;
 
-    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body }));
+    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser }));
   } catch (err) {
     next(err);
   }
@@ -544,7 +671,7 @@ router.get('/ops/customers', guard, async (req, res, next) => {
       ${sectionHeading('Everyone', 'Customers', (people || []).length)}
       ${table(['Name', 'Phone', 'City', 'Orders', 'Billed', 'Status'], rows)}`;
 
-    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body }));
+    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser }));
   } catch (err) {
     next(err);
   }
@@ -639,7 +766,7 @@ router.get('/ops/customers/:id', guard, async (req, res, next) => {
         ])
       )}`;
 
-    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body }));
+    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser }));
   } catch (err) {
     next(err);
   }
@@ -748,7 +875,7 @@ router.get('/ops/partners', guard, async (req, res, next) => {
              </div>`
       }`;
 
-    res.type('html').send(adminPage({ title: 'Partners', active: '/ops/partners', body }));
+    res.type('html').send(adminPage({ title: 'Partners', active: '/ops/partners', body, user: req.opsUser }));
   } catch (err) {
     next(err);
   }
@@ -768,6 +895,144 @@ router.post('/ops/partners/:id/status', guard, async (req, res, next) => {
 
     // Redirect rather than render, so a refresh doesn't resubmit.
     return res.redirect(303, '/ops/partners');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/team — who can sign in
+// ---------------------------------------------------------------------------
+
+router.get('/ops/team', guard, async (req, res, next) => {
+  try {
+    const { data: people, error } = await db
+      .from('ops_users')
+      .select('id, name, phone, status, last_login_at, created_at')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const rows = (people || []).map((p) => {
+      const isMe = p.id === req.opsUser.id;
+      return [
+        `${escapeHtml(p.name)}${isMe ? ' <span style="color:var(--ink-400);">(you)</span>' : ''}`,
+        escapeHtml(formatPhone(p.phone)),
+        p.status === 'ACTIVE'
+          ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
+          : '<span class="badge">DISABLED</span>',
+        p.last_login_at ? dateTime(p.last_login_at) : 'never',
+        // You cannot switch yourself off — that is the one way to lock
+        // everybody out of a tool with no other way back in.
+        isMe
+          ? '<span style="color:var(--ink-400);font-size:14px;">—</span>'
+          : `<form method="post" action="/ops/team/${p.id}/status" style="margin:0;">
+               <button class="btn btn-sm ${p.status === 'ACTIVE' ? 'btn-outline' : 'btn-primary'}"
+                       name="status" value="${p.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'}">
+                 ${p.status === 'ACTIVE' ? 'Switch off' : 'Switch on'}
+               </button>
+             </form>`,
+      ];
+    });
+
+    const body = `
+      ${sectionHeading('Who can sign in', 'Team', (people || []).length)}
+
+      ${
+        req.query.added
+          ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
+               <p style="font-size:16px;margin:0;">Added. They can sign in with that number now.</p>
+             </div>`
+          : ''
+      }
+      ${
+        req.query.error
+          ? `<div role="alert" class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--stain-100);box-shadow:6px 6px 0 var(--stain-500);">
+               <p style="font-size:16px;margin:0;">${escapeHtml(String(req.query.error))}</p>
+             </div>`
+          : ''
+      }
+
+      ${table(['Name', 'Mobile', 'Status', 'Last signed in', ''], rows)}
+
+      <div class="card card-xl" style="padding:28px;margin-top:44px;max-width:560px;">
+        ${sectionHeading('Add someone', 'New person')}
+        <form method="post" action="/ops/team">
+          <div class="stack">
+            <div class="field">
+              <label class="field-label" for="t_name">Name</label>
+              <input class="input input-lg" type="text" id="t_name" name="name" required>
+            </div>
+            <div class="field">
+              <label class="field-label" for="t_phone">Mobile number</label>
+              <input class="input input-lg" type="tel" id="t_phone" name="phone" required
+                     inputmode="tel" placeholder="(201) 555-0142">
+              <span class="field-hint">They sign in with this. It has to receive texts.</span>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-ink btn-lg" style="margin-top:20px;">
+            Add them ${icon('arrow-right', '22')}
+          </button>
+        </form>
+      </div>`;
+
+    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/ops/team', guard, async (req, res, next) => {
+  try {
+    const name = String((req.body || {}).name || '').trim();
+    const phone = normalisePhone((req.body || {}).phone);
+
+    if (!name) return res.redirect(303, '/ops/team?error=' + encodeURIComponent('They need a name.'));
+    if (!phone) {
+      return res.redirect(
+        303,
+        '/ops/team?error=' + encodeURIComponent('That does not look like a US mobile number.')
+      );
+    }
+
+    const { error } = await db.from('ops_users').insert({ name, phone, status: 'ACTIVE' });
+
+    if (error) {
+      // The unique index on phone is what catches a duplicate.
+      const message = /duplicate|unique/i.test(error.message)
+        ? 'Someone is already set up with that number.'
+        : error.message;
+      return res.redirect(303, '/ops/team?error=' + encodeURIComponent(message));
+    }
+
+    return res.redirect(303, '/ops/team?added=1');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/team/:id/status', guard, async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That person id is not valid.');
+
+    const status = String((req.body || {}).status || '');
+    if (!['ACTIVE', 'DISABLED'].includes(status)) {
+      return notFoundPage(res, 'That is not a status a person can have.');
+    }
+
+    // Belt and braces: the page hides the button, and this refuses it anyway.
+    // Switching yourself off is how a tool with no other way in gets locked.
+    if (req.params.id === req.opsUser.id) {
+      return res.redirect(
+        303,
+        '/ops/team?error=' + encodeURIComponent('You cannot switch yourself off.')
+      );
+    }
+
+    const { error } = await db.from('ops_users').update({ status }).eq('id', req.params.id);
+    if (error) throw error;
+
+    return res.redirect(303, '/ops/team');
   } catch (err) {
     return next(err);
   }

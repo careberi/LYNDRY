@@ -344,17 +344,54 @@ GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
 GET  /ops/partners           enquiries from /partners, newest first
 POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
-GET  /ops/login              the only page reachable signed out
+GET  /ops/team               who can sign in; add and disable people
+GET  /ops/login              phone number     } the only two pages
+GET  /ops/login/code         six-digit code   } reachable signed out
 ```
 
-**There are no accounts.** One shared code — `ADMIN_API_KEY`, the same secret
-the API uses. Two ways in: the `x-admin-key` header for scripts, or the
-`ly_ops` cookie a browser gets after signing in.
+**Two credentials, for two kinds of caller.** Don't collapse them.
 
-**The cookie is not the key.** It is an HMAC of an expiry, signed with the key.
-A leaked cookie expires on its own and never contained the secret. Changing
-`ADMIN_API_KEY` invalidates every cookie ever issued — that is the whole
-revocation story, and it is enough for two people.
+| Caller | Credential |
+|---|---|
+| A person, in a browser | their mobile number, plus a code we text them |
+| A script (`npm run driver`) | `ADMIN_API_KEY` in an `x-admin-key` header |
+
+A script cannot receive a text, which is why the machine key stays.
+
+**People live in `ops_users`, one row each.** A driver who leaves gets
+`DISABLED`, which takes effect on their next request — `requireAdminPage`
+re-reads the row every time rather than trusting the cookie for 30 days.
+Deleting them would lose the record of who did what.
+
+**The code is never stored.** `ops_login_codes` holds an HMAC of it keyed with
+`ADMIN_API_KEY`. Six digits is small enough to brute-force offline, which is
+exactly why the plaintext never lands in a row and why five wrong guesses kill
+a code regardless of its expiry. Codes are single-use and last 10 minutes.
+
+**The sign-in page must never reveal whether a number is registered.** An
+unknown number gets the identical "check your phone" response. Otherwise
+`/ops/login` becomes a way to find out who works here.
+
+**The session cookie is not a credential.** It is `userId.expiry`, signed with
+`ADMIN_API_KEY`. A leaked cookie expires on its own and never held a secret.
+**Rotating `ADMIN_API_KEY` signs everybody out instantly** — that is the
+emergency lever if a phone goes missing.
+
+**Bootstrap the first person from the terminal** — signing in needs a row, and
+adding a row needs somebody signed in:
+
+```bash
+npm run ops:user -- add "Their Name" +12015551234
+```
+
+**Nobody can switch themselves off.** The Team page hides the button and the
+route refuses it anyway; it is the one action that can lock everyone out of a
+tool with no other way in.
+
+**When a code can't be texted it is written to the server log** — and only
+then. Carrier registration is still pending, so without that the dashboard
+would be unreachable; the log is the way back in. It is never written to the
+`messages` table: a live credential does not belong in a database row.
 
 **`src/routes/admin.js` must stay mounted before `src/routes/ops.js`** in
 `index.js`. The API router blocks everything under `/ops`, so if it ran first
@@ -370,9 +407,10 @@ ops page, exactly as on the public forms. A customer's name is untrusted input.
 that check the sign-in page becomes an open redirector, which is a ready-made
 phishing link on our own domain.
 
-The sign-in page throttles to 10 attempts per IP per 15 minutes. It is an
-in-memory counter, so it resets on restart and is per-instance — fine for one
-small server, and it must move into the database if this ever runs on two.
+Throttles, all in-memory: 5 codes per number and 15 per IP per 15 minutes, and
+20 verification attempts per IP. They reset on restart and are per-instance —
+fine for one small server, and they must move into the database if this ever
+runs on two.
 
 ## Payments
 

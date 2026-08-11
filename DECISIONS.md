@@ -266,14 +266,47 @@ HTML; `src/routes/ops.js` stays the JSON API the driver script talks to. The
 sign-in check moved into `src/core/admin-auth.js` so both use exactly the same
 one and cannot drift.
 
-**One shared code, no accounts.** It is Neil and a driver. `ADMIN_API_KEY` is
-already the API secret, so it is the sign-in code too — a second credential
-would be a second thing to lose.
+**People sign in with their mobile number and a texted code.** It started as
+one shared code; Neil asked for per-person sign-in, which is right — a driver
+who leaves gets switched off without changing a secret everyone else is using,
+and every session belongs to somebody.
 
-**The cookie is not the key.** It is an HMAC of an expiry signed with the key,
-so a leaked cookie expires by itself and never held the secret. Rotating
-`ADMIN_API_KEY` invalidates every session ever issued. No session table, no
-store to keep, and revocation that actually works.
+`ADMIN_API_KEY` stays, but only as the *machine* credential for the driver
+script and anything else calling the JSON API. A script cannot receive a text.
+Two callers, two credentials; collapsing them would break one or the other.
+
+**The code is never stored.** `ops_login_codes` holds an HMAC of it keyed with
+`ADMIN_API_KEY`. Six digits is small enough to brute-force offline, so the
+plaintext must not sit in a row that a database leak would expose. Five wrong
+guesses kill a code regardless of its expiry; codes are single-use and last ten
+minutes.
+
+**An unknown number gets the same answer as a real one.** Saying "no such user"
+would turn the sign-in page into a way to find out who works here.
+
+**Disabling takes effect on the next request, not in thirty days.** The guard
+re-reads the `ops_users` row every time rather than trusting the cookie. A
+cookie that stays valid for a month after someone is switched off is not
+really an off switch.
+
+**Nobody can switch themselves off.** It is the one action that could lock
+everybody out of a tool with no other way in. The page hides the button and the
+route refuses it anyway.
+
+**The cookie is not a credential.** It is `userId.expiry`, signed with
+`ADMIN_API_KEY`, so a leaked cookie expires by itself and never held a secret.
+Rotating that key signs everybody out instantly — the emergency lever if a
+phone goes missing. No session table, no store to keep.
+
+**When a code cannot be texted it goes to the server log, and only then.**
+Carrier registration is still pending, so texting does not work in production
+yet; without this the dashboard would be unreachable on the day it shipped.
+It is never written to the `messages` table — a live credential does not belong
+in a database row.
+
+**The first person is added from the terminal** (`npm run ops:user`), because
+signing in needs a row and adding a row needs somebody signed in. Everyone
+after that is added on the Team page.
 
 **Deliberately not a single-page app.** Plain server-rendered HTML with real
 forms and real redirects, reusing the site's own stylesheets. It is a handful

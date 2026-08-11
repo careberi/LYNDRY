@@ -10,6 +10,7 @@
     "seed": "node --use-system-ca scripts/seed.js",
     "sms": "node --use-system-ca scripts/simulate-sms.js",
     "driver": "node --use-system-ca scripts/simulate-driver.js",
+    "ops:user": "node --use-system-ca scripts/ops-user.js",
     "test:signature": "node scripts/test-signature.js"
   },
   "engines": {
