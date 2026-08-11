@@ -586,3 +586,27 @@ from the main number: one number, one thread the customer can reply to.
 **Only sign-in codes may use it.** Order confirmations and the AI's replies must
 keep coming from `LYNDRY_PHONE_NUMBER`, because customers reply to those and a
 short code is not where that conversation lives.
+
+## Testing before the carrier works
+
+**`/ops/test` is the test console.** Admin only. It sends a message through the
+real `handleInbound()` — same dedupe, same AI, same seven actions — and shows
+the reply, and it can mint a customer sign-in code so the booking pages can be
+used. See TESTING.md.
+
+**It does not weaken `/sms`.** The console calls `handleInbound()` directly
+rather than posting to the route, so the Telnyx signature check on the public
+webhook is untouched.
+
+**`LOG_LOGIN_CODES=true` writes sign-in codes to the server log.** That is the
+only way into a deployed LYNDRY while carrier registration is pending. Turn it
+off at launch; the server warns loudly at boot while it is on.
+
+**Why a fallback hung off a failed send does not work:** Telnyx accepts every
+message and answers 200, then the carrier drops it and says so in a separate
+delivery receipt. `sendMessage` only throws when *Telnyx* refuses, so a
+`catch` block never sees an undelivered text. That bug made the live site
+impossible to sign in to.
+
+**Sign-in accepts any live code, not just the newest.** Asking for another code
+must not kill the one already sitting in the customer's messages.

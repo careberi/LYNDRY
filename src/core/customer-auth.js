@@ -171,10 +171,15 @@ async function requestCode(rawPhone, req) {
       from: config.telnyx.codeNumber || undefined,
     });
   } catch (err) {
-    // Unlike the staff sign-in, a customer's code is NOT written to the log as
-    // a fallback. Staff can read the server log; a customer cannot, so it
-    // would be a credential sitting in a log for no one's benefit.
     console.error(`Could not text a customer sign-in code to ${phone}: ${err.message}`);
+  }
+
+  // Only while LOG_LOGIN_CODES is on — that is, only until carrier
+  // registration lands. A customer cannot read a server log, so this exists
+  // purely so Neil can sign in AS a customer and test the booking pages
+  // before texting works. It must be off at launch.
+  if (config.logLoginCodes) {
+    console.warn(`  CUSTOMER LOGIN CODE for ${customer.name} (${phone}): ${code}  — valid ${CODE_TTL_MINUTES} minutes`);
   }
 
   return { ok: true, phone };
@@ -197,6 +202,12 @@ async function verifyCode(rawPhone, rawCode, req) {
 
   if (!customer || customer.status !== 'ACTIVE') return { ok: false, reason: 'bad' };
 
+  // EVERY live code, not just the newest.
+  //
+  // Tapping "send another code" issues a second one, and people routinely then
+  // type the first — it is sitting right there in their messages. Accepting
+  // only the newest made that fail for no reason a customer could see. Five
+  // attempts and ten minutes still bound the guessing.
   const { data: rows } = await db
     .from('customer_login_codes')
     .select('id, code_hash, attempts')
@@ -204,16 +215,19 @@ async function verifyCode(rawPhone, rawCode, req) {
     .is('consumed_at', null)
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false })
-    .limit(1);
+    .limit(5);
 
-  const record = (rows || [])[0];
-  if (!record || record.attempts >= MAX_CODE_ATTEMPTS) return { ok: false, reason: 'bad' };
+  const live = (rows || []).filter((r) => r.attempts < MAX_CODE_ATTEMPTS);
+  if (!live.length) return { ok: false, reason: 'bad' };
 
-  if (!sameSecret(hmac(`code.${customer.id}.${code}`), record.code_hash)) {
-    await db
-      .from('customer_login_codes')
-      .update({ attempts: record.attempts + 1 })
-      .eq('id', record.id);
+  const record = live.find((r) => sameSecret(hmac(`code.${customer.id}.${code}`), r.code_hash));
+
+  if (!record) {
+    // Count the miss against every live code, so a wrong guess cannot be
+    // retried indefinitely by cycling through them.
+    for (const r of live) {
+      await db.from('customer_login_codes').update({ attempts: r.attempts + 1 }).eq('id', r.id);
+    }
     return { ok: false, reason: 'bad' };
   }
 
@@ -226,6 +240,41 @@ async function verifyCode(rawPhone, rawCode, req) {
   clearBucket(`cust:code:phone:${phone}`);
 
   return { ok: true, customer };
+}
+
+// --- For the ops test console -----------------------------------------------
+
+// Creates a real sign-in code for a customer and RETURNS it, rather than only
+// texting it. Exists so the booking pages can be tested before carrier
+// registration lands.
+//
+// It is effectively impersonation, so the only caller is the admin-only test
+// console, which logs who asked. It is a normal code in every other respect —
+// ten minutes, one use, hashed in the table, never stored in plain text.
+async function mintCodeForTesting(rawPhone, req) {
+  const phone = normalisePhone(rawPhone);
+  if (!phone) return null;
+
+  const { data: customer } = await db
+    .from('customers')
+    .select('id, status')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  if (!customer || customer.status !== 'ACTIVE') return null;
+
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+
+  const { error } = await db.from('customer_login_codes').insert({
+    customer_id: customer.id,
+    code_hash: hmac(`code.${customer.id}.${code}`),
+    expires_at: new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString(),
+    requested_ip: req && req.ip,
+  });
+
+  if (error) throw error;
+
+  return code;
 }
 
 // --- The check routes use ---------------------------------------------------
@@ -270,6 +319,7 @@ function isSignedIn(req) {
 
 module.exports = {
   COOKIE_NAME,
+  mintCodeForTesting,
   CODE_TTL_MINUTES,
   requestCode,
   verifyCode,
