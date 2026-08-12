@@ -210,16 +210,64 @@ async function answerWithBrain(customer, text, from) {
 
   console.log(`ACTION  ${from}: ${decision.name} ${JSON.stringify(decision.input)}`);
 
+  const helpers = {
+    // How an action reaches Neil when it needs a human. Passed in rather
+    // than imported so nothing in core/ needs to know about SMS at all.
+    notify: (to, body) => sms.sendMessage({ to, text: body }),
+  };
+
   let message;
   try {
-    message = await actions.run(decision.name, decision.input, customer, {
-      // How an action reaches Neil when it needs a human. Passed in rather
-      // than imported so nothing in core/ needs to know about SMS at all.
-      notify: (to, body) => sms.sendMessage({ to, text: body }),
-    });
+    message = await actions.run(decision.name, decision.input, customer, helpers);
   } catch (err) {
     console.error(`Action ${decision.name} failed:`, err.message);
-    message = `Sorry — I couldn't do that. Email ${site.email} and we'll sort it out.`;
+    await reply(from, `Sorry — I couldn't do that. Email ${site.email} and we'll sort it out.`, customer.id);
+    return;
+  }
+
+  // One message can carry two jobs. "good to go" at a booking recap that also
+  // corrects a preference has to save the correction AND book the pickup, and
+  // with strictly one action per message the model picked one and dropped the
+  // other — a real customer approved a recap and got "I'll use that from your
+  // next pickup" with nothing booked.
+  //
+  // So after a SETUP action (saving details or preferences), the model is
+  // asked once: anything left? If it names a follow-on action, that runs and
+  // ITS message is what the customer receives. If it says no, the setup
+  // message stands. One extra step, never more, so it cannot loop.
+  const SETUP_ACTIONS = ['save_details', 'update_profile'];
+
+  if (SETUP_ACTIONS.includes(decision.name)) {
+    try {
+      // Fresh rows: the setup action just changed them, and the follow-up
+      // decision has to see the world it created.
+      const { data: freshCustomer } = await db
+        .from('customers')
+        .select('*')
+        .eq('id', customer.id)
+        .single();
+
+      const freshOrder = await orders.findLatestInFlight(customer.id);
+
+      const followOn = await brain.decide({
+        customer: freshCustomer || customer,
+        order: freshOrder,
+        recentMessages: await recentConversation(customer.id),
+        message: text,
+        followUp: { name: decision.name, reply: message },
+      });
+
+      if (followOn.type === 'tool' && !SETUP_ACTIONS.includes(followOn.name)) {
+        console.log(`ACTION+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
+        message = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
+      }
+      // Any text answer — "OK" or otherwise — means nothing more to do, and
+      // the setup action's own message is the reply.
+    } catch (err) {
+      // The follow-up is best effort. The setup succeeded and its message is
+      // true, so that is what gets sent if deciding the next step fails.
+      console.error('Follow-up decision failed:', err.message);
+    }
   }
 
   await reply(from, message, customer.id);

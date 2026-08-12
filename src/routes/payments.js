@@ -286,8 +286,16 @@ async function handleEvent(event) {
     // most often a retry the provider made on its own. Keep our record in
     // step rather than letting the two drift apart.
     case 'payment_intent.succeeded': {
-      const orderId = (event.data.object.metadata || {}).lyndry_order_id;
+      const meta = event.data.object.metadata || {};
+      const orderId = meta.lyndry_order_id;
       if (!orderId) return;
+
+      // The $25 minimum carries the order id too, and its success must NOT
+      // mark the order paid — the balance has not been charged yet. Exactly
+      // that happened on a real order: the deposit webhook stamped it PAID at
+      // booking, delivery then skipped the balance charge as "already paid",
+      // and the customer was told $87.50 was charged when only $25 ever was.
+      if (meta.lyndry_kind === 'deposit') return;
 
       await db
         .from('orders')
@@ -303,8 +311,13 @@ async function handleEvent(event) {
     }
 
     case 'payment_intent.payment_failed': {
-      const orderId = (event.data.object.metadata || {}).lyndry_order_id;
+      const failedMeta = event.data.object.metadata || {};
+      const orderId = failedMeta.lyndry_order_id;
       if (!orderId) return;
+
+      // Same rule as success: a failed DEPOSIT must not mark the whole order's
+      // payment as failed. The deposit's own path already handles its decline.
+      if (failedMeta.lyndry_kind === 'deposit') return;
 
       const failure = event.data.object.last_payment_error || {};
 

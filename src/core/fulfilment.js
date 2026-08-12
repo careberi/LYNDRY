@@ -68,11 +68,12 @@ async function step(order, to, buildMessage) {
 // customer loses the ability to cancel. Both follow from this one call.
 
 async function collect(order, { bagCount } = {}) {
+  // The one new fact: we have the bag. The turnaround was promised in the
+  // confirmation; repeating it in every text is what Neil flagged.
   const result = await step(
     order,
     'IN_PROCESS',
-    () =>
-      `We've got your laundry! It'll be washed, folded and back with you within ${site.turnaround}.`
+    () => `We've got your laundry! We'll text you the weight and the total once it's on the scale.`
   );
 
   if (!result.ok) return result;
@@ -158,22 +159,22 @@ async function recordWeight(order, weightLb) {
   const owed = Math.max(0, priceCents - alreadyPaid);
   const card = billing.describeCard(customer);
 
+  // The one new fact: the weight, and what follows from it. No turnaround
+  // repeat - that was promised at booking.
   let message;
   if (owed === 0 && alreadyPaid > 0) {
     message =
-      `Your laundry weighed ${weight} lb. That's under our ${money(alreadyPaid)} minimum, ` +
-      `so it's ${money(alreadyPaid)} and nothing more to pay. ` +
-      `We'll have it back to you within ${site.turnaround}.`;
+      `Your laundry weighed ${weight} lb, under the ${money(alreadyPaid)} minimum you've ` +
+      `already paid, so there's nothing more to pay.`;
   } else if (alreadyPaid > 0) {
     message =
-      `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound. ` +
-      `You've already paid ${money(alreadyPaid)}, so the remaining ${money(owed)} comes off ` +
-      `${card ? `your ${card}` : 'your card'} when we deliver. ` +
-      `Back with you within ${site.turnaround}.`;
+      `Your laundry weighed ${weight} lb, so the total is ${money(priceCents)} at ` +
+      `${site.pricePerLb} a pound. You've paid ${money(alreadyPaid)}, and the remaining ` +
+      `${money(owed)} comes off ${card ? `your ${card}` : 'your card'} on delivery.`;
   } else {
     message =
-      `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound, ` +
-      `charged when we deliver. Back with you within ${site.turnaround}.`;
+      `Your laundry weighed ${weight} lb, so the total is ${money(priceCents)} at ` +
+      `${site.pricePerLb} a pound, charged on delivery.`;
   }
 
   await sendAndLog(customer.phone, message, customer.id);
@@ -192,10 +193,9 @@ async function recordWeight(order, weightLb) {
 // --- Out for delivery -------------------------------------------------------
 
 async function outForDelivery(order) {
-  return step(order, 'OUT_FOR_DELIVERY', (updated) => {
-    const price = order.price_cents ? ` That's ${money(order.price_cents)}.` : '';
-    return `Your laundry is washed, folded and out for delivery today.${price}`;
-  });
+  // The one new fact: it is on the van. They already know the price from the
+  // weigh text; repeating it here is what made the thread read like a bill.
+  return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`);
 }
 
 // --- Delivered, with the photo ----------------------------------------------
@@ -241,21 +241,23 @@ async function deliver(order, file) {
 
     // What we say about money depends on whether we actually got it. A
     // delivery text that reads like a receipt when the card was declined is
-    // how an unpaid order quietly becomes a forgotten one.
+    // how an unpaid order quietly becomes a forgotten one. The total is NOT
+    // repeated here — the weigh text already said it, and a real thread ended
+    // up quoting it four times.
     let price = '';
     if (!order.price_cents) {
       price = '';
     } else if (charge.coveredByMinimum) {
-      price = ` ${money(order.price_cents)} covered by the minimum you already paid.`;
+      price = ` All covered by the minimum you already paid, nothing more charged.`;
+    } else if (charge.ok && charge.chargedCents) {
+      price = ` The remaining ${money(charge.chargedCents)} went on your card and you're all settled.`;
     } else if (charge.ok) {
-      price = ` ${money(charge.chargedCents || order.price_cents)} charged, ${money(order.price_cents)} in total.`;
+      price = ` You're all paid up.`;
     } else if (charge.needsCard || charge.declined) {
       price = ` ${money(order.price_cents)} is still outstanding, the card link we sent will settle it.`;
-    } else {
-      price = ` ${money(order.price_cents)} for this one.`;
     }
 
-    return `Delivered. Your laundry is at your door.${price}${photo}`;
+    return `Delivered! Your laundry is at your door.${price}${photo}`;
   });
 
   if (!result.ok) return result;

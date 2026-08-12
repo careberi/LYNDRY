@@ -422,56 +422,52 @@ function whenLine(order) {
 // the charge that follows, so if an order is ever disputed the message log
 // shows the customer being told which card, before any work was done.
 function confirmationMessage(customer, order, { rolled = false, opener = null } = {}) {
-  const bags = order.bag_count
-    ? `${order.bag_count} bag${order.bag_count > 1 ? 's' : ''}`
-    : 'it';
+  const prefs = customer.preferences || {};
 
+  // Where and how the bag changes hands, with their standing note folded in.
+  const spot = prefs.special_instructions ? ` (${prefs.special_instructions})` : '';
   const handover =
     order.pickup_method === 'HAND_TO_DRIVER'
-      ? `Just have ${bags} ready and we'll knock when we arrive.`
-      : `Just leave ${bags} outside your door and we'll text you as soon as we've got it.`;
+      ? `We'll knock when we arrive${spot}.`
+      : `Leave the bag outside${spot} and we'll text you as soon as we've got it.`;
 
-  // What was actually taken, and what happens to the rest.
-  //
-  // The minimum is stated as a charge that has already happened, because it
-  // has. Anything vaguer invites "why is there $25 on my card".
+  // Their wash, as they chose it. Drops out entirely if somehow unset.
+  const wash = prefs.water_temp
+    ? ` Washed ${String(prefs.water_temp).toLowerCase()} with ` +
+      `${prefs.detergent === 'HYPOALLERGENIC' ? 'hypoallergenic' : 'standard'} detergent, ` +
+      `${prefs.fabric_softener ? 'softener on' : 'no softener'}.`
+    : '';
+
+  // What was actually taken, and what happens to the rest. Stated as a charge
+  // that has already happened, because it has.
   const card = billing.describeCard(customer);
   const minimum = billing.money(config.pricing.minimumCents);
 
   const money = order.deposit_paid_at
-    ? `We've taken the ${minimum} minimum on your ${card}. It's ${site.pricePerLb} a pound, ` +
-      `so if it comes to more than that we'll charge the difference once we weigh it.`
+    ? ` We've taken the ${minimum} minimum on your ${card}; it's ${site.pricePerLb} a pound and anything over that comes off the same card on delivery.`
     : card
-      ? `It's ${site.pricePerLb} a pound, weighed after pickup and charged to your ${card}.`
-      : `It's ${site.pricePerLb} a pound, weighed after pickup.`;
+      ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum, charged to your ${card}.`
+      : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum.`;
 
-  // Plain hyphens and straight quotes only, here and in every other outbound
-  // message. One em dash triples what this costs to send; the reasoning is in
-  // full at the top of src/core/notify.js, which warns if one creeps back in.
-  // The order number is in here so the customer has it if they ever ring or
-  // email about this pickup. It is the same number the driver sees on the run
-  // sheet, which is the whole point of having one.
-  const reference = order.order_number ? ` Order #${order.order_number}.` : '';
+  const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 
-  // handover carries the "we'll text you" promise for a doorstep pickup and
-  // the "we'll knock" one for a handover, so it is not repeated here.
-  // Stated, not apologised for. "Today's rounds are done" is a fact about the
-  // van, not a negotiation, and it stops them wondering why the day moved.
-  //
-  // `opener` lets a caller replace the lead-in when the confirmation follows
-  // something else — "Card saved!" from the payment webhook, say. Without it,
-  // the webhook prefixed "Card saved: Visa ending 8663." onto a sentence that
-  // also names the card, and a real customer got the card twice in one text.
+  // "Today's rounds are done" is a fact about the van, not a negotiation.
+  // `opener` lets the payment webhook lead with "Card saved" without naming
+  // the card twice in one text, which a real customer got.
   const lead = rolled
-    ? `${opener || "Sorted"}! Today's rounds are finished, so the earliest we can get to you is`
-    : `${opener || 'Of course'}! We'll be there`;
+    ? `${opener || 'Of course'}! Today's rounds are finished, so order #${order.order_number} is in for the earliest we can do:`
+    : `${opener || 'Of course'}! Order #${order.order_number} is booked:`;
 
+  // THE CONFIRMATION IS THE ONE COMPLETE DOCUMENT of the order: number, day
+  // and window, address, handover, wash, money, turnaround. Every later text
+  // in the order's life says only the one new thing that just happened - a
+  // real thread said "24 hours" three times and the total four, and Neil
+  // called it out. This is the only message allowed to say everything.
   return (
-    `${lead} ${whenLine(order)}. ${handover} ` +
-    `${money} Back with you within ${site.turnaround}.${reference}`
+    `${lead} pickup ${whenLine(order)}${address}. ${handover}${wash}${money} ` +
+    `Back with you within ${site.turnaround}.`
   );
 }
-
 function rescheduledMessage(order) {
   return `No problem at all, we've moved it to ${whenLine(order)}.`;
 }

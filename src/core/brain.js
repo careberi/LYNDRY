@@ -313,7 +313,7 @@ Ask the question and then stop. Do not follow it with a list of the answers they
 CONFIRM BEFORE BOOKING. MANDATORY, EVERY ORDER.
 Before you call create_order, or save_details with a pickup date, send ONE recap and get a yes. The recap covers, in one message: when we are coming, the address, where the bag will be, and how it gets washed. Everything is already in the notes below, so this is never a list of questions, it is a statement they approve:
   "So that's a pickup today, Wednesday 12 Aug, at 16-50 Chandler Dr, bag outside the door, washed cold with standard detergent and softener. Good to go?"
-ALWAYS name the day AND its date in the recap: "today, Wednesday 12 Aug", "tomorrow, Thursday 13 Aug". You know today's date from the top of these instructions. The recap is where a wrong date gets caught, before it becomes a wrong order, so the date is not optional.
+ALWAYS name the day AND its date AND the window in the recap: "today, Wednesday 12 Aug, between 3 and 6pm". You know today's date and time from the top of these instructions and the windows from PICKUP WINDOWS, so you can name the window their request lands in: the one containing their time, or the next one with at least an hour left, or tomorrow's first if today is done. A recap with no time reads as no plan; the date is where a wrong day gets caught before it becomes a wrong order. The booking code has the final word on the window, and the confirmation states it.
 When they say yes, book. If they correct something, apply it, and fold the correction into the booking (update_profile for a lasting change, notes for a one-off) rather than asking anything else.
 This is the ONLY confirmation step. Never re-confirm after booking, and never confirm the same thing twice.
 A returning customer texting "laundry tomorrow" still gets asked no questions at all: their address, wash preferences and usual pickup method are saved and go straight into the recap. One recap, one yes, booked.
@@ -447,7 +447,13 @@ function customerContext(customer, order, recentMessages) {
 // ---------------------------------------------------------------------------
 
 // Returns either { type: 'tool', name, input } or { type: 'text', text }.
-async function decide({ customer, order, recentMessages, message }) {
+//
+// `followUp`, when present, means a tool has ALREADY run for this same
+// customer message and this call decides whether anything is left to do. It
+// exists because one message can carry two jobs — "good to go" at a recap
+// both saves a correction and books the pickup — and a single action per
+// message meant the model picked one and silently dropped the other.
+async function decide({ customer, order, recentMessages, message, followUp }) {
   // New Jersey's date, not the server's. After 8pm ET the two disagree, and
   // telling Claude it is already tomorrow makes "pickup today" impossible.
   const now = booking.nowInService();
@@ -461,7 +467,16 @@ async function decide({ customer, order, recentMessages, message }) {
     // date arithmetic, and a customer is waiting on a reply.
     output_config: { effort: 'low' },
 
-    system: `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages)}`,
+    system:
+      `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages)}` +
+      (followUp
+        ? `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
+          `The reply queued to send them is: "${followUp.reply}"\n` +
+          `If their message also asked for something that tool did not do — they approved ` +
+          `a booking recap, say, so the pickup itself still needs create_order — call that ` +
+          `ONE remaining tool now. The profile above is already updated. ` +
+          `If nothing more is needed, reply with exactly: OK`
+        : ''),
 
     // Exactly one action per message. Without this, Claude could book an order
     // and cancel it in the same breath.

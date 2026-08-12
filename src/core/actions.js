@@ -240,7 +240,7 @@ async function updateProfile(customer, input) {
     const stored = field === 'state' ? value.toUpperCase() : value;
     const { error } = await db.from('customers').update({ [field]: stored }).eq('id', customer.id);
     if (error) throw error;
-    return `Updated. I've got that saved.`;
+    return `Done, that's saved.`;
   }
 
   if (PREFERENCE_KEYS.includes(field)) {
@@ -250,7 +250,12 @@ async function updateProfile(customer, input) {
 
     const { error } = await db.from('customers').update({ preferences }).eq('id', customer.id);
     if (error) throw error;
-    return `Updated. I'll use that from your next pickup.`;
+    // Deliberately not "I'll use that from your next pickup" — this often runs
+    // one step before a booking, and a real customer who had just approved a
+    // recap was told exactly that instead of getting their order booked. The
+    // chaining in sms.js finishes the booking; this reply only survives when
+    // there genuinely was nothing else to do.
+    return `Done, that's saved.`;
   }
 
   // Claude asked to change something we don't store. Hand over rather than
