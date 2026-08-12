@@ -210,6 +210,67 @@ async function updateProfile(customer, input) {
   return `I'll pass that to someone who can sort it. You'll hear back shortly.`;
 }
 
+// --- save_details -----------------------------------------------------------
+
+// The state is defaulted, not asked for. Everyone we serve is in New Jersey,
+// so making a new customer spell it out is a question with one possible answer.
+const DEFAULT_STATE = 'NJ';
+
+async function saveDetails(customer, input) {
+  const clean = (value, max) => String(value || '').trim().slice(0, max);
+
+  const changes = {};
+  if (clean(input.name, 80)) changes.name = clean(input.name, 80);
+  if (clean(input.address_line1, 120)) changes.address_line1 = clean(input.address_line1, 120);
+  if (clean(input.address_line2, 80)) changes.address_line2 = clean(input.address_line2, 80);
+  if (clean(input.city, 80)) changes.city = clean(input.city, 80);
+  if (clean(input.postal_code, 10)) changes.postal_code = clean(input.postal_code, 10);
+
+  const state = clean(input.state, 2).toUpperCase();
+  if (state) changes.state = state;
+
+  if (!Object.keys(changes).length) {
+    return `Sorry, I didn't catch that. What's your name and the address we should collect from?`;
+  }
+
+  // Fill in the state once there is an address to attach it to, so a customer
+  // is never blocked from booking by a field nobody asked them about.
+  if (changes.address_line1 && !changes.state && !customer.state) {
+    changes.state = DEFAULT_STATE;
+  }
+
+  const { data: updated, error } = await db
+    .from('customers')
+    .update(changes)
+    .eq('id', customer.id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  // What is still missing decides what we say next. hasAddress() is the same
+  // check bookPickup uses, so this can never claim someone is set up and then
+  // refuse their first booking for want of an address.
+  if (!updated.name) {
+    return `Got the address. What should I call you?`;
+  }
+
+  if (!hasAddress(updated)) {
+    const missing = !updated.address_line1
+      ? 'the street address'
+      : !updated.city
+        ? 'the town'
+        : 'the zip code';
+
+    return `Thanks ${updated.name}. I've still got no ${missing} — what is it?`;
+  }
+
+  return (
+    `You're all set, ${updated.name}. ${site.pricePerLb} a pound, back within ` +
+    `${site.turnaround}. When would you like your first pickup?`
+  );
+}
+
 // --- handoff_to_human -------------------------------------------------------
 
 async function handoffToHuman(customer, input, { notify }) {
@@ -245,6 +306,8 @@ async function run(name, input, customer, helpers = {}) {
       return openLocker(customer);
     case 'update_profile':
       return updateProfile(customer, input);
+    case 'save_details':
+      return saveDetails(customer, input);
     case 'handoff_to_human':
       return handoffToHuman(customer, input, helpers);
     default:

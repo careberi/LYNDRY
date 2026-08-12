@@ -87,7 +87,7 @@ function contactSentence() {
 const tokens = Object.freeze({
   NAME: site.name,
   PHONE: site.publicPhoneDisplay,
-  SMS_LINK: site.hasPublicPhone ? `sms:${site.publicPhoneLink}` : '/signup',
+  SMS_LINK: site.hasPublicPhone ? `sms:${site.publicPhoneLink}` : '/#get-started',
   LEGAL_NAME: site.legalName,
   BUSINESS_ADDRESS: site.businessAddress,
   TAGLINE: site.tagline,

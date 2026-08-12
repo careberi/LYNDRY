@@ -96,6 +96,13 @@ app.get('/health', (req, res) => {
     // finding 'test' here on the production server.
     payments: require('./providers/payments').mode,
 
+    // Whether handoff_to_human has somewhere to go. A boolean, never the
+    // number itself — this endpoint is public, and that is Neil's mobile.
+    //
+    // Worth reporting because an unset SUPPORT_PHONE fails silently: the AI
+    // decides a customer needs a person, logs it, and nobody is told.
+    supportPhone: Boolean(config.supportPhone),
+
     uptimeSeconds: Math.round(process.uptime()),
   });
 });

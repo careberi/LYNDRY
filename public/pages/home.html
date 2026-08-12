@@ -117,14 +117,26 @@
           Leave it at your door. It comes back washed, folded and on time.
         </p>
 
-        <!-- The number is carried through to the signup page rather than
-             texted immediately: we may not message anyone before they have
-             ticked an unticked consent box, and that box lives there. -->
-        <form action="/signup" method="get">
+        <!-- POST, not GET. A GET would put the visitor's mobile number in the
+             URL, which then sits in their browser history, in our server logs
+             and in the referrer header of every link they click next. A phone
+             number does not belong in any of those. -->
+        <!-- Every "Get started" on the site points at #get-started, which is
+             this field. There is nowhere else to send them: signing up now
+             happens in the text thread, and /signup is kept only as a fallback
+             that nothing links to. -->
+        <form id="get-started" action="/start" method="post">
+          <!-- The honeypot. A person never sees this; something filling every
+               field in the form does. Handled in POST /start. -->
+          <div aria-hidden="true" style="position:absolute;left:-9999px;">
+            <label for="heroWebsite">Website</label>
+            <input id="heroWebsite" name="website" type="text" tabindex="-1" autocomplete="off">
+          </div>
+
           <div class="hero-form" style="display:flex;gap:12px;max-width:540px;">
             <div style="flex:1;">
               <label for="heroPhone" class="sr-only">Your mobile number</label>
-              <input id="heroPhone" name="phone" type="tel" autocomplete="tel"
+              <input id="heroPhone" name="phone" type="tel" autocomplete="tel" required
                      class="input input-lg" placeholder="Your mobile number">
             </div>
             <div style="flex:0 0 auto;white-space:nowrap;">
@@ -138,17 +150,14 @@
                The wording is the design handoff's, verbatim — it is what
                carriers read during registration, so it does not get reworded.
 
-               Ticking this gates the button, but it is NOT the consent record.
-               That has to be captured with a timestamp and an IP address at
-               the moment the account is created, which happens on /signup. The
-               box there is asked again and starts unticked — pre-ticking a
-               consent box is the single fastest way to fail carrier review. -->
+               This box IS the consent record now. Ticking it is what makes the
+               text that follows legal, so it is submitted and stored against
+               the customer with a timestamp, the visitor's IP and a source of
+               WEB_HERO. It starts unticked and must stay that way — a
+               pre-ticked consent box is the single fastest way to fail carrier
+               review. -->
           <label class="check" style="margin-top:18px;max-width:540px;">
-            <!-- No name attribute on purpose: `required` still gates the form,
-                 but an unnamed control is not submitted, so the URL stays a
-                 clean ?phone=... rather than carrying a tick that means
-                 nothing once it gets there. -->
-            <input type="checkbox" required>
+            <input type="checkbox" name="sms_consent" value="yes" required>
             <span class="check-box">{{ICON_CHECK}}</span>
             <span class="check-text" style="color:var(--ink-800);">
               By checking this box you agree to receive text messages from

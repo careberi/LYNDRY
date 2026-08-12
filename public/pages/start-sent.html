@@ -1,0 +1,56 @@
+<!-- Where the home page's phone field lands. Handled by POST /start in
+     src/routes/web.js.
+
+     Deliberately a dead end with no form on it. Everything from here happens
+     in the customer's messages app, which is the whole point of the product -
+     a page telling them to go and finish signing up somewhere else would undo
+     the thing we just did. -->
+
+<section class="section">
+  <div class="container container-narrow" style="text-align:center;">
+
+    <p class="eyebrow">Check your phone</p>
+
+    <h1 class="display-2" style="margin-bottom:18px;">
+      We've just texted you.
+    </h1>
+
+    <p style="font-size:19px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:0 auto 40px;">
+      Reply with your name and where we should collect from, and you're set up.
+      That's the whole thing - no account, no password, no app.
+    </p>
+
+    <div class="card card-xl" style="padding:32px;text-align:left;max-width:520px;margin:0 auto;">
+      <p class="eyebrow" style="margin-bottom:14px;">What happens next</p>
+
+      <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        {{ICON_MESSAGE}}
+        <span style="font-size:16px;line-height:1.5;">
+          Tell us your name and address in the thread.
+        </span>
+      </div>
+
+      <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        {{ICON_CALENDAR}}
+        <span style="font-size:16px;line-height:1.5;">
+          Say when suits you - "tomorrow at 6" is enough. We'll text back a
+          pickup window.
+        </span>
+      </div>
+
+      <div style="display:flex;gap:14px;padding:14px 0;">
+        {{ICON_TRUCK}}
+        <span style="font-size:16px;line-height:1.5;">
+          Leave the bag outside. It comes back washed and folded within
+          {{TURNAROUND}}, at {{PRICE_PER_LB}} a pound.
+        </span>
+      </div>
+    </div>
+
+    <p style="font-size:15px;color:var(--ink-500);margin-top:32px;">
+      Nothing arrived? Give it a minute, then text us on
+      <a href="{{SMS_LINK}}">{{PHONE}}</a> and we'll pick it up from there.
+    </p>
+
+  </div>
+</section>

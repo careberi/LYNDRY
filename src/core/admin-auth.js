@@ -113,29 +113,11 @@ function clearSessionCookie(res) {
 
 // --- Throttling -------------------------------------------------------------
 //
-// Deliberately simple in-memory counters. They reset when the server restarts
-// and they are per-instance, which is fine for one small server and far better
-// than nothing. If this ever runs on more than one instance they need to move
-// into the database.
+// Moved to src/core/throttle.js when the home page started sending texts too.
+// Both are public and both cost money when abused, so they share one
+// implementation rather than each keeping a copy that could drift.
 
-const buckets = new Map();
-
-function hit(key, limit, windowMs) {
-  const now = Date.now();
-  const record = buckets.get(key);
-
-  if (!record || now > record.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
-  }
-
-  record.count += 1;
-  return record.count > limit;
-}
-
-function clearBucket(key) {
-  buckets.delete(key);
-}
+const { hit, clearBucket } = require('./throttle');
 
 // --- Sending a code ---------------------------------------------------------
 

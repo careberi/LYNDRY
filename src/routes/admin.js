@@ -42,13 +42,43 @@ function shortDate(iso) {
   return `${day} ${d} ${MONTHS[m - 1]}`;
 }
 
+// A timestamp, shown in New Jersey's time rather than the server's.
+//
+// Railway runs in UTC, so this used to render a text sent at 6pm as "10pm" and
+// tip messages sent after 8pm onto the following day. On a message thread that
+// is not a cosmetic problem: the timestamps are how you work out what happened
+// in what order when a customer says nobody ever replied to them.
+const STAMP = new Intl.DateTimeFormat('en-US', {
+  timeZone: booking.SERVICE_TZ,
+  day: 'numeric',
+  month: 'short',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
 function dateTime(iso) {
   if (!iso) return '—';
-  const at = new Date(iso);
-  return `${at.getDate()} ${MONTHS[at.getMonth()]}, ${at.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  })}`;
+
+  const parts = {};
+  for (const p of STAMP.formatToParts(new Date(iso))) parts[p.type] = p.value;
+
+  return `${parts.day} ${parts.month}, ${parts.hour}:${parts.minute} ${parts.dayPeriod.toLowerCase()}`;
+}
+
+// "just now", "20m ago", "3d ago" — for a conversation list, where how long
+// someone has been waiting for a reply is the thing you are scanning for.
+function timeAgo(iso) {
+  if (!iso) return '';
+
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  return days < 30 ? `${days}d ago` : dateTime(iso);
 }
 
 function money(cents) {
@@ -131,6 +161,7 @@ function adminPage({ title, active = '', body, user = null }) {
       <nav class="site-nav">
         ${roles.can(user, 'orders.view') ? tab('/ops', 'Orders') : ''}
         ${roles.can(user, 'customers.view') ? tab('/ops/customers', 'Customers') : ''}
+        ${roles.can(user, 'messages.view') ? tab('/ops/messages', 'Messages') : ''}
         ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
         ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
       </nav>
@@ -797,6 +828,13 @@ router.get('/ops/customers/:id', guard, may('customers.view'), async (req, res, 
           ${escapeHtml(person.name || 'Unnamed')}
         </h1>
         <span class="badge" style="${person.status === 'ACTIVE' ? 'background:var(--suds-300);' : ''}">${escapeHtml(person.status)}</span>
+        ${
+          roles.can(req.opsUser, 'messages.view')
+            ? `<a href="/ops/messages/${encodeURIComponent(
+                String(person.phone || '').replace(/\D/g, '')
+              )}" class="btn btn-outline btn-sm">Read the thread</a>`
+            : ''
+        }
       </div>
 
       <div class="grid-2" style="align-items:start;margin-bottom:44px;">
@@ -841,6 +879,265 @@ router.get('/ops/customers/:id', guard, may('customers.view'), async (req, res, 
       )}`;
 
     res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/messages — every conversation, one row per phone number
+//
+// Grouped by PHONE, not by customer, and that is the point. A message from
+// someone with no account still gets logged with their number, so this is the
+// only screen in the system that shows people who texted once and never signed
+// up. Grouping by customer_id would silently hide exactly the rows worth
+// reading.
+// ---------------------------------------------------------------------------
+
+// How far back the conversation list reaches.
+//
+// There is no "conversations" table to query, so the threads are assembled in
+// memory from recent messages. At a few hundred messages this is nothing; if
+// the table ever gets big enough for this to be the wrong shape, the fix is a
+// database view, not a bigger number here. The page says when it has hit the
+// limit rather than quietly showing a partial list.
+const THREAD_SCAN_LIMIT = 2000;
+
+// Turns a flat list of messages into one entry per phone number.
+function groupIntoThreads(messages) {
+  const threads = new Map();
+
+  for (const m of messages) {
+    // Older rows pre-date the phone column and only have a customer. Skip
+    // rather than inventing a thread with no number to open.
+    if (!m.phone) continue;
+
+    let thread = threads.get(m.phone);
+    if (!thread) {
+      thread = {
+        phone: m.phone,
+        customer: m.customers || null,
+        total: 0,
+        inbound: 0,
+        // Messages arrive newest first, so the first one seen for a number is
+        // the latest — which is what the list is sorted and previewed on.
+        last: m,
+      };
+      threads.set(m.phone, thread);
+    }
+
+    thread.total += 1;
+    if (m.direction === 'INBOUND') thread.inbound += 1;
+
+    // A number can text before signing up and again afterwards. Whichever
+    // message carries the customer wins, so the row shows a name.
+    if (!thread.customer && m.customers) thread.customer = m.customers;
+  }
+
+  return [...threads.values()];
+}
+
+router.get('/ops/messages', guard, may('messages.view'), async (req, res, next) => {
+  try {
+    const { data, error } = await db
+      .from('messages')
+      .select('phone, direction, body, created_at, delivery_status, customers(id, name, status)')
+      .order('created_at', { ascending: false })
+      .limit(THREAD_SCAN_LIMIT);
+
+    if (error) throw error;
+
+    const scanned = (data || []).length;
+    const threads = groupIntoThreads(data || []);
+
+    // Numbers with no customer row. These are people who texted and never
+    // signed up — worth chasing, and invisible everywhere else in ops.
+    const leads = threads.filter((t) => !t.customer);
+
+    const row = (t) => {
+      const who = t.customer
+        ? `<span style="font-weight:600;">${escapeHtml(t.customer.name || 'Unnamed')}</span>`
+        : `<span class="badge" style="background:var(--sunbeam-500);">Not a customer</span>`;
+
+      const stopped =
+        t.customer && t.customer.status === 'UNSUBSCRIBED'
+          ? ` <span class="badge" style="background:var(--stain-500);color:var(--paper-050);">Opted out</span>`
+          : '';
+
+      const preview = String(t.last.body || '').replace(/\s+/g, ' ').slice(0, 90);
+
+      return [
+        `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">
+           ${who}${stopped}
+           <div style="font-size:13px;color:var(--ink-500);font-variant-numeric:tabular-nums;">${escapeHtml(
+             formatPhone(t.phone)
+           )}</div>
+         </a>`,
+        `<div style="font-size:14px;color:var(--ink-700);max-width:46ch;">
+           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Them' : 'Us'}</span>
+           ${escapeHtml(preview)}${t.last.body && t.last.body.length > 90 ? '&hellip;' : ''}
+         </div>`,
+        `<span style="white-space:nowrap;">${escapeHtml(timeAgo(t.last.created_at))}</span>`,
+        `<span style="font-variant-numeric:tabular-nums;">${t.total}</span>`,
+      ];
+    };
+
+    const body = `
+      ${sectionHeading('Everything anyone has texted us', 'Conversations', threads.length)}
+
+      ${
+        leads.length
+          ? `<div class="card" style="padding:18px 22px;margin-bottom:28px;background:var(--sunbeam-500);">
+               <p style="margin:0;font-size:16px;">
+                 <strong>${leads.length} ${leads.length === 1 ? 'number has' : 'numbers have'} texted without signing up.</strong>
+                 They got sent the signup link automatically. Nothing else chases them.
+               </p>
+             </div>`
+          : ''
+      }
+
+      ${table(['Who', 'Latest message', 'When', 'Total'], threads.map(row))}
+
+      ${
+        scanned >= THREAD_SCAN_LIMIT
+          ? `<p style="font-size:14px;color:var(--ink-500);margin-top:22px;">
+               Showing conversations from the most recent ${THREAD_SCAN_LIMIT} messages. Older threads are not listed.
+             </p>`
+          : ''
+      }`;
+
+    res.type('html').send(
+      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/messages/:phone — one conversation, oldest first
+// ---------------------------------------------------------------------------
+
+// What the carrier did with a message we sent. This is the only place a
+// blocked or filtered text admits to itself — the send looked fine at the time,
+// and the bad news arrives later on a separate webhook.
+function deliveryNote(m) {
+  if (m.direction !== 'OUTBOUND') return '';
+
+  const failed = m.delivery_status && /fail|undeliver|reject|expired/i.test(m.delivery_status);
+
+  if (failed || m.delivery_error) {
+    return `<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">
+              Not delivered${m.delivery_error ? `: ${escapeHtml(m.delivery_error)}` : ''}
+            </span>`;
+  }
+
+  if (m.delivery_status === 'delivered') {
+    return `<span style="font-size:12px;color:var(--ink-500);">Delivered</span>`;
+  }
+
+  // No receipt yet. Not the same as delivered, and saying so matters when
+  // someone is asking why a customer never replied.
+  return `<span style="font-size:12px;color:var(--ink-400);">Sent${
+    m.delivery_status ? ` &middot; ${escapeHtml(m.delivery_status)}` : ''
+  }</span>`;
+}
+
+function bubble(m) {
+  const inbound = m.direction === 'INBOUND';
+
+  // Suds for what we said, paper for what they said. Ink text on both — a
+  // brand colour is never dark enough to carry white type.
+  return `
+  <div style="display:flex;flex-direction:column;align-items:${inbound ? 'flex-start' : 'flex-end'};gap:5px;">
+    <div style="
+      max-width:min(560px, 78%);
+      background:${inbound ? 'var(--paper-050)' : 'var(--suds-500)'};
+      border:2px solid var(--ink-900);
+      border-radius:${inbound ? '4px 16px 16px 16px' : '16px 16px 4px 16px'};
+      box-shadow:${inbound ? '3px 3px' : '-3px 3px'} 0 var(--ink-900);
+      padding:13px 17px;
+      font-size:16px;
+      line-height:1.45;
+      color:var(--ink-900);
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+    ">${escapeHtml(m.body)}</div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-500);">
+      <span>${escapeHtml(dateTime(m.created_at))}</span>
+      ${deliveryNote(m)}
+    </div>
+  </div>`;
+}
+
+router.get('/ops/messages/:phone', guard, may('messages.view'), async (req, res, next) => {
+  try {
+    // The URL carries digits only, so a "+" never has to survive a path.
+    const phone = normalisePhone(req.params.phone);
+
+    if (!phone) {
+      return res.status(404).type('html').send(
+        adminPage({
+          title: 'Conversation',
+          active: '/ops/messages',
+          body: `<a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
+                 <p style="font-size:17px;margin-top:20px;">That is not a phone number we could read.</p>`,
+          user: req.opsUser,
+        })
+      );
+    }
+
+    const [{ data: messages, error }, { data: customer }] = await Promise.all([
+      db
+        .from('messages')
+        .select('direction, body, created_at, delivery_status, delivery_error')
+        .eq('phone', phone)
+        .order('created_at', { ascending: true }),
+      db.from('customers').select('id, name, status, address_line1, city, postal_code').eq('phone', phone).maybeSingle(),
+    ]);
+
+    if (error) throw error;
+
+    const thread = messages || [];
+
+    const heading = customer ? customer.name || 'Unnamed customer' : formatPhone(phone);
+
+    const who = customer
+      ? `<a href="/ops/customers/${customer.id}" class="btn btn-outline btn-sm">Open profile</a>`
+      : `<span class="badge" style="background:var(--sunbeam-500);">Never signed up</span>`;
+
+    const body = `
+      <a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
+
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:18px 0 6px;">
+        <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0;">
+          ${escapeHtml(heading)}
+        </h1>
+        ${who}
+        ${
+          customer && customer.status === 'UNSUBSCRIBED'
+            ? `<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">Opted out - do not text</span>`
+            : ''
+        }
+      </div>
+
+      <p style="font-size:15px;color:var(--ink-500);margin:0 0 32px;font-variant-numeric:tabular-nums;">
+        ${escapeHtml(formatPhone(phone))}
+        &middot; ${thread.length} message${thread.length === 1 ? '' : 's'}
+        ${customer && customer.address_line1 ? `&middot; ${escapeHtml(addressOf(customer))}` : ''}
+      </p>
+
+      <div class="card card-xl" style="padding:28px;">
+        ${
+          thread.length
+            ? `<div style="display:flex;flex-direction:column;gap:20px;">${thread.map(bubble).join('')}</div>`
+            : `<p style="font-size:16px;color:var(--ink-500);margin:0;">Nothing has been sent to or from this number.</p>`
+        }
+      </div>`;
+
+    res.type('html').send(
+      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser })
+    );
   } catch (err) {
     next(err);
   }

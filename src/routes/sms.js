@@ -8,6 +8,7 @@ const sms = require('../providers/sms');
 const compliance = require('../core/compliance');
 const brain = require('../core/brain');
 const actions = require('../core/actions');
+const onboarding = require('../core/onboarding');
 const orders = require('../core/orders');
 const { site } = require('../web/site');
 
@@ -140,15 +141,25 @@ async function handleInbound(inbound) {
 
   // --- A number we don't recognise -----------------------------------------
   //
-  // We do not try to sign people up over text. Too much to collect, and the
-  // consent record has to come from the website.
+  // They get onboarded right here in the thread rather than sent to a form.
+  //
+  // Somebody texting us first is the strongest consent there is — they started
+  // the conversation, and their message is sitting in the messages table as the
+  // record of it. That is recorded as INBOUND_TEXT so it can be told apart
+  // from a ticked box later, because the two are different kinds of evidence.
+  //
+  // startConversation sends the opening message. All it asks for is a name and
+  // an address; the AI takes over from their reply.
   if (!customer) {
-    await reply(
-      from,
-      `Thanks for texting LYNDRY. We don't have an account for this number yet — ` +
-        `sign up at ${config.baseUrl}/signup and we'll take it from there.`,
-      null
-    );
+    const started = await onboarding.startConversation({
+      phone: from,
+      consentSource: 'INBOUND_TEXT',
+      // No IP to record — this did not come through a browser. The evidence is
+      // their own inbound message, not a form submission.
+      consentIp: null,
+    });
+
+    if (!started.ok) console.log(`Could not start a conversation with ${from}: ${started.reason}`);
     return;
   }
 

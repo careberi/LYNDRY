@@ -269,14 +269,15 @@ scripts/                seed.js  simulate-sms.js
 Claude's only job is to translate **one message into one structured action.** It
 holds no state, decides no prices, and never touches hardware.
 
-The seven tools:
+The eight tools:
 
 ```
-create_order(service, pickup_date, pickup_method, notes)
+create_order(pickup_date, pickup_time, pickup_method, bag_count, notes)
 get_order_status()
-reschedule_order(new_date)
+reschedule_order(new_date, new_time)
 cancel_order()
 open_locker()
+save_details(name, address_line1, address_line2, city, state, postal_code)
 update_profile(field, value)
 handoff_to_human(reason)
 ```
@@ -295,6 +296,12 @@ Rules:
   the entire reason for the AI is that the customer does not have to learn a
   format. This survived a proposal to add scripted step-by-step flows; don't
   reintroduce them.
+- **Always second person.** The customer notes handed to Claude are written in
+  the third person, and it will echo that voice back if not told not to —
+  "They've got a pickup booked" went out to a real phone once. It says "you".
+- **A greeting is not a request.** "hello" gets "Hey! How can I help?" — not an
+  order recap and not a tool call. Same for "thanks" and "ok". Not every
+  message needs an action.
 - Missing a required field? Ask for **that one field only**, then act.
 - A returning customer texting "laundry tomorrow" gets an order with zero
   follow-up questions.
@@ -349,6 +356,8 @@ GET  /ops                    orders board: active, upcoming, past
 GET  /ops/orders/:id         one order, plus the message thread
 GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
+GET  /ops/messages           every conversation, one row per phone number
+GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 GET  /ops/partners           enquiries from /partners, newest first
 POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
 GET  /ops/team               who can sign in; add and disable people
@@ -377,11 +386,18 @@ yourself writing `if (user.role === 'ADMIN')` in a page, stop and add a
 permission there instead — role checks scattered through templates are how a
 screen ends up showing a driver something it shouldn't.
 
-| | orders | customers | partners | team | money |
-|---|---|---|---|---|---|
-| **Admin** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Driver** | ✓ | — | — | — | — |
-| **Sales** | ✓ | ✓ | ✓ | — | — |
+| | orders | customers | messages | partners | team | money |
+|---|---|---|---|---|---|---|
+| **Admin** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Driver** | ✓ | — | — | — | — | — |
+| **Sales** | ✓ | ✓ | ✓ | ✓ | — | — |
+
+**The conversations screen is grouped by phone number, not by customer,** and
+that is the point: a message from someone with no account is still logged
+against their number, so this is the only screen that shows people who texted
+once and never signed up. Grouping by `customer_id` would hide exactly the rows
+worth reading. `messages.view` is separate from `customers.view` because a
+thread holds things a person said to what they thought was a person.
 
 Every page takes two middlewares: `guard` proves who you are, `may('...')`
 proves you're allowed. **Adding a page means adding both.**
@@ -523,8 +539,39 @@ Plus `OUT_OF_SERVICE`, set manually.
 - `STOP` / `UNSTOP` / `START` / `HELP` are handled in code, before Claude sees
   them. These are legally required and must never depend on an AI reading them
   correctly.
-- Unknown number → reply with a link to the signup page. Do not onboard over text.
+- Unknown number → onboard them in the thread, via `src/core/onboarding.js`.
+  Do **not** send them to a web form; that was the old behaviour and it is gone.
 - Log every message, both directions.
+
+**Onboarding happens over text, and the only two things asked for are a name
+and a street address.** Not email, not preferences, not a unit number they
+didn't mention. `save_details` takes the whole lot in one tool call, because
+somebody answering "what's your name and where should we collect from?" replies
+with all of it in one message — and asking them to confirm it back field by
+field is the phone tree this product exists to avoid. Wash preferences keep
+their defaults and are changed by texting.
+
+**There are three ways to consent, and which one it was is recorded** in
+`customers.sms_consent_source` alongside the timestamp and IP. An audit asks
+*how* consent was obtained, not just whether it was.
+
+| Source | What the evidence is |
+|---|---|
+| `WEB_HERO` | The phone field on the home page. Ticked box, timestamp, IP |
+| `WEB_SIGNUP` | The full signup form. Same box, same evidence |
+| `INBOUND_TEXT` | They texted first. Their own message in the `messages` table |
+
+**The consent checkbox wording appears in three places and must stay identical
+in all of them** — the home page hero, `/signup`, and the blockquote on
+`/sms-terms`. A carrier comparing them expects one sentence. They drifted once
+already and the terms page quoted wording no form had ever shown.
+
+**`POST /start` sends a text to a number a stranger typed.** That cannot be
+designed away, only contained: the box must be ticked, the number must parse,
+an opted-out number is refused outright, and there are throttles per number and
+per IP in `src/core/throttle.js`. Every outcome returns the same 303 to
+`/start/sent` — telling the visitor "that number has opted out" would turn the
+home page into a way of finding out who is a customer.
 
 **Every outbound text is plain ASCII.** SMS has two encodings: the basic GSM
 alphabet fits 160 characters in a segment, and *one* character outside it forces

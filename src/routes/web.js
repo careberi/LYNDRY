@@ -6,6 +6,8 @@ const express = require('express');
 
 const db = require('../db');
 const notify = require('../core/notify');
+const onboarding = require('../core/onboarding');
+const throttle = require('../core/throttle');
 const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
 const { renderPage } = require('../web/layout');
@@ -52,6 +54,12 @@ const PAGES = [
     file: 'signup-thanks.html',
     title: "You're all set",
     description: 'Your LYNDRY account is ready.',
+  },
+  {
+    path: '/start/sent',
+    file: 'start-sent.html',
+    title: 'Check your phone',
+    description: 'We have texted you. Reply with your name and address and you are set up.',
   },
   {
     path: '/privacy',
@@ -299,6 +307,82 @@ router.get('/sitemap.xml', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /start — the phone field on the home page
+//
+// Takes a number and a ticked consent box, and texts that number. Everything
+// after this happens in the customer's messages app.
+//
+// This is a public endpoint that causes an SMS to be sent to a number a
+// stranger typed, which deserves stating plainly: whoever fills this in is not
+// necessarily the person who owns the handset. That cannot be designed away,
+// only contained, which is what the throttles and the opted-out check below
+// are for. One message goes out and nothing more is sent until they reply.
+// ---------------------------------------------------------------------------
+
+// Per number: enough for a genuine retype, not enough to be a nuisance.
+const START_PER_PHONE = 3;
+// Per IP: a household or an office might legitimately sign up a few people.
+const START_PER_IP = 10;
+const START_WINDOW_MS = 60 * 60 * 1000;
+
+router.post('/start', async (req, res, next) => {
+  const form = req.body || {};
+
+  // Send everyone to the same page whatever happened.
+  //
+  // A refusal must not tell the visitor anything about the number they typed.
+  // "That number has opted out" would turn this form into a way of finding out
+  // whether a given person is a LYNDRY customer, and "already registered" is
+  // the same leak in a friendlier voice.
+  const done = () => res.redirect(303, '/start/sent');
+
+  try {
+    // The honeypot, same as the partners form. Anything that fills a field a
+    // person cannot see gets the success page and is dropped.
+    if (String(form.website || '').trim()) {
+      console.warn('Dropped a /start submission that filled the honeypot field.');
+      return done();
+    }
+
+    if (form.sms_consent !== 'yes') {
+      // The box is `required` in the markup, so reaching here means the form
+      // was posted by something other than the page. No text is sent.
+      console.warn('Refused a /start submission with no consent box ticked.');
+      return done();
+    }
+
+    const phone = normalisePhone(form.phone);
+    if (!phone) {
+      console.warn('Refused a /start submission with an unusable number.');
+      return done();
+    }
+
+    if (
+      throttle.hit(`start:phone:${phone}`, START_PER_PHONE, START_WINDOW_MS) ||
+      throttle.hit(`start:ip:${req.ip}`, START_PER_IP, START_WINDOW_MS)
+    ) {
+      console.warn(`Throttled a /start submission for ${phone}.`);
+      return done();
+    }
+
+    // req.ip is the real visitor address because index.js sets 'trust proxy'.
+    // It is half of the consent record, so it has to be the visitor's and not
+    // the load balancer's.
+    const result = await onboarding.startConversation({
+      phone,
+      consentSource: 'WEB_HERO',
+      consentIp: req.ip,
+    });
+
+    if (!result.ok) console.log(`/start refused ${phone}: ${result.reason}`);
+
+    return done();
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // The signup form handler.
 //
 // Two jobs, both of which matter:
@@ -392,6 +476,9 @@ router.post('/signup', async (req, res, next) => {
       // hosting platform's proxy instead, which would be worthless.
       sms_consent_at: new Date().toISOString(),
       sms_consent_ip: req.ip,
+      // Which door they came through. See migration 0012 — an audit asks how
+      // consent was obtained, not just whether it was.
+      sms_consent_source: 'WEB_SIGNUP',
 
       status: 'ACTIVE',
     });

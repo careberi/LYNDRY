@@ -16,6 +16,12 @@ const PERMISSIONS = Object.freeze({
   'orders.view': 'See the orders board and individual orders',
   'orders.act': 'Move an order along — collected, weighed, delivered',
   'customers.view': 'Browse customers and their history',
+  // Every word anyone has ever texted us, including people who are not
+  // customers. Kept separate from customers.view because a conversation holds
+  // things a person said to what they thought was a person — complaints, where
+  // they live, why they were out. Fewer people should be able to read that
+  // than can look up an order.
+  'messages.view': 'Read the text conversations',
   'partners.view': 'See partner enquiries',
   'partners.manage': 'Mark enquiries contacted or closed',
   'team.manage': 'Add people, change roles, switch people off',
@@ -43,8 +49,17 @@ const ROLES = Object.freeze({
 
   SALES: {
     label: 'Sales',
-    description: 'Customers and partner enquiries. No money, no team.',
-    permissions: ['orders.view', 'customers.view', 'partners.view', 'partners.manage'],
+    description: 'Customers, conversations and partner enquiries. No money, no team.',
+    // Sales gets the conversations because the useful ones are from numbers
+    // that never signed up — someone who texted once and went quiet is the
+    // warmest lead the business has, and nothing else surfaces them.
+    permissions: [
+      'orders.view',
+      'customers.view',
+      'messages.view',
+      'partners.view',
+      'partners.manage',
+    ],
   },
 });
 

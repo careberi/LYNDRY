@@ -147,14 +147,14 @@ function navBar(currentPath) {
           ${links}
         </nav>
 
-        <a href="/signup" class="btn btn-primary btn-sm">Get started</a>
+        <a href="/#get-started" class="btn btn-primary btn-sm">Get started</a>
 
         <!-- Mobile menu. Built on <details> so it needs no JavaScript. -->
         <details class="nav-toggle">
           <summary class="btn btn-primary btn-sm" aria-label="Menu">Menu</summary>
           <div class="nav-panel">
             ${mobileLinks}
-            <a href="/signup">Get started</a>
+            <a href="/#get-started">Get started</a>
           </div>
         </details>
       </div>
@@ -184,7 +184,7 @@ function footer() {
           <div style="display:flex;flex-direction:column;gap:10px;">
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
-            <a href="/signup">Sign up</a>
+            <a href="/#get-started">Get started</a>
             <a href="/account">Schedule online</a>
           </div>
         </div>
@@ -200,7 +200,7 @@ function footer() {
           </div>
         </div>
 
-        <a href="/signup" class="btn btn-primary btn-lg">
+        <a href="/#get-started" class="btn btn-primary btn-lg">
           Get started ${icon('arrow-right', '22')}
         </a>
 

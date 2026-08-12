@@ -315,6 +315,7 @@ function rescheduledMessage(order) {
 }
 
 module.exports = {
+  SERVICE_TZ,
   bookPickup,
   whenLine,
   confirmationMessage,
