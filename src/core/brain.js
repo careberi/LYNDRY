@@ -179,10 +179,13 @@ const TOOLS = [
     // wrote and save them together.
     name: 'save_details',
     description:
-      "Save a new customer's name and address from what they just told you. Use " +
-      'this when we do not have them yet. Send whatever they gave you, even if ' +
-      'it is not all of it. Ask for the missing piece afterwards. Never invent ' +
-      'a city, a state or a postcode that they did not say.',
+      'Save what a customer tells you about themselves: name, address, wash ' +
+      'preferences, where the driver finds the bag. THE tool whenever they give ' +
+      'you more than one thing in a message, for new and existing customers ' +
+      'alike. "cold, standard detergent, no softener, back door" is ONE call ' +
+      'with four fields, never four calls. update_profile is only for changing ' +
+      'a single thing. Send whatever they gave, ask afterwards for anything ' +
+      'missing, and never invent a value they did not say.',
     input_schema: {
       type: 'object',
       properties: {
