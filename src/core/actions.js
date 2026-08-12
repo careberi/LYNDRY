@@ -63,7 +63,7 @@ async function createOrder(customer, input) {
 
   // The wording lives in src/core/booking.js so that booking by text and
   // booking on the website produce the identical confirmation.
-  return booking.confirmationMessage(customer, result.order);
+  return booking.confirmationMessage(customer, result.order, { rolled: result.rolled });
 }
 
 // --- get_order_status -------------------------------------------------------
@@ -105,7 +105,7 @@ async function rescheduleOrder(customer, input) {
   const problem = dateProblem(input.new_date);
   if (problem) return problem;
 
-  const timeIssue = timeProblem(input.new_time, input.new_date);
+  const timeIssue = timeProblem(input.new_time);
   if (timeIssue) return timeIssue;
 
   const order = await orders.findAwaitingCollection(customer.id);
@@ -130,7 +130,14 @@ async function rescheduleOrder(customer, input) {
     return `You're already down for ${booking.whenLine(order)}.`;
   }
 
-  const updated = await orders.reschedule(order, input.new_date, newTime);
+  // Whatever time they end up with, they get a real window back, chosen the
+  // same way a fresh booking chooses one.
+  const window = booking.windowFor(
+    input.new_date,
+    newTime === undefined ? normaliseTime(order.pickup_time) : newTime
+  );
+
+  const updated = await orders.reschedule(order, input.new_date, newTime, window);
   return booking.rescheduledMessage(updated);
 }
 

@@ -11,7 +11,8 @@
     "sms": "node --use-system-ca scripts/simulate-sms.js",
     "driver": "node --use-system-ca scripts/simulate-driver.js",
     "ops:user": "node --use-system-ca scripts/ops-user.js",
-    "test:signature": "node scripts/test-signature.js"
+    "test:signature": "node scripts/test-signature.js",
+    "prompt": "node scripts/show-prompt.js"
   },
   "engines": {
     "node": ">=20"

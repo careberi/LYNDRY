@@ -126,7 +126,16 @@ async function findMostRecent(customerId) {
 // Changing orders
 // ---------------------------------------------------------------------------
 
-async function create({ customerId, pickupDate, pickupTime, pickupMethod, bagCount, notes }) {
+async function create({
+  customerId,
+  pickupDate,
+  pickupTime,
+  pickupWindowStart,
+  pickupWindowEnd,
+  pickupMethod,
+  bagCount,
+  notes,
+}) {
   const { data, error } = await db
     .from('orders')
     .insert({
@@ -138,6 +147,12 @@ async function create({ customerId, pickupDate, pickupTime, pickupMethod, bagCou
       // Null is a real answer here — plenty of people just say "tomorrow" and
       // don't care what time. Only set when they actually named one.
       pickup_time: pickupTime || null,
+
+      // The window we promised. Stored rather than derived, so changing the
+      // configured windows later cannot rewrite what a booked customer was
+      // already told in a text message sitting on their phone.
+      pickup_window_start: pickupWindowStart || null,
+      pickup_window_end: pickupWindowEnd || null,
 
       pickup_method: pickupMethod || null,
       bag_count: bagCount || null,
@@ -184,7 +199,7 @@ async function transition(order, to) {
   return data;
 }
 
-async function reschedule(order, newDate, newTime) {
+async function reschedule(order, newDate, newTime, window) {
   if (!isCancellable(order.status)) {
     throw new Error('That order has already been collected, so it cannot be rescheduled.');
   }
@@ -197,6 +212,14 @@ async function reschedule(order, newDate, newTime) {
   //   null      -> they cleared it. Any time now works.
   //   'HH:MM'   -> a new time.
   if (newTime !== undefined) changes.pickup_time = newTime;
+
+  // A move always gets a freshly chosen window, because the day changed and
+  // today's remaining windows are not tomorrow's.
+  if (window) {
+    changes.pickup_date = window.date;
+    changes.pickup_window_start = window.start;
+    changes.pickup_window_end = window.end;
+  }
 
   const { data, error } = await db
     .from('orders')

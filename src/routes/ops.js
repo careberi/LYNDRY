@@ -320,7 +320,7 @@ router.get('/ops/today', async (req, res, next) => {
         // filters, and the window the customer was actually promised, so the
         // driver is working to the same words the customer read.
         pickup_time: o.pickup_time ? booking.normaliseTime(o.pickup_time) : null,
-        pickup_window: booking.arrivalWindow(o.pickup_time),
+        pickup_window: booking.arrivalWindow(o),
 
         pickup_method: o.pickup_method,
         bag_count: o.bag_count,

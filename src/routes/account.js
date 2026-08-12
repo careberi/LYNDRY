@@ -559,7 +559,7 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
     // whichever door they came through.
     await sendAndLog(
       customer.phone,
-      booking.confirmationMessage(customer, result.order),
+      booking.confirmationMessage(customer, result.order, { rolled: result.rolled }),
       customer.id
     );
 
@@ -578,7 +578,7 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
     const problem = booking.dateProblem(newDate);
     if (problem) return back(res, `?error=${encodeURIComponent(problem)}`);
 
-    const timeIssue = booking.timeProblem(newTime, newDate);
+    const timeIssue = booking.timeProblem(newTime);
     if (timeIssue) return back(res, `?error=${encodeURIComponent(timeIssue)}`);
 
     const order = await orders.findAwaitingCollection(customer.id);
@@ -592,7 +592,13 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
       return back(res, '');
     }
 
-    const updated = await orders.reschedule(order, newDate, newTime);
+    // Same window rules as the text thread, chosen in src/core/booking.js.
+    const window = booking.windowFor(
+      newDate,
+      newTime === undefined ? booking.normaliseTime(order.pickup_time) : newTime
+    );
+
+    const updated = await orders.reschedule(order, newDate, newTime, window);
 
     await sendAndLog(customer.phone, booking.rescheduledMessage(updated), customer.id);
 

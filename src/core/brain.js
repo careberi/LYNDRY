@@ -38,7 +38,7 @@ const TOOLS = [
     name: 'create_order',
     description:
       'Book a new laundry pickup. Use this when the customer wants their laundry ' +
-      'collected. Only pickup_date is required — everything else falls back to ' +
+      'collected. Only pickup_date is required. Everything else falls back to ' +
       'their saved preferences, so do not ask for it.',
     input_schema: {
       type: 'object',
@@ -130,7 +130,7 @@ const TOOLS = [
     // will open THEIR locker, and ignore the number they said.
     name: 'open_locker',
     description:
-      'Unlock the customer\'s own locker. Takes no arguments — the backend works ' +
+      'Unlock the customer\'s own locker. Takes no arguments, because the backend works ' +
       'out which one from their open order and refuses if they have none. If the ' +
       'customer names a specific locker number, ignore the number and call this.',
     input_schema: { type: 'object', properties: {}, required: [] },
@@ -181,7 +181,7 @@ const TOOLS = [
     description:
       "Save a new customer's name and address from what they just told you. Use " +
       'this when we do not have them yet. Send whatever they gave you, even if ' +
-      'it is not all of it — ask for the missing piece afterwards. Never invent ' +
+      'it is not all of it. Ask for the missing piece afterwards. Never invent ' +
       'a city, a state or a postcode that they did not say.',
     input_schema: {
       type: 'object',
@@ -228,16 +228,25 @@ const TOOLS = [
 // The system prompt
 // ---------------------------------------------------------------------------
 
-function systemPrompt(today) {
+function systemPrompt(today, now) {
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
 
-Today is ${today}. Work out any date the customer mentions from that, and always give dates as YYYY-MM-DD.
+Right now it is ${now.time} on ${today} in New Jersey. Work out any date the customer mentions from that, and always give dates as YYYY-MM-DD.
+You know what time it is, so never ask the customer. "Is 3pm still ahead of us?" is never a question you may ask; you can see the clock above.
 
 WHAT LYNDRY DOES
 Wash, dry and fold only. No dry cleaning, pressing or alterations.
 Charged by weight at ${site.pricePerLb} per pound, weighed after collection, so you can never state an exact price before a bag has been weighed. A typical bag is ${site.typicalBagWeight}, around ${site.estimateRange}. Maximum ${site.maxOrder} per pickup.
-Back within ${site.turnaround}. Pickup happens whenever the customer needs: no fixed route days, and no menu of time slots to pick from. If they name a time, take it. If they don't, don't ask, because plenty of people genuinely don't mind.
-Cancelling is free until the driver collects, and impossible after.
+Back within ${site.turnaround}.
+
+PICKUP WINDOWS
+The van runs in fixed windows: ${booking.listWindows()}. There are no fixed route days, so any day works, but within a day it is these windows and nothing else.
+A customer names a time and gets the window that contains it. They do not choose a window from a list and you never offer them one. "3pm" and "3:45" are both the same answer: the window that covers the middle of the afternoon.
+NEVER ARGUE ABOUT TIME. Do not offer alternatives, do not ask them to pick something else, do not tell them a time has passed, and do not ask them to confirm which day they meant. Whatever they say, the booking code works out the right window, rolling to the next one or to tomorrow on its own. Your job is to book it and say which window they got.
+If a time has gone by, or falls in a gap, or is after the last window, that is not a problem and not worth mentioning. They just get the next one, and the confirmation tells them which.
+
+CANCELLING
+Free until the driver collects, and impossible after.
 
 HOW PEOPLE WILL TEXT YOU
 Like they are texting a friend who happens to do their laundry. "hey can you grab my laundry tomorrow at 6", "same as last time?", "actually make it friday", "you got my stuff?". Sloppy punctuation, no capitals, half a sentence. That is normal and you should handle all of it without comment.
@@ -270,8 +279,11 @@ Read these as the house voice:
   Them: hello
   You:  Hey there! How can we help?
 
-  Them: hey can you pick up my laundry tomorrow at 6?
-  You:  Of course! We'll be there tomorrow between 5:30 and 7. Just leave it outside your door and we'll text you as soon as we've got it.
+  Them: hey can you pick up my laundry tomorrow at 3?
+  You:  Of course! We'll be there tomorrow between 3 and 6pm. Just leave it outside your door and we'll text you as soon as we've got it.
+
+  Them: today at 3pm
+  You:  Of course! We'll be there between 3 and 6pm today. Just leave it outside your door and we'll text you as soon as we've got it.
 
   Them: you get my stuff today
   You:  We did, picked it up this morning and it's in the wash now. You'll have it back tomorrow.
@@ -353,7 +365,8 @@ function customerContext(customer, order, recentMessages) {
 async function decide({ customer, order, recentMessages, message }) {
   // New Jersey's date, not the server's. After 8pm ET the two disagree, and
   // telling Claude it is already tomorrow makes "pickup today" impossible.
-  const today = booking.today();
+  const now = booking.nowInService();
+  const today = now.date;
 
   const response = await client.messages.create({
     model: MODEL,
@@ -363,7 +376,7 @@ async function decide({ customer, order, recentMessages, message }) {
     // date arithmetic, and a customer is waiting on a reply.
     output_config: { effort: 'low' },
 
-    system: `${systemPrompt(today)}\n\n${customerContext(customer, order, recentMessages)}`,
+    system: `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages)}`,
 
     // Exactly one action per message. Without this, Claude could book an order
     // and cancel it in the same breath.
@@ -387,4 +400,7 @@ async function decide({ customer, order, recentMessages, message }) {
   return { type: 'text', text };
 }
 
-module.exports = { decide, TOOLS, MODEL };
+// systemPrompt and customerContext are exported so the exact words the AI is
+// given can be printed and read without starting the server or sending a text.
+// `npm run prompt` does that. Everything the AI is allowed to do is in here.
+module.exports = { decide, TOOLS, MODEL, systemPrompt, customerContext };

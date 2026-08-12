@@ -55,11 +55,18 @@ const site = Object.freeze({
   // shown before that point is an estimate and has to say so — quoting a firm
   // price we then change is the fastest way to lose someone's trust.
   pricePerLb: `$${(config.pricing.perPoundCents / 100).toFixed(2)}`,
-  estimateRange: `$${Math.round(config.pricing.estimateLowCents / 100)}–${Math.round(
+  // "to" rather than an en dash, in both of these.
+  //
+  // They are used on web pages, where a dash would be house style, AND inside
+  // the AI's prompt and its replies, where any dash is banned because one
+  // character outside the basic GSM alphabet triples what a text costs to
+  // send. A prompt containing en dashes also teaches the model to write them,
+  // however firmly the same prompt says not to. One value, no drift.
+  estimateRange: `$${Math.round(config.pricing.estimateLowCents / 100)} to $${Math.round(
     config.pricing.estimateHighCents / 100
   )}`,
   maxOrder: `${config.pricing.maxOrderLb} lb`,
-  typicalBagWeight: '15–18 lb',
+  typicalBagWeight: '15 to 18 lb',
 
   turnaround: '24 hours',
 

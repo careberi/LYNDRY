@@ -587,7 +587,7 @@ const may = (permission) => roles.requirePermission(permission, refuse);
 // ---------------------------------------------------------------------------
 
 const ORDER_FIELDS =
-  'id, order_number, status, pickup_date, pickup_time, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
+  'id, order_number, status, pickup_date, pickup_time, pickup_window_start, pickup_window_end, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
   'delivery_photo_url, notes, created_at, customers(id, name, phone, address_line1, address_line2, city, postal_code)';
 
 router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
@@ -632,8 +632,8 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
         // The window under the day, because "Wednesday" is not enough to plan a
         // round with once customers start naming times.
         `${shortDate(o.pickup_date)}${
-          o.pickup_time
-            ? `<div style="font-size:13px;color:var(--ink-500);">${escapeHtml(booking.arrivalWindow(o.pickup_time))}</div>`
+          o.pickup_window_start
+            ? `<div style="font-size:13px;color:var(--ink-500);">${escapeHtml(booking.arrivalWindow(o))}</div>`
             : ''
         }`,
         statusBadge(o.status),
@@ -756,9 +756,13 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
           ${detail('Pickup', shortDate(order.pickup_date))}
           ${detail(
             'Window',
-            order.pickup_time
-              ? escapeHtml(booking.arrivalWindow(order.pickup_time))
-              : 'no time asked for'
+            order.pickup_window_start
+              ? escapeHtml(booking.arrivalWindow(order))
+              : 'no window set'
+          )}
+          ${detail(
+            'They asked for',
+            order.pickup_time ? escapeHtml(booking.readableTime(order.pickup_time)) : 'no time'
           )}
           ${detail('Method', escapeHtml((order.pickup_method || '').replace(/_/g, ' ').toLowerCase() || '—'))}
           ${detail('Bags', order.bag_count || '—')}

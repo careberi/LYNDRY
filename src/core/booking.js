@@ -98,18 +98,30 @@ function dateProblem(iso) {
 }
 
 // ---------------------------------------------------------------------------
-// What time, and the window we promise back
+// The pickup windows
 // ---------------------------------------------------------------------------
 //
-// A customer who says "tomorrow at 6" is told we'll be there between 5:30 and
-// 7. We never quote the exact minute they asked for, because we would miss it
-// and a missed promise is worse than a wider one.
+// A van cannot be at forty doors at arbitrary minutes, so we do not pretend it
+// can. A customer names a time; we put them in the window that contains it and
+// tell them the window. We never quote a minute, and we never negotiate.
 //
-// These two numbers are the whole rule. Widen or tighten the window by editing
-// them; nothing else needs to change and nothing needs backfilling, because the
-// order stores the time asked for rather than the window quoted.
-const WINDOW_BEFORE_MIN = 30;
-const WINDOW_AFTER_MIN = 60;
+// THESE ARE PLACEHOLDER VALUES taken from Neil's example and not yet confirmed
+// against a real round. They are the only place windows are defined: change
+// them here and every quote, confirmation and ops screen follows. Existing
+// orders are unaffected, because the window they were promised is stored on
+// the order itself rather than recomputed.
+//
+// A gap between windows is deliberate and fine. A time that falls in one gets
+// the next window that starts after it.
+const PICKUP_WINDOWS = Object.freeze([
+  Object.freeze({ start: '09:00', end: '12:00' }),
+  Object.freeze({ start: '13:00', end: '14:00' }),
+  Object.freeze({ start: '15:00', end: '18:00' }),
+]);
+
+// How close to a window's start we will still accept a booking for it. Below
+// this, the van is already loaded and moving, so it goes to the next one.
+const WINDOW_CUTOFF_MIN = 60;
 
 // Accepts what a form sends ("18:00") and what Postgres returns ("18:00:00"),
 // and returns a clean "HH:MM" — or null if it is not a time at all.
@@ -158,48 +170,111 @@ function readableTime(value) {
   return `${bareClock(minutes)}${clockParts(minutes).meridiem}`;
 }
 
-// The sentence fragment a customer actually reads: "between 5:30 and 7pm".
+// "between 3 and 6pm" from a stored window, or from anything window-shaped.
 //
-// Returns null when no time was asked for, which is a normal thing to happen
-// and means the confirmation simply doesn't mention a time.
-function arrivalWindow(value) {
-  const clean = normaliseTime(value);
-  if (!clean) return null;
+// Returns null when there is no window, which is normal: an order booked with
+// no time at all simply doesn't mention one.
+function describeWindow(startValue, endValue) {
+  const from = normaliseTime(startValue);
+  const to = normaliseTime(endValue);
+  if (!from || !to) return null;
+
+  const startMin = toMinutes(from);
+  const endMin = toMinutes(to);
+  const a = clockParts(startMin);
+  const b = clockParts(endMin);
+
+  // The suffix goes on the end only, unless the window straddles noon and the
+  // two halves differ: without that, 11 to 1 reads as "between 11 and 1pm".
+  const startLabel =
+    a.meridiem === b.meridiem ? bareClock(startMin) : `${bareClock(startMin)}${a.meridiem}`;
+
+  return `between ${startLabel} and ${bareClock(endMin)}${b.meridiem}`;
+}
+
+// The window an order was promised. Reads what is stored, never recomputes.
+function arrivalWindow(order) {
+  if (!order) return null;
+  return describeWindow(order.pickup_window_start, order.pickup_window_end);
+}
+
+// ---------------------------------------------------------------------------
+// Choosing a window
+// ---------------------------------------------------------------------------
+//
+// Given a day, a time somebody asked for, and what time it is now, work out
+// which window they get. Returns { date, start, end } or null when there is
+// nothing left today and the caller should look at tomorrow.
+//
+// The rules, in order:
+//   - a window that has already started, or starts within the hour, is gone
+//   - otherwise the window containing the requested time
+//   - otherwise the next window that starts after it
+//   - no time asked for at all means the first window still available
+function chooseWindow(date, requestedTime) {
+  const now = nowInService();
+  const isToday = date === now.date;
+  const nowMin = toMinutes(now.time);
+
+  const usable = PICKUP_WINDOWS.filter((w) =>
+    isToday ? toMinutes(w.start) - WINDOW_CUTOFF_MIN > nowMin : true
+  );
+
+  if (!usable.length) return null;
+
+  const clean = normaliseTime(requestedTime);
+  if (!clean) return { date, ...usable[0] };
 
   const asked = toMinutes(clean);
 
-  // Clamped to the same calendar day. Without this, "11pm" produces a window
-  // that runs into tomorrow and reads as nonsense.
-  const start = Math.max(0, asked - WINDOW_BEFORE_MIN);
-  const end = Math.min(23 * 60 + 59, asked + WINDOW_AFTER_MIN);
+  const containing = usable.find(
+    (w) => asked >= toMinutes(w.start) && asked <= toMinutes(w.end)
+  );
+  if (containing) return { date, ...containing };
 
-  const from = clockParts(start);
-  const to = clockParts(end);
+  const next = usable.find((w) => toMinutes(w.start) >= asked);
+  if (next) return { date, ...next };
 
-  // Normally the suffix goes on the end only — "between 5:30 and 7pm". When the
-  // window straddles noon or midnight the two halves differ, and dropping the
-  // first suffix would turn 11:30am into "between 11 and 12:30pm".
-  const fromLabel = from.meridiem === to.meridiem
-    ? bareClock(start)
-    : `${bareClock(start)}${from.meridiem}`;
+  // Asked for a time later than every window, "9pm" say. The closest we can
+  // actually do is the last window of the day, which beats throwing them to
+  // nine the next morning for being three hours optimistic.
+  return { date, ...usable[usable.length - 1] };
+}
 
-  return `between ${fromLabel} and ${bareClock(end)}${to.meridiem}`;
+// The day after an ISO date, without going near a Date object's timezone.
+function nextDay(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d + 1));
+  return at.toISOString().slice(0, 10);
+}
+
+// The window a customer actually gets, rolling to tomorrow when today is done.
+// Always returns something, so nothing ever has to ask the customer to pick.
+function windowFor(date, requestedTime) {
+  return chooseWindow(date, requestedTime) || {
+    ...chooseWindow(nextDay(date), requestedTime),
+    rolledToNextDay: true,
+  };
+}
+
+// Every window, as a sentence, for the website and the AI's context.
+function listWindows() {
+  return PICKUP_WINDOWS.map((w) => describeWindow(w.start, w.end).replace('between ', '')).join(', ');
 }
 
 // Returns a human sentence if the time is unusable, or null if it is fine.
-function timeProblem(value, pickupDate) {
+//
+// A time that has already gone by is NOT a problem any more. It used to ask
+// "did you mean tomorrow, or later today?", which reads as arguing with the
+// customer about what time it is, and in one real thread the AI asked the
+// customer whether 3pm had happened yet. With fixed windows there is nothing
+// to argue about: a time that has passed simply lands in the next window, and
+// we tell them which one that is.
+function timeProblem(value) {
   if (value === undefined || value === null || value === '') return null;
 
   const clean = normaliseTime(value);
   if (!clean) return "I didn't catch what time you meant. Roughly when suits you?";
-
-  // A time that has already gone by today. They almost certainly mean tomorrow,
-  // but guessing which day someone meant is exactly the kind of assumption that
-  // gets a driver sent out on the wrong evening — so ask.
-  const now = nowInService();
-  if (pickupDate === now.date && toMinutes(clean) <= toMinutes(now.time)) {
-    return `${readableTime(clean)} today has already gone by. Did you mean tomorrow, or later today?`;
-  }
 
   return null;
 }
@@ -223,9 +298,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   const detail = dateProblem(pickupDate);
   if (detail) return { ok: false, reason: 'bad_date', detail };
 
-  // Checked against the date above, so "today at 6" can tell whether 6 has
-  // already been and gone.
-  const timeDetail = timeProblem(pickupTime, pickupDate);
+  const timeDetail = timeProblem(pickupTime);
   if (timeDetail) return { ok: false, reason: 'bad_time', detail: timeDetail };
 
   // One order awaiting collection at a time. The database enforces this with a
@@ -248,10 +321,16 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
 
   const prefs = customer.preferences || {};
 
+  // The window is decided here and stored, never recomputed. If today is done
+  // it rolls to tomorrow rather than asking the customer to choose again.
+  const window = windowFor(pickupDate, pickupTime);
+
   const order = await orders.create({
     customerId: customer.id,
-    pickupDate,
+    pickupDate: window.date,
     pickupTime: normaliseTime(pickupTime),
+    pickupWindowStart: window.start,
+    pickupWindowEnd: window.end,
     // Their saved default, unless they asked for something else this time.
     pickupMethod: PICKUP_METHODS.includes(pickupMethod)
       ? pickupMethod
@@ -260,7 +339,11 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     notes,
   });
 
-  return { ok: true, order };
+  // Whether we had to move them off the day they asked for. Not a failure and
+  // not worth arguing about, but worth one clause in the confirmation: a
+  // customer who says "today" and silently gets tomorrow writes back to ask
+  // why, which is a conversation nobody needed to have.
+  return { ok: true, order, rolled: window.date !== pickupDate };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +360,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
 // asked for.
 function whenLine(order) {
   const day = readableDate(order.pickup_date);
-  const window = arrivalWindow(order.pickup_time);
+  const window = arrivalWindow(order);
   return window ? `${day} ${window}` : day;
 }
 
@@ -286,7 +369,7 @@ function whenLine(order) {
 // Naming the card here is load-bearing: this message is the authorisation for
 // the charge that follows, so if an order is ever disputed the message log
 // shows the customer being told which card, before any work was done.
-function confirmationMessage(customer, order) {
+function confirmationMessage(customer, order, { rolled = false } = {}) {
   const bags = order.bag_count
     ? `${order.bag_count} bag${order.bag_count > 1 ? 's' : ''}`
     : 'it';
@@ -311,8 +394,14 @@ function confirmationMessage(customer, order) {
 
   // handover carries the "we'll text you" promise for a doorstep pickup and
   // the "we'll knock" one for a handover, so it is not repeated here.
+  // Stated, not apologised for. "Today's rounds are done" is a fact about the
+  // van, not a negotiation, and it stops them wondering why the day moved.
+  const opener = rolled
+    ? `Today's rounds are finished, so the earliest we can get to you is`
+    : `Of course! We'll be there`;
+
   return (
-    `Of course! We'll be there ${whenLine(order)}. ${handover} ` +
+    `${opener} ${whenLine(order)}. ${handover} ` +
     `${money} Back with you within ${site.turnaround}.${reference}`
   );
 }
@@ -323,6 +412,10 @@ function rescheduledMessage(order) {
 
 module.exports = {
   SERVICE_TZ,
+  PICKUP_WINDOWS,
+  windowFor,
+  describeWindow,
+  listWindows,
   bookPickup,
   whenLine,
   confirmationMessage,
