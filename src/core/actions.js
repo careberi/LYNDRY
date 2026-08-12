@@ -46,6 +46,11 @@ async function createOrder(customer, input) {
     switch (result.reason) {
       case 'no_address':
         return `I don't have an address on file for you. Send your street address and I'll get it saved.`;
+      case 'out_of_area':
+        return (
+          `We don't reach ${customer.city || 'your area'} just yet, sorry. We cover ` +
+          `${site.serviceArea} right now, and we'll text you the moment that changes.`
+        );
       case 'bad_date':
       case 'bad_time':
         return result.detail;
@@ -286,6 +291,11 @@ async function saveDetails(customer, input) {
 
   if (error) throw error;
 
+  // People are called by their first name. "Thanks Neil Perry" is what a
+  // form-letter says; the full name stays in the database for the driver and
+  // the books.
+  const first = String(updated.name || '').trim().split(/\s+/)[0];
+
   // What is still missing decides what we say next. hasAddress() is the same
   // check bookPickup uses, so this can never claim someone is set up and then
   // refuse their first booking for want of an address.
@@ -294,18 +304,36 @@ async function saveDetails(customer, input) {
   }
 
   if (!hasAddress(updated)) {
-    const missing = !updated.address_line1
-      ? 'the street address'
-      : !updated.city
-        ? 'the town'
-        : 'the zip code';
+    if (!updated.address_line1) return `Thanks ${first}! And what's the street address?`;
+    if (!updated.city) return `Thanks ${first}! Which town is that in?`;
+    return `Thanks ${first}! And the zip code?`;
+  }
 
-    return `Thanks ${updated.name}. I've still got no ${missing} — what is it?`;
+  // The address is complete. If the van doesn't go there, say so NOW — not at
+  // their first booking attempt, which would waste the whole conversation.
+  if (!booking.inServiceArea(updated)) {
+    return (
+      `Thanks ${first}, all saved. One thing though: we don't reach ` +
+      `${updated.city || 'your area'} just yet. We cover ${site.serviceArea} right now, ` +
+      `and we'll text you the moment that changes.`
+    );
+  }
+
+  // They already said when they want the pickup — it is earlier in the thread
+  // and the AI carries it into this call. Book it now rather than asking
+  // "when would you like your first pickup?" at somebody who told us "today"
+  // four messages ago. That exact reply went to a real tester.
+  if (input.pickup_date) {
+    return createOrder(updated, {
+      pickup_date: input.pickup_date,
+      pickup_time: input.pickup_time,
+    });
   }
 
   return (
-    `You're all set, ${updated.name}. ${site.pricePerLb} a pound, back within ` +
-    `${site.turnaround}. When would you like your first pickup?`
+    `You're all set, ${first}! ${site.pricePerLb} a pound with a ` +
+    `${billing.money(config.pricing.minimumCents)} minimum, back within ${site.turnaround}. ` +
+    `When would you like your first pickup?`
   );
 }
 

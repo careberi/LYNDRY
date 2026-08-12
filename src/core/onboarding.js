@@ -54,7 +54,7 @@ function welcomeBackMessage(customer) {
 //   { ok: false, reason: 'opted_out' }   they texted STOP. Do not message them.
 // ---------------------------------------------------------------------------
 
-async function startConversation({ phone, consentSource, consentIp = null }) {
+async function startConversation({ phone, consentSource, consentIp = null, sendWelcome = true }) {
   if (!phone) return { ok: false, reason: 'bad_phone' };
 
   if (!CONSENT_SOURCES.includes(consentSource)) {
@@ -84,7 +84,7 @@ async function startConversation({ phone, consentSource, consentIp = null }) {
     // Their consent record is NOT overwritten. The first time they agreed is
     // the one that matters legally, and rewriting the timestamp every time
     // somebody retypes their number would destroy the evidence.
-    await sendAndLog(phone, welcomeBackMessage(existing), existing.id);
+    if (sendWelcome) await sendAndLog(phone, welcomeBackMessage(existing), existing.id);
     return { ok: true, customer: existing, created: false };
   }
 
@@ -108,7 +108,14 @@ async function startConversation({ phone, consentSource, consentIp = null }) {
 
   console.log(`New conversation with ${phone} (consent: ${consentSource})`);
 
-  await sendAndLog(phone, welcomeMessage(), customer.id);
+  // Only the web hero sends the canned welcome, because there the person
+  // typed a number into a box and there is nothing to reply TO.
+  //
+  // Somebody who texted us first said something, and a canned welcome ignores
+  // it. "Can you grab my laundry tomorrow?" answered with a script that asks
+  // no question about laundry reads as a robot. Their message goes to the AI
+  // instead, which knows they are brand new and answers what they said.
+  if (sendWelcome) await sendAndLog(phone, welcomeMessage(), customer.id);
 
   return { ok: true, customer, created: true };
 }

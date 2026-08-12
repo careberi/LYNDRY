@@ -148,8 +148,10 @@ async function handleInbound(inbound) {
   // record of it. That is recorded as INBOUND_TEXT so it can be told apart
   // from a ticked box later, because the two are different kinds of evidence.
   //
-  // startConversation sends the opening message. All it asks for is a name and
-  // an address; the AI takes over from their reply.
+  // No canned welcome. They said something, so the AI answers THAT — it can
+  // see they are brand new and introduces LYNDRY as part of the reply. A
+  // scripted "what's your name and where should we collect from?" in response
+  // to "hello" was the first thing a real tester noticed.
   if (!customer) {
     const started = await onboarding.startConversation({
       phone: from,
@@ -157,9 +159,15 @@ async function handleInbound(inbound) {
       // No IP to record — this did not come through a browser. The evidence is
       // their own inbound message, not a form submission.
       consentIp: null,
+      sendWelcome: false,
     });
 
-    if (!started.ok) console.log(`Could not start a conversation with ${from}: ${started.reason}`);
+    if (!started.ok) {
+      console.log(`Could not start a conversation with ${from}: ${started.reason}`);
+      return;
+    }
+
+    await answerWithBrain(started.customer, text, from);
     return;
   }
 

@@ -77,6 +77,26 @@ function hasAddress(customer) {
   return Boolean(customer.address_line1 && customer.city && customer.postal_code);
 }
 
+// Is this address somewhere the van actually goes?
+//
+// Deliberately coarse: New Jersey, in the 07xxx zip range, which is the
+// northern and central part of the state. The website promises "Northern New
+// Jersey, down to Jersey City" — the exact boundary inside 07 is a business
+// decision Neil has not drawn yet, so this errs towards accepting and the
+// fine line can be tightened to a zip list later in one place.
+//
+// What this is NOT: proof the address exists. Nothing here checks that
+// 16-50 Chandler Dr is a real door — that needs an address validation service
+// and is a separate, deliberate decision. This only stops us booking a pickup
+// in Florida.
+function inServiceArea(customer) {
+  const state = String(customer.state || '').trim().toUpperCase();
+  if (state && state !== 'NJ') return false;
+
+  const zip = String(customer.postal_code || '').trim();
+  return /^07\d{3}/.test(zip);
+}
+
 // Returns a human sentence if the date is unusable, or null if it is fine.
 function dateProblem(iso) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) {
@@ -296,6 +316,10 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes } = {}) {
   if (!hasAddress(customer)) return { ok: false, reason: 'no_address' };
 
+  // Checked at booking rather than only at signup, because an address can be
+  // edited later and the van's range is the van's range.
+  if (!inServiceArea(customer)) return { ok: false, reason: 'out_of_area' };
+
   const detail = dateProblem(pickupDate);
   if (detail) return { ok: false, reason: 'bad_date', detail };
 
@@ -440,6 +464,7 @@ module.exports = {
   dateProblem,
   timeProblem,
   hasAddress,
+  inServiceArea,
   readableDate,
   readableTime,
   arrivalWindow,
