@@ -348,9 +348,33 @@ function customerContext(customer, order, recentMessages) {
   }
 
   if (recentMessages && recentMessages.length) {
-    lines.push('', 'RECENT MESSAGES (oldest first)');
+    lines.push(
+      '',
+      'THE CONVERSATION SO FAR (oldest first). Read this before replying: their',
+      'message is the next line of THIS conversation, not the start of a new one.',
+      'Do not greet them again mid-thread, do not re-ask anything already answered',
+      'below, and if they are replying to a question we asked, answer THAT.'
+    );
     for (const m of recentMessages) {
       lines.push(`${m.direction === 'INBOUND' ? 'Them' : 'Us'}: ${m.body}`);
+    }
+
+    // How stale the thread is changes what "context" means. "yes" two minutes
+    // after we asked a question is an answer to it; "yes" nine days later is
+    // somebody starting again, and treating it as a reply to the old question
+    // books things nobody asked for.
+    const last = recentMessages[recentMessages.length - 1];
+    if (last && last.created_at) {
+      const minutes = Math.round((Date.now() - new Date(last.created_at).getTime()) / 60000);
+      if (minutes >= 240) {
+        const ago =
+          minutes >= 2880 ? `${Math.round(minutes / 1440)} days` : `${Math.round(minutes / 60)} hours`;
+        lines.push(
+          '',
+          `NOTE: the last message above was ${ago} ago. This is probably a fresh start,`,
+          'not a continuation. Do not treat their message as a reply to that old thread.'
+        );
+      }
     }
   }
 

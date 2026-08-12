@@ -219,13 +219,18 @@ async function answerWithBrain(customer, text, from) {
 
 // The last few messages either way, oldest first. Enough for a follow-up like
 // "make it Friday" to make sense, without sending the whole history.
+//
+// Ten rather than six because a first booking is a longer exchange now: hello,
+// onboarding, address, a window, the card link, "done". With six, the start of
+// that conversation had already scrolled out of view by the time the customer
+// said "done", and the AI lost the thread it was in the middle of.
 async function recentConversation(customerId) {
   const { data, error } = await db
     .from('messages')
-    .select('direction, body')
+    .select('direction, body, created_at')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
-    .limit(6);
+    .limit(10);
 
   if (error) {
     console.error('Could not read recent messages:', error.message);
