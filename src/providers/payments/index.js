@@ -48,6 +48,11 @@ const disabled = {
     needsCustomerAction: false,
     paymentIntentId: null,
   }),
+  refund: async () => ({
+    ok: false,
+    refundId: null,
+    reason: 'Payments are not configured.',
+  }),
   verifyWebhook: () => {
     throw new Error('Payments are not configured: STRIPE_WEBHOOK_SECRET is missing.');
   },

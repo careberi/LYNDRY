@@ -4,6 +4,8 @@ const express = require('express');
 
 const db = require('../db');
 const billing = require('../core/billing');
+const booking = require('../core/booking');
+const orders = require('../core/orders');
 const payments = require('../providers/payments');
 const { sendAndLog } = require('../core/notify');
 const { renderPage } = require('../web/layout');
@@ -232,19 +234,50 @@ async function handleEvent(event) {
       const settled = await billing.retryOutstanding(customer);
 
       if (settled.length > 0) {
-        const total = settled.reduce((sum, s) => sum + s.order.price_cents, 0);
         await sendAndLog(
           customer.phone,
-          `Card saved: ${card}. We've settled the ${billing.money(total)} outstanding. Thanks.`,
+          `Card saved: ${card}. We've settled the ${billing.money(
+            settled.reduce((sum, s) => sum + s.order.price_cents, 0)
+          )} outstanding. Thanks.`,
           customer.id
         );
-      } else {
-        await sendAndLog(
-          customer.phone,
-          `Card saved: ${card}. Text us whenever you want a pickup.`,
-          customer.id
-        );
+        return;
       }
+
+      // Finish the booking they were in the middle of.
+      //
+      // Somebody adding a card is almost always partway through arranging a
+      // pickup. Before this, they got "card saved" and nothing else, and the
+      // pickup they had just asked for was left unconfirmed with no sign that
+      // anything was missing. That happened to a real customer.
+      const pending = await orders.findAwaitingCollection(customer.id);
+
+      if (pending && !pending.deposit_paid_at) {
+        const deposit = await billing.chargeDeposit(pending, customer);
+
+        if (deposit.ok) {
+          await sendAndLog(
+            customer.phone,
+            `Card saved: ${card}. ` +
+              booking.confirmationMessage(customer, deposit.order || pending),
+            customer.id
+          );
+          return;
+        }
+
+        await sendAndLog(
+          customer.phone,
+          deposit.message || `Card saved: ${card}, but the minimum didn't go through. Try another card.`,
+          customer.id
+        );
+        return;
+      }
+
+      await sendAndLog(
+        customer.phone,
+        `Card saved: ${card}. Text us whenever you want a pickup.`,
+        customer.id
+      );
       return;
     }
 

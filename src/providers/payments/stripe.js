@@ -185,11 +185,39 @@ function verifyWebhook({ rawBody, signature }) {
   return stripe.webhooks.constructEvent(rawBody, signature, config.stripe.webhookSecret);
 }
 
+// Give money back.
+//
+// Used when a pickup is cancelled before the driver has collected, which the
+// website promises is free. Note that the processing fee on the original
+// charge is NOT returned by Stripe, so every refund costs us a little over a
+// dollar. That is a known cost of keeping the promise, not a bug.
+//
+// Returns the same plain shape as chargeOffSession rather than throwing, so a
+// failed refund never blocks the cancellation the customer asked for.
+async function refund({ paymentIntentId, amountCents, idempotencyKey }) {
+  try {
+    const created = await stripe.refunds.create(
+      {
+        payment_intent: paymentIntentId,
+        // Omitted means the whole thing, which is what we want when the
+        // amount is not given.
+        ...(amountCents ? { amount: amountCents } : {}),
+      },
+      { idempotencyKey }
+    );
+
+    return { ok: true, refundId: created.id, status: created.status };
+  } catch (err) {
+    return { ok: false, refundId: null, reason: err.message || 'The refund failed.' };
+  }
+}
+
 module.exports = {
   name: 'stripe',
   createCustomer,
   createSetupLink,
   getSavedPaymentMethod,
   chargeOffSession,
+  refund,
   verifyWebhook,
 };

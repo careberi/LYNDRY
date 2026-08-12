@@ -322,6 +322,12 @@ router.get('/ops/today', async (req, res, next) => {
         pickup_time: o.pickup_time ? booking.normaliseTime(o.pickup_time) : null,
         pickup_window: booking.arrivalWindow(o),
 
+        // A booking is only confirmed once the minimum has actually cleared.
+        // Orders that predate the minimum have no deposit and count as
+        // confirmed, because they were taken under the old rules.
+        confirmed: Boolean(o.deposit_paid_at) || o.deposit_cents == null,
+        deposit_paid: Boolean(o.deposit_paid_at),
+
         pickup_method: o.pickup_method,
         bag_count: o.bag_count,
         weight_lb: o.weight_lb,
@@ -342,7 +348,15 @@ router.get('/ops/today', async (req, res, next) => {
       date: today,
       // Anything due today or overdue — an order left from yesterday should
       // not silently drop off the run sheet.
-      pickups: all.filter((o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= today),
+      // Only bookings that were actually paid for.
+      //
+      // An order with no minimum taken is not confirmed: the customer was sent
+      // a card link and never finished. Nobody should drive to that door.
+      // They are listed separately so they are chased rather than lost.
+      pickups: all.filter(
+        (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= today && o.confirmed
+      ),
+      unconfirmed: all.filter((o) => orders.AWAITING_COLLECTION.includes(o.status) && !o.confirmed),
       upcoming_pickups: all.filter((o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date > today),
       awaiting_weight: all.filter((o) => o.status === 'IN_PROCESS' && !o.weight_lb),
       washing: all.filter((o) => o.status === 'IN_PROCESS' && o.weight_lb),

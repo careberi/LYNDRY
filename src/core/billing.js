@@ -39,9 +39,12 @@ function money(cents) {
 function consentText() {
   return (
     `You're authorising ${site.legalName} (LYNDRY) to save this card and charge it for ` +
-    `each order you confirm by text. Wash and fold is ${site.pricePerLb} a pound, so the ` +
-    `amount is worked out after we weigh your bag. We text you the weight and the total ` +
-    `every time. No subscription and no recurring charge. Reply STOP any time.`
+    `each pickup you book. We take a ${money(config.pricing.minimumCents)} minimum when you book. ` +
+    `Wash and fold is ${site.pricePerLb} a pound, so once we weigh your bag we charge the ` +
+    `difference if it comes to more. If it comes to less, the ${money(config.pricing.minimumCents)} ` +
+    `minimum is the price and nothing is refunded. We text you the weight and the total every ` +
+    `time. Cancel before we collect and the minimum comes back. No subscription and no ` +
+    `recurring charge. Reply STOP any time.`
   );
 }
 
@@ -183,6 +186,100 @@ async function recordSavedCard(paymentLink) {
 // Returns { ok, message } — the message is what to text the customer, written
 // here rather than by the AI so the figure in it is always the real one from
 // the database.
+// ---------------------------------------------------------------------------
+// The minimum, taken at booking
+// ---------------------------------------------------------------------------
+//
+// Until this cleared, nothing had been paid for anything. Now a pickup is not
+// confirmed until it has: deposit_paid_at is what keeps an unpaid booking off
+// the driver's run sheet.
+//
+// Returns { ok, order, message } where message is what the customer should be
+// told, or null when there is nothing to say.
+
+async function chargeDeposit(order, customer) {
+  if (order.deposit_paid_at) return { ok: true, order, message: null };
+
+  // Payments switched off entirely, which is how this runs before Stripe keys
+  // are set. The booking still stands; there is simply nothing to collect.
+  if (!payments.isConfigured) {
+    return { ok: true, order, message: null, skipped: 'payments off' };
+  }
+
+  if (!hasPaymentMethod(customer)) {
+    return { ok: false, needsCard: true, order, message: null };
+  }
+
+  const amount = config.pricing.minimumCents;
+
+  const result = await payments.chargeOffSession({
+    stripeCustomerId: customer.stripe_customer_id,
+    paymentMethodId: customer.default_payment_method_id,
+    amountCents: amount,
+    description: `${site.name} order #${order.order_number} minimum`,
+    // The attempt number is in here for the same reason it is on the final
+    // charge: the provider caches the result of a key, including a decline,
+    // so a fixed key would replay "declined" at somebody who has since fixed
+    // their card.
+    idempotencyKey: `deposit-${order.id}-${amount}-${order.deposit_intent_id ? 'retry' : 'first'}`,
+    metadata: { lyndry_order_id: order.id, lyndry_kind: 'deposit' },
+  });
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      declined: true,
+      order,
+      message:
+        `That card was declined, so the pickup isn't booked yet. ` +
+        `Try another one here and it'll go straight through: ${(await createSetupLink(customer)).url}`,
+    };
+  }
+
+  const { data: updated, error } = await db
+    .from('orders')
+    .update({
+      deposit_cents: amount,
+      deposit_paid_at: new Date().toISOString(),
+      deposit_intent_id: result.paymentIntentId || null,
+    })
+    .eq('id', order.id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  return { ok: true, order: updated, message: null };
+}
+
+// Give the minimum back. Cancelling is free until the driver collects, and
+// that promise is already on the website and in the AI's replies.
+async function refundDeposit(order) {
+  if (!order.deposit_paid_at || order.deposit_refunded_at) return { ok: true, refunded: false };
+  if (!payments.isConfigured || !order.deposit_intent_id) return { ok: true, refunded: false };
+
+  const result = await payments.refund({
+    paymentIntentId: order.deposit_intent_id,
+    amountCents: order.deposit_cents,
+    idempotencyKey: `refund-${order.id}`,
+  });
+
+  if (!result.ok) {
+    // Do not block the cancellation on this. The customer asked to cancel and
+    // is entitled to; a refund that failed is our problem to chase, and it is
+    // visible on the order because deposit_refunded_at stays null.
+    console.error(`Could not refund the minimum on order ${order.order_number}: ${result.reason}`);
+    return { ok: false, refunded: false, reason: result.reason };
+  }
+
+  await db
+    .from('orders')
+    .update({ deposit_refunded_at: new Date().toISOString() })
+    .eq('id', order.id);
+
+  return { ok: true, refunded: true, amountCents: order.deposit_cents };
+}
+
 async function chargeOrder(order, customer) {
   if (order.payment_status === 'PAID') {
     return { ok: true, alreadyPaid: true, message: null };
@@ -194,6 +291,37 @@ async function chargeOrder(order, customer) {
 
   if (!order.price_cents) {
     return { ok: false, message: null, reason: 'The order has no price yet.' };
+  }
+
+  // What is actually still owed.
+  //
+  // The minimum was taken at booking, so only the difference is charged now.
+  // A light load whose real total is below the minimum owes nothing further:
+  // the minimum IS the price, and no money comes back.
+  const alreadyPaid = order.deposit_refunded_at ? 0 : order.deposit_cents || 0;
+  const owed = Math.max(0, order.price_cents - alreadyPaid);
+
+  if (owed === 0) {
+    const { data: settled } = await db
+      .from('orders')
+      .update({ payment_status: 'PAID', paid_at: new Date().toISOString() })
+      .eq('id', order.id)
+      .select('*')
+      .maybeSingle();
+
+    // Below the minimum, so the $25 already taken covers it. Say what they
+    // paid, not what the weight would have come to, or it reads like a
+    // mistake.
+    return {
+      ok: true,
+      order: settled || order,
+      coveredByMinimum: true,
+      message:
+        `Your laundry weighed ${order.weight_lb} lb. That's under our ` +
+        `${money(config.pricing.minimumCents)} minimum, so it's ` +
+        `${money(alreadyPaid)} and nothing more to pay. ` +
+        `We'll have it back to you within ${site.turnaround}.`,
+    };
   }
 
   // Payments switched off entirely, which is how the service runs before
@@ -223,7 +351,7 @@ async function chargeOrder(order, customer) {
   const result = await payments.chargeOffSession({
     stripeCustomerId: customer.stripe_customer_id,
     paymentMethodId: customer.default_payment_method_id,
-    amountCents: order.price_cents,
+    amountCents: owed,
     description: `LYNDRY wash & fold — ${order.weight_lb} lb`,
     // Same order, same amount, same attempt number, same key — so two clicks
     // of the weight button produce one charge, not two.
@@ -231,7 +359,7 @@ async function chargeOrder(order, customer) {
     // The attempt number has to be in there. Stripe caches the *result* of a
     // key, including a decline. Without it, a customer who fixed their card
     // would get the old "declined" answer replayed at them forever.
-    idempotencyKey: `order_${order.id}_${order.price_cents}_${order.payment_attempts || 0}`,
+    idempotencyKey: `order_${order.id}_${owed}_${order.payment_attempts || 0}`,
     metadata: { lyndry_order_id: order.id, lyndry_customer_id: customer.id },
   });
 
@@ -315,6 +443,8 @@ async function retryOutstanding(customer) {
 }
 
 module.exports = {
+  chargeDeposit,
+  refundDeposit,
   hasPaymentMethod,
   describeCard,
   consentText,

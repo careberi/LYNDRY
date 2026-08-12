@@ -95,6 +95,18 @@ const config = Object.freeze({
   pricing: Object.freeze({
     perPoundCents: 250,
 
+    // The minimum order, charged when a pickup is booked.
+    //
+    // Exactly 10 lb at the rate above. A genuine MINIMUM, not a deposit: an
+    // 8 lb load costs this and nothing comes back, because a small load still
+    // costs a full pickup and a full delivery. At weigh-in we charge the
+    // difference between this and the real total, and nothing more when the
+    // real total is smaller.
+    //
+    // Change this and the website copy has to change with it, because a
+    // minimum has to be stated before a card is charged, not after.
+    minimumCents: 2500,
+
     // The range quoted to someone asking "roughly what will this cost?".
     // Derived from the rate above and a typical 15–18 lb bag, so if the rate
     // changes these have to change with it or the site quotes a range the

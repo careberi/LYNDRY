@@ -54,12 +54,30 @@ async function createOrder(customer, input) {
           `You've already got a pickup booked for ${booking.whenLine(result.order)}. ` +
           `Want me to move it, or add a second one after that?`
         );
-      case 'needs_card':
-        return billing.setupLinkMessage(customer);
       default:
         return `Let me get a person on this. Someone will come back to you shortly.`;
     }
   }
+
+  // The details are settled and the order exists. Only now does the card come
+  // into it, which is the order Neil asked for: never ask for payment before
+  // there is something to pay for.
+  const { deposit } = result;
+
+  if (deposit && deposit.needsCard) {
+    // Booked but unconfirmed. Saving a card finishes it off automatically,
+    // from the payment webhook, so they never have to say it twice.
+    const { url } = await billing.createSetupLink(customer);
+
+    return (
+      `${booking.whenLine(result.order)} it is. One thing first: we take a ` +
+      `${billing.money(config.pricing.minimumCents)} minimum when you book, and we don't have a ` +
+      `card for you yet. Add one here and you're set, it's handled by our ` +
+      `payment provider and we never see the number: ${url}`
+    );
+  }
+
+  if (deposit && deposit.declined) return deposit.message;
 
   // The wording lives in src/core/booking.js so that booking by text and
   // booking on the website produce the identical confirmation.
@@ -155,6 +173,19 @@ async function cancelOrder(customer) {
   }
 
   await orders.transition(order, 'CANCELED');
+
+  // The minimum comes back. "Free until the driver collects" is promised on
+  // the website, in the AI's replies and on the Stripe consent page, so it has
+  // to actually happen rather than be a thing we say.
+  const refund = await billing.refundDeposit(order);
+
+  if (refund.refunded) {
+    return (
+      `Cancelled, and the ${billing.money(refund.amountCents)} minimum is on its way back to your card. ` +
+      `Text me whenever you want to book again.`
+    );
+  }
+
   return `Cancelled, no charge. Text me whenever you want to book again.`;
 }
 

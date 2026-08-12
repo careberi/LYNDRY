@@ -4,6 +4,7 @@ const orders = require('./orders');
 const billing = require('./billing');
 const payments = require('../providers/payments');
 const { site } = require('../web/site');
+const { config } = require('../config');
 
 // ---------------------------------------------------------------------------
 // The rules for booking a pickup, in one place.
@@ -307,18 +308,16 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   const existing = await orders.findAwaitingCollection(customer.id);
   if (existing) return { ok: false, reason: 'already_booked', order: existing };
 
-  // No card, no booking.
+  // The card is NOT asked for here.
   //
-  // This lives in code rather than in Claude's instructions, and it applies to
-  // the web form for exactly the same reason: nothing a customer types — or
-  // posts — should be able to talk its way past it.
+  // It used to be: no card meant no order, so somebody arranging their first
+  // pickup got a payment link instead of a booking, and once they had paid
+  // there was nothing to resume. They ended up with a saved card and no
+  // pickup, which happened to a real customer.
   //
-  // Only enforced once payments are actually switched on, so the service still
-  // works end to end before the payment provider is configured.
-  if (payments.isConfigured && !billing.hasPaymentMethod(customer)) {
-    return { ok: false, reason: 'needs_card' };
-  }
-
+  // Now the order is written first and the minimum is charged against it
+  // straight afterwards. A booking with no minimum paid is simply not
+  // confirmed: deposit_paid_at stays null and it stays off the run sheet.
   const prefs = customer.preferences || {};
 
   // The window is decided here and stored, never recomputed. If today is done
@@ -339,11 +338,20 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     notes,
   });
 
+  // Now take the minimum. The order exists either way; what this decides is
+  // whether it is confirmed.
+  const deposit = await billing.chargeDeposit(order, customer);
+
   // Whether we had to move them off the day they asked for. Not a failure and
   // not worth arguing about, but worth one clause in the confirmation: a
   // customer who says "today" and silently gets tomorrow writes back to ask
   // why, which is a conversation nobody needed to have.
-  return { ok: true, order, rolled: window.date !== pickupDate };
+  return {
+    ok: true,
+    order: deposit.order || order,
+    rolled: window.date !== pickupDate,
+    deposit,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -379,10 +387,19 @@ function confirmationMessage(customer, order, { rolled = false } = {}) {
       ? `Just have ${bags} ready and we'll knock when we arrive.`
       : `Just leave ${bags} outside your door and we'll text you as soon as we've got it.`;
 
+  // What was actually taken, and what happens to the rest.
+  //
+  // The minimum is stated as a charge that has already happened, because it
+  // has. Anything vaguer invites "why is there $25 on my card".
   const card = billing.describeCard(customer);
-  const money = card
-    ? `It's ${site.pricePerLb} a pound, weighed after pickup and charged to your ${card}.`
-    : `It's ${site.pricePerLb} a pound, weighed after pickup.`;
+  const minimum = billing.money(config.pricing.minimumCents);
+
+  const money = order.deposit_paid_at
+    ? `We've taken the ${minimum} minimum on your ${card}. It's ${site.pricePerLb} a pound, ` +
+      `so if it comes to more than that we'll charge the difference once we weigh it.`
+    : card
+      ? `It's ${site.pricePerLb} a pound, weighed after pickup and charged to your ${card}.`
+      : `It's ${site.pricePerLb} a pound, weighed after pickup.`;
 
   // Plain hyphens and straight quotes only, here and in every other outbound
   // message. One em dash triples what this costs to send; the reasoning is in
