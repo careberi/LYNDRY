@@ -293,13 +293,13 @@ function confirmationMessage(customer, order) {
 
   const handover =
     order.pickup_method === 'HAND_TO_DRIVER'
-      ? `Have ${bags} ready and we'll knock.`
-      : `Leave ${bags} outside.`;
+      ? `Just have ${bags} ready and we'll knock when we arrive.`
+      : `Just leave ${bags} outside your door and we'll text you as soon as we've got it.`;
 
   const card = billing.describeCard(customer);
   const money = card
-    ? `${site.pricePerLb} a pound, weighed after pickup and charged to your ${card}.`
-    : `${site.pricePerLb} a pound, weighed after pickup.`;
+    ? `It's ${site.pricePerLb} a pound, weighed after pickup and charged to your ${card}.`
+    : `It's ${site.pricePerLb} a pound, weighed after pickup.`;
 
   // Plain hyphens and straight quotes only, here and in every other outbound
   // message. One em dash triples what this costs to send; the reasoning is in
@@ -311,7 +311,7 @@ function confirmationMessage(customer, order) {
 }
 
 function rescheduledMessage(order) {
-  return `No problem, we'll come ${whenLine(order)} instead.`;
+  return `No problem at all, we've moved it to ${whenLine(order)}.`;
 }
 
 module.exports = {

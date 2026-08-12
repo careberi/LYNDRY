@@ -68,10 +68,22 @@ const PLAIN_EQUIVALENT = {
 };
 
 function toPlainText(text) {
-  return String(text).replace(
+  const ascii = String(text).replace(
     /[‐-―‘-‟…• ′″«»‹›]/g,
     (ch) => PLAIN_EQUIVALENT[ch] || ch
   );
+
+  // No dashes in a LYNDRY text message, full stop.
+  //
+  // A dash between phrases is the tell that something was written rather than
+  // said, and it is most of what makes a message read as machine-generated.
+  // The prompt says so at length; Claude still reaches for one, because every
+  // writer does. So the last word belongs here, at the point of sending.
+  //
+  // Only a hyphen with a space on BOTH sides is touched, which is the one
+  // standing in for a comma. Hyphens inside a word (wash-and-fold), inside a
+  // phone number and inside a URL have no spaces and are left alone.
+  return ascii.replace(/ +- +/g, ", ");
 }
 
 function warnIfExpensive(text) {

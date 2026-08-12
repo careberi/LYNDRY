@@ -32,9 +32,9 @@ const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'INBOUND_TEXT'];
 // two texts would be a form with extra steps.
 function welcomeMessage() {
   return (
-    `Hey, it's ${site.name} - laundry picked up, washed, folded and back within ` +
-    `${site.turnaround}, ${site.pricePerLb} a pound. ` +
-    `What's your name and where should we collect from?`
+    `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
+    `it back to you within ${site.turnaround}, at ${site.pricePerLb} a pound. ` +
+    `What's your name, and where should we collect from?`
   );
 }
 
