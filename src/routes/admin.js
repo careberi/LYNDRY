@@ -11,6 +11,7 @@ const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
+const issues = require('../core/issues');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -138,7 +139,7 @@ function addressOf(c) {
 // and a legal footer, which is wrong on an internal tool. Same stylesheets and
 // the same design language, different furniture.
 
-function adminPage({ title, active = '', body, user = null }) {
+function adminPage({ title, active = '', body, user = null, openIssues = 0 }) {
   const tab = (href, label) =>
     `<a href="${href}"${href === active ? ' aria-current="page"' : ''}>${label}</a>`;
 
@@ -168,6 +169,7 @@ function adminPage({ title, active = '', body, user = null }) {
         ${roles.can(user, 'orders.view') ? tab('/ops', 'Orders') : ''}
         ${roles.can(user, 'customers.view') ? tab('/ops/customers', 'Customers') : ''}
         ${roles.can(user, 'messages.view') ? tab('/ops/messages', 'Messages') : ''}
+        ${roles.can(user, 'issues.manage') ? tab('/ops/issues', 'Issues') : ''}
         ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
         ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
       </nav>
@@ -185,6 +187,29 @@ function adminPage({ title, active = '', body, user = null }) {
   </header>
 
   <main class="container" style="padding-top:36px;padding-bottom:96px;">
+${
+    // THE FLAG THAT WILL NOT GO AWAY.
+    //
+    // On every ops page, on every load, until a person resolves it. There is
+    // deliberately no dismiss button: a customer whose shirt was ruined should
+    // be impossible to forget, and a banner you can close is a banner that
+    // gets closed.
+    openIssues
+      ? `<a href="/ops/issues" style="display:block;text-decoration:none;margin-bottom:32px;">
+           <div class="card" style="padding:18px 24px;background:var(--stain-500);color:var(--paper-050);">
+             <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+               <div>
+                 <div class="eyebrow" style="margin:0 0 4px;color:var(--paper-050);">Needs a person</div>
+                 <div style="font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.1;">
+                   ${openIssues} unresolved ${openIssues === 1 ? 'issue' : 'issues'}
+                 </div>
+               </div>
+               <span style="font-size:16px;font-weight:700;text-decoration:underline;">Open them</span>
+             </div>
+           </div>
+         </a>`
+      : ''
+  }
 ${body}
   </main>
 </body>
@@ -556,6 +581,14 @@ router.post('/ops/logout', (req, res) => {
 // of a clean 401. ADDING A PAGE BELOW MEANS ADDING `guard` TO IT.
 const guard = auth.requireAdminPage;
 
+// Counts what is unresolved, for the banner in the shell. Runs on every ops
+// page so a new page cannot accidentally hide the flag; a failure here returns
+// zero rather than taking the dashboard down.
+async function withIssues(req, res, next) {
+  req.openIssues = await issues.openCount().catch(() => 0);
+  next();
+}
+
 // Signed in, but not allowed here. A plain refusal rather than a redirect to
 // the sign-in page — they ARE signed in, and bouncing them would be a
 // confusing lie about what went wrong.
@@ -590,7 +623,7 @@ const ORDER_FIELDS =
   'id, order_number, status, pickup_date, pickup_time, pickup_window_start, pickup_window_end, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
   'delivery_photo_url, notes, created_at, customers(id, name, phone, address_line1, address_line2, city, postal_code)';
 
-router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
+router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('orders')
@@ -711,7 +744,7 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
       }
     `;
 
-    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser }));
+    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }
@@ -733,7 +766,7 @@ function statCard(label, value, bg = 'var(--paper-050)', fg = 'var(--ink-900)') 
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) => {
+router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
     // Accepts either form: the UUID, or the number a person would actually
     // have — off a bag tag, out of a text, or read down the phone. A UUID
@@ -886,7 +919,7 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
 
       </div>`;
 
-    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser }));
+    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }
@@ -896,7 +929,7 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
 // GET /ops/customers — everyone
 // ---------------------------------------------------------------------------
 
-router.get('/ops/customers', guard, may('customers.view'), async (req, res, next) => {
+router.get('/ops/customers', guard, withIssues, may('customers.view'), async (req, res, next) => {
   try {
     const { data: people, error } = await db
       .from('customers')
@@ -941,7 +974,7 @@ router.get('/ops/customers', guard, may('customers.view'), async (req, res, next
       ${sectionHeading('Everyone', 'Customers', (people || []).length)}
       ${table(headings, rows)}`;
 
-    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser }));
+    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }
@@ -951,7 +984,7 @@ router.get('/ops/customers', guard, may('customers.view'), async (req, res, next
 // GET /ops/customers/:id — one profile, with their whole order history
 // ---------------------------------------------------------------------------
 
-router.get('/ops/customers/:id', guard, may('customers.view'), async (req, res, next) => {
+router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
 
@@ -1044,7 +1077,7 @@ router.get('/ops/customers/:id', guard, may('customers.view'), async (req, res, 
         ])
       )}`;
 
-    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser }));
+    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }
@@ -1130,6 +1163,118 @@ orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
 orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
 
 // ---------------------------------------------------------------------------
+// GET /ops/issues — everything a person still has to deal with
+//
+// Open ones first and impossible to skip. Closing one is a deliberate act by a
+// named person, recorded with what they did about it, because "resolved" with
+// no author is how a complaint gets quietly buried.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, res, next) => {
+  try {
+    const all = await issues.listRecent(60);
+    const open = all.filter((i) => i.status === 'OPEN');
+    const closed = all.filter((i) => i.status === 'RESOLVED');
+
+    const card = (i) => {
+      const c = i.customers || {};
+      const o = i.orders || null;
+
+      return `
+      <div class="card card-xl" style="padding:26px;margin-bottom:20px;${
+        i.status === 'OPEN' ? 'box-shadow:6px 6px 0 var(--stain-500);' : ''
+      }">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:14px;">
+          <span class="badge" style="background:${
+            i.status === 'OPEN' ? 'var(--stain-500);color:var(--paper-050)' : 'var(--ink-200)'
+          };">${escapeHtml(i.status)}</span>
+          ${
+            o
+              ? `<a href="/ops/orders/${o.order_number}" style="font-weight:700;">Order #${o.order_number}</a>`
+              : '<span style="font-size:14px;color:var(--ink-500);">No order attached</span>'
+          }
+          <span style="font-size:14px;color:var(--ink-500);">${escapeHtml(dateTime(i.created_at))}</span>
+        </div>
+
+        <p style="font-size:19px;line-height:1.45;margin:0 0 12px;font-weight:600;">
+          ${escapeHtml(i.reason)}
+        </p>
+
+        ${
+          i.customer_said
+            ? `<p style="font-size:16px;line-height:1.5;margin:0 0 16px;padding:12px 16px;border-left:3px solid var(--ink-900);background:var(--paper-100);">
+                 &ldquo;${escapeHtml(i.customer_said)}&rdquo;
+               </p>`
+            : ''
+        }
+
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:15px;margin-bottom:${
+          i.status === 'OPEN' ? '20px' : '0'
+        };">
+          <a href="/ops/customers/${c.id}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
+          <a href="tel:${escapeHtml(c.phone || '')}">${escapeHtml(formatPhone(c.phone || ''))}</a>
+          <a href="/ops/messages/${encodeURIComponent(String(c.phone || '').replace(/\\D/g, ''))}">Read the thread</a>
+        </div>
+
+        ${
+          i.status === 'OPEN'
+            ? `<form method="post" action="/ops/issues/${i.id}/resolve"
+                     style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;border-top:2px solid var(--ink-900);padding-top:18px;margin:0;">
+                 <input class="input" type="text" name="resolution" maxlength="200"
+                        placeholder="What did you do about it?" style="flex:1;min-width:240px;">
+                 <button type="submit" class="btn btn-primary">Mark resolved</button>
+               </form>`
+            : `<p style="font-size:14px;color:var(--ink-500);margin:14px 0 0;">
+                 Resolved ${escapeHtml(dateTime(i.resolved_at))}${
+                   i.ops_users ? ` by ${escapeHtml(i.ops_users.name)}` : ''
+                 }${i.resolution ? `: ${escapeHtml(i.resolution)}` : ''}
+               </p>`
+        }
+      </div>`;
+    };
+
+    const body = `
+      ${sectionHeading('Needs a person', 'Open', open.length)}
+      ${
+        open.length
+          ? open.map(card).join('')
+          : '<p style="font-size:17px;color:var(--ink-500);margin-bottom:56px;">Nothing open. Everything a customer raised has been dealt with.</p>'
+      }
+
+      ${closed.length ? `<div style="margin-top:56px;">${sectionHeading('Dealt with', 'Resolved', closed.length)}${closed.map(card).join('')}</div>` : ''}
+    `;
+
+    res.type('html').send(
+      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/ops/issues/:id/resolve', guard, may('issues.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That is not an issue id.');
+
+    const closed = await issues.resolve(
+      req.params.id,
+      req.opsUser,
+      (req.body || {}).resolution
+    );
+
+    if (!closed) {
+      // Already resolved by somebody else, most likely. Not an error worth a
+      // page of its own.
+      console.log(`Issue ${req.params.id} was already resolved.`);
+    }
+
+    return res.redirect(303, '/ops/issues');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /ops/messages — every conversation, one row per phone number
 //
 // Grouped by PHONE, not by customer, and that is the point. A message from
@@ -1182,7 +1327,7 @@ function groupIntoThreads(messages) {
   return [...threads.values()];
 }
 
-router.get('/ops/messages', guard, may('messages.view'), async (req, res, next) => {
+router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('messages')
@@ -1252,7 +1397,7 @@ router.get('/ops/messages', guard, may('messages.view'), async (req, res, next) 
       }`;
 
     res.type('html').send(
-      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser })
+      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues })
     );
   } catch (err) {
     next(err);
@@ -1315,7 +1460,7 @@ function bubble(m) {
   </div>`;
 }
 
-router.get('/ops/messages/:phone', guard, may('messages.view'), async (req, res, next) => {
+router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), async (req, res, next) => {
   try {
     // The URL carries digits only, so a "+" never has to survive a path.
     const phone = normalisePhone(req.params.phone);
@@ -1327,7 +1472,7 @@ router.get('/ops/messages/:phone', guard, may('messages.view'), async (req, res,
           active: '/ops/messages',
           body: `<a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
                  <p style="font-size:17px;margin-top:20px;">That is not a phone number we could read.</p>`,
-          user: req.opsUser,
+          user: req.opsUser, openIssues: req.openIssues,
         })
       );
     }
@@ -1381,7 +1526,7 @@ router.get('/ops/messages/:phone', guard, may('messages.view'), async (req, res,
       </div>`;
 
     res.type('html').send(
-      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser })
+      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues })
     );
   } catch (err) {
     next(err);
@@ -1394,7 +1539,7 @@ router.get('/ops/messages/:phone', guard, may('messages.view'), async (req, res,
 
 const PARTNER_LABEL = { LAUNDROMAT: 'Laundromat', PROPERTY: 'Property' };
 
-router.get('/ops/partners', guard, may('partners.view'), async (req, res, next) => {
+router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('partner_enquiries')
@@ -1491,7 +1636,7 @@ router.get('/ops/partners', guard, may('partners.view'), async (req, res, next) 
              </div>`
       }`;
 
-    res.type('html').send(adminPage({ title: 'Partners', active: '/ops/partners', body, user: req.opsUser }));
+    res.type('html').send(adminPage({ title: 'Partners', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }
@@ -1520,7 +1665,7 @@ router.post('/ops/partners/:id/status', guard, may('partners.manage'), async (re
 // GET /ops/team — who can sign in
 // ---------------------------------------------------------------------------
 
-router.get('/ops/team', guard, may('team.manage'), async (req, res, next) => {
+router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, next) => {
   try {
     const { data: people, error } = await db
       .from('ops_users')
@@ -1657,7 +1802,7 @@ router.get('/ops/team', guard, may('team.manage'), async (req, res, next) => {
 
       </div>`;
 
-    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser }));
+    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }

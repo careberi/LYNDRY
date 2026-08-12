@@ -182,14 +182,17 @@ async function handleInbound(inbound) {
 async function answerWithBrain(customer, text, from) {
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
-  const [order, recentMessages] = await Promise.all([
+  const [order, recentMessages, recentOrders] = await Promise.all([
     orders.findLatestInFlight(customer.id),
     recentConversation(customer.id),
+    // Their own order numbers, so a complaint can be tied to the right one and
+    // the AI can name it rather than asking blind.
+    recentOrdersFor(customer.id),
   ]);
 
   let decision;
   try {
-    decision = await brain.decide({ customer, order, recentMessages, message: text });
+    decision = await brain.decide({ customer, order, recentMessages, recentOrders, message: text });
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.
     console.error('Claude call failed:', err.message);
@@ -214,6 +217,9 @@ async function answerWithBrain(customer, text, from) {
     // How an action reaches Neil when it needs a human. Passed in rather
     // than imported so nothing in core/ needs to know about SMS at all.
     notify: (to, body) => sms.sendMessage({ to, text: body }),
+    // What they actually said, kept on an issue alongside the AI's summary,
+    // because their own words matter when somebody is upset.
+    customerSaid: text,
   };
 
   let message;
@@ -271,6 +277,24 @@ async function answerWithBrain(customer, text, from) {
   }
 
   await reply(from, message, customer.id);
+}
+
+// The order numbers a customer might refer to. Enough to answer "which one
+// is it about?" without sending their whole history.
+async function recentOrdersFor(customerId) {
+  const { data, error } = await db
+    .from('orders')
+    .select('order_number, status, pickup_date, weight_lb')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.error('Could not read recent orders:', error.message);
+    return [];
+  }
+
+  return data || [];
 }
 
 // The last few messages either way, oldest first. Enough for a follow-up like

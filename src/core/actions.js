@@ -4,6 +4,7 @@ const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
 const booking = require('./booking');
+const issues = require('./issues');
 const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -396,19 +397,69 @@ async function saveDetails(customer, input) {
 
 // --- handoff_to_human -------------------------------------------------------
 
-async function handoffToHuman(customer, input, { notify }) {
+async function handoffToHuman(customer, input, helpers = {}) {
   const reason = String(input.reason || 'no reason given');
 
-  console.log(`HANDOFF  ${customer.phone} (${customer.name || 'unnamed'}): ${reason}`);
+  // Which order, if they named one.
+  //
+  // Checked against THIS customer, never trusted. The order number is printed
+  // in their own confirmation texts, so it is not secret, but somebody who
+  // guesses a neighbour's number must not attach their complaint to it or see
+  // it acknowledged.
+  let order = null;
 
-  if (config.supportPhone && notify) {
-    await notify(
-      config.supportPhone,
-      `LYNDRY handoff: ${customer.name || customer.phone}: ${reason}`
-    ).catch((err) => console.error('Could not notify support:', err.message));
+  if (input.order_number != null) {
+    const wanted = Number(input.order_number);
+
+    if (Number.isInteger(wanted)) {
+      const { data, error } = await db
+        .from('orders')
+        .select('*')
+        .eq('order_number', wanted)
+        .eq('customer_id', customer.id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        // Their own orders are in front of the AI, so this is a typo far more
+        // often than anything else. Say so plainly and let them correct it,
+        // rather than flagging a complaint against nothing.
+        return (
+          `I can't find order #${wanted} on your account. Could you check the ` +
+          `number? It's in the text we sent when you booked.`
+        );
+      }
+
+      order = data;
+    }
   }
 
-  return `Let me get a person on this. Someone will come back to you shortly.`;
+  const { issue, isNew } = await issues.raise({
+    customer,
+    order,
+    reason,
+    customerSaid: helpers.customerSaid,
+  });
+
+  console.log(
+    `HANDOFF  ${customer.phone} (${customer.name || 'unnamed'})` +
+      `${order ? ` order #${order.order_number}` : ''}: ${reason}` +
+      `${isNew ? '' : ' [already open]'}`
+  );
+
+  const about = order ? ` about order #${order.order_number}` : '';
+
+  // Already flagged. Saying the identical sentence again is what made three
+  // angry messages get three identical replies in testing.
+  if (!isNew) {
+    return (
+      `You're already with a manager${about} and they've got everything you've ` +
+      `sent. They'll be in touch as soon as they can.`
+    );
+  }
+
+  return `Let me get a manager on this${about}. They'll reach out to you shortly.`;
 }
 
 // ---------------------------------------------------------------------------

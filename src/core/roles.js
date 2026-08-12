@@ -25,6 +25,10 @@ const PERMISSIONS = Object.freeze({
   'partners.view': 'See partner enquiries',
   'partners.manage': 'Mark enquiries contacted or closed',
   'team.manage': 'Add people, change roles, switch people off',
+  // Raised when the AI hands a conversation over. Holding this permission is
+  // also what decides who gets TEXTED when one appears, so it is deliberately
+  // not given to drivers: a ruined shirt is not theirs to answer at 11pm.
+  'issues.manage': 'See and resolve customer issues, and be alerted to them',
   // Prices, payment status, what is owed, lifetime billed. Kept separate from
   // orders.view so a driver can do the round without seeing the books.
   'money.view': 'See prices and payment status',
@@ -57,6 +61,7 @@ const ROLES = Object.freeze({
       'orders.view',
       'customers.view',
       'messages.view',
+      'issues.manage',
       'partners.view',
       'partners.manage',
     ],

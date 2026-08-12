@@ -250,15 +250,26 @@ const TOOLS = [
   {
     name: 'handoff_to_human',
     description:
-      'Pass this conversation to a person. Use when the customer is upset, when ' +
-      'something has gone wrong with their laundry, when they ask for a human, or ' +
-      'when you are not confident what they want. Guessing is worse than handing over.',
+      'Pass this conversation to a manager. Use when the customer is upset, when ' +
+      'something has gone wrong with their laundry, when they ask for a person, or ' +
+      'when you are not confident what they want. Guessing is worse than handing over. ' +
+      'If the complaint is about a specific order, ASK WHICH ORDER NUMBER FIRST and ' +
+      'pass it here, so the manager opens the right one.',
     input_schema: {
       type: 'object',
       properties: {
         reason: {
           type: 'string',
-          description: 'One line explaining why, so the person picking it up has context.',
+          description:
+            'One line explaining what is wrong, so the manager picking it up knows ' +
+            'what they are walking into before reading the thread.',
+        },
+        order_number: {
+          type: 'integer',
+          description:
+            'The order this is about, if they gave one, as the plain number: 1042, ' +
+            'not "#1042". Leave it out when the problem belongs to no order, or ' +
+            'when they have not told you yet. Never guess one.',
         },
       },
       required: ['reason'],
@@ -328,7 +339,12 @@ If they mention a time, whether that is "at 6", "sixish", "after work" or "first
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
 Wash preferences are chosen ONCE, by the customer, during their first setup. There are no defaults and you never invent one: if the notes below say NONE YET, ask before their first booking, in one message: "cold or warm water, regular or hypoallergenic detergent, and softener or no?" Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
 Never state a price as a fact. If asked what it will cost, say it is ${site.pricePerLb} a pound and a typical bag runs about ${site.estimateRange}, weighed after pickup.
-If the customer is upset, something has gone wrong, or you are unsure what they mean, hand off to a human rather than guessing.
+WHEN SOMETHING HAS GONE WRONG
+If the customer is upset, something is damaged or missing, they ask for a person, or you are unsure what they mean, this goes to a manager. Guessing is worse than handing over.
+Before you hand over, work out whether it is about a specific order. A stain, a missing item, a late or absent delivery, a wrong charge: all about an order. "Do you reach Hoboken" is not.
+If it IS about an order and you do not already know which, ask for the order number first, in one short question, naming what you can see: "Sorry about that. Which order number is it? Your last one was #1042." Their orders are listed below, so if they only have one, use it and do not ask at all.
+Then call handoff_to_human with the reason and the order number. Our code checks the order really is theirs, records it so it cannot be forgotten, and texts a manager.
+Once you have handed over, STOP. If they text again about the same thing, do not hand over a second time and do not repeat yourself word for word: say it is already with a manager and that they will hear back. Three identical "someone will come back to you shortly" replies to three angry messages is exactly what not to do.
 
 HOW TO WRITE
 You are texting this person directly. Say "you" and "your". NEVER say "they", "them", "their", "the customer" or "this customer". The notes below are written in the third person because they are notes to you, and echoing that voice back is the single most obvious way to sound like a machine. "They've got a pickup booked" is wrong. "You've got a pickup booked" is right.
@@ -365,7 +381,7 @@ One exclamation mark in a message is plenty. Friendly, not breathless. Never say
 // What Claude gets to see about this customer
 // ---------------------------------------------------------------------------
 
-function customerContext(customer, order, recentMessages) {
+function customerContext(customer, order, recentMessages, recentOrders) {
   const prefs = customer.preferences || {};
 
   const address = [
@@ -399,6 +415,21 @@ function customerContext(customer, order, recentMessages) {
   }
 
   lines.push('');
+
+  if (recentOrders && recentOrders.length) {
+    lines.push(
+      '',
+      'THEIR RECENT ORDERS (newest first). Use these to work out which one a',
+      'complaint is about, and to name one when you ask.'
+    );
+    for (const o of recentOrders) {
+      lines.push(
+        `#${o.order_number}: ${o.pickup_date}, ${o.status}` +
+          (o.weight_lb ? `, ${o.weight_lb} lb` : '')
+      );
+    }
+    lines.push('');
+  }
 
   if (order) {
     lines.push(
@@ -461,7 +492,7 @@ function customerContext(customer, order, recentMessages) {
 // exists because one message can carry two jobs — "good to go" at a recap
 // both saves a correction and books the pickup — and a single action per
 // message meant the model picked one and silently dropped the other.
-async function decide({ customer, order, recentMessages, message, followUp }) {
+async function decide({ customer, order, recentMessages, recentOrders, message, followUp }) {
   // New Jersey's date, not the server's. After 8pm ET the two disagree, and
   // telling Claude it is already tomorrow makes "pickup today" impossible.
   const now = booking.nowInService();
@@ -476,7 +507,7 @@ async function decide({ customer, order, recentMessages, message, followUp }) {
     output_config: { effort: 'low' },
 
     system:
-      `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages)}` +
+      `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages, recentOrders)}` +
       (followUp
         ? `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
           `The reply queued to send them is: "${followUp.reply}"\n` +
