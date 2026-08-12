@@ -24,14 +24,18 @@ const { CSS_BASE } = require('./assets');
 // characters of border-and-shadow utilities on every element.
 // ---------------------------------------------------------------------------
 
+// /account is deliberately NOT here.
+//
+// Booking happens in the text thread; putting "Schedule online" in the nav
+// invites people to go and find a form instead, which is the opposite of the
+// product. The page still works for anyone who has the link, exactly like
+// /signup — unlinked rather than removed, so it stays available as a fallback
+// if texting is ever down.
 const NAV_LINKS = [
   { href: '/how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/partners', label: 'Partners' },
   { href: '/contact', label: 'Contact' },
-  // The way back in for an existing customer. Sits last, next to Get started,
-  // because it is the returning-customer action rather than a page to read.
-  { href: '/account', label: 'Schedule online' },
 ];
 
 // Replaces every {{TOKEN}} in a chunk of HTML with its value.
@@ -185,7 +189,6 @@ function footer() {
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
             <a href="/#get-started">Get started</a>
-            <a href="/account">Schedule online</a>
           </div>
         </div>
 
