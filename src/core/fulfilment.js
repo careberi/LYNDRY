@@ -299,6 +299,45 @@ function nextSteps(order) {
   return STEPS.filter((s) => allowed.includes(s.to));
 }
 
+// ---------------------------------------------------------------------------
+// How long is left on the promise
+// ---------------------------------------------------------------------------
+//
+// We tell every customer "back within 24 hours", and the clock starts when the
+// driver takes the bag. Until now nothing anywhere counted it: an order could
+// sit at a laundromat for two days and no screen would say so.
+//
+// Returns null for anything not yet collected or already delivered, because a
+// countdown only means something while we are holding somebody's clothes.
+const TURNAROUND_HOURS = 24;
+
+function turnaround(order) {
+  if (!order.collected_at) return null;
+  if (['DELIVERED', 'CANCELED'].includes(order.status)) return null;
+
+  const due = new Date(order.collected_at).getTime() + TURNAROUND_HOURS * 3600 * 1000;
+  const minutesLeft = Math.round((due - Date.now()) / 60000);
+
+  const label = (mins) => {
+    const h = Math.floor(Math.abs(mins) / 60);
+    const m = Math.abs(mins) % 60;
+    return h ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  if (minutesLeft < 0) {
+    return { overdue: true, urgent: true, minutesLeft, text: `${label(minutesLeft)} overdue` };
+  }
+
+  return {
+    overdue: false,
+    // Under four hours is the point where somebody needs to do something about
+    // it rather than just know about it.
+    urgent: minutesLeft <= 240,
+    minutesLeft,
+    text: `${label(minutesLeft)} left`,
+  };
+}
+
 module.exports = {
   collect,
   dropAtPartner,
@@ -307,6 +346,8 @@ module.exports = {
   outForDelivery,
   deliver,
   nextSteps,
+  turnaround,
+  TURNAROUND_HOURS,
   STEPS,
   PHOTO_BUCKET,
 };

@@ -594,7 +594,7 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('orders')
-      .select(ORDER_FIELDS)
+      .select(`${ORDER_FIELDS}, collected_at, at_partner_at, ready_at, delivered_at`)
       .order('pickup_date', { ascending: false })
       .order('pickup_time', { ascending: true, nullsFirst: false });
 
@@ -603,25 +603,51 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
     const all = data || [];
     const now = today();
 
-    // Active is "we have it, or we're going to get it today". Upcoming is
-    // booked for a later day. Past is finished, one way or the other.
-    const active = all.filter(
-      (o) =>
-        ['IN_PROCESS', 'OUT_FOR_DELIVERY'].includes(o.status) ||
-        (orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= now)
-    );
-    const upcoming = all.filter(
-      (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date > now
-    );
-    const past = all.filter((o) => ['DELIVERED', 'CANCELED'].includes(o.status));
+    // Grouped by WHERE THE BAG PHYSICALLY IS, not by a vague notion of
+    // "active". The old board had three buckets and AT_PARTNER matched none
+    // of them, so a 45 lb order sat invisible at a laundromat. Every status
+    // belongs to exactly one group below, which is what stops that recurring.
+    const inGroup = {
+      collect: (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= now,
+      upcoming: (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date > now,
+      van: (o) => o.status === 'IN_PROCESS',
+      partner: (o) => o.status === 'AT_PARTNER',
+      ready: (o) => o.status === 'READY',
+      out: (o) => o.status === 'OUT_FOR_DELIVERY',
+      past: (o) => ['DELIVERED', 'CANCELED'].includes(o.status),
+    };
 
-    const owed = all.filter((o) => o.payment_status === 'FAILED');
+    const g = {};
+    for (const [key, test] of Object.entries(inGroup)) g[key] = all.filter(test);
+
+    // Anything a group forgot. If this is ever non-empty the board is lying,
+    // so it is shown rather than swallowed.
+    const grouped = new Set(Object.values(g).flat().map((o) => o.id));
+    g.stray = all.filter((o) => !grouped.has(o.id));
+
+    // With us right now: collected and not yet back at their door.
+    const withUs = [...g.van, ...g.partner, ...g.ready, ...g.out];
+    const poundsWithUs = withUs.reduce((sum, o) => sum + Number(o.weight_lb || 0), 0);
+    const late = withUs.filter((o) => {
+      const t = fulfilment.turnaround(o);
+      return t && t.overdue;
+    });
+
+    const owed = all.filter((o) => ['FAILED', 'UNPAID'].includes(o.payment_status) && o.price_cents);
     const owedTotal = owed.reduce((sum, o) => sum + (o.price_cents || 0), 0);
 
     // A driver does the round; they have no business seeing the books. The
     // money columns are dropped from the markup entirely rather than hidden
     // with CSS — a value that never reaches the page cannot leak from it.
     const showMoney = roles.can(req.opsUser, 'money.view');
+
+    const clock = (o) => {
+      const t = fulfilment.turnaround(o);
+      if (!t) return '—';
+      const tone = t.overdue ? 'var(--stain-500)' : t.urgent ? 'var(--sunbeam-500)' : 'var(--ink-100)';
+      const ink = t.overdue ? 'var(--paper-050)' : 'var(--ink-900)';
+      return `<span class="badge" style="background:${tone};color:${ink};white-space:nowrap;">${escapeHtml(t.text)}</span>`;
+    };
 
     const row = (o) => {
       const c = o.customers || {};
@@ -637,35 +663,52 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
             : ''
         }`,
         statusBadge(o.status),
+        clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
         ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
       ];
     };
 
-    const headings = ['Order', 'Customer', 'Pickup', 'Status', 'Weight'];
+    const headings = ['Order', 'Customer', 'Pickup', 'Status', '24h clock', 'Weight'];
     if (showMoney) headings.push('Price', 'Payment');
 
-    const board = (eyebrow, heading, list) => `
-      <section style="margin-bottom:56px;">
+    // A section is only drawn when it has something in it, so the board is a
+    // list of work rather than a wall of "Nothing here".
+    const board = (eyebrow, heading, list, note = '') =>
+      list.length
+        ? `
+      <section style="margin-bottom:48px;">
         ${sectionHeading(eyebrow, heading, list.length)}
+        ${note ? `<p style="font-size:15px;color:var(--ink-500);margin:-10px 0 18px;">${note}</p>` : ''}
         ${table(headings, list.map(row))}
-      </section>`;
+      </section>`
+        : '';
 
     const body = `
-      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:44px;">
-        ${statCard('Active', active.length)}
-        ${statCard('Upcoming', upcoming.length)}
-        ${statCard('Completed', past.filter((o) => o.status === 'DELIVERED').length)}
-        ${
-          showMoney && owed.length
-            ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)')
-            : ''
-        }
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
+        ${statCard('To collect', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
+        ${statCard('At laundromat', g.partner.length)}
+        ${statCard('Ready to collect', g.ready.length, g.ready.length ? 'var(--sunbeam-500)' : undefined)}
+        ${statCard('Out for delivery', g.out.length)}
+        ${statCard('Pounds with us', poundsWithUs ? `${poundsWithUs} lb` : '0')}
+        ${late.length ? statCard('Past 24h', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
+        ${showMoney && owed.length ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)') : ''}
       </div>
 
-      ${board('Right now', 'Active', active)}
-      ${board('Booked', 'Upcoming', upcoming)}
-      ${board('Finished', 'Past', past)}
+      ${board('Not in a group', 'Unclassified', g.stray, 'These match no stage. That is a bug worth reporting.')}
+      ${board('Ready', 'Ready to collect from the partner', g.ready, 'Washed and folded. Collect these and get them out.')}
+      ${board('Today', 'To collect from customers', g.collect)}
+      ${board('On the van', 'Collected, not yet dropped', g.van)}
+      ${board('At the partner', 'Being washed', g.partner)}
+      ${board('On the way back', 'Out for delivery', g.out)}
+      ${board('Booked', 'Upcoming', g.upcoming)}
+      ${board('Finished', 'Past', g.past)}
+
+      ${
+        all.length
+          ? ''
+          : '<p style="font-size:17px;color:var(--ink-500);">No orders yet. The first one will appear here the moment somebody books.</p>'
+      }
     `;
 
     res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser }));
@@ -675,6 +718,8 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
 });
 
 function statCard(label, value, bg = 'var(--paper-050)', fg = 'var(--ink-900)') {
+  // Zero is drawn quieter than a number that needs acting on: a board of
+  // shouting zeroes is a board nobody reads.
   return `
   <div class="card" style="padding:18px 24px;min-width:130px;background:${bg};color:${fg};">
     <div style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;">${value}</div>
@@ -741,6 +786,16 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
         </h1>
         ${statusBadge(order.status)}
         ${paymentBadge(order)}
+        ${
+          // The promise, counting down. Only while we are holding it.
+          (() => {
+            const t = fulfilment.turnaround(order);
+            if (!t) return '';
+            const bg = t.overdue ? 'var(--stain-500)' : t.urgent ? 'var(--sunbeam-500)' : 'var(--ink-100)';
+            const fg = t.overdue ? 'var(--paper-050)' : 'var(--ink-900)';
+            return `<span class="badge" style="background:${bg};color:${fg};">${escapeHtml(t.text)} on the 24h promise</span>`;
+          })()
+        }
       </div>
 
       ${workCard(order, {
