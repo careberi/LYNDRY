@@ -348,12 +348,19 @@ async function saveDetails(customer, input) {
     return `Thanks ${first}! And the zip code?`;
   }
 
-  // Address done, but no wash choices yet. Ask, never invent — this is the
-  // backstop behind the prompt's instruction to ask, and it is what stops
-  // "we've set you up with cold water" going to somebody who chose nothing.
+  // Address done. If they have not said WHEN yet, that comes before anything
+  // about detergent: it is what they came here for, and it is what tells them
+  // we can actually do it.
+  if (!input.pickup_date) {
+    return `Thanks ${first}! When would you like it picked up?`;
+  }
+
+  // When is settled, so now the wash. Ask, never invent — this is the backstop
+  // behind the prompt's instruction to ask, and it is what stops "we've set
+  // you up with cold water" going to somebody who chose nothing.
   if (!booking.hasPreferences(updated)) {
     return (
-      `Thanks ${first}! Now the wash itself: cold or warm water, regular or ` +
+      `Great. How do you like it washed: cold or warm water, regular or ` +
       `hypoallergenic detergent, and softener or no? And where should the ` +
       `driver find the bag?`
     );

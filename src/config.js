@@ -93,11 +93,11 @@ const config = Object.freeze({
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.
   pricing: Object.freeze({
-    perPoundCents: 250,
+    perPoundCents: 200,
 
     // The minimum order, charged when a pickup is booked.
     //
-    // Exactly 10 lb at the rate above. A genuine MINIMUM, not a deposit: an
+    // 12.5 lb at the rate above. A genuine MINIMUM, not a deposit: an
     // 8 lb load costs this and nothing comes back, because a small load still
     // costs a full pickup and a full delivery. At weigh-in we charge the
     // difference between this and the real total, and nothing more when the
@@ -111,8 +111,8 @@ const config = Object.freeze({
     // Derived from the rate above and a typical 15–18 lb bag, so if the rate
     // changes these have to change with it or the site quotes a range the
     // arithmetic doesn't support.
-    estimateLowCents: 3750, // 15 lb
-    estimateHighCents: 4500, // 18 lb
+    estimateLowCents: 3000, // 15 lb
+    estimateHighCents: 3600, // 18 lb
 
     // The most we will take in a single pickup.
     maxOrderLb: 50,

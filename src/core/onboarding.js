@@ -31,10 +31,14 @@ const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'INBOUND_TEXT'];
 // One message, and it asks for both things we need at once. Two questions in
 // two texts would be a form with extra steps.
 function welcomeMessage() {
+  // Opens a door, does not demand anything through it. Asking a stranger for
+  // their name and home address in the first sentence is too forward, and it
+  // also assumes they want a pickup when they might be asking what we cost or
+  // whether we reach them.
   return (
     `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
     `it back to you within ${site.turnaround}, at ${site.pricePerLb} a pound. ` +
-    `What's your name, and where should we collect from?`
+    `How can we help?`
   );
 }
 
