@@ -58,8 +58,10 @@
         <span style="font-size:15px;font-weight:600;">per pound</span>
       </div>
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:20px 0 26px;">
-        No minimum, no membership, no delivery fee. Weighed after pickup, so
-        you only pay for what you send. A typical bag runs {{ESTIMATE_RANGE}}.
+        {{MINIMUM}} minimum per pickup &mdash; that's the first {{MINIMUM_LB}},
+        charged when you book. Weighed after pickup, and anything over the
+        minimum is just {{PRICE_PER_LB}} a pound. A typical bag runs
+        {{ESTIMATE_RANGE}}.
       </p>
       <a href="/#get-started" class="btn btn-ink btn-full">Get started {{ICON_ARROW_SM}}</a>
     </div>
@@ -68,8 +70,9 @@
       <p class="eyebrow" style="margin-bottom:18px;">Not in the price</p>
       <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;letter-spacing:-0.03em;margin:0 0 18px;">Nothing</h2>
       <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">
-        There is no delivery fee, no rush fee, no minimum order and no
-        membership. {{PRICE_PER_LB}} a pound is the entire price.
+        There is no delivery fee, no rush fee and no membership.
+        {{PRICE_PER_LB}} a pound with a {{MINIMUM}} minimum is the entire
+        price.
       </p>
       <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">
         What we don't do yet: dry cleaning, pressing and alterations. Wash, dry
@@ -115,7 +118,11 @@
       <span class="amount">Free</span>
     </div>
     <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Membership or minimum order</span>
+      <span style="font-size:16px;color:var(--ink-800);">Minimum per pickup</span>
+      <span class="amount">{{MINIMUM}}</span>
+    </div>
+    <div class="price-row">
+      <span style="font-size:16px;color:var(--ink-800);">Membership</span>
       <span class="amount">None</span>
     </div>
     <div class="price-row">
@@ -154,7 +161,11 @@
       </div>
       <div class="qa">
         <h3>When exactly am I charged?</h3>
-        <p>After we weigh your laundry, and never before. You get a text with the weight and the amount every single time. Nothing is recurring — you're only charged for an order you asked for.</p>
+        <p>Twice, and you're told both times. The {{MINIMUM}} minimum is charged when you book — that covers the first {{MINIMUM_LB}}. After we weigh your laundry, anything above the minimum is charged when we deliver it back, and you get a text with the weight and the total before that happens. Nothing is recurring — you're only ever charged for an order you asked for.</p>
+      </div>
+      <div class="qa">
+        <h3>What if my laundry weighs less than {{MINIMUM_LB}}?</h3>
+        <p>The {{MINIMUM}} minimum is the price. A small load still gets a full pickup, a full wash and fold, and a full delivery, which is what the minimum covers. Cancel before we collect and the {{MINIMUM}} comes straight back to your card.</p>
       </div>
       <div class="qa">
         <h3>Do you charge for pickup or delivery?</h3>

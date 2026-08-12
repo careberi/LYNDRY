@@ -342,6 +342,7 @@ async function chargeOrder(order, customer) {
     return {
       ok: false,
       needsCard: true,
+      setupUrl: url,
       message:
         `Your laundry weighed ${order.weight_lb} lb, so that's ${money(order.price_cents)}. ` +
         `We don't have a card on file. Add one here and we'll settle it: ${url}`,
@@ -377,6 +378,7 @@ async function chargeOrder(order, customer) {
 
     return {
       ok: true,
+      chargedCents: owed,
       message:
         `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)} at ` +
         `${site.pricePerLb} a pound, charged to your ${describeCard(customer)}. ` +
@@ -398,6 +400,7 @@ async function chargeOrder(order, customer) {
   return {
     ok: false,
     declined: true,
+    setupUrl: url,
     message:
       `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)}. ` +
       `Your ${card} was declined, so nothing has been taken. ` +

@@ -144,15 +144,37 @@ async function recordWeight(order, weightLb) {
 
   const customer = order.customers;
 
-  // The billing layer writes the message because it is the only thing that
-  // knows whether the charge went through, and a customer must never be told
-  // "charged" when it failed.
-  const charge = await billing.chargeOrder(updated, customer);
+  // NOTHING IS CHARGED HERE.
+  //
+  // Weighing sets the price; delivery collects it. The card is touched twice
+  // in an order's life and no more: the minimum when they book, and the
+  // balance when the laundry is back on their doorstep. Charging at the scale
+  // would take money for work that has not been finished, and would have to be
+  // refunded if anything went wrong between the machine and the door.
+  //
+  // What this does owe the customer is the number. They were promised a
+  // weight and a total, and this is the moment both exist.
+  const alreadyPaid = updated.deposit_refunded_at ? 0 : updated.deposit_cents || 0;
+  const owed = Math.max(0, priceCents - alreadyPaid);
+  const card = billing.describeCard(customer);
 
-  const message =
-    charge.message ||
-    `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ` +
-      `${site.pricePerLb} a pound. We'll have it back to you within ${site.turnaround}.`;
+  let message;
+  if (owed === 0 && alreadyPaid > 0) {
+    message =
+      `Your laundry weighed ${weight} lb. That's under our ${money(alreadyPaid)} minimum, ` +
+      `so it's ${money(alreadyPaid)} and nothing more to pay. ` +
+      `We'll have it back to you within ${site.turnaround}.`;
+  } else if (alreadyPaid > 0) {
+    message =
+      `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound. ` +
+      `You've already paid ${money(alreadyPaid)}, so the remaining ${money(owed)} comes off ` +
+      `${card ? `your ${card}` : 'your card'} when we deliver. ` +
+      `Back with you within ${site.turnaround}.`;
+  } else {
+    message =
+      `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound, ` +
+      `charged when we deliver. Back with you within ${site.turnaround}.`;
+  }
 
   await sendAndLog(customer.phone, message, customer.id);
 
@@ -162,9 +184,8 @@ async function recordWeight(order, weightLb) {
     message,
     weightLb: weight,
     priceCents,
+    owedCents: owed,
     overMaxOrder: weight > config.pricing.maxOrderLb,
-    paid: Boolean(charge.ok),
-    paymentNote: charge.ok ? null : charge.needsCard ? 'no card on file' : 'card declined',
   };
 }
 
@@ -201,6 +222,20 @@ async function deliver(order, file) {
     photoUrl = `${config.baseUrl}/p/${order.id}`;
   }
 
+  // THE BALANCE IS COLLECTED HERE, not at the scale.
+  //
+  // The laundry is on the doorstep, the work is finished, and the amount has
+  // been known since it was weighed. This is the only moment where charging
+  // and delivering are the same event.
+  //
+  // Done BEFORE the transition so the message can say what actually happened
+  // to the money. A decline does not stop the delivery: the clothes are
+  // already there, and holding somebody's laundry over a card is a bad look
+  // and legally murky. We deliver and chase.
+  const charge = order.price_cents
+    ? await billing.chargeOrder(order, order.customers)
+    : { ok: false, message: null };
+
   const result = await step(order, 'DELIVERED', () => {
     const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
 
@@ -208,11 +243,15 @@ async function deliver(order, file) {
     // delivery text that reads like a receipt when the card was declined is
     // how an unpaid order quietly becomes a forgotten one.
     let price = '';
-    if (order.price_cents && order.payment_status === 'PAID') {
-      price = ` ${money(order.price_cents)}, paid.`;
-    } else if (order.price_cents && order.payment_status === 'FAILED') {
+    if (!order.price_cents) {
+      price = '';
+    } else if (charge.coveredByMinimum) {
+      price = ` ${money(order.price_cents)} covered by the minimum you already paid.`;
+    } else if (charge.ok) {
+      price = ` ${money(charge.chargedCents || order.price_cents)} charged, ${money(order.price_cents)} in total.`;
+    } else if (charge.needsCard || charge.declined) {
       price = ` ${money(order.price_cents)} is still outstanding, the card link we sent will settle it.`;
-    } else if (order.price_cents) {
+    } else {
       price = ` ${money(order.price_cents)} for this one.`;
     }
 
@@ -220,6 +259,9 @@ async function deliver(order, file) {
   });
 
   if (!result.ok) return result;
+
+  result.paid = Boolean(charge.ok);
+  result.paymentNote = charge.ok ? null : charge.needsCard ? 'no card on file' : 'card declined';
 
   if (photoUrl) {
     await db

@@ -236,7 +236,7 @@ You know what time it is, so never ask the customer. "Is 3pm still ahead of us?"
 
 WHAT LYNDRY DOES
 Wash, dry and fold only. No dry cleaning, pressing or alterations.
-Charged by weight at ${site.pricePerLb} per pound, weighed after collection, so you can never state an exact price before a bag has been weighed. A typical bag is ${site.typicalBagWeight}, around ${site.estimateRange}. Maximum ${site.maxOrder} per pickup.
+${site.pricePerLb} a pound with a $${(config.pricing.minimumCents / 100).toFixed(0)} minimum per pickup. The minimum covers the first ${config.pricing.minimumCents / config.pricing.perPoundCents} lb and is charged when they book; after weighing, anything above it is charged on delivery. A load under ${config.pricing.minimumCents / config.pricing.perPoundCents} lb costs the minimum, and nothing is refunded for being light. You can never state an exact total before a bag has been weighed. A typical bag is ${site.typicalBagWeight}, around ${site.estimateRange}. Maximum ${site.maxOrder} per pickup.
 Back within ${site.turnaround}.
 
 PICKUP WINDOWS

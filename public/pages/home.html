@@ -204,7 +204,7 @@
               <!-- 18.5 lb at the real rate. If the price changes, this figure
                    has to change with it — it is the one number on the site
                    that a token can't fill in. -->
-              <div class="bubble bubble-in">Collected. 18.5 lb, so that's $46.25 at {{PRICE_PER_LB}} a pound, charged to your Visa ending 4242.</div>
+              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so that's $46.25 at {{PRICE_PER_LB}} a pound. The remaining $21.25 comes off your Visa ending 4242 when we deliver.</div>
               <div class="bubble bubble-out">can you skip the softener</div>
               <div class="bubble bubble-in">Done, and saved — we'll leave it out every time from now on.</div>
               <div class="bubble bubble-out">where is it</div>
@@ -290,8 +290,9 @@
       <p class="eyebrow eyebrow-lilac">Pricing</p>
       <h2 class="display-3">{{PRICE_PER_LB}} a pound.</h2>
       <p style="font-size:18px;line-height:1.55;color:var(--ink-800);max-width:38ch;margin:0 0 28px;">
-        Weighed after pickup, so you only pay for what you send. A typical bag
-        runs {{ESTIMATE_RANGE}}. No membership, no minimum, no surprise fees.
+        {{MINIMUM}} minimum per pickup, then {{PRICE_PER_LB}} a pound weighed
+        after collection. A typical bag runs {{ESTIMATE_RANGE}}. No membership,
+        no delivery fee, no surprise numbers.
       </p>
       <a href="/pricing" class="btn btn-ink btn-lg">
         See full pricing {{ICON_ARROW}}

@@ -103,6 +103,8 @@ const tokens = Object.freeze({
   CONTACT_SENTENCE: contactSentence(),
   SERVICE_AREA: site.serviceArea,
   PRICE_PER_LB: site.pricePerLb,
+  MINIMUM: `$${(config.pricing.minimumCents / 100).toFixed(0)}`,
+  MINIMUM_LB: `${config.pricing.minimumCents / config.pricing.perPoundCents} lb`,
   ESTIMATE_RANGE: site.estimateRange,
   MAX_ORDER: site.maxOrder,
   BAG_WEIGHT: site.typicalBagWeight,
