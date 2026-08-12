@@ -127,10 +127,21 @@ async function recordWeight(order, weightLb) {
     return { ok: false, reason: 'illegal', detail: `That order is ${order.status}.` };
   }
 
-  // The rate stored on the order, never today's rate. Changing the price must
-  // not re-price work that was already quoted.
+  // The terms stored on the order, never today's terms. Changing the price or
+  // the minimum must not re-price work that was already quoted.
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
-  const priceCents = Math.round(weight * rate);
+  const byWeight = Math.round(weight * rate);
+
+  // THE MINIMUM IS PART OF THE PRICE, not just part of the charging.
+  //
+  // Without this, a 10 lb order at $2.00 recorded $20.00 as its price while
+  // the customer was charged the $25.00 minimum, so the order under-reported
+  // its own revenue and every total built on it was short by the difference.
+  //
+  // Null on orders taken before the minimum existed, which were genuinely not
+  // subject to one.
+  const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
+  const priceCents = Math.max(byWeight, floor);
 
   // Weight and price are written together; the database refuses one without
   // the other, so an order can never carry a charge no weight justifies.
@@ -161,20 +172,31 @@ async function recordWeight(order, weightLb) {
 
   // The one new fact: the weight, and what follows from it. No turnaround
   // repeat - that was promised at booking.
+  //
+  // When the minimum is what set the price, say so. "10 lb, so the total is
+  // $25.00 at $2.00 a pound" is arithmetic the customer can see is wrong.
+  const minimumApplied = priceCents > byWeight;
+
+  let howPriced;
+  if (minimumApplied) {
+    howPriced =
+      `Your laundry weighed ${weight} lb, which is under our ${money(floor)} minimum, ` +
+      `so the total is ${money(priceCents)}.`;
+  } else {
+    howPriced =
+      `Your laundry weighed ${weight} lb, so the total is ${money(priceCents)} at ` +
+      `${site.pricePerLb} a pound.`;
+  }
+
   let message;
   if (owed === 0 && alreadyPaid > 0) {
-    message =
-      `Your laundry weighed ${weight} lb, under the ${money(alreadyPaid)} minimum you've ` +
-      `already paid, so there's nothing more to pay.`;
+    message = `${howPriced} You've already paid that, so there's nothing more to pay.`;
   } else if (alreadyPaid > 0) {
     message =
-      `Your laundry weighed ${weight} lb, so the total is ${money(priceCents)} at ` +
-      `${site.pricePerLb} a pound. You've paid ${money(alreadyPaid)}, and the remaining ` +
-      `${money(owed)} comes off ${card ? `your ${card}` : 'your card'} on delivery.`;
+      `${howPriced} You've paid ${money(alreadyPaid)}, and the remaining ${money(owed)} ` +
+      `comes off ${card ? `your ${card}` : 'your card'} on delivery.`;
   } else {
-    message =
-      `Your laundry weighed ${weight} lb, so the total is ${money(priceCents)} at ` +
-      `${site.pricePerLb} a pound, charged on delivery.`;
+    message = `${howPriced} Charged on delivery.`;
   }
 
   await sendAndLog(customer.phone, message, customer.id);

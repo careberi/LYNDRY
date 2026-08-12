@@ -158,9 +158,10 @@ async function create({
       bag_count: bagCount || null,
       notes: notes || null,
 
-      // The rate is recorded on the order itself so that changing the price
-      // later never silently re-prices work already done.
+      // Both halves of the price are recorded on the order itself, so that
+      // changing either later never silently re-prices work already done.
       price_per_lb_cents: config.pricing.perPoundCents,
+      minimum_cents: config.pricing.minimumCents,
     })
     .select('*')
     .single();
