@@ -439,6 +439,8 @@ router.get('/ops/today', async (req, res, next) => {
 
       return {
         order_id: o.id,
+        // What the driver actually says out loud. The UUID is for the API.
+        order_number: o.order_number,
         name: c.name,
         phone: c.phone,
         address,

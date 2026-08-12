@@ -497,7 +497,7 @@ const may = (permission) => roles.requirePermission(permission, refuse);
 // ---------------------------------------------------------------------------
 
 const ORDER_FIELDS =
-  'id, status, pickup_date, pickup_time, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
+  'id, order_number, status, pickup_date, pickup_time, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
   'delivery_photo_url, notes, created_at, customers(id, name, phone, address_line1, address_line2, city, postal_code)';
 
 router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
@@ -536,7 +536,8 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
     const row = (o) => {
       const c = o.customers || {};
       return [
-        `<a href="/ops/orders/${o.id}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
+        `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
+        `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
          <div style="font-size:13px;color:var(--ink-500);">${escapeHtml(addressOf(c))}</div>`,
         // The window under the day, because "Wednesday" is not enough to plan a
         // round with once customers start naming times.
@@ -551,7 +552,7 @@ router.get('/ops', guard, may('orders.view'), async (req, res, next) => {
       ];
     };
 
-    const headings = ['Customer', 'Pickup', 'Status', 'Weight'];
+    const headings = ['Order', 'Customer', 'Pickup', 'Status', 'Weight'];
     if (showMoney) headings.push('Price', 'Payment');
 
     const board = (eyebrow, heading, list) => `
@@ -599,7 +600,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) => {
   try {
-    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That order id is not valid.');
+    // Accepts either form: the UUID, or the number a person would actually
+    // have — off a bag tag, out of a text, or read down the phone. A UUID
+    // always has hyphens and letters, so digits alone are never ambiguous.
+    const wanted = String(req.params.id);
+    const byNumber = /^\d+$/.test(wanted);
+
+    if (!byNumber && !UUID.test(wanted)) {
+      return notFoundPage(res, 'That is not an order number or an order id.');
+    }
 
     const { data: order, error } = await db
       .from('orders')
@@ -607,11 +616,11 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
       // preferences, not on the order, and asking for them makes the whole
       // query fail rather than just returning null.
       .select(`${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at`)
-      .eq('id', req.params.id)
+      .eq(byNumber ? 'order_number' : 'id', wanted)
       .maybeSingle();
 
     if (error) throw error;
-    if (!order) return notFoundPage(res, 'No order with that id.');
+    if (!order) return notFoundPage(res, `No order ${byNumber ? `#${wanted}` : 'with that id'}.`);
 
     const c = order.customers || {};
     const showMoney = roles.can(req.opsUser, 'money.view');
@@ -636,6 +645,8 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
 
       <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin:18px 0 32px;">
         <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0;">
+          <span style="font-variant-numeric:tabular-nums;">#${order.order_number}</span>
+          <span style="color:var(--ink-400);">&middot;</span>
           ${escapeHtml(c.name || 'Unknown customer')}
         </h1>
         ${statusBadge(order.status)}

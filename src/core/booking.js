@@ -304,9 +304,16 @@ function confirmationMessage(customer, order) {
   // Plain hyphens and straight quotes only, here and in every other outbound
   // message. One em dash triples what this costs to send; the reasoning is in
   // full at the top of src/core/notify.js, which warns if one creeps back in.
+  // The order number is in here so the customer has it if they ever ring or
+  // email about this pickup. It is the same number the driver sees on the run
+  // sheet, which is the whole point of having one.
+  const reference = order.order_number ? ` Order #${order.order_number}.` : '';
+
+  // handover carries the "we'll text you" promise for a doorstep pickup and
+  // the "we'll knock" one for a handover, so it is not repeated here.
   return (
-    `Of course. We'll come ${whenLine(order)}. ${handover} ` +
-    `We'll text you when we've got it. ${money} Back within ${site.turnaround}.`
+    `Of course! We'll be there ${whenLine(order)}. ${handover} ` +
+    `${money} Back with you within ${site.turnaround}.${reference}`
   );
 }
 
