@@ -77,6 +77,18 @@ function hasAddress(customer) {
   return Boolean(customer.address_line1 && customer.city && customer.postal_code);
 }
 
+// Have they actually told us how to wash their clothes?
+//
+// There are NO default preferences. Washing somebody's clothes warm when they
+// never said so is how clothes get ruined, and "we've set you up with cold
+// water and standard detergent" went to a real customer who had chosen
+// nothing. A first booking is refused until these exist, which is what makes
+// the asking mandatory rather than polite.
+function hasPreferences(customer) {
+  const prefs = customer.preferences || {};
+  return Boolean(prefs.water_temp && prefs.detergent && prefs.fabric_softener != null);
+}
+
 // Is this address somewhere the van actually goes?
 //
 // Deliberately coarse: New Jersey, in the 07xxx zip range, which is the
@@ -140,8 +152,11 @@ const PICKUP_WINDOWS = Object.freeze([
   Object.freeze({ start: '15:00', end: '18:00' }),
 ]);
 
-// How close to a window's start we will still accept a booking for it. Below
-// this, the van is already loaded and moving, so it goes to the next one.
+// How much of a window must be LEFT for it to still take a booking. Measured
+// against the window's end, not its start: a window that is underway is still
+// a real option — the van is out until it closes. "Today at 4:30", texted at
+// 3:32, belongs in the 3 to 6 window, and the first version of this rule
+// threw it to tomorrow, which put a real order on the wrong day.
 const WINDOW_CUTOFF_MIN = 60;
 
 // Accepts what a form sends ("18:00") and what Postgres returns ("18:00:00"),
@@ -238,7 +253,7 @@ function chooseWindow(date, requestedTime) {
   const nowMin = toMinutes(now.time);
 
   const usable = PICKUP_WINDOWS.filter((w) =>
-    isToday ? toMinutes(w.start) - WINDOW_CUTOFF_MIN > nowMin : true
+    isToday ? toMinutes(w.end) - WINDOW_CUTOFF_MIN >= nowMin : true
   );
 
   if (!usable.length) return null;
@@ -319,6 +334,11 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   // Checked at booking rather than only at signup, because an address can be
   // edited later and the van's range is the van's range.
   if (!inServiceArea(customer)) return { ok: false, reason: 'out_of_area' };
+
+  // No preferences, no booking. The AI is told to ask; this is what makes
+  // sure, because a model is not a guarantee and a wash nobody specified is
+  // not a wash we should run.
+  if (!hasPreferences(customer)) return { ok: false, reason: 'no_preferences' };
 
   const detail = dateProblem(pickupDate);
   if (detail) return { ok: false, reason: 'bad_date', detail };
@@ -469,6 +489,7 @@ module.exports = {
   dateProblem,
   timeProblem,
   hasAddress,
+  hasPreferences,
   inServiceArea,
   readableDate,
   readableTime,

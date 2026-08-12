@@ -537,6 +537,7 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
       const message = {
         no_address: 'We need your address before we can collect. Email us and we’ll add it.',
         out_of_area: `We don’t reach your address just yet — we cover ${site.serviceArea} right now.`,
+        no_preferences: 'Tell us how you like it washed first — text us and we’ll get you set up in a minute.',
         bad_date: result.detail,
         bad_time: result.detail,
         already_booked: 'You already have a pickup booked. Move it rather than booking a second.',

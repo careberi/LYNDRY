@@ -51,6 +51,11 @@ async function createOrder(customer, input) {
           `We don't reach ${customer.city || 'your area'} just yet, sorry. We cover ` +
           `${site.serviceArea} right now, and we'll text you the moment that changes.`
         );
+      case 'no_preferences':
+        return (
+          `Almost there! Just tell me how you like it washed: cold or warm water, ` +
+          `regular or hypoallergenic detergent, and softener or no?`
+        );
       case 'bad_date':
       case 'bad_time':
         return result.detail;
@@ -272,6 +277,35 @@ async function saveDetails(customer, input) {
   const state = clean(input.state, 2).toUpperCase();
   if (state) changes.state = state;
 
+  // Wash preferences and the handover spot, exactly as they chose them.
+  // These only ever come from the customer's own words — there are no
+  // defaults, and a booking is refused until they exist.
+  const prefs = { ...(customer.preferences || {}) };
+  let prefsChanged = false;
+
+  if (['COLD', 'WARM', 'HOT'].includes(input.water_temp)) {
+    prefs.water_temp = input.water_temp;
+    prefsChanged = true;
+  }
+  if (['STANDARD', 'HYPOALLERGENIC'].includes(input.detergent)) {
+    prefs.detergent = input.detergent;
+    prefsChanged = true;
+  }
+  if (input.fabric_softener === 'yes' || input.fabric_softener === 'no') {
+    prefs.fabric_softener = input.fabric_softener === 'yes';
+    prefsChanged = true;
+  }
+  if (['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'].includes(input.pickup_method)) {
+    prefs.default_pickup_method = input.pickup_method;
+    prefsChanged = true;
+  }
+  if (clean(input.pickup_spot, 200)) {
+    prefs.special_instructions = clean(input.pickup_spot, 200);
+    prefsChanged = true;
+  }
+
+  if (prefsChanged) changes.preferences = prefs;
+
   if (!Object.keys(changes).length) {
     return `Sorry, I didn't catch that. What's your name and the address we should collect from?`;
   }
@@ -307,6 +341,17 @@ async function saveDetails(customer, input) {
     if (!updated.address_line1) return `Thanks ${first}! And what's the street address?`;
     if (!updated.city) return `Thanks ${first}! Which town is that in?`;
     return `Thanks ${first}! And the zip code?`;
+  }
+
+  // Address done, but no wash choices yet. Ask, never invent — this is the
+  // backstop behind the prompt's instruction to ask, and it is what stops
+  // "we've set you up with cold water" going to somebody who chose nothing.
+  if (!booking.hasPreferences(updated)) {
+    return (
+      `Thanks ${first}! Now the wash itself: cold or warm water, regular or ` +
+      `hypoallergenic detergent, and softener or no? And where should the ` +
+      `driver find the bag?`
+    );
   }
 
   // The address is complete. If the van doesn't go there, say so NOW — not at

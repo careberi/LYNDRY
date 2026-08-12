@@ -311,8 +311,12 @@ Rules:
 - Missing a required field? Ask for **that one field only**, then act.
 - A returning customer texting "laundry tomorrow" gets an order with zero
   follow-up questions.
-- Never ask about detergent, temperature, folding or softener over SMS. Those
-  live in `preferences`, collected once on the website.
+- **There are no default wash preferences, anywhere.** A new customer is asked
+  once, in the thread, during setup — water temperature, detergent, softener,
+  and where the driver finds the bag — and `bookPickup()` refuses a first
+  booking until they exist. Never invent a setting and never tell somebody
+  what they've been "set up with"; that sentence went to a real customer and
+  Neil called it unacceptable. Once saved, never asked again.
 - Uncertain, or the customer is upset? `handoff_to_human` rather than guessing.
 - Replies sound like a competent human at a small business. Short. No emoji.
   Never "I'm an AI".
