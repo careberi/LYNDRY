@@ -196,6 +196,17 @@ async function chargeOrder(order, customer) {
     return { ok: false, message: null, reason: 'The order has no price yet.' };
   }
 
+  // Payments switched off entirely, which is how the service runs before
+  // Stripe keys are set. Weighing must still work and the customer must still
+  // be told what it came to; the money is simply not collected yet.
+  //
+  // Without this, recording a weight throws "Payments are not configured"
+  // deep inside the setup-link code and the driver gets a 500 at the one
+  // moment they most need the screen to work.
+  if (!payments.isConfigured) {
+    return { ok: false, message: null, reason: 'Payments are not switched on.' };
+  }
+
   if (!hasPaymentMethod(customer)) {
     const { url } = await createSetupLink(customer);
     await markFailed(order, 'No card on file.');

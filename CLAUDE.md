@@ -318,6 +318,8 @@ time. No login system, no accounts — it's Neil and a driver.
 
 ```
 POST /ops/collected          the bag is in the van        -> IN_PROCESS
+POST /ops/at-partner         dropped at the laundromat    -> AT_PARTNER
+POST /ops/ready              partner has finished it      -> READY
 POST /ops/weight             pounds in, price out         (sets price_cents, CHARGES)
 POST /ops/out-for-delivery                                -> OUT_FOR_DELIVERY
 POST /ops/delivered          multipart photo upload       -> DELIVERED
@@ -325,6 +327,20 @@ POST /ops/charge             retry a declined card        (manual lever)
 POST /ops/waive              decide not to charge         -> WAIVED
 GET  /ops/today              the driver's run sheet, plus what's owed
 ```
+
+**The steps themselves live in `src/core/fulfilment.js`, and both front doors
+call it** — the buttons on the ops screens and this JSON API. They used to be
+one implementation with no buttons at all; the moment a second caller appeared,
+reimplementing "collected" in the HTML router would have drifted the first time
+one of them learned something the other did not. Same rule as `booking.js`.
+
+**A partner never touches the system. The driver records everything.** He taps
+"dropped at partner", the laundromat tells him the weight, he taps it in. There
+are no partner accounts and no partner logins, on purpose: `/ops/weight` is what
+charges the customer's card, so a weight of 400 instead of 40 is a $1,000
+charge, and our own driver belongs between that number and someone's card. Also
+there is no signed partner yet and no agreed commercial terms, so partner
+logins would be building for somebody who does not exist.
 
 **Every status change texts the customer**, through `src/core/notify.js`, which
 sends and logs in one step. Nothing may send a text without recording it.
@@ -345,6 +361,19 @@ shortener** — carriers treat shortened links as a spam signal in 10DLC.
 `npm run driver` is the terminal equivalent, and still the fastest way to test
 an order through its whole day.
 
+**The order page is where the work actually happens.** One card at the top, the
+legal next steps as 56px full-width buttons, and a weight box. No JavaScript
+anywhere: a driver on two bars of signal in a stairwell gets a page that either
+worked or did not, rather than a spinner that lies. `?done=` and `?problem=` on
+the redirect carry the banner, so refreshing repeats the message and never the
+action. A double-tap is refused by the state machine and shown as a sentence.
+
+**An order number identifies an order to a person; the UUID is for the
+database.** `orders.order_number` starts at 1001, appears on the board, heads
+the order page, rides along on the booking confirmation text, and is what
+`/ops/orders/1042` accepts. A UUID always has hyphens and letters, so digits
+alone are never ambiguous.
+
 ## The ops screens
 
 Browser screens for Neil, at `/ops`. Built in `src/routes/admin.js`, which
@@ -353,7 +382,9 @@ sign-in check in `src/core/admin-auth.js`, so they cannot drift apart.
 
 ```
 GET  /ops                    orders board: active, upcoming, past
-GET  /ops/orders/:id         one order, plus the message thread
+GET  /ops/orders/:id         one order, the buttons, and the message thread
+POST /ops/orders/:id/<step>  the buttons: collected, at-partner, ready,
+                             weight, out-for-delivery, delivered
 GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
 GET  /ops/messages           every conversation, one row per phone number
@@ -514,10 +545,30 @@ which one is live.
 
 ```
 REQUESTED -> ASSIGNED -> DEPOSITED -> IN_PROCESS -> OUT_FOR_DELIVERY -> DELIVERED
+                                          |                ^
+                                          v                |
+                                     AT_PARTNER -> READY --+
 ```
 
 `ASSIGNED` and `DEPOSITED` are the locker path and are unused at launch.
 Residential orders go `REQUESTED -> IN_PROCESS` when the driver collects.
+
+**The partner leg is optional.** `IN_PROCESS` means the bag is in the van and
+ours; `AT_PARTNER` means it is at the laundromat; `READY` means the partner has
+finished and it is waiting to be collected again. A bag we wash ourselves goes
+straight from `IN_PROCESS` to `OUT_FOR_DELIVERY`, so the machine never forces us
+to invent a partner visit that did not happen.
+
+**`AT_PARTNER` and `READY` are the two status changes that do NOT text the
+customer,** and that is deliberate. "Your laundry is at our partner laundromat"
+says something about how the business is run rather than about their order, and
+two more texts per order is real money and a worse complaint profile for
+information nobody asked for. They still get collected, weighed-and-priced, out
+for delivery, and delivered.
+
+**Weighing is an event, not a state** — the same way unlocking a locker is. It
+can happen at any point while we hold the bag, and it is what turns an estimate
+into a price.
 
 `CANCELED` is reachable only before the laundry is in our hands — before
 `DEPOSITED` on the locker path, before collection on the residential path.

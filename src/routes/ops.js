@@ -12,6 +12,7 @@ const { config } = require('../config');
 const { site } = require('../web/site');
 const { readableDate } = require('../core/actions');
 const booking = require('../core/booking');
+const fulfilment = require('../core/fulfilment');
 
 const router = express.Router();
 
@@ -21,12 +22,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
-
-const PHOTO_BUCKET = 'delivery-photos';
-
-// How long a delivery photo link stays alive. Matches the privacy policy's
-// promise that photos are kept for a limited period.
-const PHOTO_LINK_DAYS = 30;
 
 // ---------------------------------------------------------------------------
 // Who is allowed in
@@ -70,245 +65,120 @@ async function loadOrder(req, res) {
   return data;
 }
 
-// Turns a state machine refusal into a 409 the driver can understand, rather
-// than a 500 that looks like the server broke.
-function handleTransitionError(err, res) {
-  if (/cannot go from/i.test(err.message)) {
-    return res.status(409).json({ error: 'illegal_transition', detail: err.message });
-  }
-  throw err;
-}
-
 function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
 // ---------------------------------------------------------------------------
-// POST /ops/collected — the driver has the bag
+// The steps of an order's day
 //
-// This is the moment the laundry becomes our responsibility, and the moment
-// the customer loses the ability to cancel. Both follow from this one call.
+// Thin wrappers. Every one of these calls src/core/fulfilment.js, which is the
+// same code the buttons on the ops screens call. Two implementations of
+// "collected" would have drifted the first time one of them learned something
+// the other did not.
 // ---------------------------------------------------------------------------
+
+// Turns a fulfilment result into the right HTTP answer.
+function send(res, result, extra = {}) {
+  if (!result.ok) {
+    const illegal = result.reason === 'illegal';
+    return res
+      .status(illegal ? 409 : 400)
+      .json({ error: illegal ? 'illegal_transition' : 'invalid_request', detail: result.detail });
+  }
+
+  return res.json({
+    ok: true,
+    order_id: result.order.id,
+    order_number: result.order.order_number,
+    status: result.order.status,
+    ...extra,
+  });
+}
 
 router.post('/ops/collected', async (req, res, next) => {
   try {
     const order = await loadOrder(req, res);
     if (!order) return;
 
-    const bagCount = Number(req.body.bag_count) || order.bag_count || null;
-
-    let updated;
-    try {
-      updated = await orders.transition(order, 'IN_PROCESS');
-    } catch (err) {
-      return handleTransitionError(err, res);
-    }
-
-    if (bagCount && bagCount !== order.bag_count) {
-      await db.from('orders').update({ bag_count: bagCount }).eq('id', order.id);
-      updated.bag_count = bagCount;
-    }
-
-    const customer = order.customers;
-    await sendAndLog(
-      customer.phone,
-      `We've collected your laundry. It'll be washed, folded and back with you within ${site.turnaround}.`,
-      customer.id
-    );
-
-    res.json({ ok: true, order_id: order.id, status: updated.status, bag_count: updated.bag_count });
+    const result = await fulfilment.collect(order, { bagCount: req.body.bag_count });
+    return send(res, result, result.ok ? { bag_count: result.order.bag_count } : {});
   } catch (err) {
     next(err);
   }
 });
 
-// ---------------------------------------------------------------------------
-// POST /ops/weight — record the weight, which sets the price
-//
-// Wash and fold is charged by the pound, so this is where an order stops
-// having an estimate and starts having a real number. The rate used is the one
-// stored on the order, not today's rate — a price change must never re-price
-// work that was already quoted.
-// ---------------------------------------------------------------------------
+router.post('/ops/at-partner', async (req, res, next) => {
+  try {
+    const order = await loadOrder(req, res);
+    if (!order) return;
+    return send(res, await fulfilment.dropAtPartner(order));
+  } catch (err) {
+    next(err);
+  }
+});
 
+router.post('/ops/ready', async (req, res, next) => {
+  try {
+    const order = await loadOrder(req, res);
+    if (!order) return;
+    return send(res, await fulfilment.markReady(order));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Weighing sets the price and charges the card, so it answers with more than
+// a status: the driver screen shows whether the money actually moved.
 router.post('/ops/weight', async (req, res, next) => {
   try {
     const order = await loadOrder(req, res);
     if (!order) return;
 
-    const weight = Number(req.body.weight_lb);
+    const result = await fulfilment.recordWeight(order, req.body.weight_lb);
 
-    if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
-      return res.status(400).json({ error: 'weight_lb_invalid', detail: 'Expected a weight in pounds between 0 and 200.' });
+    if (!result.ok) {
+      const illegal = result.reason === 'illegal';
+      return res
+        .status(illegal ? 409 : 400)
+        .json({ error: illegal ? 'order_not_active' : 'weight_lb_invalid', detail: result.detail });
     }
 
-    if (!orders.IN_FLIGHT.includes(order.status)) {
-      return res.status(409).json({ error: 'order_not_active', detail: `That order is ${order.status}.` });
-    }
-
-    const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
-    const priceCents = Math.round(weight * rate);
-
-    // Weight and price are written together — the database refuses one
-    // without the other, so an order can never carry a charge that no weight
-    // justifies.
-    const { data: updated, error } = await db
-      .from('orders')
-      .update({ weight_lb: weight, price_cents: priceCents })
-      .eq('id', order.id)
-      .select('*')
-      .single();
-
-    if (error) throw error;
-
-    const customer = order.customers;
-    const over = weight > config.pricing.maxOrderLb;
-
-    // Weighing is the moment the card gets charged. The customer already
-    // authorised it — once when they saved the card, and again when they
-    // confirmed this order by text — so there is nothing more to ask them.
-    //
-    // The message is written by the billing layer, because it is the only
-    // thing that knows whether the charge went through, and the customer must
-    // not be told "charged" if it didn't.
-    const charge = await billing.chargeOrder(updated, customer);
-
-    if (charge.message) {
-      await sendAndLog(customer.phone, charge.message, customer.id);
-    } else {
-      // Nothing to charge — already paid, or waived by Neil. Still tell them
-      // the weight, because that is the number they were promised.
-      await sendAndLog(
-        customer.phone,
-        `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ${site.pricePerLb} a pound. ` +
-          `We'll have it back to you within ${site.turnaround}.`,
-        customer.id
-      );
-    }
-
-    res.json({
+    return res.json({
       ok: true,
-      order_id: order.id,
-      weight_lb: updated.weight_lb,
-      price_cents: updated.price_cents,
-      price: money(updated.price_cents),
-      over_max_order: over,
-      // The driver's screen needs to show this. A declined card is not their
-      // problem to solve, but "keep going, we'll chase it" is worth knowing.
-      paid: Boolean(charge.ok),
-      payment_note: charge.ok ? null : charge.needsCard ? 'no card on file' : 'card declined',
+      order_id: result.order.id,
+      order_number: result.order.order_number,
+      weight_lb: result.weightLb,
+      price_cents: result.priceCents,
+      price: money(result.priceCents),
+      over_max_order: result.overMaxOrder,
+      // A declined card is not the driver's problem to solve, but
+      // "keep going, we will chase it" is worth knowing.
+      paid: result.paid,
+      payment_note: result.paymentNote,
     });
   } catch (err) {
     next(err);
   }
 });
 
-// ---------------------------------------------------------------------------
-// POST /ops/out-for-delivery
-// ---------------------------------------------------------------------------
-
 router.post('/ops/out-for-delivery', async (req, res, next) => {
   try {
     const order = await loadOrder(req, res);
     if (!order) return;
-
-    let updated;
-    try {
-      updated = await orders.transition(order, 'OUT_FOR_DELIVERY');
-    } catch (err) {
-      return handleTransitionError(err, res);
-    }
-
-    const customer = order.customers;
-    const price = order.price_cents ? ` That's ${money(order.price_cents)}.` : '';
-
-    await sendAndLog(
-      customer.phone,
-      `Your laundry is washed, folded and out for delivery today.${price}`,
-      customer.id
-    );
-
-    res.json({ ok: true, order_id: order.id, status: updated.status });
+    return send(res, await fulfilment.outForDelivery(order));
   } catch (err) {
     next(err);
   }
 });
-
-// ---------------------------------------------------------------------------
-// POST /ops/delivered — with a photo
-//
-// The photo is the proof. It goes into a private bucket, and the customer gets
-// a link that expires — a picture of somebody's front door is not something to
-// leave publicly readable forever.
-// ---------------------------------------------------------------------------
 
 router.post('/ops/delivered', upload.single('photo'), async (req, res, next) => {
   try {
     const order = await loadOrder(req, res);
     if (!order) return;
 
-    let photoPath = null;
-    let photoUrl = null;
-
-    if (req.file) {
-      const extension = (req.file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-      photoPath = `${order.id}/${Date.now()}.${extension}`;
-
-      const { error: uploadError } = await db.storage
-        .from(PHOTO_BUCKET)
-        .upload(photoPath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
-
-      if (uploadError) throw new Error(`Photo upload failed: ${uploadError.message}`);
-
-      // The customer gets a short link on our own domain, not a signed
-      // storage URL. Carriers distrust links to domains that aren't yours,
-      // and a signature with an expiry date in it would eventually break the
-      // photo. We sign on demand instead, when someone opens the link.
-      photoUrl = `${config.baseUrl}/p/${order.id}`;
-    }
-
-    let updated;
-    try {
-      updated = await orders.transition(order, 'DELIVERED');
-    } catch (err) {
-      return handleTransitionError(err, res);
-    }
-
-    if (photoUrl) {
-      await db
-        .from('orders')
-        .update({ delivery_photo_url: photoUrl, delivery_photo_path: photoPath })
-        .eq('id', order.id);
-    }
-
-    const customer = order.customers;
-    const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
-
-    // What we say about the money depends on whether we actually got it. A
-    // delivery text that reads like a receipt when the card was declined is
-    // how an unpaid order quietly becomes a forgotten one.
-    let price = '';
-    if (order.price_cents && order.payment_status === 'PAID') {
-      price = ` ${money(order.price_cents)}, paid.`;
-    } else if (order.price_cents && order.payment_status === 'FAILED') {
-      price = ` ${money(order.price_cents)} is still outstanding — the card link we sent will settle it.`;
-    } else if (order.price_cents) {
-      price = ` ${money(order.price_cents)} for this one.`;
-    }
-
-    await sendAndLog(
-      customer.phone,
-      `Delivered. Your laundry is at your door.${price}${photo}`,
-      customer.id
-    );
-
-    res.json({
-      ok: true,
-      order_id: order.id,
-      status: updated.status,
-      photo: Boolean(photoUrl),
-      payment_status: order.payment_status,
-    });
+    const result = await fulfilment.deliver(order, req.file);
+    return send(res, result, result.ok ? { photo: result.photo, payment_status: order.payment_status } : {});
   } catch (err) {
     next(err);
   }

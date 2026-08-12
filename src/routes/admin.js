@@ -11,6 +11,12 @@ const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
+const fulfilment = require('../core/fulfilment');
+
+// The delivery photo arrives from a phone camera, so it is held in memory and
+// pushed straight to storage. Same limits as the JSON API.
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -216,6 +222,90 @@ function table(headings, rows) {
           .join('')}
       </tbody>
     </table>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// The work card
+//
+// The single most-used thing on this screen: what a driver taps, standing on a
+// doorstep with one hand full. Before this existed the only way to move an
+// order along was a terminal command, which is fine for testing and useless
+// for a round.
+//
+// Buttons are 56px and full width on a phone deliberately. Every one of them
+// posts a form and reloads the page, with no JavaScript anywhere: a driver on
+// two bars of signal in a stairwell gets a page that either worked or didn't,
+// rather than a spinner that lies.
+// ---------------------------------------------------------------------------
+
+function workCard(order, { canAct, notice, problem }) {
+  const steps = fulfilment.nextSteps(order);
+  const weighed = order.weight_lb != null;
+
+  // Weighing is an event rather than a step, so it is offered the whole time
+  // we have the bag rather than at one point in the sequence.
+  const canWeigh = orders.IN_FLIGHT.includes(order.status);
+
+  if (!canAct) return '';
+
+  const banner = (text, background) => `
+    <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+              background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+
+  // Delivered needs a photo, so it is a file input rather than a bare button.
+  const stepButton = (s) =>
+    s.to === 'DELIVERED'
+      ? `
+      <form method="post" action="/ops/orders/${order.order_number}/delivered"
+            enctype="multipart/form-data" style="margin:0;display:flex;flex-direction:column;gap:10px;">
+        <label class="field-label" for="photo">Photo at the door</label>
+        <input class="input" type="file" id="photo" name="photo" accept="image/*" capture="environment">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
+        <span class="field-hint">The customer gets a link to this that expires after 30 days.</span>
+      </form>`
+      : `
+      <form method="post" action="/ops/orders/${order.order_number}/${s.action}" style="margin:0;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
+        <span class="field-hint" style="display:block;margin-top:6px;">${escapeHtml(s.hint)}</span>
+      </form>`;
+
+  return `
+  <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
+    ${sectionHeading('Next', 'What happens now')}
+
+    ${problem ? banner(problem, 'var(--stain-500)') : ''}
+    ${notice ? banner(notice, 'var(--suds-300)') : ''}
+
+    ${
+      steps.length
+        ? `<div style="display:flex;flex-direction:column;gap:22px;">${steps.map(stepButton).join('')}</div>`
+        : `<p style="font-size:16px;color:var(--ink-500);margin:0;">
+             Nothing left to do. This order is ${escapeHtml(order.status.replace(/_/g, ' ').toLowerCase())}.
+           </p>`
+    }
+
+    ${
+      canWeigh
+        ? `
+      <form method="post" action="/ops/orders/${order.order_number}/weight"
+            style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-900);">
+        <label class="field-label" for="weight_lb">
+          ${weighed ? 'Correct the weight' : 'Weigh it'}
+        </label>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
+                 step="0.1" min="0.1" max="200" inputmode="decimal" required
+                 style="flex:1;" value="${weighed ? escapeHtml(String(order.weight_lb)) : ''}"
+                 placeholder="Pounds">
+          <button type="submit" class="btn btn-ink btn-lg">Save</button>
+        </div>
+        <span class="field-hint" style="display:block;margin-top:8px;">
+          This sets the price and charges the card. ${weighed ? 'It has already been weighed once.' : ''}
+        </span>
+      </form>`
+        : ''
+    }
   </div>`;
 }
 
@@ -653,6 +743,12 @@ router.get('/ops/orders/:id', guard, may('orders.view'), async (req, res, next) 
         ${paymentBadge(order)}
       </div>
 
+      ${workCard(order, {
+        canAct: roles.can(req.opsUser, 'orders.act'),
+        notice: req.query.done ? DONE_MESSAGES[String(req.query.done)] || null : null,
+        problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+      })}
+
       <div class="grid-2" style="align-items:start;">
 
         <div class="card card-xl" style="padding:28px;">
@@ -894,6 +990,85 @@ router.get('/ops/customers/:id', guard, may('customers.view'), async (req, res, 
     next(err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// The buttons on the order page
+//
+// One route per step, each a thin wrapper over src/core/fulfilment.js, which
+// is the same code the JSON API calls. They answer with a redirect rather than
+// JSON because a browser is on the other end: a driver who taps twice gets the
+// page back with a plain sentence, not a wall of braces.
+//
+// Both middlewares, every time: guard proves who you are, may('orders.act')
+// proves you are allowed to move an order. Admins have orders.act as well as
+// drivers, so the same buttons appear for both.
+// ---------------------------------------------------------------------------
+
+// What the green banner says after each step. Keyed by the ?done= value so a
+// refresh cannot repeat the action, only the message.
+const DONE_MESSAGES = Object.freeze({
+  collected: 'Collected. The customer has been texted.',
+  'at-partner': 'Marked as dropped at the partner.',
+  ready: 'Marked ready for collection.',
+  weight: 'Weight saved. The price is set and the card has been charged.',
+  'out-for-delivery': 'Out for delivery. The customer has been texted.',
+  delivered: 'Delivered. The customer has been texted.',
+});
+
+// Loads the order behind an ops button. Accepts the number or the UUID, the
+// same as the page itself.
+async function loadOrderForAction(idOrNumber) {
+  const wanted = String(idOrNumber);
+  const byNumber = /^\d+$/.test(wanted);
+
+  if (!byNumber && !UUID.test(wanted)) return null;
+
+  const { data, error } = await db
+    .from('orders')
+    .select('*, customers(*)')
+    .eq(byNumber ? 'order_number' : 'id', wanted)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+// Every button route is this shape, so they are built rather than repeated.
+function orderAction(action, run, middleware = null) {
+  const handler = async (req, res, next) => {
+    try {
+      const order = await loadOrderForAction(req.params.id);
+      if (!order) return notFoundPage(res, 'No order with that number.');
+
+      const back = `/ops/orders/${order.order_number}`;
+
+      const result = await run(order, req);
+
+      if (!result.ok) {
+        // A refused transition is a driver double-tapping, not a crash. Say
+        // what happened in a sentence and put them back on the page.
+        return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail || 'That did not work.')}`);
+      }
+
+      return res.redirect(303, `${back}?done=${action}`);
+    } catch (err) {
+      return next(err);
+    }
+  };
+
+  const path = `/ops/orders/:id/${action}`;
+  if (middleware) router.post(path, guard, may('orders.act'), middleware, handler);
+  else router.post(path, guard, may('orders.act'), handler);
+}
+
+// req.body is undefined when a form posts nothing at all, which is exactly
+// what a bare button does.
+orderAction('collected', (order, req) => fulfilment.collect(order, { bagCount: (req.body || {}).bag_count }));
+orderAction('at-partner', (order) => fulfilment.dropAtPartner(order));
+orderAction('ready', (order) => fulfilment.markReady(order));
+orderAction('weight', (order, req) => fulfilment.recordWeight(order, (req.body || {}).weight_lb));
+orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
+orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
 
 // ---------------------------------------------------------------------------
 // GET /ops/messages — every conversation, one row per phone number

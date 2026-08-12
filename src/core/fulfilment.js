@@ -1,0 +1,268 @@
+'use strict';
+
+const db = require('../db');
+const orders = require('./orders');
+const billing = require('./billing');
+const { sendAndLog } = require('./notify');
+const { config } = require('../config');
+const { site } = require('../web/site');
+
+// ---------------------------------------------------------------------------
+// Moving an order through its day.
+//
+// There are two front doors onto these steps and they must behave identically:
+//
+//   1. Buttons on the ops screens, which is how the work actually gets done
+//   2. The JSON API in src/routes/ops.js, which npm run driver talks to
+//
+// Both call the functions here. When the buttons were added, the alternative
+// was to reimplement "collected" in the HTML router, and the two copies would
+// have drifted the first time one of them learned something the other did not.
+// Same reasoning as src/core/booking.js holding the booking rules for both the
+// AI and the web form.
+//
+// Every function returns the same shape:
+//   { ok: true,  order, message }        message is what the customer was told
+//   { ok: false, reason, detail }        reason is 'illegal' or 'invalid'
+//
+// Nothing here decides who is allowed to do it. That is the caller's job, via
+// the role check on the route.
+// ---------------------------------------------------------------------------
+
+const PHOTO_BUCKET = 'delivery-photos';
+
+function money(cents) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+// A state machine refusal is a normal thing that happens when a driver taps
+// twice, not a crash. It becomes a 409 or a red line on the screen.
+function refusal(err) {
+  if (/cannot go from/i.test(err.message)) {
+    return { ok: false, reason: 'illegal', detail: err.message };
+  }
+  throw err;
+}
+
+// Moves the order and texts the customer, in that order. If the transition is
+// refused, nothing is sent — which is the whole reason the text comes second.
+async function step(order, to, buildMessage) {
+  let updated;
+  try {
+    updated = await orders.transition(order, to);
+  } catch (err) {
+    return refusal(err);
+  }
+
+  const customer = order.customers;
+  const message = buildMessage ? buildMessage(updated, customer) : null;
+
+  if (message && customer) await sendAndLog(customer.phone, message, customer.id);
+
+  return { ok: true, order: updated, message };
+}
+
+// --- Collected --------------------------------------------------------------
+//
+// The moment the laundry becomes our responsibility, and the moment the
+// customer loses the ability to cancel. Both follow from this one call.
+
+async function collect(order, { bagCount } = {}) {
+  const result = await step(
+    order,
+    'IN_PROCESS',
+    () =>
+      `We've got your laundry! It'll be washed, folded and back with you within ${site.turnaround}.`
+  );
+
+  if (!result.ok) return result;
+
+  const bags = Number(bagCount) || order.bag_count || null;
+  if (bags && bags !== order.bag_count) {
+    await db.from('orders').update({ bag_count: bags }).eq('id', order.id);
+    result.order.bag_count = bags;
+  }
+
+  return result;
+}
+
+// --- Dropped at the partner, and picked back up -----------------------------
+//
+// Deliberately silent. Every other step texts the customer, and these two do
+// not, for two reasons: "your laundry is at our partner laundromat" tells them
+// something about how we run the business rather than about their order, and
+// two extra texts per order is real money and a worse 10DLC complaint profile
+// for information nobody asked for.
+//
+// They still get "we've got it", the weight and price, "out for delivery" and
+// "delivered". Nothing they care about is missing.
+
+async function dropAtPartner(order) {
+  return step(order, 'AT_PARTNER', null);
+}
+
+async function markReady(order) {
+  return step(order, 'READY', null);
+}
+
+// --- Weight, which is where the money happens -------------------------------
+//
+// Not a status change. Weighing is an event that can happen at any point while
+// we have the bag, the same way unlocking a locker is an event rather than a
+// state. What it does change is the price, from an estimate to a real number.
+
+async function recordWeight(order, weightLb) {
+  const weight = Number(weightLb);
+
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail: 'Expected a weight in pounds between 0 and 200.',
+    };
+  }
+
+  if (!orders.IN_FLIGHT.includes(order.status)) {
+    return { ok: false, reason: 'illegal', detail: `That order is ${order.status}.` };
+  }
+
+  // The rate stored on the order, never today's rate. Changing the price must
+  // not re-price work that was already quoted.
+  const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
+  const priceCents = Math.round(weight * rate);
+
+  // Weight and price are written together; the database refuses one without
+  // the other, so an order can never carry a charge no weight justifies.
+  const { data: updated, error } = await db
+    .from('orders')
+    .update({ weight_lb: weight, price_cents: priceCents })
+    .eq('id', order.id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  const customer = order.customers;
+
+  // The billing layer writes the message because it is the only thing that
+  // knows whether the charge went through, and a customer must never be told
+  // "charged" when it failed.
+  const charge = await billing.chargeOrder(updated, customer);
+
+  const message =
+    charge.message ||
+    `Your laundry weighed ${weight} lb, so that's ${money(priceCents)} at ` +
+      `${site.pricePerLb} a pound. We'll have it back to you within ${site.turnaround}.`;
+
+  await sendAndLog(customer.phone, message, customer.id);
+
+  return {
+    ok: true,
+    order: updated,
+    message,
+    weightLb: weight,
+    priceCents,
+    overMaxOrder: weight > config.pricing.maxOrderLb,
+    paid: Boolean(charge.ok),
+    paymentNote: charge.ok ? null : charge.needsCard ? 'no card on file' : 'card declined',
+  };
+}
+
+// --- Out for delivery -------------------------------------------------------
+
+async function outForDelivery(order) {
+  return step(order, 'OUT_FOR_DELIVERY', (updated) => {
+    const price = order.price_cents ? ` That's ${money(order.price_cents)}.` : '';
+    return `Your laundry is washed, folded and out for delivery today.${price}`;
+  });
+}
+
+// --- Delivered, with the photo ----------------------------------------------
+//
+// The photo is the proof. It goes into a private bucket and the customer gets
+// a link on our own domain that signs on demand, because a picture of
+// somebody's front door should not be publicly readable forever, and a signed
+// storage URL would eventually expire and break the photo.
+
+async function deliver(order, file) {
+  let photoPath = null;
+  let photoUrl = null;
+
+  if (file && file.buffer) {
+    const extension = (String(file.mimetype || '').split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    photoPath = `${order.id}/${Date.now()}.${extension}`;
+
+    const { error: uploadError } = await db.storage
+      .from(PHOTO_BUCKET)
+      .upload(photoPath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+    if (uploadError) throw new Error(`Photo upload failed: ${uploadError.message}`);
+
+    photoUrl = `${config.baseUrl}/p/${order.id}`;
+  }
+
+  const result = await step(order, 'DELIVERED', () => {
+    const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
+
+    // What we say about money depends on whether we actually got it. A
+    // delivery text that reads like a receipt when the card was declined is
+    // how an unpaid order quietly becomes a forgotten one.
+    let price = '';
+    if (order.price_cents && order.payment_status === 'PAID') {
+      price = ` ${money(order.price_cents)}, paid.`;
+    } else if (order.price_cents && order.payment_status === 'FAILED') {
+      price = ` ${money(order.price_cents)} is still outstanding, the card link we sent will settle it.`;
+    } else if (order.price_cents) {
+      price = ` ${money(order.price_cents)} for this one.`;
+    }
+
+    return `Delivered. Your laundry is at your door.${price}${photo}`;
+  });
+
+  if (!result.ok) return result;
+
+  if (photoUrl) {
+    await db
+      .from('orders')
+      .update({ delivery_photo_url: photoUrl, delivery_photo_path: photoPath })
+      .eq('id', order.id);
+    result.order.delivery_photo_url = photoUrl;
+  }
+
+  result.photo = Boolean(photoUrl);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// What can be done to this order right now
+//
+// One list, used to draw the buttons and to label them. Keeping it beside the
+// functions means a new step cannot be added without the screens learning
+// about it.
+// ---------------------------------------------------------------------------
+
+const STEPS = Object.freeze([
+  { to: 'IN_PROCESS', action: 'collected', label: 'Collected', hint: 'Bag is in the van' },
+  { to: 'AT_PARTNER', action: 'at-partner', label: 'Dropped at partner', hint: 'Left at the laundromat' },
+  { to: 'READY', action: 'ready', label: 'Ready for collection', hint: 'Partner has finished it' },
+  { to: 'OUT_FOR_DELIVERY', action: 'out-for-delivery', label: 'Out for delivery', hint: 'On the van, going back' },
+  { to: 'DELIVERED', action: 'delivered', label: 'Delivered', hint: 'Needs a photo' },
+]);
+
+// The steps legal from where this order is now, in the order they appear above.
+function nextSteps(order) {
+  const allowed = orders.ALLOWED_NEXT[order.status] || [];
+  return STEPS.filter((s) => allowed.includes(s.to));
+}
+
+module.exports = {
+  collect,
+  dropAtPartner,
+  markReady,
+  recordWeight,
+  outForDelivery,
+  deliver,
+  nextSteps,
+  STEPS,
+  PHOTO_BUCKET,
+};

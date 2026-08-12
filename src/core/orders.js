@@ -24,7 +24,15 @@ const ALLOWED_NEXT = Object.freeze({
   REQUESTED: ['ASSIGNED', 'IN_PROCESS', 'CANCELED'],
   ASSIGNED: ['DEPOSITED', 'CANCELED'],
   DEPOSITED: ['IN_PROCESS', 'CANCELED'],
-  IN_PROCESS: ['OUT_FOR_DELIVERY'],
+
+  // The partner leg is optional. A bag we wash ourselves goes straight from
+  // the van to the round; a bag a laundromat washes stops at AT_PARTNER and
+  // READY on the way. Both are legal, so the machine does not force us to
+  // invent a partner visit that never happened.
+  IN_PROCESS: ['AT_PARTNER', 'OUT_FOR_DELIVERY'],
+  AT_PARTNER: ['READY'],
+  READY: ['OUT_FOR_DELIVERY'],
+
   OUT_FOR_DELIVERY: ['DELIVERED'],
   DELIVERED: [],
   CANCELED: [],
@@ -36,12 +44,24 @@ const ALLOWED_NEXT = Object.freeze({
 const AWAITING_COLLECTION = Object.freeze(['REQUESTED', 'ASSIGNED', 'DEPOSITED']);
 
 // Everything that isn't finished or cancelled.
-const IN_FLIGHT = Object.freeze([...AWAITING_COLLECTION, 'IN_PROCESS', 'OUT_FOR_DELIVERY']);
+const IN_FLIGHT = Object.freeze([
+  ...AWAITING_COLLECTION,
+  'IN_PROCESS',
+  'AT_PARTNER',
+  'READY',
+  'OUT_FOR_DELIVERY',
+]);
+
+// Statuses where we are holding the customer's laundry. Used to answer "can
+// this still be cancelled" and "is this our problem right now".
+const IN_OUR_HANDS = Object.freeze(['IN_PROCESS', 'AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY']);
 
 // When a status is reached, which timestamp column records it.
 const TIMESTAMP_FOR = Object.freeze({
   DEPOSITED: 'deposited_at',
   IN_PROCESS: 'collected_at',
+  AT_PARTNER: 'at_partner_at',
+  READY: 'ready_at',
   DELIVERED: 'delivered_at',
 });
 
@@ -196,6 +216,7 @@ module.exports = {
   ALLOWED_NEXT,
   AWAITING_COLLECTION,
   IN_FLIGHT,
+  IN_OUR_HANDS,
   canTransition,
   isCancellable,
   findAwaitingCollection,
