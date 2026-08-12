@@ -256,10 +256,11 @@ async function handleEvent(event) {
         const deposit = await billing.chargeDeposit(pending, customer);
 
         if (deposit.ok) {
+          // The confirmation names the card itself when the minimum is taken,
+          // so the opener must not name it again.
           await sendAndLog(
             customer.phone,
-            `Card saved: ${card}. ` +
-              booking.confirmationMessage(customer, deposit.order || pending),
+            booking.confirmationMessage(customer, deposit.order || pending, { opener: 'Card saved' }),
             customer.id
           );
           return;

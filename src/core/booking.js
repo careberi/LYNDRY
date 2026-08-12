@@ -401,7 +401,7 @@ function whenLine(order) {
 // Naming the card here is load-bearing: this message is the authorisation for
 // the charge that follows, so if an order is ever disputed the message log
 // shows the customer being told which card, before any work was done.
-function confirmationMessage(customer, order, { rolled = false } = {}) {
+function confirmationMessage(customer, order, { rolled = false, opener = null } = {}) {
   const bags = order.bag_count
     ? `${order.bag_count} bag${order.bag_count > 1 ? 's' : ''}`
     : 'it';
@@ -437,12 +437,17 @@ function confirmationMessage(customer, order, { rolled = false } = {}) {
   // the "we'll knock" one for a handover, so it is not repeated here.
   // Stated, not apologised for. "Today's rounds are done" is a fact about the
   // van, not a negotiation, and it stops them wondering why the day moved.
-  const opener = rolled
-    ? `Today's rounds are finished, so the earliest we can get to you is`
-    : `Of course! We'll be there`;
+  //
+  // `opener` lets a caller replace the lead-in when the confirmation follows
+  // something else — "Card saved!" from the payment webhook, say. Without it,
+  // the webhook prefixed "Card saved: Visa ending 8663." onto a sentence that
+  // also names the card, and a real customer got the card twice in one text.
+  const lead = rolled
+    ? `${opener || "Sorted"}! Today's rounds are finished, so the earliest we can get to you is`
+    : `${opener || 'Of course'}! We'll be there`;
 
   return (
-    `${opener} ${whenLine(order)}. ${handover} ` +
+    `${lead} ${whenLine(order)}. ${handover} ` +
     `${money} Back with you within ${site.turnaround}.${reference}`
   );
 }
