@@ -161,6 +161,166 @@ async function saveBase(id, form) {
   return data;
 }
 
+// --- When somebody actually works -------------------------------------------
+//
+// Same shape as a partner's hours and read the same way, with ONE deliberate
+// difference: a driver with NO hours at all is treated as always available.
+//
+// A partner with no hours is somebody we have not asked yet, and a van sent to
+// a shut door wastes a trip - so unknown means closed. A driver with no hours
+// is the one-van business that has never needed a rota, and refusing to assign
+// them anything would stop the system dead the moment somebody is added.
+
+async function hoursFor(opsUserId) {
+  const { data, error } = await db
+    .from('ops_user_hours')
+    .select('*')
+    .eq('ops_user_id', opsUserId)
+    .order('weekday', { ascending: true })
+    .order('starts_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// Everybody's, in one query, as a Map. The assignment asks about the whole team
+// at once and a query each would be a round trip per driver.
+async function hoursForAll() {
+  const { data, error } = await db
+    .from('ops_user_hours')
+    .select('*')
+    .order('weekday', { ascending: true })
+    .order('starts_at', { ascending: true });
+
+  if (error) throw error;
+
+  const byPerson = new Map();
+  for (const row of data || []) {
+    if (!byPerson.has(row.ops_user_id)) byPerson.set(row.ops_user_id, []);
+    byPerson.get(row.ops_user_id).push(row);
+  }
+  return byPerson;
+}
+
+function minutesOfDay(value) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mins = Number(m[2]);
+  return h > 23 || mins > 59 ? null : h * 60 + mins;
+}
+
+// Is this person working then? `weekday` is 0-6 with Sunday as 0, `time` is
+// "HH:MM" on the service clock.
+function isWorking(rows, weekday, time) {
+  // No rota at all: always available. See the note above.
+  if (!rows || !rows.length) return true;
+
+  const at = minutesOfDay(time);
+  if (at == null) return true;
+
+  return rows
+    .filter((r) => Number(r.weekday) === Number(weekday))
+    .some((r) => {
+      const from = minutesOfDay(r.starts_at);
+      const to = minutesOfDay(r.ends_at);
+      if (from == null || to == null) return false;
+      // End-exclusive: a shift that ends at five is not being worked at five.
+      return at >= from && at < to;
+    });
+}
+
+// "Mon-Fri 7am-4pm, Sat 8am-1pm" from the rows. Consecutive days with identical
+// hours collapse, because seven lines that say the same thing is not something
+// anybody reads.
+function describeHours(rows) {
+  if (!rows || !rows.length) return 'Any day, any time';
+
+  const byDay = [0, 1, 2, 3, 4, 5, 6].map((day) =>
+    rows
+      .filter((r) => Number(r.weekday) === day)
+      .map((r) => `${String(r.starts_at).slice(0, 5)}-${String(r.ends_at).slice(0, 5)}`)
+      .join(', ')
+  );
+
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const groups = [];
+
+  for (const day of order) {
+    const spec = byDay[day];
+    const last = groups[groups.length - 1];
+    if (last && last.spec === spec) last.days.push(day);
+    else groups.push({ spec, days: [day] });
+  }
+
+  const clock = (mins) => {
+    const h24 = Math.floor(mins / 60);
+    const m = mins % 60;
+    const h = h24 % 12 === 0 ? 12 : h24 % 12;
+    return `${h}${m ? `:${String(m).padStart(2, '0')}` : ''}${h24 < 12 ? 'am' : 'pm'}`;
+  };
+
+  const pretty = (spec) =>
+    spec
+      ? spec
+          .split(', ')
+          .map((r) => r.split('-').map((t) => clock(minutesOfDay(t))).join('-'))
+          .join(' and ')
+      : 'off';
+
+  return groups
+    .filter((g) => g.spec || g.days.length < 7)
+    .map((g) => {
+      const label =
+        g.days.length === 1
+          ? names[g.days[0]]
+          : `${names[g.days[0]]}-${names[g.days[g.days.length - 1]]}`;
+      return `${label} ${pretty(g.spec)}`;
+    })
+    .join(', ');
+}
+
+// Replace somebody's whole week from a submitted form. Delete then insert: the
+// form IS the week, so a day left out is a day off, exactly as partner hours
+// work.
+async function saveHours(opsUserId, form) {
+  const rows = [];
+
+  for (let day = 0; day < 7; day += 1) {
+    for (const suffix of ['', '_2']) {
+      const from = (form || {})[`shift_${day}_start${suffix}`];
+      const to = (form || {})[`shift_${day}_end${suffix}`];
+
+      const start = minutesOfDay(from);
+      const end = minutesOfDay(to);
+
+      // Both or neither. Half a pair is somebody mid-edit, and guessing the
+      // other half invents a shift nobody typed.
+      if (start == null || end == null || end <= start) continue;
+
+      rows.push({
+        ops_user_id: opsUserId,
+        weekday: day,
+        starts_at: String(from).slice(0, 5),
+        ends_at: String(to).slice(0, 5),
+      });
+    }
+  }
+
+  const { error: clearError } = await db
+    .from('ops_user_hours')
+    .delete()
+    .eq('ops_user_id', opsUserId);
+  if (clearError) throw clearError;
+
+  if (!rows.length) return [];
+
+  const { data, error } = await db.from('ops_user_hours').insert(rows).select('*');
+  if (error) throw error;
+  return data || [];
+}
+
 // --- Who gets it ------------------------------------------------------------
 
 // The nearest active driver to a point, by home base.
@@ -173,14 +333,33 @@ async function saveBase(id, form) {
 // Drivers with no base of their own are still candidates: they fall back to the
 // service base, which is a real place a van leaves from. Excluding them would
 // mean a team with no bases filled in gets nothing assigned at all.
-async function nearest(at, { drivers = null } = {}) {
+async function nearest(at, { drivers = null, weekday = null, time = null } = {}) {
   if (!at || at.lat == null || at.lng == null) return null;
 
   const list = drivers || (await active());
   if (!list.length) return null;
 
+  // NOBODY GETS WORK ON A DAY THEY DO NOT WORK.
+  //
+  // The system knew when a laundromat was open and nothing about when its own
+  // drivers were, so a Sunday pickup went to somebody who does not work Sundays
+  // and no screen said so. Only applied when the caller says WHEN - assignment
+  // knows the pickup day, and something asking "who is nearest" in the abstract
+  // should not be answered with "nobody, it is Sunday".
+  let candidates = list;
+
+  if (weekday != null) {
+    const rota = await hoursForAll();
+    const working = list.filter((driver) => isWorking(rota.get(driver.id), weekday, time || '09:00'));
+
+    // If NOBODY is down as working, fall back to everybody rather than leaving
+    // the order unassigned. A rota nobody filled in should not silently stop
+    // work being handed out; an unassigned order is the thing that gets missed.
+    if (working.length) candidates = working;
+  }
+
   let best = null;
-  for (const driver of list) {
+  for (const driver of candidates) {
     const base = baseOf(driver);
     const miles = geocode.milesBetween(base, at);
     if (!best || miles < best.miles) best = { driver, miles, ownBase: base.own };
@@ -199,7 +378,16 @@ async function assign(order, { force = false } = {}) {
   const at = await geocode.locate(order.customers || {});
   if (!at) return null;
 
-  const best = await nearest(at);
+  // The day the pickup is actually booked for, so somebody who does not work
+  // Sundays is not handed a Sunday. Built from the ISO date rather than a local
+  // Date so a server in another timezone cannot land on the wrong weekday.
+  let weekday = null;
+  if (order.pickup_date) {
+    const [y, m, d] = String(order.pickup_date).split('-').map(Number);
+    weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  }
+
+  const best = await nearest(at, { weekday, time: order.pickup_time || '09:00' });
   if (!best) return null;
 
   const { error } = await db.from('orders').update({ driver_id: best.driver.id }).eq('id', order.id);
@@ -285,6 +473,11 @@ async function board(dateIso) {
 module.exports = {
   DRIVER_FIELDS,
   active,
+  hoursFor,
+  hoursForAll,
+  isWorking,
+  describeHours,
+  saveHours,
   find,
   baseAddress,
   baseOf,

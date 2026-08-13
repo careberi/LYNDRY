@@ -3582,6 +3582,9 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
     if (error) throw error;
 
+    // Their rotas, in one query rather than one per person.
+    const rota = await drivers.hoursForAll();
+
     // A LIST IS A LIST. Every control that used to be wedged into a row -
     // the role dropdown, the driving toggle, the switch-off button - now lives
     // on the person's own page, along with the two things nothing could edit at
@@ -3599,8 +3602,13 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : '<span class="badge">DISABLED</span>',
+        // On the round, and when. The rota is what decides who gets a load, so
+        // it belongs next to the badge rather than only on their own page.
         roles.can(p, 'orders.drive')
-          ? '<span class="badge" style="background:var(--suds-300);">On the round</span>'
+          ? '<span class="badge" style="background:var(--suds-300);">On the round</span>' +
+            `<span style="display:block;margin-top:6px;font-size:13px;color:var(--ink-500);">${
+              escapeHtml(drivers.describeHours(rota.get(p.id) || []))
+            }</span>`
           : '<span style="color:var(--ink-400);">&mdash;</span>',
         roles.can(p, 'orders.drive')
           ? p.base_address_line1
@@ -3767,13 +3775,21 @@ router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, r
     const person = await drivers.find(req.params.id);
     if (!person) return notFoundPage(res, 'No such person.');
 
+    // Whether they can be deleted at all. Somebody who has handled work cannot
+    // be erased without blanking the record of who did it.
+    const { count: orderCount } = await db
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', person.id);
+
     return res.type('html').send(
       adminPage({
         title: person.name,
         active: '/ops/team',
         body: teamMemberBody({
-          person,
+          person: { ...person, orderCount: orderCount || 0 },
           isMe: person.id === req.opsUser.id,
+          hours: await drivers.hoursFor(person.id),
           formatPhone,
           notice: req.query.note ? String(req.query.note).slice(0, 300) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
@@ -3781,6 +3797,55 @@ router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, r
         user: req.opsUser,
         openIssues: req.openIssues,
       })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Erase somebody completely.
+//
+// Only ever possible when they have never been given an order. The ordinary
+// answer to "they left" is switching them off, which keeps every record of what
+// they did; this exists for the row added with a typo in the phone number, and
+// it refuses anything else.
+router.post('/ops/team/:id/delete', guard, may('team.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const person = await drivers.find(req.params.id);
+    if (!person) return notFoundPage(res, 'No such person.');
+
+    if (person.id === req.opsUser.id) {
+      return res.redirect(
+        303,
+        `/ops/team/${person.id}?problem=${encodeURIComponent('You cannot delete yourself.')}`
+      );
+    }
+
+    const { count } = await db
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('driver_id', person.id);
+
+    if (count) {
+      return res.redirect(
+        303,
+        `/ops/team/${person.id}?problem=${encodeURIComponent(
+          `${person.name} has handled ${count} order${count === 1 ? '' : 's'}. ` +
+            'Deleting them would leave that work with no record of who did it - switch them off instead.'
+        )}`
+      );
+    }
+
+    await db.from('ops_user_hours').delete().eq('ops_user_id', person.id);
+    await db.from('vehicles').delete().eq('driver_id', person.id);
+    await db.from('ops_login_codes').delete().eq('ops_user_id', person.id);
+    await db.from('ops_users').delete().eq('id', person.id);
+
+    return res.redirect(
+      303,
+      `/ops/team?note=${encodeURIComponent(`${person.name} deleted.`)}`
     );
   } catch (err) {
     return next(err);
@@ -3843,7 +3908,10 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
     // costs a geocoder call. Only for somebody who is actually on the round -
     // there is nothing for a route to start from otherwise.
     const willDrive = roles.can({ ...person, role, drives }, 'orders.drive');
-    if (willDrive) await drivers.saveBase(person.id, body);
+    if (willDrive) {
+      await drivers.saveBase(person.id, body);
+      await drivers.saveHours(person.id, body);
+    }
 
     // WORK DOES NOT FOLLOW SOMEBODY OFF THE ROUND. An order still pointing at
     // a person who no longer drives appears on no board and gets collected by

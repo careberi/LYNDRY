@@ -37,7 +37,63 @@ function field({ name, label, value = '', hint = '', type = 'text', attrs = '' }
   </div>`;
 }
 
-function teamMemberBody({ person, isMe, notice = null, problem = null, formatPhone }) {
+// The week, as fourteen time boxes. Same control as a partner's opening hours,
+// and read the same way - a day left blank is a day off.
+//
+// The one difference is what BLANK ALTOGETHER means. For a partner it means
+// closed; for a driver it means always available, because a one-van business
+// has never needed a rota and refusing them work would stop the system.
+function shiftGrid(rows) {
+  const at = (day, n) => {
+    const forDay = (rows || []).filter((r) => Number(r.weekday) === day);
+    return forDay[n] || null;
+  };
+
+  const box = (name, value) =>
+    `<input class="input" type="time" name="${name}" value="${
+      value ? escapeHtml(String(value).slice(0, 5)) : ''
+    }" style="width:100%;min-width:0;">`;
+
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const row = (day) => {
+    const first = at(day, 0);
+    const second = at(day, 1);
+    return `
+    <div class="tm-shift">
+      <span class="tm-day">${escapeHtml(DAYS[day])}</span>
+      <div class="tm-pair">
+        ${box(`shift_${day}_start`, first && first.starts_at)}
+        <span class="tm-dash">to</span>
+        ${box(`shift_${day}_end`, first && first.ends_at)}
+      </div>
+      <div class="tm-pair tm-second">
+        ${box(`shift_${day}_start_2`, second && second.starts_at)}
+        <span class="tm-dash">to</span>
+        ${box(`shift_${day}_end_2`, second && second.ends_at)}
+      </div>
+    </div>`;
+  };
+
+  return `
+    <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 6px;">
+      Orders are only given to somebody on a day they work.
+      <strong>Leave the whole week blank and they are available any time</strong> -
+      which is what a single van with no rota wants. The second pair is for a
+      split shift.
+    </p>
+    ${
+      !(rows || []).length
+        ? `<p style="font-size:14px;color:var(--ink-500);margin:0 0 14px;">
+             Nothing set, so they can be given work any day.
+           </p>`
+        : ''
+    }
+    <div class="tm-head"><span></span><span>Working</span><span>And again</span></div>
+    <div class="tm-shifts">${[1, 2, 3, 4, 5, 6, 0].map(row).join('')}</div>`;
+}
+
+function teamMemberBody({ person, isMe, hours = [], notice = null, problem = null, formatPhone }) {
   const drives = roles.can(person, 'orders.drive');
 
   return `
@@ -160,7 +216,7 @@ function teamMemberBody({ person, isMe, notice = null, problem = null, formatPho
       }
 
       <div class="field" style="margin-top:20px;">
-        <label class="field-label">Can sign in</label>
+        <label class="field-label">Active</label>
         ${
           isMe
             ? `<p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
@@ -171,14 +227,27 @@ function teamMemberBody({ person, isMe, notice = null, problem = null, formatPho
                  <input type="checkbox" name="active" value="yes" ${person.status === 'ACTIVE' ? 'checked' : ''}
                         style="width:22px;height:22px;margin-top:2px;flex:none;">
                  <span>
-                   <strong>They can sign in.</strong>
-                   Switching this off takes effect on their next request, and keeps
-                   the record of everything they did.
+                   <strong>They work here.</strong>
+                   Switched off, they cannot sign in and <strong>nothing is
+                   assigned to them</strong> - it takes effect on their next
+                   request, and everything they did is kept.
                  </span>
                </label>`
         }
       </div>
     </div>
+
+    ${
+      // The rota, for anybody on the round. Somebody who never drives has no
+      // work to be given, so a rota would change nothing.
+      drives
+        ? `
+    <div class="card card-xl" style="padding:26px;margin-bottom:22px;">
+      <p class="eyebrow" style="margin:0 0 12px;">When they work</p>
+      ${shiftGrid(hours)}
+    </div>`
+        : ''
+    }
 
     ${
       // Only somebody on the round has anywhere to start from. Sales has no
@@ -221,9 +290,71 @@ function teamMemberBody({ person, isMe, notice = null, problem = null, formatPho
     <button type="submit" class="btn btn-ink btn-lg">Save ${icon('arrow-right', '22')}</button>
   </form>
 
+  ${
+    // REMOVING SOMEBODY IS TWO DIFFERENT THINGS and they are not
+    // interchangeable, so the page offers both and says which is which.
+    //
+    // Switching off is what "they left" means: they cannot sign in, nothing is
+    // assigned to them, and every order they touched still says who touched it.
+    // That is almost always the right answer, so it is the ordinary control
+    // above rather than something down here.
+    //
+    // Deleting erases the row. It is only offered when they have NEVER been
+    // given an order, because otherwise it would blank the actor on work they
+    // actually did - and a delivery whose history says nobody delivered it is
+    // worse than a disabled row nobody looks at.
+    isMe
+      ? ''
+      : `
+  <div class="card card-xl" style="padding:26px;margin-top:28px;border-color:var(--stain-500);">
+    <p class="eyebrow" style="margin:0 0 8px;">If they leave</p>
+    <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;">
+      <strong>Switching them off above is what you usually want.</strong> They
+      cannot sign in, nothing is assigned to them, and every order they handled
+      still records that they handled it.
+    </p>
+
+    ${
+      person.orderCount
+        ? `<p style="font-size:15px;line-height:1.6;margin:0;padding:14px 17px;border:2px solid var(--ink-900);
+                      border-radius:12px;background:var(--paper-200);">
+             <strong>They cannot be deleted.</strong> They have handled
+             ${person.orderCount} order${person.orderCount === 1 ? '' : 's'}, and
+             deleting them would leave that work with no record of who did it.
+             Switch them off instead.
+           </p>`
+        : `<form method="post" action="/ops/team/${person.id}/delete" style="margin:0;"
+                 onsubmit="return confirm('Delete ${escapeHtml(person.name)} completely? This cannot be undone.');">
+             <button class="btn btn-outline" style="border-color:var(--stain-500);color:var(--stain-500);">
+               Delete ${escapeHtml(person.name)} completely
+             </button>
+             <span class="field-hint" style="display:block;margin-top:10px;">
+               Only possible because they have never been given an order. There is
+               nothing to lose the record of.
+             </span>
+           </form>`
+    }
+  </div>`
+  }
+
   <style>
     .tm-three { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr); gap: 14px; }
     .tm-three > * { min-width: 0; }
+    .tm-shifts { display: flex; flex-direction: column; gap: 10px; }
+    .tm-shift { display: grid; grid-template-columns: 84px minmax(0,1fr) minmax(0,1fr); gap: 12px; align-items: center; }
+    .tm-shift > * { min-width: 0; }
+    .tm-day { font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .tm-pair { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: center; }
+    .tm-dash { font-size: 13px; color: var(--ink-500); }
+    .tm-second { opacity: 0.65; }
+    .tm-second:focus-within { opacity: 1; }
+    .tm-head { display: grid; grid-template-columns: 84px minmax(0,1fr) minmax(0,1fr); gap: 12px; margin: 0 0 6px; }
+    .tm-head span { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-500); }
+    @media (max-width: 640px) {
+      .tm-head { display: none; }
+      .tm-shift { grid-template-columns: 1fr; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--ink-100); }
+      .tm-second { opacity: 1; }
+    }
     /* An inline grid-template-columns would beat this and the row would refuse
        to stack, which is the rule the whole stylesheet follows. */
     @media (max-width: 620px) { .tm-three { grid-template-columns: minmax(0,1fr); } }
