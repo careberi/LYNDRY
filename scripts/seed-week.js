@@ -184,9 +184,33 @@ async function clear() {
 
   const { data: partners } = await db
     .from('partners')
-    .select('id')
+    .select('id, name, lat, lng, wholesale_per_lb_cents')
     .eq('type', 'LAUNDROMAT')
     .eq('status', 'ACTIVE');
+
+  // WHICH LAUNDROMAT A FINISHED BAG IS SITTING AT decides where the van has to
+  // drive to collect it, and it is not a free choice at that point - it is
+  // wherever the bag was dropped. Assigning it round-robin put Jersey City
+  // bags in Clifton and dragged a whole waterfront round north, which reads as
+  // a routing bug and is not one.
+  //
+  // So the seed picks the partner the router would have picked: cheapest all
+  // in, wash plus the driving to reach it from the customer.
+  const perMile = 1.17;
+  function bestPartnerFor(customer, pounds) {
+    if (!partners || !partners.length) return null;
+
+    let best = null;
+    for (const p of partners) {
+      if (p.lat == null) continue;
+      const miles =
+        geocode.milesBetween({ lat: Number(customer.lat), lng: Number(customer.lng) },
+                             { lat: Number(p.lat), lng: Number(p.lng) }) * 1.3 * 2;
+      const cost = pounds * (p.wholesale_per_lb_cents || 100) + miles * perMile * 100;
+      if (!best || cost < best.cost) best = { partner: p, cost };
+    }
+    return best ? best.partner : partners[0];
+  }
 
   process.stdout.write('\n  customers');
 
@@ -299,7 +323,7 @@ async function clear() {
       cursor += 1;
 
       const pounds = 12 + ((i * 7) % 26);
-      const partner = partners && partners.length ? partners[partnerTurn++ % partners.length] : null;
+      const partner = bestPartnerFor(await customerRow(customerId), pounds);
 
       const at = await geocode.locate(await customerRow(customerId));
       const best = at ? await driversCore.nearest(at, { drivers: team }) : null;
@@ -373,7 +397,7 @@ async function clear() {
       const at = await geocode.locate(await customerRow(customerId));
       const best = at ? await driversCore.nearest(at, { drivers: team }) : null;
       const driver = best ? best.driver : team[0];
-      const partner = partners && partners.length ? partners[partnerTurn++ % partners.length] : null;
+      const partner = bestPartnerFor(await customerRow(customerId), pounds);
       const when = (h) => new Date(`${date}T${String(h).padStart(2, '0')}:00:00Z`).toISOString();
       const declined = i % 9 === 8;
 

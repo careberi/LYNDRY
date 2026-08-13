@@ -628,7 +628,11 @@ async function board(dateIso, fromTime, driverId = null) {
       choice,
       bags: needsWash.length + (pickups || []).length,
       pounds: dropWeight,
-      orders: needsWash,
+      // Everything being handed over: what is already in the van unwashed AND
+      // what leg 1 is about to collect. It listed only the former, so a stop
+      // dropping three bags picked up this morning showed a bag count and no
+      // order numbers at all.
+      orders: [...needsWash, ...(pickups || [])],
     });
   }
 
@@ -646,6 +650,7 @@ async function board(dateIso, fromTime, driverId = null) {
       kind: 'pickup_partner',
       at: partner ? partner.at : null,
       partner,
+      orders: list,
       bags: list.length,
       pounds: list.reduce((t, o) => t + Number(o.weight_lb || 0), 0),
       orders: list,

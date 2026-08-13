@@ -123,9 +123,29 @@ async function clear() {
 
   const { data: partners } = await db
     .from('partners')
-    .select('id, name')
+    .select('id, name, lat, lng, wholesale_per_lb_cents')
     .eq('type', 'LAUNDROMAT')
     .eq('status', 'ACTIVE');
+
+  // Where a finished bag is SITTING decides where the van must drive to fetch
+  // it, and that is not a free choice at that point. Round-robin left Jersey
+  // City bags in Clifton and dragged a waterfront round north - which reads as
+  // a routing bug and is not one. Pick what the router would have picked.
+  function bestPartnerFor(customer, pounds) {
+    if (!partners || !partners.length) return null;
+    let best = null;
+    for (const p of partners) {
+      if (p.lat == null || customer.lat == null) continue;
+      const miles =
+        geocode.milesBetween(
+          { lat: Number(customer.lat), lng: Number(customer.lng) },
+          { lat: Number(p.lat), lng: Number(p.lng) }
+        ) * 1.3 * 2;
+      const cost = pounds * (p.wholesale_per_lb_cents || 100) + miles * 117;
+      if (!best || cost < best.cost) best = { partner: p, cost };
+    }
+    return best ? best.partner : partners[0];
+  }
 
   console.log('\n--- customers ---');
 
@@ -241,7 +261,8 @@ async function clear() {
     }
 
     const price = pounds ? Math.max(2500, Math.round(pounds * 200)) : null;
-    const partner = partners && partners.length ? partners[partnerTurn++ % partners.length] : null;
+    const { data: forPartner } = await db.from('customers').select('*').eq('id', customerId).single();
+    const partner = bestPartnerFor(forPartner, pounds || 20);
 
     const patch = {
       to_collect: {},

@@ -176,6 +176,20 @@ async function dropAtPartner(order, { partnerId, by = {} } = {}) {
   // The number itself is kept on the row, not cleared, so the order page can
   // still say which clip a bag travelled under - the same reason a released
   // sticker keeps its order.
+  // ONCE IT IS HANDED OVER, WHERE IT WENT CANNOT CHANGE.
+  //
+  // Until this moment the laundromat is an intention and the router is free to
+  // move it - a pickup fifteen minutes later near a different partner should be
+  // able to redirect a bag still in the van. Handing it across a counter is
+  // what settles it, and after that orders.partner_id is a record of fact
+  // rather than a plan.
+  if (partnerId) {
+    await db
+      .from('bag_labels')
+      .update({ intended_partner_id: partnerId, partner_locked: true })
+      .eq('order_id', order.id);
+  }
+
   const freed = await bags.unclipOrder(order.id);
 
   if (freed.length) {

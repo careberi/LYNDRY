@@ -72,10 +72,13 @@ function stopRow(stop, { showNames, showMoney }) {
   const order = stop.order;
   const customer = order ? order.customers || {} : null;
 
+  // ALWAYS THE ORDER NUMBER, AND ALWAYS A LINK. A name alone cannot be clicked
+  // through to when and where the bag is going; the number is what every other
+  // screen and every text message uses to talk about an order.
   const who = order
-    ? showNames && customer.name
-      ? escapeHtml(customer.name)
-      : `#${order.order_number}`
+    ? `<a href="/ops/orders/${order.order_number}" style="font-weight:700;">#${order.order_number}</a>${
+        showNames && customer.name ? ` &middot; ${escapeHtml(customer.name)}` : ''
+      }`
     : stop.partner
       ? escapeHtml(stop.partner.name)
       : '<span style="color:var(--stain-500);font-weight:700;">no laundromat available</span>';
@@ -85,6 +88,16 @@ function stopRow(stop, { showNames, showMoney }) {
     : stop.partner
       ? escapeHtml(addressOf(stop.partner))
       : '';
+
+  // WHICH ORDERS, not just how many bags. "3 bags" is not something you can act
+  // on at a counter or check afterwards; three order numbers are.
+  const atPartner = !order && (stop.orders || []).length
+    ? `<div style="font-size:13px;margin-top:4px;">
+         ${(stop.orders || [])
+           .map((o) => `<a href="/ops/orders/${o.order_number}">#${o.order_number}</a>`)
+           .join(' &middot; ')}
+       </div>`
+    : '';
 
   const detail = order
     ? [
@@ -109,6 +122,7 @@ function stopRow(stop, { showNames, showMoney }) {
       </div>
       ${where ? `<div style="font-size:14px;color:var(--ink-700);line-height:1.45;">${where}</div>` : ''}
       ${detail ? `<div style="font-size:13px;color:var(--ink-500);margin-top:2px;">${detail}</div>` : ''}
+      ${atPartner}
       ${
         !stop.at
           ? `<div style="font-size:13px;color:var(--stain-500);font-weight:700;margin-top:3px;">
