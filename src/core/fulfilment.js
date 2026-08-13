@@ -294,13 +294,24 @@ async function deliver(order, file) {
       price = ` ${money(order.price_cents)} is still outstanding, the card link we sent will settle it.`;
     }
 
-    // The one moment worth asking about a standing order: they have just
-    // seen the service work, start to finish. Asked once, only if they have
-    // no schedule already, and only when the delivery went cleanly - nobody
-    // wants to be sold a weekly habit in the same breath as a failed card.
+    // The offer to make it regular, on every ONE-OFF delivery until they are
+    // on a schedule. Three conditions, all of them necessary:
+    //
+    //   - they have no schedule already, or we would be selling them what
+    //     they have got
+    //   - this order did not come FROM a schedule, which is the same thing
+    //     said a second way and cheap insurance if the first ever drifts
+    //   - the money went through. Nobody wants to be sold a weekly habit in
+    //     the same breath as a failed card.
+    //
+    // Asked every time rather than once: somebody who says no after their
+    // first order often says yes after their third, and this rides along on a
+    // text they were getting anyway rather than being a message of its own.
     const customer = order.customers || {};
     const offer =
-      !recurring.isScheduled(customer) && (charge.ok || charge.coveredByMinimum)
+      !recurring.isScheduled(customer) &&
+      !order.from_schedule &&
+      (charge.ok || charge.coveredByMinimum)
         ? ` Want us to make this a regular thing? We can come every week or every other week.`
         : '';
 
