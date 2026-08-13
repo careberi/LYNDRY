@@ -531,6 +531,18 @@ the service works means correcting the affected section and bumping that date,
 in the same commit. A process document that is wrong is worse than none,
 because people act on it.
 
+**The ops nav is four `<details>` menus, not a row of tabs** — Dashboard,
+People, Tools, Resources, defined once in `OPS_MENUS` in `src/routes/admin.js`.
+Ten flat tabs needed 556px on a 375px phone; four menus need 335px. Built on
+`<details>` like the marketing hamburger, so **they open with no JavaScript** —
+this is the chrome around a driver's action pages and a nav that needs a script
+to open is a nav that can fail to open.
+
+Every entry carries the permission that already guards its route, so the menu
+cannot offer a screen its owner would be refused at, and **a group with nothing
+left in it disappears** rather than opening onto nothing. Adding a page means
+adding it to `OPS_MENUS` as well as adding the route and its `may()` guard.
+
 **Two credentials, for two kinds of caller.** Don't collapse them.
 
 | Caller | Credential |

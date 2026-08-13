@@ -149,14 +149,80 @@ function addressOf(c) {
 // and a legal footer, which is wrong on an internal tool. Same stylesheets and
 // the same design language, different furniture.
 
+// The ops navigation, grouped.
+//
+// Ten flat tabs was more than a phone could hold and more than a person could
+// scan. These are Neil's groupings; Load out, Issues and Labels were not in his
+// list and are placed where they belong - the two a driver uses every day under
+// Dashboard, and the sticker printer under Tools, where it is findable instead
+// of only reachable from an order page.
+//
+// Each entry carries the permission that already guards its route, so the menu
+// cannot offer somebody a screen they would be refused at. A group with nothing
+// left in it disappears entirely rather than opening onto nothing.
+const OPS_MENUS = Object.freeze([
+  {
+    label: 'Dashboard',
+    items: [
+      { href: '/ops', label: 'Orders', permission: 'orders.view' },
+      { href: '/ops/loadout', label: 'Load out', permission: 'orders.act' },
+      { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
+      { href: '/ops/issues', label: 'Issues', permission: 'issues.manage' },
+    ],
+  },
+  {
+    label: 'People',
+    items: [
+      { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
+      { href: '/ops/partners', label: 'Partners', permission: 'partners.view' },
+      { href: '/ops/team', label: 'Team', permission: 'team.manage' },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { href: '/ops/economics', label: 'Economics', permission: 'money.view' },
+      { href: '/ops/planner', label: 'Planner', permission: 'money.view' },
+      { href: '/ops/labels', label: 'Bag labels', permission: 'orders.act' },
+    ],
+  },
+  {
+    label: 'Resources',
+    // No permission: the process page is the one you hand a new driver.
+    items: [{ href: '/ops/process', label: 'How it works', permission: null }],
+  },
+]);
+
+function opsNav(user, active) {
+  return OPS_MENUS.map((menu) => {
+    const items = menu.items.filter((i) => !i.permission || roles.can(user, i.permission));
+    if (!items.length) return '';
+
+    // Which group holds the page you are on, so "where am I" survives being
+    // folded into a menu. Deliberately NOT opened on load - a panel covering
+    // the page you just asked for is worse than a highlighted word.
+    const here = items.some((i) => i.href === active);
+
+    const links = items
+      .map(
+        (i) =>
+          `<a href="${i.href}"${i.href === active ? ' aria-current="page"' : ''}>${escapeHtml(i.label)}</a>`
+      )
+      .join('');
+
+    return `
+        <details class="ops-menu"${here ? " data-here=\"1\"" : ''}>
+          <summary>${escapeHtml(menu.label)}</summary>
+          <div class="ops-menu-panel">${links}</div>
+        </details>`;
+  }).join('');
+}
+
 // `head` is for the rare page that needs something of its own in <head> - the
 // route planner's map library, and so far nothing else. Kept as a parameter
 // rather than letting pages write their own <head> so that every ops screen
 // still gets the same stylesheets, the same noindex and the same furniture.
 function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '' }) {
-  const tab = (href, label) =>
-    `<a href="${href}"${href === active ? ' aria-current="page"' : ''}>${label}</a>`;
-
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -181,19 +247,7 @@ ${head}
       <!-- Only the tabs this person may actually open. A driver never sees a
            Customers link they would be refused at. -->
       <nav class="site-nav">
-        ${roles.can(user, 'orders.view') ? tab('/ops', 'Orders') : ''}
-        ${roles.can(user, 'orders.act') ? tab('/ops/loadout', 'Load out') : ''}
-        ${roles.can(user, 'customers.view') ? tab('/ops/customers', 'Customers') : ''}
-        ${roles.can(user, 'messages.view') ? tab('/ops/messages', 'Messages') : ''}
-        ${roles.can(user, 'issues.manage') ? tab('/ops/issues', 'Issues') : ''}
-        ${roles.can(user, 'money.view') ? tab('/ops/economics', 'Economics') : ''}
-        ${roles.can(user, 'money.view') ? tab('/ops/planner', 'Planner') : ''}
-        ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
-        ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
-        <!-- No permission on this one. It is the page you hand a new driver on
-             their first morning, and it holds no customer and no wholesale
-             figure - only how the service works. -->
-        ${tab('/ops/process', 'Process')}
+        ${opsNav(user, active)}
       </nav>
       <form method="post" action="/ops/logout" style="margin:0;display:flex;align-items:center;gap:12px;">
         ${

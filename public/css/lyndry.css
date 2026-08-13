@@ -665,13 +665,13 @@
 .ops-bar .site-nav { gap: 18px; }
 
 /* The ops nav scrolls sideways instead of pushing the page.
-   With seven tabs it is wider than a phone, and because it never collapses to
+   Ten screens is wider than a phone, and because this nav never collapses to
    the marketing hamburger it was dragging the whole document to 556px at a
    375px viewport - every ops page scrolled horizontally, on the device the
-   driver actually holds. Scrolling the strip keeps every tab reachable and
-   the page still. */
+   driver actually holds. Grouping into four menus fixed most of that; the
+   scroll stays as the backstop for a narrow phone. */
 .ops-bar .site-nav {
-  overflow-x: auto;
+  overflow-x: visible;
   flex: 1 1 auto;
   min-width: 0;
   scrollbar-width: none;
@@ -679,6 +679,81 @@
 }
 .ops-bar .site-nav::-webkit-scrollbar { display: none; }
 .ops-bar .site-nav a { white-space: nowrap; }
+
+/* ---------------------------------------------------------------------------
+   The ops menus.
+   Built on <details>, exactly like the marketing hamburger above, so they open
+   and close with NO JAVASCRIPT AT ALL. That matters more here than on the
+   website: this is the chrome around a driver's action pages, and a nav that
+   needs a script to open is a nav that can fail to open.
+   --------------------------------------------------------------------------- */
+.ops-menu { position: relative; flex: none; }
+
+.ops-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--paper-200);
+  padding: 6px 0;
+}
+.ops-menu > summary::-webkit-details-marker { display: none; }
+.ops-menu > summary::marker { content: ''; }
+.ops-menu > summary:hover { color: var(--suds-300); }
+
+/* The group holding the page you are on. Same colour the individual tabs used
+   to go, so "where am I" survives the regrouping. */
+.ops-menu[data-here='1'] > summary { color: var(--suds-300); }
+
+/* A caret drawn in borders rather than an icon: icons.css has no chevron, and
+   adding a whole Lucide glyph for a triangle is not worth the mask. */
+.ops-menu > summary::after {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.ops-menu[open] > summary::after { transform: rotate(180deg); }
+
+.ops-menu-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 12px);
+  min-width: 210px;
+  background: var(--paper-050);
+  border: var(--border-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop-md);
+  overflow: hidden;
+  /* Above the page, and above a Leaflet map, which sets its own stacking. */
+  z-index: 60;
+}
+.ops-menu-panel a {
+  display: block;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ink-100);
+}
+.ops-menu-panel a:last-child { border-bottom: none; }
+.ops-menu-panel a:hover { background: var(--paper-200); color: var(--ink-900); }
+.ops-menu-panel a[aria-current='page'] { background: var(--suds-500); color: var(--ink-900); }
+
+/* On a phone the panel would otherwise hang off the right edge of the screen
+   for the last menu. Anchored right instead, so it opens inwards. */
+@media (max-width: 560px) {
+  .ops-menu:last-of-type .ops-menu-panel { left: auto; right: 0; }
+}
 
 .site-footer { background: var(--ink-900); color: var(--paper-200); }
 .footer-head {
