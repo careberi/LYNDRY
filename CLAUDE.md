@@ -437,6 +437,18 @@ mileage figure whose provenance is invisible is worse than no figure. If the
 demo server becomes unreliable, the replacement is a paid routing key, not a
 quiet return to estimates.
 
+**Standing orders need a scheduler or they never happen.** `npm run
+cron:recurring` books tomorrow's recurring pickups and texts each customer the
+evening before with a way to SKIP. Nothing in the app calls it — it is a Railway
+cron service running once a day. Without that, a customer can set up a weekly
+pickup, be told it is arranged, and never be collected from.
+
+It calls `recurring.bookDue()` directly rather than posting to
+`/ops/cron/recurring`; same repo, same env, same database, so a URL and an admin
+key would only be two more things that could be wrong. The endpoint stays for
+testing by hand. **Safe to run any number of times** — `bookPickup()` refuses a
+second pickup for anyone who already has one waiting, so a retry is a no-op.
+
 **Bag labels are pre-printed and bound later.** A sticker has to exist at a
 customer's door and there is no printer in the van, so blank labels are printed
 in batches from `/ops/labels`, live in the van, and the driver enters the code
