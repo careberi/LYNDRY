@@ -419,6 +419,7 @@ GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
 GET  /ops/loadout            scan bags into the van, build the run
+GET  /ops/dispatch           can we take this one? a mid-run pickup quote
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
 GET  /ops/partners           the businesses we work with, added by hand
@@ -522,6 +523,33 @@ issue is raised. **The per-bag flag is not the real detector** — a partner
 running 1.9 lb heavy every single time never trips it, so the partner page also
 shows average drift and how many of their bags read heavier than ours. Wiring their number into `price_cents` removes
 the control Neil asked for.
+
+**`/ops/dispatch` answers "can we take this one".** Cheapest insertion of a
+pickup into today's run: where it slots, minutes added, cost, and whether it is
+under `routing.autoAcceptUnderMinutes`. Three rules it must keep:
+
+- **Never re-sequence a run that is already physical.** Bags are in the van with
+  numbers on them, so the van IS the route. A new stop is spliced into the
+  remaining sequence and nothing else moves.
+- **Pickups only.** A delivery needs a bag that is already on the truck. There is
+  no path for a customer to request a delivery slot.
+- **Auto-accept never fires on a stop that loses money**, however short the
+  detour — a threshold that waves through a loss is worse than no threshold.
+
+It writes nothing. `GET` with the address in the query string on purpose, so it
+is safe to refresh and safe to send to somebody.
+
+**Today's run is deliveries in the van PLUS today's uncollected pickups.** The
+load-out pass sequences by scanning bags, and a pickup has no bag to scan, so
+pickups were in no run at all — a quote against a delivery-only run measures
+against half a day's work.
+
+**The cost model lives in `config.routing`**, env-overridable. A mile is about
+$1.17 and roughly 70% of that is the driver's wage, which is why every answer is
+in minutes first and miles second. Straight-line distance times a road factor —
+the planner uses a real routing service, dispatch deliberately does not, because
+a driver waiting on a network call to find out whether to take an order is worse
+than a rough answer now.
 
 **The load-out pass turns the van into a sequence.** Scan every bag out of the
 laundromat, build the run, load in REVERSE — highest stop deepest, stop 1 by the

@@ -18,6 +18,8 @@ const { processBody } = require('../web/process');
 const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
 const orderEvents = require('../core/order-events');
+const dispatch = require('../core/dispatch');
+const { dispatchBody } = require('../web/dispatch-page');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
@@ -167,6 +169,7 @@ const OPS_MENUS = Object.freeze([
     items: [
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       { href: '/ops/loadout', label: 'Load out', permission: 'orders.act' },
+      { href: '/ops/dispatch', label: 'Dispatch', permission: 'orders.act' },
       { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
       { href: '/ops/issues', label: 'Issues', permission: 'issues.manage' },
     ],
@@ -1676,6 +1679,53 @@ orderAction('out-for-delivery', (order, req) =>
 orderAction('delivered', (order, req) =>
   fulfilment.deliver(order, req.file, { by: { opsUser: req.opsUser } }), upload.single('photo')
 );
+
+// ---------------------------------------------------------------------------
+// GET /ops/dispatch — can we take this one?
+//
+// A GET with the address in the query string on purpose. It writes nothing, so
+// it is safe to refresh, safe to bookmark and safe to send to somebody - which
+// a POST would not be. The one cost is that an address ends up in the ops
+// server log; these pages are already full of them.
+//
+// Behind orders.act rather than money.view. It shows a per-mile cost, but that
+// is the van's cost and not the customer's book, and the person who needs the
+// answer is whoever is being asked to take the order.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/dispatch', guard, withIssues, may('orders.act'), async (req, res, next) => {
+  try {
+    const address = String(req.query.address || '').trim().slice(0, 200);
+    const lb = String(req.query.lb || '').trim().slice(0, 6);
+
+    const run = dispatch.sequence(await dispatch.todaysRun());
+
+    let quote = null;
+    let problem = null;
+
+    if (address) {
+      const answer = await dispatch.quote({
+        address,
+        estimateLb: lb ? Number(lb) : null,
+      });
+
+      if (answer.ok) quote = answer;
+      else problem = answer.detail;
+    }
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Dispatch',
+        active: '/ops/dispatch',
+        body: dispatchBody({ run, quote, form: { address, lb }, problem }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // The load-out pass: /ops/loadout

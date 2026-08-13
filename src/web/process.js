@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped when the charge moved to the door
+const REVIEWED = '13 August 2026';  // bumped with the dispatch quote
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -353,7 +353,9 @@ function processBody() {
         `Sign in at <code>/ops</code> with a mobile number and a six-digit code
          we text. No password, no app. The board shows what is on today, and
          a booking with no card on file is flagged as unconfirmed - do not drive
-         to it, we have no way to bill it.`
+         to it, we have no way to bill it. <strong>Dispatch</strong> answers the
+         other question that comes up mid-round: an order has just come in, does
+         it fit into what you are already doing, and what does taking it cost.`
       )}
       ${step(
         2,

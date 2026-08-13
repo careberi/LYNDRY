@@ -89,6 +89,52 @@ const config = Object.freeze({
 
   adminApiKey: process.env.ADMIN_API_KEY || '',
 
+  // What it costs to run the van for a mile, and how long a stop takes.
+  //
+  // Used to answer one question: an order has just come in, does it fit into
+  // what the driver is already doing today, and what does taking it cost?
+  //
+  // ROUGHLY 70% OF A MILE IS THE DRIVER'S TIME, not fuel. At these numbers a
+  // mile is about $1.17 and only 15c of that is petrol. Which is why every
+  // answer this produces is in minutes first and miles second - minutes are
+  // what actually run out.
+  //
+  // Environment variables so they can be changed without a code edit, with
+  // defaults that are honest starting points rather than measurements. When
+  // Neil starts tuning these regularly they want a settings screen and a
+  // config table; until then a redeploy is the cheaper mechanism.
+  routing: Object.freeze({
+    wagePerHour: Number(process.env.ROUTING_WAGE_PER_HOUR || 20),
+    gasPerGallon: Number(process.env.ROUTING_GAS_PER_GALLON || 3.4),
+    milesPerGallon: Number(process.env.ROUTING_MPG || 22),
+    wearPerMile: Number(process.env.ROUTING_WEAR_PER_MILE || 0.18),
+
+    // Average door-to-door speed on residential streets, not a speed limit.
+    milesPerHour: Number(process.env.ROUTING_SPEED_MPH || 24),
+
+    // Straight-line distance times this approximates a road. Only used when
+    // there are no real driving distances - the planner page gets those from a
+    // routing service, this does not, because a driver waiting on a network
+    // call to find out whether to take an order is worse than a rough answer.
+    roadFactor: Number(process.env.ROUTING_ROAD_FACTOR || 1.3),
+
+    // Minutes on the ground per stop.
+    minutesPerPickup: Number(process.env.ROUTING_MIN_PER_PICKUP || 4),
+    minutesPerDelivery: Number(process.env.ROUTING_MIN_PER_DELIVERY || 4),
+    minutesPerPartnerVisit: Number(process.env.ROUTING_MIN_PER_PARTNER || 10),
+
+    // How long the van is out. Not a promise to anybody - the yardstick for
+    // "is today already full".
+    workingDayMinutes: Number(process.env.ROUTING_DAY_MINUTES || 480),
+
+    // THE ONE KNOB THAT DECIDES HOW MUCH THE SYSTEM DECIDES ON ITS OWN.
+    //
+    // A pickup that adds less than this to the run is worth taking without
+    // asking anybody. Above it, a person looks. Set it to 0 and every order
+    // waits for Neil.
+    autoAcceptUnderMinutes: Number(process.env.ROUTING_AUTO_ACCEPT_MIN || 8),
+  }),
+
   // Wash & fold is priced by weight, so the real price of an order is not
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.
