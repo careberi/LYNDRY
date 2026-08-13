@@ -99,8 +99,27 @@ async function collect(order, { bagCount } = {}) {
 // They still get "we've got it", the weight and price, "out for delivery" and
 // "delivered". Nothing they care about is missing.
 
+// WEIGH IT BEFORE IT LEAVES YOUR HANDS.
+//
+// The weight is the price, and it is the only number we have that does not
+// depend on somebody else's scale. Handing a bag to a laundromat unweighed
+// means taking their figure for what to charge our own customer, with no way
+// to check it and no record if they are wrong.
+//
+// The same applies to putting it on the van for delivery: the balance is
+// charged at the door, and an unweighed order has no balance to charge.
+function needsWeightFirst(order) {
+  if (order.weight_lb != null) return null;
+
+  return {
+    ok: false,
+    reason: 'invalid',
+    detail: 'Weigh it first. The weight sets the price, and it has to be ours, not the partner\'s.',
+  };
+}
+
 async function dropAtPartner(order) {
-  return step(order, 'AT_PARTNER', null);
+  return needsWeightFirst(order) || step(order, 'AT_PARTNER', null);
 }
 
 async function markReady(order) {
@@ -216,6 +235,12 @@ async function recordWeight(order, weightLb) {
 // --- Out for delivery -------------------------------------------------------
 
 async function outForDelivery(order) {
+  // Same rule as the partner drop. The balance is charged at the door, and an
+  // unweighed order has no balance to charge, so a bag must never get on the
+  // van without a weight on record.
+  const unweighed = needsWeightFirst(order);
+  if (unweighed) return unweighed;
+
   // The one new fact: it is on the van. They already know the price from the
   // weigh text; repeating it here is what made the thread read like a bill.
   return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`);

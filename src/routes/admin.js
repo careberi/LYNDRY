@@ -265,12 +265,21 @@ function table(headings, rows) {
 // ---------------------------------------------------------------------------
 
 function workCard(order, { canAct, notice, problem }) {
-  const steps = fulfilment.nextSteps(order);
   const weighed = order.weight_lb != null;
 
   // Weighing is an event rather than a step, so it is offered the whole time
   // we have the bag rather than at one point in the sequence.
   const canWeigh = orders.IN_FLIGHT.includes(order.status);
+
+  // NOTHING LEAVES OUR HANDS UNWEIGHED.
+  //
+  // Once we have the bag, the next steps both send it somewhere: to a partner,
+  // or back to the customer. Both need our own weight on record first, so the
+  // buttons are withheld until there is one rather than offered and refused.
+  // The rule is enforced in src/core/fulfilment.js as well; this just stops
+  // the driver tapping something that cannot work.
+  const mustWeighFirst = !weighed && order.status === 'IN_PROCESS';
+  const steps = mustWeighFirst ? [] : fulfilment.nextSteps(order);
 
   if (!canAct) return '';
 
@@ -309,30 +318,45 @@ function workCard(order, { canAct, notice, problem }) {
     ${notice ? banner(notice, 'var(--suds-300)') : ''}
 
     ${
-      steps.length
-        ? `<div style="display:flex;flex-direction:column;gap:22px;">${steps.map(stepButton).join('')}</div>`
-        : `<p style="font-size:16px;color:var(--ink-500);margin:0;">
-             Nothing left to do. This order is ${escapeHtml(order.status.replace(/_/g, ' ').toLowerCase())}.
+      mustWeighFirst
+        ? `<p style="margin:0 0 4px;padding:14px 18px;border:2px solid var(--ink-900);border-radius:12px;
+                     background:var(--sunbeam-500);font-size:16px;line-height:1.45;">
+             <strong>Weigh it before it goes anywhere.</strong> The weight sets the price, and it
+             has to be ours rather than the partner's. Nothing else opens until it's in.
            </p>`
+        : steps.length
+          ? `<div style="display:flex;flex-direction:column;gap:22px;">${steps.map(stepButton).join('')}</div>`
+          : `<p style="font-size:16px;color:var(--ink-500);margin:0;">
+               Nothing left to do. This order is ${escapeHtml(order.status.replace(/_/g, ' ').toLowerCase())}.
+             </p>`
     }
 
     ${
       canWeigh
         ? `
       <form method="post" action="/ops/orders/${order.order_number}/weight"
-            style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-900);">
+            style="margin:${mustWeighFirst ? '18px' : '26px'} 0 0;${
+              // No divider when the scale IS the task: a rule under a
+              // yellow "weigh it first" note reads as a separate section.
+              mustWeighFirst ? '' : 'padding-top:24px;border-top:2px solid var(--ink-900);'
+            }">
         <label class="field-label" for="weight_lb">
           ${weighed ? 'Correct the weight' : 'Weigh it'}
         </label>
         <div style="display:flex;gap:12px;align-items:flex-start;">
           <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
                  step="0.1" min="0.1" max="200" inputmode="decimal" required
+                 ${mustWeighFirst ? 'autofocus' : ''}
                  style="flex:1;" value="${weighed ? escapeHtml(String(order.weight_lb)) : ''}"
                  placeholder="Pounds">
-          <button type="submit" class="btn btn-ink btn-lg">Save</button>
+          <button type="submit" class="btn btn-${mustWeighFirst ? 'primary' : 'ink'} btn-lg">Save</button>
         </div>
         <span class="field-hint" style="display:block;margin-top:8px;">
-          This sets the price and charges the card. ${weighed ? 'It has already been weighed once.' : ''}
+          This sets the price. ${
+            weighed
+              ? 'It has already been weighed once.'
+              : 'The balance is charged when you mark it delivered.'
+          }
         </span>
       </form>`
         : ''
