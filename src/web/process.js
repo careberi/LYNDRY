@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the dispatch quote
+const REVIEWED = '13 August 2026';  // bumped with the next-day clock
 
 function esc(s) {
   return String(s == null ? '' : s)

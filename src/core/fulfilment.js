@@ -4,6 +4,7 @@ const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
 const bags = require('./bags');
+const booking = require('./booking');
 const loadout = require('./loadout');
 const events = require('./order-events');
 const recurring = require('./recurring');
@@ -463,6 +464,11 @@ async function deliver(order, file, { by = {} } = {}) {
       ? await billing.chargeOrder(order, order.customers)
       : { ok: true, nothingDue: true };
 
+  // Loaded here rather than read off the customer row: a customer can have
+  // several standing orders now, and the only question this asks is whether
+  // they have any at all before offering them one.
+  const schedules = order.customers ? await recurring.forCustomer(order.customers.id) : [];
+
   const settled = Boolean(charge.ok);
 
   await events.record(order.id, {
@@ -500,7 +506,7 @@ async function deliver(order, file, { by = {} } = {}) {
     // seen the service work, start to finish. Asked once, only if they have
     // no schedule already, and only when the delivery went cleanly - nobody
     // wants to be sold a weekly habit in the same breath as a failed card.
-    const customer = order.customers || {};
+    const customer = Object.assign({}, order.customers, { schedules });
     const offer =
       !recurring.isScheduled(customer) && settled
         ? ` Want us to make this a regular thing? We can come every week or every other week.`
@@ -575,24 +581,54 @@ function nextSteps(order) {
 // How long is left on the promise
 // ---------------------------------------------------------------------------
 //
-// We tell every customer "back within 24 hours", and the clock starts when the
-// driver takes the bag. Until now nothing anywhere counted it: an order could
-// sit at a laundromat for two days and no screen would say so.
+// WE PROMISE NEXT DAY, SO THE DEADLINE IS THE END OF THE NEXT DAY.
+//
+// It used to be a flat 24 hours from collection, and that is a different
+// promise wearing the same words. A bag collected at 9am was due back at 9am;
+// one collected at 5pm was due at 5pm the next day, which is after the van has
+// finished. Two customers on the same round had deadlines eight hours apart
+// and neither matched what they were told.
+//
+// Now both are due by the end of the day after we collected - the end of the
+// last window the van runs, which is where `endOfDeliveryDay()` comes from
+// rather than being written down again here. So the time a bag has is exactly
+// "the rest of today, plus tomorrow up to the last delivery", and a late
+// pickup honestly has less of it.
 //
 // Returns null for anything not yet collected or already delivered, because a
 // countdown only means something while we are holding somebody's clothes.
-const TURNAROUND_HOURS = 24;
+
+function dueAt(order) {
+  if (!order.collected_at) return null;
+
+  // Which day it was collected on, in New Jersey rather than UTC. Past 8pm
+  // Eastern the two disagree, and using UTC would move a Monday evening
+  // pickup's deadline forward a whole day.
+  const collectedOn = new Intl.DateTimeFormat('en-CA', {
+    timeZone: booking.SERVICE_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(order.collected_at));
+
+  return booking.instantAt(booking.addDays(collectedOn, 1), booking.endOfDeliveryDay());
+}
 
 function turnaround(order) {
   if (!order.collected_at) return null;
   if (['DELIVERED', 'CANCELED'].includes(order.status)) return null;
 
-  const due = new Date(order.collected_at).getTime() + TURNAROUND_HOURS * 3600 * 1000;
+  const due = dueAt(order);
   const minutesLeft = Math.round((due - Date.now()) / 60000);
 
+  // Days once it is more than a day out, because "31h 12m left" is a number
+  // somebody has to do arithmetic on and "1d 7h left" is not.
   const label = (mins) => {
-    const h = Math.floor(Math.abs(mins) / 60);
-    const m = Math.abs(mins) % 60;
+    const total = Math.abs(mins);
+    const d = Math.floor(total / 1440);
+    const h = Math.floor((total % 1440) / 60);
+    const m = total % 60;
+    if (d) return `${d}d ${h}h`;
     return h ? `${h}h ${m}m` : `${m}m`;
   };
 
@@ -619,7 +655,7 @@ module.exports = {
   deliver,
   nextSteps,
   turnaround,
-  TURNAROUND_HOURS,
+  dueAt,
   STEPS,
   PHOTO_BUCKET,
   WEIGHT_PHOTO_BUCKET,

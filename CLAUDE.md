@@ -464,6 +464,19 @@ mileage figure whose provenance is invisible is worse than no figure. If the
 demo server becomes unreliable, the replacement is a paid routing key, not a
 quiet return to estimates.
 
+**A customer may have several standing orders.** `recurring_schedules`, one row
+per arrangement, so Tuesday mornings and Saturday lunchtimes can both exist —
+that was impossible while the schedule lived in four columns on the customer
+row. Each carries its own `time_of_day`, which is usually what makes the second
+one different from the first. `recurring.isScheduled(customer)` reads
+`customer.schedules`, so a caller has to load them first rather than each firing
+its own query. The old `customers.recurring_*` columns are backfilled and no
+longer read; they stay until it is certain nothing touches them.
+
+**Two schedules on the same day is one pickup, not two.** The unique index stops
+a duplicate being created, and `bookPickup()` would refuse the second anyway —
+silently, which is worse.
+
 **Standing orders need a scheduler or they never happen.** `npm run
 cron:recurring` books tomorrow's recurring pickups and texts each customer the
 evening before with a way to SKIP. Nothing in the app calls it — it is a Railway
@@ -475,6 +488,12 @@ It calls `recurring.bookDue()` directly rather than posting to
 key would only be two more things that could be wrong. The endpoint stays for
 testing by hand. **Safe to run any number of times** — `bookPickup()` refuses a
 second pickup for anyone who already has one waiting, so a retry is a no-op.
+
+**A sticker is in one of three states, and `labelState()` is the only thing
+that decides which** — OUTSTANDING (printed, never used), IN USE (on a bag, QR
+opens), EXPIRED (order delivered, link dead). `/ops/labels` counts, colours and
+filters by it, and warns when blank stock drops below ten, because a driver with
+no sticker cannot label a bag and an unlabelled bag cannot be scanned at a door.
 
 **Bag labels are pre-printed and bound later.** A sticker has to exist at a
 customer's door and there is no printer in the van, so blank labels are printed
@@ -872,9 +891,11 @@ rule is only about text messages.
 
 - **Service:** wash, dry and fold only
 - **Price:** $2.50 per pound, weighed after pickup
-- **Turnaround:** next day. The internal clock is still 24 hours from
-  collection (`TURNAROUND_HOURS`), which is what the ops countdown measures —
-  but nothing customer-facing says "24 hours" any more
+- **Turnaround:** next day, and the clock means it. A bag is due back by the
+  end of the day after collection — the end of the last pickup window, derived
+  from `PICKUP_WINDOWS` so changing the windows moves the promise. It used to
+  be a flat 24 hours from collection, which gave two customers on the same
+  round deadlines eight hours apart and matched nothing either was told
 - **Scheduling:** pickup whenever the customer needs — no fixed route days
 - **Model:** door-to-door pickup, for **houses and apartments alike**. An
   apartment customer puts their unit on `address_line2` and the driver comes to

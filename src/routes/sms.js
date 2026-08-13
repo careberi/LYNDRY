@@ -10,6 +10,7 @@ const brain = require('../core/brain');
 const actions = require('../core/actions');
 const onboarding = require('../core/onboarding');
 const orders = require('../core/orders');
+const recurring = require('../core/recurring');
 const { site } = require('../web/site');
 
 const router = express.Router();
@@ -201,6 +202,10 @@ async function answerWithBrain(customer, text, from) {
 
   let decision;
   try {
+    // The AI's context mentions their standing orders, and a customer can have
+    // more than one, so they come from their own table rather than the row.
+    customer.schedules = await recurring.forCustomer(customer.id);
+
     decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text });
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.

@@ -493,24 +493,39 @@ async function saveDetails(customer, input) {
 async function setPickupSchedule(customer, input) {
   const first = String(customer.name || '').trim().split(/\s+/)[0];
 
+  // A customer can have several standing orders now, so every branch below
+  // loads them rather than reading one off the customer row.
+  const schedules = await recurring.forCustomer(customer.id);
+  const active = schedules.filter((s) => s.status === 'ACTIVE');
+
   // Skipping one, or pausing for a while, without touching the cadence.
   if (input.skip_next || input.pause_until) {
-    if (!recurring.isScheduled(customer)) {
+    if (!active.length) {
       return `You haven't got a repeating pickup set up, so there's nothing to skip.`;
     }
 
-    // "Skip this week" means pause up to and including the next one.
-    const until = input.pause_until || recurring.nextDate(customer);
-    const updated = await recurring.pauseUntil(customer, until);
+    // Whichever comes round first is the one they mean by "skip the next one".
+    const soonest = active
+      .map((s) => ({ s, on: recurring.nextDate(s) }))
+      .filter((x) => x.on)
+      .sort((a, b) => a.on.localeCompare(b.on))[0];
+
+    const until = input.pause_until || (soonest && soonest.on);
+    await recurring.pauseUntil(customer, until, soonest && soonest.s.id);
+
+    const after = (await recurring.forCustomer(customer.id))
+      .map((s) => recurring.nextDate(s))
+      .filter(Boolean)
+      .sort()[0];
 
     return (
-      `No problem, skipped. Your next one is ${booking.readableDate(recurring.nextDate(updated))}. ` +
+      `No problem, skipped. Your next one is ${booking.readableDate(after)}. ` +
       `Text me any time if you want one sooner.`
     );
   }
 
   if (input.cadence === 'OFF') {
-    if (!recurring.isScheduled(customer)) {
+    if (!active.length) {
       return `You haven't got a repeating pickup running, so there's nothing to stop.`;
     }
 
@@ -527,15 +542,26 @@ async function setPickupSchedule(customer, input) {
     return `Which day suits you?`;
   }
 
-  const updated = await recurring.setSchedule(customer, { cadence: input.cadence, weekday });
-  const next = recurring.nextDate(updated);
+  const saved = await recurring.addSchedule(customer, {
+    cadence: input.cadence,
+    weekday,
+    timeOfDay: input.time || null,
+  });
+  const next = recurring.nextDate(saved);
+
+  // Says what they now have in total, not just what changed. Somebody adding a
+  // Saturday to an existing Tuesday needs to hear both, or they will wonder
+  // whether the Tuesday survived.
+  const all = await recurring.forCustomer(customer.id);
+  const others = all.filter((s) => s.status === 'ACTIVE' && s.id !== saved.id);
 
   // No mention of a total, because there isn't one: a schedule costs nothing
   // and each pickup is priced by weight exactly as it always was.
   return (
-    `Sorted${first ? `, ${first}` : ''}! We'll come ${recurring.describe(updated)} from now on, ` +
-    `starting ${booking.readableDate(next)}. We'll text you the day before each one, ` +
-    `and you can skip a week or stop any time by texting me.`
+    `Sorted${first ? `, ${first}` : ''}! We'll come ${recurring.describe(saved)} from now on, ` +
+    `starting ${booking.readableDate(next)}.` +
+    (others.length ? ` That's on top of ${recurring.describeAll(others)}.` : '') +
+    ` We'll text you the day before each one, and you can skip a week or stop any time by texting me.`
   );
 }
 

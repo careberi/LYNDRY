@@ -278,6 +278,14 @@ const TOOLS = [
             'the schedule entirely. Those are the only two frequencies we offer, ' +
             'so never promise anything else.',
         },
+        time: {
+          type: 'string',
+          description:
+            'The time of day they asked for, as 24-hour HH:MM. Set it whenever ' +
+            'they mention one - "Tuesdays at 8" is "08:00". A customer can have ' +
+            'more than one standing order, and the time is usually what makes ' +
+            'the second one different from the first.',
+        },
         weekday: {
           type: 'integer',
           minimum: 0,
@@ -491,8 +499,14 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
         `settles it.`
       : 'No open issue.',
     recurring.isScheduled(customer)
-      ? `Repeating pickup: ${recurring.describe(customer)}, next on ${recurring.nextDate(customer)}` +
-        (customer.recurring_paused_until ? ` (paused until ${customer.recurring_paused_until})` : '')
+      ? `Repeating pickups: ${recurring.describeAll(customer.schedules)}` +
+        (() => {
+          const next = (customer.schedules || [])
+            .map((s) => recurring.nextDate(s))
+            .filter(Boolean)
+            .sort()[0];
+          return next ? `, next on ${next}` : '';
+        })()
       : 'Repeating pickup: none. Offer one only after a delivery, and only once.',
   ];
 

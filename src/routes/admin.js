@@ -11,6 +11,7 @@ const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
+const recurring = require('../core/recurring');
 const issues = require('../core/issues');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
@@ -835,7 +836,7 @@ const ORDER_FIELDS =
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
   // which is the half the driver actually needs.
-  'customers(id, name, phone, address_line1, address_line2, city, postal_code, preferences, recurring_cadence, recurring_weekday)';
+  'customers(id, name, phone, address_line1, address_line2, city, postal_code, preferences)';
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
@@ -1491,6 +1492,11 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       .eq('id', req.params.id)
       .maybeSingle();
 
+    // A customer can have several standing orders - Tuesday mornings and
+    // Saturday lunchtimes is a real arrangement - so they come from their own
+    // table rather than a pair of columns on the row.
+    const schedules = person ? await recurring.forCustomer(person.id) : [];
+
     if (error) throw error;
     if (!person) return notFoundPage(res, 'No customer with that id.');
 
@@ -1543,6 +1549,55 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           ${detail('Signed up', dateTime(person.created_at))}
           ${detail('Texting consent', person.sms_consent_at ? dateTime(person.sms_consent_at) : 'not recorded')}
           ${showMoney ? detail('Card', card) + detail('Lifetime billed', `<strong>${money(billed)}</strong>`) : ''}
+        </div>
+
+        <div class="card card-xl" style="padding:28px;">
+          ${sectionHeading(
+            'Standing orders',
+            schedules.filter((sc) => sc.status === 'ACTIVE').length
+              ? `${schedules.filter((sc) => sc.status === 'ACTIVE').length} running`
+              : 'None'
+          )}
+          ${
+            schedules.filter((sc) => sc.status === 'ACTIVE').length
+              ? schedules
+                  .filter((sc) => sc.status === 'ACTIVE')
+                  .map((sc) => {
+                    const next = recurring.nextDate(sc);
+                    const paused = Boolean(sc.paused_until);
+                    return `
+            <div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+              <span style="flex:none;width:12px;height:12px;margin-top:6px;border:2px solid var(--ink-900);
+                           border-radius:50%;background:${paused ? 'var(--paper-300)' : 'var(--suds-500)'};"></span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:16px;">
+                  ${escapeHtml(recurring.DAY_NAMES[sc.weekday])}${
+                      sc.time_of_day ? ` at ${escapeHtml(booking.readableTime(sc.time_of_day))}` : ''
+                    }
+                </div>
+                <div style="font-size:14px;color:var(--ink-700);margin-top:2px;">
+                  ${escapeHtml(recurring.CADENCES[sc.cadence].label)}${
+                      paused
+                        ? ` &middot; paused until ${escapeHtml(booking.readableDate(String(sc.paused_until).slice(0, 10)))}`
+                        : ''
+                    }
+                </div>
+                <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);margin-top:4px;">
+                  ${next ? `next ${escapeHtml(booking.readableDate(next))}` : 'nothing due'}
+                </div>
+              </div>
+            </div>`;
+                  })
+                  .join('') +
+                `<p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:16px 0 0;">
+                   Booked the evening before by the nightly run, with a text they can
+                   reply SKIP to. Changed by texting us, not from here.
+                 </p>`
+              : `<p style="margin:6px 0 0;font-size:15px;color:var(--ink-500);line-height:1.6;">
+                   No repeating pickup. They are offered one after a clean delivery,
+                   once, and can set one up any time by texting.
+                 </p>`
+          }
         </div>
 
         <div class="card card-xl" style="padding:28px;">
@@ -1917,21 +1972,73 @@ router.post('/ops/orders/:id/label/:labelId/release', guard, may('orders.act'), 
 // discover you need one.
 // ---------------------------------------------------------------------------
 
+// A sticker is in exactly one of three states, and every count and colour on
+// this page comes from this one function so they cannot disagree.
+//
+//   OUTSTANDING  printed, never used. Blank stock sitting in the van.
+//   IN USE       on a bag right now. Its QR opens.
+//   EXPIRED      the order it was on has been delivered. The code is kept so
+//                the order page can still show which sticker was on which bag,
+//                but the link is dead.
+function labelState(label) {
+  if (label.released_at) return 'EXPIRED';
+  if (label.order_id) return 'IN_USE';
+  return 'OUTSTANDING';
+}
+
+const LABEL_STATES = Object.freeze({
+  OUTSTANDING: { label: 'Outstanding', colour: 'var(--lilac-500)', blurb: 'Printed, not yet on a bag' },
+  IN_USE: { label: 'In use', colour: 'var(--suds-500)', blurb: 'On a bag right now, QR opens' },
+  EXPIRED: { label: 'Expired', colour: 'var(--paper-300)', blurb: 'Order delivered, link dead' },
+});
+
 router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res, next) => {
   try {
-    // Blank stock: never been on a bag.
-    const { count: blank } = await db
+    // Every label, so the counts and the list are the same data rather than
+    // three separate queries that could each be right about a different moment.
+    const { data: all, error: labelError } = await db
       .from('bag_labels')
-      .select('id', { count: 'exact', head: true })
-      .is('order_id', null);
+      .select('*, orders(order_number)')
+      .order('printed_at', { ascending: false })
+      .limit(600);
 
-    // On a bag right now. A retired label still has its order_id - that is what
-    // keeps the history - so "in use" has to mean not yet released.
-    const { count: inUse } = await db
-      .from('bag_labels')
-      .select('id', { count: 'exact', head: true })
-      .not('order_id', 'is', null)
-      .is('released_at', null);
+    if (labelError) throw labelError;
+
+    const labels = all || [];
+    const byState = { OUTSTANDING: [], IN_USE: [], EXPIRED: [] };
+    labels.forEach((l) => byState[labelState(l)].push(l));
+
+    const blank = byState.OUTSTANDING.length;
+    const inUse = byState.IN_USE.length;
+
+    const filter = ['OUTSTANDING', 'IN_USE', 'EXPIRED'].includes(String(req.query.state))
+      ? String(req.query.state)
+      : null;
+
+    const showing = filter ? byState[filter] : labels;
+
+    const labelRow = (l) => {
+      const state = labelState(l);
+      const tone = LABEL_STATES[state];
+      return `
+      <div style="display:flex;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;">
+        <span style="flex:none;width:12px;height:12px;border:2px solid var(--ink-900);border-radius:50%;
+                     background:${tone.colour};"></span>
+        <span style="font-family:var(--font-mono);font-size:18px;font-weight:700;letter-spacing:0.06em;
+                     ${state === 'EXPIRED' ? 'color:var(--ink-500);' : ''}">${escapeHtml(l.code)}</span>
+        <span class="badge" style="background:${tone.colour};">${escapeHtml(tone.label)}</span>
+        <span style="flex:1;"></span>
+        <span style="font-size:14px;color:var(--ink-700);white-space:nowrap;">
+          ${
+            l.orders
+              ? `<a href="/ops/orders/${l.orders.order_number}">#${l.orders.order_number}</a>${
+                  l.position ? ` &middot; bag ${l.position}` : ''
+                }`
+              : '<span style="color:var(--ink-500);">unused</span>'
+          }
+        </span>
+      </div>`;
+    };
 
     const body = `
       <div style="max-width:640px;">
@@ -1945,9 +2052,23 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>
 
       <div style="display:flex;flex-wrap:wrap;gap:20px;margin:32px 0;">
-        ${statCard('Blank, in the van', blank == null ? '?' : blank)}
-        ${statCard('On a bag right now', inUse == null ? '?' : inUse, 'var(--suds-500)')}
+        ${statCard('Outstanding', byState.OUTSTANDING.length, 'var(--lilac-500)')}
+        ${statCard('In use', byState.IN_USE.length, 'var(--suds-500)')}
+        ${statCard('Expired', byState.EXPIRED.length)}
       </div>
+
+      ${
+        blank < 10
+          ? `<div class="card card-xl" style="padding:22px;margin-bottom:28px;background:var(--sunbeam-500);max-width:560px;">
+               <p style="margin:0;font-size:16px;line-height:1.6;font-weight:600;">
+                 ${blank === 0 ? 'No blank stickers left.' : `Only ${blank} blank sticker${blank === 1 ? '' : 's'} left.`}
+                 Print a sheet before the next round - a driver with no sticker
+                 cannot label a bag, and an unlabelled bag cannot be scanned at
+                 the door.
+               </p>
+             </div>`
+          : ''
+      }
 
       <div class="card card-xl" style="padding:28px;max-width:560px;">
         ${sectionHeading('Print', 'A fresh sheet')}
@@ -1963,6 +2084,44 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
             30-per-sheet size sold everywhere. Print at 100% scale.
           </span>
         </form>
+      </div>
+
+      <div class="card card-xl" style="padding:28px;margin-top:28px;">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          ${sectionHeading('Every sticker', filter ? LABEL_STATES[filter].label : 'All', showing.length)}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a class="btn btn-sm ${filter ? 'btn-outline' : ''}" href="/ops/labels">All</a>
+            ${['OUTSTANDING', 'IN_USE', 'EXPIRED']
+              .map(
+                (k) =>
+                  `<a class="btn btn-sm ${filter === k ? '' : 'btn-outline'}" href="/ops/labels?state=${k}">${escapeHtml(
+                    LABEL_STATES[k].label
+                  )}</a>`
+              )
+              .join('')}
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:16px 24px;margin-bottom:18px;">
+          ${['OUTSTANDING', 'IN_USE', 'EXPIRED']
+            .map(
+              (k) => `
+            <span style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-700);">
+              <span style="width:12px;height:12px;border:2px solid var(--ink-900);border-radius:50%;
+                           background:${LABEL_STATES[k].colour};"></span>
+              ${escapeHtml(LABEL_STATES[k].blurb)}
+            </span>`
+            )
+            .join('')}
+        </div>
+
+        ${
+          showing.length
+            ? showing.map(labelRow).join('')
+            : `<p style="margin:0;font-size:15px;color:var(--ink-500);line-height:1.6;">
+                 Nothing in that state.
+               </p>`
+        }
       </div>`;
 
     return res.type('html').send(

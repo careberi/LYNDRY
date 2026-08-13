@@ -67,6 +67,54 @@ function today() {
   return nowInService().date;
 }
 
+// Add days to a date string without ever making a Date out of it.
+//
+// Date.UTC then getUTCDate is safe here because nothing is being converted
+// between zones - it is calendar arithmetic on a plain "2026-08-13".
+function addDays(iso, days) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + days));
+  return t.toISOString().slice(0, 10);
+}
+
+// How far New Jersey is from UTC at a given instant. Negative, and it changes
+// twice a year, which is the whole reason this is worked out rather than
+// hardcoded to -4 or -5.
+function offsetAt(instant) {
+  const parts = {};
+  for (const p of CLOCK.formatToParts(instant)) parts[p.type] = p.value;
+  const asIfUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute)
+  );
+  return asIfUtc - instant;
+}
+
+// "2026-08-14" plus "18:00" in New Jersey, as a real instant in time.
+//
+// Two passes on purpose. The first guesses the offset from the naive time; on
+// the two days a year the clocks move, that guess can be an hour out, and the
+// second pass corrects it using the offset that actually applies at the
+// instant we landed on.
+function instantAt(iso, hhmm) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  const [hh, mi] = String(hhmm).split(':').map(Number);
+  const naive = Date.UTC(y, m - 1, d, hh, mi);
+
+  const first = naive - offsetAt(naive);
+  return naive - offsetAt(first);
+}
+
+// The hour by which a bag has to be back: the end of the last window the van
+// runs. Derived rather than written down again, so changing the windows moves
+// the promise with them.
+function endOfDeliveryDay() {
+  return PICKUP_WINDOWS[PICKUP_WINDOWS.length - 1].end;
+}
+
 // 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones naive versions
 // get wrong.
 function ordinal(n) {
@@ -506,6 +554,9 @@ function rescheduledMessage(order) {
 
 module.exports = {
   SERVICE_TZ,
+  addDays,
+  instantAt,
+  endOfDeliveryDay,
   PICKUP_WINDOWS,
   windowFor,
   describeWindow,

@@ -2,25 +2,24 @@
 
 const db = require('../db');
 const booking = require('./booking');
+const orders = require('./orders');
 const { sendAndLog } = require('./notify');
-const { site } = require('../web/site');
 
 // ---------------------------------------------------------------------------
-// Standing orders: come every week, or every other week.
+// Standing orders.
 //
-// The whole feature is: work out whose pickup falls tomorrow, book it, and
-// tell them the day before so nobody is charged without warning. That last
-// part is not politeness. A $25 charge appearing with no heads-up is the
-// single most reliable way to earn a chargeback.
+// "Same time every week." A customer says it once and the pickups happen
+// without them asking again.
 //
-// Deliberately NOT a subscription. Nothing is charged for having a schedule,
-// and every pickup it creates is an ordinary order priced by weight, with its
-// own confirmation, its own window and its own minimum. What it removes is the
-// asking, not the pricing.
+// A CUSTOMER MAY HAVE SEVERAL. Sheets and towels on Tuesday morning,
+// everything else on Saturday lunchtime, is a real arrangement and used to be
+// impossible - the schedule lived in four columns on the customer row, so
+// there was exactly one and nowhere to put a second. It is a table now, one
+// row per arrangement.
 //
-// There is no scheduler in this codebase and this does not add one. A single
-// endpoint runs the sweep below once a day, and it is safe to run twice, ten
-// times, or by hand: it books nothing that already exists.
+// NOTHING IN THE APP RUNS THESE. `npm run cron:recurring` does, once a day,
+// from Railway's scheduler. Without it a customer can be told their weekly
+// pickup is arranged and never be collected from.
 // ---------------------------------------------------------------------------
 
 const CADENCES = Object.freeze({
@@ -33,21 +32,6 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 // How far ahead a pickup is booked. One day, so the warning text lands the
 // evening before rather than a week out when they have forgotten agreeing.
 const BOOK_AHEAD_DAYS = 1;
-
-function isScheduled(customer) {
-  return Boolean(customer.recurring_cadence && customer.recurring_weekday != null);
-}
-
-// "every week on Tuesday". Used in confirmations and on the ops screens, so
-// the words a customer reads and the words Neil reads are the same words.
-function describe(customer) {
-  if (!isScheduled(customer)) return null;
-
-  const cadence = CADENCES[customer.recurring_cadence];
-  if (!cadence) return null;
-
-  return `${cadence.label} on ${DAY_NAMES[customer.recurring_weekday]}`;
-}
 
 // --- Date arithmetic --------------------------------------------------------
 //
@@ -65,34 +49,78 @@ function addDays(iso, days) {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-// The first date on or after `from` that falls on the wanted weekday.
+// The next date on or after `from` that falls on `weekday`.
 function nextWeekday(from, weekday) {
-  const gap = (weekday - weekdayOf(from) + 7) % 7;
-  return addDays(from, gap);
+  let candidate = from;
+  let guard = 0;
+  while (weekdayOf(candidate) !== weekday && guard < 8) {
+    candidate = addDays(candidate, 1);
+    guard += 1;
+  }
+  return candidate;
 }
 
-// When this customer's next pickup should be, counting from today.
+// --- Reading them -----------------------------------------------------------
+
+async function forCustomer(customerId, { includeEnded = false } = {}) {
+  let query = db
+    .from('recurring_schedules')
+    .select('*')
+    .eq('customer_id', customerId)
+    .order('weekday', { ascending: true });
+
+  if (!includeEnded) query = query.neq('status', 'ENDED');
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+// Does this customer have any standing order at all?
 //
-// FORTNIGHTLY counts from the day the schedule started, so "every other
-// Tuesday" stays on the same fortnight rather than drifting whenever a week
-// is skipped.
-function nextDate(customer, fromDate = booking.today()) {
-  if (!isScheduled(customer)) return null;
+// Takes a customer whose schedules have already been loaded onto them, because
+// the callers that ask this - the delivery text deciding whether to offer one,
+// the AI's context - are already holding the customer and must not each fire
+// their own query.
+function isScheduled(customer) {
+  return Boolean(customer && (customer.schedules || []).some((s) => s.status === 'ACTIVE'));
+}
 
-  let candidate = nextWeekday(fromDate, customer.recurring_weekday);
+// "every week on Tuesday at 8am". One schedule, in the words a customer reads
+// and the words Neil reads, so the two are never different sentences.
+function describe(schedule) {
+  if (!schedule) return null;
 
-  if (customer.recurring_cadence === 'FORTNIGHTLY') {
-    const anchor = customer.recurring_started_at
-      ? String(customer.recurring_started_at).slice(0, 10)
-      : candidate;
+  const cadence = CADENCES[schedule.cadence];
+  if (!cadence) return null;
 
-    const anchorDay = nextWeekday(anchor, customer.recurring_weekday);
+  const when = schedule.time_of_day ? ` at ${booking.readableTime(schedule.time_of_day)}` : '';
+  const paused = schedule.paused_until ? `, paused until ${booking.readableDate(schedule.paused_until)}` : '';
+
+  return `${cadence.label} on ${DAY_NAMES[schedule.weekday]}${when}${paused}`;
+}
+
+// All of them, as one phrase: "every week on Tuesday and every week on Saturday".
+function describeAll(schedules) {
+  const active = (schedules || []).filter((s) => s.status === 'ACTIVE');
+  if (!active.length) return null;
+  return active.map(describe).filter(Boolean).join(', and ');
+}
+
+// When this schedule next comes round.
+function nextDate(schedule, fromDate = booking.today()) {
+  if (!schedule || schedule.status !== 'ACTIVE') return null;
+
+  let candidate = nextWeekday(fromDate, schedule.weekday);
+
+  if (schedule.cadence === 'FORTNIGHTLY') {
+    const anchor = String(schedule.started_on || candidate).slice(0, 10);
+    const anchorDay = nextWeekday(anchor, schedule.weekday);
 
     // Whole weeks between the anchor and the candidate. Odd means this is the
     // off week, so push a week later.
     const weeksApart = Math.round(
-      (Date.parse(`${candidate}T00:00:00Z`) - Date.parse(`${anchorDay}T00:00:00Z`)) /
-        (7 * 86400000)
+      (Date.parse(`${candidate}T00:00:00Z`) - Date.parse(`${anchorDay}T00:00:00Z`)) / (7 * 86400000)
     );
 
     if (Math.abs(weeksApart % 2) === 1) candidate = addDays(candidate, 7);
@@ -100,10 +128,10 @@ function nextDate(customer, fromDate = booking.today()) {
 
   // Paused, or skipping this one. Roll forward a cadence at a time until past
   // the pause, rather than cancelling the schedule outright.
-  if (customer.recurring_paused_until) {
-    const step = CADENCES[customer.recurring_cadence].days;
+  if (schedule.paused_until) {
+    const step = CADENCES[schedule.cadence].days;
     let guard = 0;
-    while (candidate <= customer.recurring_paused_until && guard < 60) {
+    while (candidate <= String(schedule.paused_until).slice(0, 10) && guard < 60) {
       candidate = addDays(candidate, step);
       guard += 1;
     }
@@ -114,27 +142,30 @@ function nextDate(customer, fromDate = booking.today()) {
 
 // --- The daily sweep --------------------------------------------------------
 
-// Everyone with a standing order due on `date` who has nothing booked already.
+// Every schedule due on `date`, with the customer it belongs to.
 async function dueOn(date) {
   const { data, error } = await db
-    .from('customers')
-    .select('*')
-    .not('recurring_cadence', 'is', null)
-    .eq('status', 'ACTIVE');
+    .from('recurring_schedules')
+    .select('*, customers(*)')
+    .eq('status', 'ACTIVE')
+    .eq('weekday', weekdayOf(date));
 
   if (error) throw error;
 
   const due = [];
 
-  for (const customer of data || []) {
-    if (nextDate(customer) !== date) continue;
+  for (const schedule of data || []) {
+    if (!schedule.customers || schedule.customers.status !== 'ACTIVE') continue;
+    if (nextDate(schedule) !== date) continue;
 
-    // Never book on top of something. They may have arranged this week's
-    // pickup themselves, or the sweep may have already run today.
-    const existing = await require('./orders').findAwaitingCollection(customer.id);
+    // Never book on top of something. They may have arranged this pickup
+    // themselves, the sweep may have already run today, or - now that a
+    // customer can have several schedules - two of them may fall on the same
+    // day, which is one pickup and not two.
+    const existing = await orders.findAwaitingCollection(schedule.customer_id);
     if (existing) continue;
 
-    due.push(customer);
+    due.push(schedule);
   }
 
   return due;
@@ -146,18 +177,22 @@ async function dueOn(date) {
 // waiting, so a second run in the same day books nothing.
 async function bookDue({ date } = {}) {
   const target = date || addDays(booking.today(), BOOK_AHEAD_DAYS);
-  const customers = await dueOn(target);
+  const schedules = await dueOn(target);
 
   const booked = [];
   const failed = [];
 
-  for (const customer of customers) {
+  for (const schedule of schedules) {
+    const customer = schedule.customers;
+
     try {
       const result = await booking.bookPickup(customer, {
         pickupDate: target,
-        // Their usual time, so a standing order lands in the window they are
-        // used to rather than the first one of the day.
-        pickupTime: customer.preferences && customer.preferences.usual_pickup_time,
+        // The time on the schedule itself, so Tuesday at 8am and Saturday at
+        // noon are genuinely different arrangements rather than the same one
+        // twice. Falls back to their usual time when the schedule has none.
+        pickupTime:
+          schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
         fromSchedule: true,
       });
 
@@ -189,22 +224,45 @@ async function bookDue({ date } = {}) {
   return { date: target, booked, failed };
 }
 
-// --- Changing a schedule ----------------------------------------------------
+// --- Changing them ----------------------------------------------------------
 
-async function setSchedule(customer, { cadence, weekday }) {
+// Add a standing order, or move an existing one for the same day.
+//
+// Keyed on customer + weekday + cadence, so asking twice for "Tuesdays" edits
+// the Tuesday one rather than creating a second that would quietly never fire
+// - bookPickup refuses a second pickup on a day that already has one.
+async function addSchedule(customer, { cadence, weekday, timeOfDay = null }) {
   if (!CADENCES[cadence]) throw new Error(`Unknown cadence: ${cadence}`);
 
+  const day = Number(weekday);
+  if (!Number.isInteger(day) || day < 0 || day > 6) throw new Error(`Unknown weekday: ${weekday}`);
+
+  const existing = (await forCustomer(customer.id, { includeEnded: true })).find(
+    (s) => s.weekday === day && s.cadence === cadence
+  );
+
+  const patch = {
+    time_of_day: timeOfDay ? booking.normaliseTime(timeOfDay) : null,
+    paused_until: null,
+    status: 'ACTIVE',
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const { data, error } = await db
+      .from('recurring_schedules')
+      .update(patch)
+      .eq('id', existing.id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
   const { data, error } = await db
-    .from('customers')
-    .update({
-      recurring_cadence: cadence,
-      recurring_weekday: weekday,
-      // The anchor a fortnightly schedule counts from. Only set when there was
-      // no schedule before, so changing the day does not shift the fortnight.
-      recurring_started_at: customer.recurring_started_at || new Date().toISOString(),
-      recurring_paused_until: null,
-    })
-    .eq('id', customer.id)
+    .from('recurring_schedules')
+    .insert({ customer_id: customer.id, cadence, weekday: day, ...patch })
     .select('*')
     .single();
 
@@ -212,48 +270,52 @@ async function setSchedule(customer, { cadence, weekday }) {
   return data;
 }
 
-async function stop(customer) {
-  const { data, error } = await db
-    .from('customers')
-    .update({
-      recurring_cadence: null,
-      recurring_weekday: null,
-      recurring_started_at: null,
-      recurring_paused_until: null,
-    })
-    .eq('id', customer.id)
-    .select('*')
-    .single();
+// End one schedule, or all of them when no id is given - "stop the weekly
+// pickups" from somebody with two means both.
+async function stop(customer, scheduleId = null) {
+  let query = db
+    .from('recurring_schedules')
+    .update({ status: 'ENDED', updated_at: new Date().toISOString() })
+    .eq('customer_id', customer.id)
+    .neq('status', 'ENDED');
 
+  if (scheduleId) query = query.eq('id', scheduleId);
+
+  const { data, error } = await query.select('*');
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 // Skip until a date. "Skip this week" is a pause until the next occurrence.
-async function pauseUntil(customer, date) {
-  const { data, error } = await db
-    .from('customers')
-    .update({ recurring_paused_until: date })
-    .eq('id', customer.id)
-    .select('*')
-    .single();
+async function pauseUntil(customer, date, scheduleId = null) {
+  let query = db
+    .from('recurring_schedules')
+    .update({ paused_until: date, updated_at: new Date().toISOString() })
+    .eq('customer_id', customer.id)
+    .eq('status', 'ACTIVE');
 
+  if (scheduleId) query = query.eq('id', scheduleId);
+
+  const { data, error } = await query.select('*');
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 module.exports = {
   CADENCES,
   DAY_NAMES,
+  BOOK_AHEAD_DAYS,
+  weekdayOf,
+  addDays,
+  nextWeekday,
+  forCustomer,
   isScheduled,
   describe,
+  describeAll,
   nextDate,
-  nextWeekday,
-  addDays,
-  weekdayOf,
   dueOn,
   bookDue,
-  setSchedule,
+  addSchedule,
   stop,
   pauseUntil,
 };
