@@ -8,6 +8,7 @@ const fulfilment = require('../core/fulfilment');
 const orders = require('../core/orders');
 const brain = require('../core/brain');
 const payments = require('../providers/payments');
+const partners = require('../core/partners');
 
 // ---------------------------------------------------------------------------
 // /ops/process - how the whole thing works.
@@ -33,7 +34,7 @@ const payments = require('../providers/payments');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with phase 9c
+const REVIEWED = '13 August 2026';  // bumped with the partner directory
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -475,10 +476,12 @@ function processBody() {
         'They type in what their scale said',
         `One number, on the same page. It is a <strong>cross-check, not a
          price</strong> - our driver's weight is what charged the card, and the
-         laundromat's figure is never read by any pricing code. When the two
-         disagree by more than a pound, an issue is raised for a person to look
-         at and the laundromat is told so plainly. A bad scale in either
-         direction is money, and this is what catches one.`
+         laundromat's figure is never read by any pricing code. Two scales are
+         allowed to differ by <strong>${partners.TOLERANCE_LB} lb or
+         ${(partners.TOLERANCE_PCT * 100).toFixed(0)}% of the bag, whichever is
+         larger</strong>; past that an issue is raised and they are told so
+         plainly. The tolerance has to grow with the bag - a flat couple of
+         pounds is far too tight on a 60 lb load and far too loose on a 10 lb one.`
       )}
       ${step(
         4,
@@ -513,6 +516,12 @@ function processBody() {
         on a live bag. Delivering an order releases its stickers, so one out of
         a bin is worth nothing. Every scan is logged, resolved or not.
       </p>
+      <p>
+        <strong>Which laundromat had the bag is recorded</strong> when the
+        driver drops it off, and their weight is kept against them. One bag two
+        pounds out is two scales; the same partner heavy on forty bags in a row
+        is something else, and their page says so.
+      </p>
     </div>
     <div class="pr-note" style="margin-top:20px;">
       <h3>There are still no partner accounts and no partner logins</h3>
@@ -526,8 +535,17 @@ function processBody() {
         And <strong>no laundromat has signed.</strong> No terms are agreed, no
         wholesale rate is settled, and nothing on the website promises a revenue
         share or a per-pound rate, because none of it has been decided.
-        Enquiries arrive through <code>/partners</code> and land on the Partners
-        screen.
+      </p>
+      <p>
+        The ones we do work with are added by hand on the Partners screen -
+        name, address, hours, what they charge us, what they charge walk-ins,
+        and how much they can take in a day. Which laundromat had a bag is
+        recorded when the driver drops it off, and <strong>their weights are
+        kept against them</strong>: one bag two pounds out is two scales, and
+        the same partner heavy on forty bags in a row is something else.
+        Enquiries from the website form are a separate list underneath, because
+        a stranger who filled in a form and a laundromat we pay every week are
+        not the same thing.
       </p>
     </div>`
   )}

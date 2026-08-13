@@ -128,8 +128,25 @@ function needsWeightFirst(order) {
   };
 }
 
-async function dropAtPartner(order) {
-  return needsWeightFirst(order) || step(order, 'AT_PARTNER', null);
+async function dropAtPartner(order, { partnerId } = {}) {
+  const unweighed = needsWeightFirst(order);
+  if (unweighed) return unweighed;
+
+  const result = await step(order, 'AT_PARTNER', null);
+  if (!result.ok) return result;
+
+  // WHICH laundromat, recorded at the moment the bag changes hands.
+  //
+  // Without it there is no way to answer "is one partner's scale consistently
+  // heavier than ours", which is the whole reason for asking them to weigh it.
+  // Optional, because a bag can be dropped somewhere we have not added yet and
+  // refusing the drop over a missing dropdown would stop the round.
+  if (partnerId) {
+    await db.from('orders').update({ partner_id: partnerId }).eq('id', order.id);
+    result.order.partner_id = partnerId;
+  }
+
+  return result;
 }
 
 async function markReady(order) {

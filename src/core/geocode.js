@@ -133,6 +133,18 @@ async function locate(customer) {
   return found;
 }
 
+// One address, looked up once, through the same queue as everything else.
+//
+// `locate` above is customer-shaped: it reads and writes the caching columns on
+// a customer row. Partners have the same columns but are a different table, so
+// this is the shared half - the bit that actually asks Nominatim, with the one
+// request a second still enforced across both callers because there is only
+// ever one queue.
+function lookupOnce(query) {
+  if (!query) return Promise.resolve(null);
+  return throttled(() => lookup(query));
+}
+
 // --- Putting stops in order -------------------------------------------------
 
 const R_MI = 3958.8;
@@ -225,4 +237,4 @@ function sequence(points, base) {
 // how this ends up defaulting to the middle of the ocean.
 const BASE = Object.freeze({ lat: 40.9404, lng: -74.1182 });
 
-module.exports = { locate, sequence, milesBetween, addressLine, BASE };
+module.exports = { locate, lookupOnce, sequence, milesBetween, addressLine, BASE };

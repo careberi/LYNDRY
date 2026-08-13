@@ -113,7 +113,7 @@ router.post('/ops/at-partner', async (req, res, next) => {
   try {
     const order = await loadOrder(req, res);
     if (!order) return;
-    return send(res, await fulfilment.dropAtPartner(order));
+    return send(res, await fulfilment.dropAtPartner(order, { partnerId: req.body.partner_id || null }));
   } catch (err) {
     next(err);
   }

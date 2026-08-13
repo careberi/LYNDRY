@@ -20,6 +20,8 @@ const bags = require('../core/bags');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
+const partners = require('../core/partners');
+const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -284,7 +286,7 @@ function table(headings, rows) {
 // rather than a spinner that lies.
 // ---------------------------------------------------------------------------
 
-function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true } }) {
+function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true }, laundromats = [] }) {
   const weighed = order.weight_lb != null;
 
   // Weighing is an event rather than a step, so it is offered the whole time
@@ -359,6 +361,20 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
       </form>`
       : `
       <form method="post" action="/ops/orders/${order.order_number}/${s.action}" style="margin:0;">
+        ${
+          // Which laundromat, chosen as the bag changes hands. Without this
+          // there is no way to tell later whose scale was heavy.
+          s.to === 'AT_PARTNER' && laundromats.length
+            ? `<label class="field-label" for="partner_id">Which laundromat</label>
+               <select class="input input-lg" id="partner_id" name="partner_id"
+                       style="width:100%;margin-bottom:12px;">
+                 ${laundromats
+                   .map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
+                   .join('')}
+                 <option value="">Somewhere else</option>
+               </select>`
+            : ''
+        }
         <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
         <span class="field-hint" style="display:block;margin-top:6px;">${escapeHtml(s.hint)}</span>
       </form>`;
@@ -984,6 +1000,10 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     // at the door. Both drive the work card.
     const labels = await bags.forOrder(order.id);
     const doorScan = await loadout.allBagsScanned(order.id);
+
+    // Only fetched when the bag could actually be dropped somewhere, so every
+    // other order page does not pay for a query it will not use.
+    const laundromats = order.status === 'IN_PROCESS' ? await partners.activeLaundromats() : [];
     const bagScan = {
       total: doorScan.total,
       scanned: doorScan.scanned,
@@ -1016,6 +1036,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       ${workCard(order, {
         canAct: roles.can(req.opsUser, 'orders.act'),
         bagScan,
+        laundromats,
         // ?note= carries a sentence the action wrote itself, for steps where a
         // fixed banner cannot say enough. Sliced and escaped like any other
         // thing a person put in a URL.
@@ -1422,7 +1443,9 @@ function orderAction(action, run, middleware = null) {
 // req.body is undefined when a form posts nothing at all, which is exactly
 // what a bare button does.
 orderAction('collected', (order, req) => fulfilment.collect(order, { bagCount: (req.body || {}).bag_count }));
-orderAction('at-partner', (order) => fulfilment.dropAtPartner(order));
+orderAction('at-partner', (order, req) =>
+  fulfilment.dropAtPartner(order, { partnerId: (req.body || {}).partner_id || null })
+);
 orderAction('ready', (order) => fulfilment.markReady(order));
 // Multipart now: the scale photo rides along with the number it evidences.
 orderAction(
@@ -2138,12 +2161,160 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
 });
 
 // ---------------------------------------------------------------------------
-// GET /ops/partners — enquiries from the /partners page
+// ---------------------------------------------------------------------------
+// The partner directory
+//
+// Added by hand, unlike the enquiries below.
+//
+// The ":id" routes fall through on anything that is not a UUID. Without that,
+// Express matches /ops/partners/enquiries against ":id" - it takes the first
+// route that matches, not the most specific - and the leads page becomes a
+// lookup for a partner called "enquiries". Guarding beats relying on the order
+// these happen to be written in, because the next literal sub-path somebody
+// adds will not come with a reminder.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req, res, next) => {
+  try {
+    const list = await partners.list({ includeEnded: req.query.all === '1' });
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Partners',
+        active: '/ops/partners',
+        body: partnerListBody({
+          list,
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/ops/partners/new', guard, withIssues, may('partners.manage'), (req, res) => {
+  res.type('html').send(
+    adminPage({
+      title: 'Add a partner',
+      active: '/ops/partners',
+      body: partnerFormBody({ problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null }),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+    })
+  );
+});
+
+router.post('/ops/partners', guard, may('partners.manage'), async (req, res, next) => {
+  try {
+    const result = await partners.create(req.body || {});
+
+    if (!result.ok) {
+      return res.redirect(303, `/ops/partners/new?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    return res.redirect(
+      303,
+      `/ops/partners/${result.partner.id}?note=${encodeURIComponent(`${result.partner.name} added.`)}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/ops/partners/:id/edit', guard, withIssues, may('partners.manage'), async (req, res, next) => {
+  try {
+    // ":id" also matches a literal like /ops/partners/enquiries, and Express
+    // takes the first route that matches. Falling through on anything that is
+    // not a UUID means a sub-path added later cannot be silently swallowed by
+    // this handler - which is exactly what happened to the enquiries page.
+    if (!UUID.test(req.params.id)) return next();
+
+    const partner = await partners.find(req.params.id);
+    if (!partner) return notFoundPage(res, 'No partner with that id.');
+
+    return res.type('html').send(
+      adminPage({
+        title: `Edit ${partner.name}`,
+        active: '/ops/partners',
+        body: partnerFormBody({
+          partner,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/partners/:id', guard, may('partners.manage'), async (req, res, next) => {
+  try {
+    // ":id" also matches a literal like /ops/partners/enquiries, and Express
+    // takes the first route that matches. Falling through on anything that is
+    // not a UUID means a sub-path added later cannot be silently swallowed by
+    // this handler - which is exactly what happened to the enquiries page.
+    if (!UUID.test(req.params.id)) return next();
+
+    const result = await partners.update(req.params.id, req.body || {});
+
+    if (!result.ok) {
+      return res.redirect(303, `/ops/partners/${req.params.id}/edit?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    return res.redirect(303, `/ops/partners/${req.params.id}?note=${encodeURIComponent('Saved.')}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (req, res, next) => {
+  try {
+    // ":id" also matches a literal like /ops/partners/enquiries, and Express
+    // takes the first route that matches. Falling through on anything that is
+    // not a UUID means a sub-path added later cannot be silently swallowed by
+    // this handler - which is exactly what happened to the enquiries page.
+    if (!UUID.test(req.params.id)) return next();
+
+    const partner = await partners.find(req.params.id);
+    if (!partner) return notFoundPage(res, 'No partner with that id.');
+
+    const history = await partners.weightHistory(partner.id);
+
+    return res.type('html').send(
+      adminPage({
+        title: partner.name,
+        active: '/ops/partners',
+        body: partnerDetailBody({
+          partner,
+          history,
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/partners/enquiries — leads from the website form
+//
+// Moved off /ops/partners when the real partner directory arrived. A stranger
+// who filled in a web form and a laundromat we pay every week are not the same
+// list, and having them on one screen buried the short important one inside
+// the long unimportant one.
 // ---------------------------------------------------------------------------
 
 const PARTNER_LABEL = { LAUNDROMAT: 'Laundromat', PROPERTY: 'Property' };
 
-router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req, res, next) => {
+router.get('/ops/partners/enquiries', guard, withIssues, may('partners.view'), async (req, res, next) => {
   try {
     const { data, error } = await db
       .from('partner_enquiries')
@@ -2193,7 +2364,7 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
             : ''
         }
 
-        <form method="post" action="/ops/partners/${e.id}/status" style="display:flex;gap:10px;flex-wrap:wrap;margin:0;">
+        <form method="post" action="/ops/partners/enquiries/${e.id}/status" style="display:flex;gap:10px;flex-wrap:wrap;margin:0;">
           ${
             e.status !== 'CONTACTED'
               ? '<button class="btn btn-sm btn-primary" name="status" value="CONTACTED">Mark contacted</button>'
@@ -2240,13 +2411,13 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
              </div>`
       }`;
 
-    res.type('html').send(adminPage({ title: 'Partners', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
     next(err);
   }
 });
 
-router.post('/ops/partners/:id/status', guard, may('partners.manage'), async (req, res, next) => {
+router.post('/ops/partners/enquiries/:id/status', guard, may('partners.manage'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That enquiry id is not valid.');
 
@@ -2259,7 +2430,7 @@ router.post('/ops/partners/:id/status', guard, may('partners.manage'), async (re
     if (error) throw error;
 
     // Redirect rather than render, so a refresh doesn't resubmit.
-    return res.redirect(303, '/ops/partners');
+    return res.redirect(303, '/ops/partners/enquiries');
   } catch (err) {
     return next(err);
   }

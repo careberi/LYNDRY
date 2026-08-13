@@ -406,8 +406,10 @@ GET  /ops/process            how the whole thing works
 GET  /ops/loadout            scan bags into the van, build the run
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
-GET  /ops/partners           enquiries from /partners, newest first
-POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
+GET  /ops/partners           the businesses we work with, added by hand
+GET  /ops/partners/:id       one partner, and their scale against ours
+GET  /ops/partners/enquiries leads from the website form
+POST /ops/partners/enquiries/:id/status   NEW / CONTACTED / CLOSED
 GET  /ops/team               who can sign in; add and disable people
 GET  /ops/login              phone number     } the only two pages
 GET  /ops/login/code         six-digit code   } reachable signed out
@@ -466,11 +468,40 @@ regex catches "the Bergen Pediatrics name tags", so the fix is an allowlist
 rather than redaction. Add a field to that page only by adding it to
 `washLines()` deliberately.
 
+**Partners are added by hand and are not the same thing as enquiries.**
+`partners` is the short list of businesses we work with, typed in by Neil;
+`partner_enquiries` is the website form and is a pile of strangers. Two types:
+`LAUNDROMAT` carries a wholesale rate, a retail rate, hours and a daily
+capacity, and `PROPERTY_MANAGER` carries none of them — **switching a record's
+type clears the ones that no longer apply**, because a stale wholesale rate on a
+landlord gets read as real a year later. Hours are free text on purpose: nothing
+decides anything from them yet, and seven open/close pairs is a form nobody
+fills in.
+
+**`orders.partner_id` records which laundromat had the bag**, set when the
+driver drops it off. Without it there is no way to answer "is one partner's
+scale consistently heavy", which is the whole reason for asking them to weigh
+it. There is no separate discrepancy table — that column joined to `weight_lb`
+and `partner_weight_lb` IS the history, and a copy would only be a second thing
+to keep in step.
+
+**Routes under `/ops/partners/:id` fall through when the id is not a UUID.**
+Express takes the first route that matches, not the most specific, so
+`/ops/partners/enquiries` was being read as a partner called "enquiries". Guard
+the param rather than relying on the order the routes happen to be written in.
+
 **The scale photo is required, and the partner's weight is a cross-check.**
 `/ops/weight` will not save a first weighing without a photo of the display —
 the number charges a card. A laundromat may enter its own figure on the QR page;
-**`partner_weight_lb` is never read by the pricing code**. Ours bills. More than
-a pound apart raises an issue. Wiring their number into `price_cents` removes
+**`partner_weight_lb` is never read by the pricing code**. Ours bills.
+
+**The tolerance is the larger of a fixed amount and a percentage** —
+`TOLERANCE_LB` or `TOLERANCE_PCT` of the bag, in `src/core/partners.js`. It has
+to be both: a flat 2 lb is far too tight on a 60 lb load where a 3 lb gap is
+ordinary, and a flat 5% is far too loose on a 10 lb one. Past the tolerance an
+issue is raised. **The per-bag flag is not the real detector** — a partner
+running 1.9 lb heavy every single time never trips it, so the partner page also
+shows average drift and how many of their bags read heavier than ours. Wiring their number into `price_cents` removes
 the control Neil asked for.
 
 **The load-out pass turns the van into a sequence.** Scan every bag out of the
