@@ -399,12 +399,39 @@ GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
+GET  /ops/issues             everything still waiting on a person
+GET  /ops/economics          what the shape of a run earns      } models, not
+GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/partners           enquiries from /partners, newest first
 POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
 GET  /ops/team               who can sign in; add and disable people
 GET  /ops/login              phone number     } the only two pages
 GET  /ops/login/code         six-digit code   } reachable signed out
 ```
+
+**`/ops/economics` and `/ops/planner` are the only two ops pages with
+client-side JavaScript, and the only two that read nothing from the database.**
+Everywhere else the plain-HTML rule holds, because a driver on two bars in a
+stairwell needs a page that either worked or did not. These two are calculators
+used at a desk; interactive is the whole point of them. Both are behind
+`money.view` — they show the wholesale wash rate, which is not a driver's to
+browse — and nothing typed into either changes anything anywhere else.
+
+**The planner is the only page in the codebase that depends on an outside
+service at runtime.** Three of them, none needing an account or a key: Leaflet
+for the map, CARTO/OpenStreetMap for the tiles, and OSRM for real driving
+distances between the stops. Leaflet is pinned to an exact version with an
+integrity hash, so a CDN that changed the bytes underneath us would be refused
+by the browser rather than run.
+
+OSRM is the one to be careful about: it is a free public demo server with
+nothing promised behind it. The page is written so that losing it is a
+downgrade rather than a break — distances fall back to straight-line times the
+road factor, and the badge under the map says which of the two you are looking
+at. **Never let it silently mix the two**, and never quietly drop the badge; a
+mileage figure whose provenance is invisible is worse than no figure. If the
+demo server becomes unreliable, the replacement is a paid routing key, not a
+quiet return to estimates.
 
 **Two credentials, for two kinds of caller.** Don't collapse them.
 

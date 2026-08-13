@@ -13,6 +13,7 @@ const roles = require('../core/roles');
 const booking = require('../core/booking');
 const issues = require('../core/issues');
 const { runEconomicsBody } = require('../web/run-economics');
+const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -140,7 +141,11 @@ function addressOf(c) {
 // and a legal footer, which is wrong on an internal tool. Same stylesheets and
 // the same design language, different furniture.
 
-function adminPage({ title, active = '', body, user = null, openIssues = 0 }) {
+// `head` is for the rare page that needs something of its own in <head> - the
+// route planner's map library, and so far nothing else. Kept as a parameter
+// rather than letting pages write their own <head> so that every ops screen
+// still gets the same stylesheets, the same noindex and the same furniture.
+function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '' }) {
   const tab = (href, label) =>
     `<a href="${href}"${href === active ? ' aria-current="page"' : ''}>${label}</a>`;
 
@@ -159,6 +164,7 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0 }) {
   <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
   <link rel="stylesheet" href="${CSS_BASE}/icons.css">
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
+${head}
 </head>
 <body>
   <header class="site-header">
@@ -172,6 +178,7 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0 }) {
         ${roles.can(user, 'messages.view') ? tab('/ops/messages', 'Messages') : ''}
         ${roles.can(user, 'issues.manage') ? tab('/ops/issues', 'Issues') : ''}
         ${roles.can(user, 'money.view') ? tab('/ops/economics', 'Economics') : ''}
+        ${roles.can(user, 'money.view') ? tab('/ops/planner', 'Planner') : ''}
         ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
         ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
       </nav>
@@ -1250,6 +1257,28 @@ router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) =>
       title: 'Run economics',
       active: '/ops/economics',
       body: runEconomicsBody(),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+    })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/planner — one van-load of stops, on a real map
+//
+// The other half of the same question. Economics asks whether the shape of a
+// run works; this asks whether a particular run works, with these stops in
+// these places. Also a model, also reads nothing from the database, and behind
+// money.view for the same reason: it shows the wholesale wash rate.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
+  res.type('html').send(
+    adminPage({
+      title: 'Route planner',
+      active: '/ops/planner',
+      head: routePlannerHead(),
+      body: routePlannerBody(),
       user: req.opsUser,
       openIssues: req.openIssues,
     })
