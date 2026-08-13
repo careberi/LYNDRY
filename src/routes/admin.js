@@ -186,7 +186,7 @@ const OPS_MENUS = Object.freeze([
   {
     label: 'Tools',
     items: [
-      { href: '/ops/economics', label: 'Economics', permission: 'money.view' },
+      { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
       { href: '/ops/planner', label: 'Planner', permission: 'money.view' },
       { href: '/ops/labels', label: 'Bag labels', permission: 'orders.act' },
     ],
@@ -2273,7 +2273,7 @@ router.get('/ops/labels/sheet', guard, may('orders.act'), async (req, res, next)
 router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
-      title: 'Run economics',
+      title: 'Unit economics',
       active: '/ops/economics',
       body: runEconomicsBody(),
       user: req.opsUser,
@@ -2757,6 +2757,12 @@ router.post('/ops/partners', guard, may('partners.manage'), async (req, res, nex
       return res.redirect(303, `/ops/partners/new?problem=${encodeURIComponent(result.detail)}`);
     }
 
+    // After the insert, because the hours rows need the partner's id. A
+    // management company has no opening hours to route by, so it gets none.
+    if (result.partner.type === 'LAUNDROMAT') {
+      await partners.saveHours(result.partner.id, req.body || {});
+    }
+
     return res.redirect(
       303,
       `/ops/partners/${result.partner.id}?note=${encodeURIComponent(`${result.partner.name} added.`)}`
@@ -2783,6 +2789,7 @@ router.get('/ops/partners/:id/edit', guard, withIssues, may('partners.manage'), 
         active: '/ops/partners',
         body: partnerFormBody({
           partner,
+          hours: await partners.hoursFor(partner.id),
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),
         user: req.opsUser,
@@ -2808,6 +2815,16 @@ router.post('/ops/partners/:id', guard, may('partners.manage'), async (req, res,
       return res.redirect(303, `/ops/partners/${req.params.id}/edit?problem=${encodeURIComponent(result.detail)}`);
     }
 
+    // Switching a record to a management company clears the laundromat fields,
+    // and the hours are one of them - a stale opening time on a landlord would
+    // be read as real the same way a stale wholesale rate would. saveHours with
+    // no time boxes filled in deletes the lot, which is exactly what is wanted.
+    if (result.partner.type === 'LAUNDROMAT') {
+      await partners.saveHours(req.params.id, req.body || {});
+    } else {
+      await partners.saveHours(req.params.id, {});
+    }
+
     return res.redirect(303, `/ops/partners/${req.params.id}?note=${encodeURIComponent('Saved.')}`);
   } catch (err) {
     return next(err);
@@ -2826,6 +2843,12 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
     if (!partner) return notFoundPage(res, 'No partner with that id.');
 
     const history = await partners.weightHistory(partner.id);
+    const hours = await partners.hoursFor(partner.id);
+
+    // What is on their floor right now. One query across every partner, then
+    // the one row we want - the same call the dispatch board makes, so the two
+    // screens can never disagree about how full somebody is.
+    const load = partners.capacityOf(partner, (await partners.loadByPartner()).get(partner.id));
 
     return res.type('html').send(
       adminPage({
@@ -2834,6 +2857,8 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
         body: partnerDetailBody({
           partner,
           history,
+          hours,
+          load,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
         }),
         user: req.opsUser,

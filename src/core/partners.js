@@ -225,6 +225,230 @@ async function locate(partner) {
   return { ...partner, ...(found || {}) };
 }
 
+// --- Opening hours ----------------------------------------------------------
+//
+// `partners.hours` is still free text and is still the human note. These read
+// `partner_hours`, which is the version routing uses, and the rule is simple:
+// A WEEKDAY WITH NO ROW IS CLOSED. Absence has to mean closed rather than
+// unknown, because "we never filled it in" is not an answer a van can act on,
+// and treating a blank as open is how a driver ends up at a shut door.
+
+const WEEKDAYS = Object.freeze([
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+]);
+
+// "07:00:00" from Postgres and "07:00" from a form both mean the same thing.
+function minutesOfDay(value) {
+  const match = /^(\d{1,2}):(\d{2})/.exec(String(value || '').trim());
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = Number(match[2]);
+  if (h > 23 || m > 59) return null;
+  return h * 60 + m;
+}
+
+function hhmm(value) {
+  const mins = minutesOfDay(value);
+  if (mins == null) return null;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+async function hoursFor(partnerId) {
+  const { data, error } = await db
+    .from('partner_hours')
+    .select('*')
+    .eq('partner_id', partnerId)
+    .order('weekday', { ascending: true })
+    .order('opens_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// Every partner's hours in one query, as a Map keyed by partner id. The board
+// needs all of them at once and a query each would be a round trip per
+// laundromat for a table that will never be long.
+async function hoursForAll() {
+  const { data, error } = await db
+    .from('partner_hours')
+    .select('*')
+    .order('weekday', { ascending: true })
+    .order('opens_at', { ascending: true });
+
+  if (error) throw error;
+
+  const byPartner = new Map();
+  for (const row of data || []) {
+    if (!byPartner.has(row.partner_id)) byPartner.set(row.partner_id, []);
+    byPartner.get(row.partner_id).push(row);
+  }
+  return byPartner;
+}
+
+// Is this partner open at this moment? `weekday` is 0-6 with Sunday as 0, the
+// same as JavaScript's getDay(), and `time` is "HH:MM" on the service clock.
+//
+// Several rows on one weekday is a split shift - open for lunch, shut, open
+// again - so a time counts as open if it falls in ANY of them.
+function isOpenAt(rows, weekday, time) {
+  const at = minutesOfDay(time);
+  if (at == null) return false;
+
+  return (rows || [])
+    .filter((r) => Number(r.weekday) === Number(weekday))
+    .some((r) => {
+      const from = minutesOfDay(r.opens_at);
+      const to = minutesOfDay(r.closes_at);
+      if (from == null || to == null) return false;
+      // End-exclusive: arriving at the exact minute they close is arriving
+      // after they closed, and a van that leaves at 9pm sharp did not make it.
+      return at >= from && at < to;
+    });
+}
+
+// "Mon-Fri 7am-9pm, Sat 8am-6pm" from the rows, for showing on a page.
+// Consecutive weekdays with identical hours are collapsed, because seven lines
+// that all say the same thing is not something anybody reads.
+function describeHours(rows) {
+  const byDay = WEEKDAYS.map((_, day) =>
+    (rows || [])
+      .filter((r) => Number(r.weekday) === day)
+      .map((r) => `${hhmm(r.opens_at)}-${hhmm(r.closes_at)}`)
+      .join(', ')
+  );
+
+  // Monday first, because that is how opening hours are written on a door.
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const groups = [];
+
+  for (const day of order) {
+    const spec = byDay[day];
+    const last = groups[groups.length - 1];
+    if (last && last.spec === spec) last.days.push(day);
+    else groups.push({ spec, days: [day] });
+  }
+
+  const short = (day) => WEEKDAYS[day].slice(0, 3);
+  const readable = (mins) => {
+    const h24 = Math.floor(mins / 60);
+    const m = mins % 60;
+    const h = h24 % 12 === 0 ? 12 : h24 % 12;
+    return `${h}${m ? `:${String(m).padStart(2, '0')}` : ''}${h24 < 12 ? 'am' : 'pm'}`;
+  };
+
+  // Shifts within one day join with "and", not a comma. Commas already separate
+  // the day groups, so "Wed 7am-12pm, 2pm-8pm, Thu closed" leaves you unable to
+  // tell which day the afternoon shift belongs to.
+  const pretty = (spec) =>
+    spec
+      ? spec
+          .split(', ')
+          .map((range) => range.split('-').map((t) => readable(minutesOfDay(t))).join('-'))
+          .join(' and ')
+      : 'closed';
+
+  return groups
+    .filter((g) => g.spec || g.days.length < 7)
+    .map((g) => {
+      const label =
+        g.days.length === 1
+          ? short(g.days[0])
+          : `${short(g.days[0])}-${short(g.days[g.days.length - 1])}`;
+      return `${label} ${pretty(g.spec)}`;
+    })
+    .join(', ');
+}
+
+// Replace a partner's hours wholesale from a submitted form.
+//
+// Delete-then-insert rather than a diff: the form IS the whole week, so what
+// is not in it is closed, and working out which individual rows changed would
+// be more code for exactly the same result.
+async function saveHours(partnerId, form) {
+  const rows = [];
+
+  for (let day = 0; day < 7; day += 1) {
+    // A day can carry a second shift. The form names them hours_1_open and
+    // hours_1_open_2, so a laundromat that shuts for lunch can say so.
+    for (const suffix of ['', '_2']) {
+      const opens = hhmm((form || {})[`hours_${day}_open${suffix}`]);
+      const closes = hhmm((form || {})[`hours_${day}_close${suffix}`]);
+
+      // Both or neither. Half a pair is somebody mid-edit, and guessing the
+      // other half would invent an opening time nobody typed.
+      if (!opens || !closes) continue;
+      if (minutesOfDay(closes) <= minutesOfDay(opens)) continue;
+
+      rows.push({ partner_id: partnerId, weekday: day, opens_at: opens, closes_at: closes });
+    }
+  }
+
+  const { error: clearError } = await db.from('partner_hours').delete().eq('partner_id', partnerId);
+  if (clearError) throw clearError;
+
+  if (!rows.length) return [];
+
+  const { data, error } = await db.from('partner_hours').insert(rows).select('*');
+  if (error) throw error;
+  return data || [];
+}
+
+// --- How much is at each laundromat right now -------------------------------
+//
+// There is no separate ledger for this and there must not be one. A bag is at a
+// partner when its order says so, and its weight is on the order - so the load
+// IS that query. A running total kept in a column would be a second version of
+// the same fact, and the two would disagree the first time anything went wrong.
+//
+// AT_PARTNER means they are washing it. READY means they have finished but we
+// have not collected it yet - it is still taking up their floor, so it still
+// counts against what they can take today.
+async function loadByPartner() {
+  const { data, error } = await db
+    .from('orders')
+    .select('partner_id, weight_lb, status')
+    .not('partner_id', 'is', null)
+    .in('status', ['AT_PARTNER', 'READY']);
+
+  if (error) throw error;
+
+  const byPartner = new Map();
+  for (const order of data || []) {
+    const seen = byPartner.get(order.partner_id) || { bags: 0, pounds: 0, unweighed: 0 };
+    seen.bags += 1;
+    // A bag dropped off before it was weighed has no pounds yet. Counting it
+    // as zero would quietly understate how full somebody is, so it is counted
+    // separately and shown as its own number.
+    if (order.weight_lb == null) seen.unweighed += 1;
+    else seen.pounds += Number(order.weight_lb);
+    byPartner.set(order.partner_id, seen);
+  }
+
+  return byPartner;
+}
+
+// What one partner can still take today, given what they already have.
+//
+// `remaining` is null - not zero - when no capacity was ever entered. Unknown
+// and full are different answers, and routing has to be able to tell them
+// apart rather than treating a blank form field as a shut door.
+function capacityOf(partner, load) {
+  const used = (load && load.pounds) || 0;
+  const cap = partner.daily_capacity_lb == null ? null : Number(partner.daily_capacity_lb);
+
+  return {
+    bags: (load && load.bags) || 0,
+    unweighed: (load && load.unweighed) || 0,
+    used,
+    capacity: cap,
+    remaining: cap == null ? null : Math.max(0, cap - used),
+    full: cap != null && used >= cap,
+    // How full, for a bar on a page. Null when there is nothing to be a
+    // fraction of.
+    fraction: cap ? Math.min(1, used / cap) : null,
+  };
+}
+
 // --- The scale history ------------------------------------------------------
 //
 // Every order this partner handled where both weights exist. Point three of
@@ -272,6 +496,15 @@ async function weightHistory(partnerId, { limit = 200 } = {}) {
 module.exports = {
   TYPES,
   STATUSES,
+  WEEKDAYS,
+  minutesOfDay,
+  hoursFor,
+  hoursForAll,
+  isOpenAt,
+  describeHours,
+  saveHours,
+  loadByPartner,
+  capacityOf,
   TOLERANCE_LB,
   TOLERANCE_PCT,
   toleranceFor,

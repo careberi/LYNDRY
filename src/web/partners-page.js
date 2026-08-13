@@ -125,7 +125,87 @@ function field({ name, label, value = '', hint = '', type = 'text', attrs = '' }
   </div>`;
 }
 
-function partnerFormBody({ partner = null, problem = null }) {
+// The week, as fourteen time boxes.
+//
+// A DAY LEFT BLANK IS CLOSED, and the form says so out loud - that is the one
+// thing about this grid somebody could get wrong by leaving it alone, and the
+// consequence is a van sent to a shut door.
+//
+// The second pair on each row is for a laundromat that shuts at lunch. It is
+// deliberately quieter than the first: most places have one shift and a form
+// that presents two equal pairs makes the common case look unfinished.
+function hoursGrid(rows) {
+  const at = (day, n) => {
+    const forDay = (rows || []).filter((r) => Number(r.weekday) === day);
+    return forDay[n] || null;
+  };
+
+  const box = (name, value) =>
+    `<input class="input" type="time" name="${name}" value="${value ? escapeHtml(String(value).slice(0, 5)) : ''}"
+            style="width:100%;min-width:0;">`;
+
+  const row = (day) => {
+    const first = at(day, 0);
+    const second = at(day, 1);
+    return `
+    <div class="ph-row">
+      <span class="ph-day">${escapeHtml(partners.WEEKDAYS[day])}</span>
+      <div class="ph-pair">
+        ${box(`hours_${day}_open`, first && first.opens_at)}
+        <span class="ph-dash">to</span>
+        ${box(`hours_${day}_close`, first && first.closes_at)}
+      </div>
+      <div class="ph-pair ph-second">
+        ${box(`hours_${day}_open_2`, second && second.opens_at)}
+        <span class="ph-dash">to</span>
+        ${box(`hours_${day}_close_2`, second && second.closes_at)}
+      </div>
+    </div>`;
+  };
+
+  // Monday first, the way hours are written on a door. Sunday is 0 in the
+  // database because that is what JavaScript's getDay() returns, so it lives at
+  // the end of this list rather than the start.
+  const order = [1, 2, 3, 4, 5, 6, 0];
+
+  return `
+    <style>
+      .ph-grid { display:flex; flex-direction:column; gap:10px; margin:0 0 8px; }
+      .ph-row { display:grid; grid-template-columns:74px minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:center; }
+      .ph-row > * { min-width:0; }
+      .ph-day { font-family:var(--font-mono); font-size:12px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; }
+      .ph-pair { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:8px; align-items:center; }
+      .ph-dash { font-size:13px; color:var(--ink-500); }
+      .ph-second { opacity:0.65; }
+      .ph-second:focus-within { opacity:1; }
+      .ph-head { display:grid; grid-template-columns:74px minmax(0,1fr) minmax(0,1fr); gap:12px; margin:0 0 4px; }
+      .ph-head span { font-family:var(--font-mono); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-500); }
+      /* An inline grid-template-columns would beat this media query and the
+         rows would refuse to stack, which is the rule the whole stylesheet
+         follows - ratios are classes, never inline styles. */
+      @media (max-width: 640px) {
+        .ph-head { display:none; }
+        .ph-row { grid-template-columns:1fr; gap:8px; padding-bottom:12px; border-bottom:1px solid var(--ink-100); }
+        .ph-second { opacity:1; }
+      }
+    </style>
+
+    <label class="field-label">Opening hours</label>
+    <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:0 0 14px;">
+      <strong>A day left blank is closed</strong>, and the dispatch board will
+      not send a bag there. The second pair is only for somewhere that shuts in
+      the middle of the day.
+    </p>
+
+    <div class="ph-head">
+      <span></span><span>Open</span><span>And again</span>
+    </div>
+    <div class="ph-grid">
+      ${order.map(row).join('')}
+    </div>`;
+}
+
+function partnerFormBody({ partner = null, hours = [], problem = null }) {
   const p = partner || {};
   const editing = Boolean(partner);
   const laundromat = (p.type || 'LAUNDROMAT') === 'LAUNDROMAT';
@@ -221,11 +301,13 @@ function partnerFormBody({ partner = null, problem = null }) {
         not agreed should stay empty rather than be guessed at.
       </p>
 
+      ${hoursGrid(hours)}
+
       ${field({
         name: 'hours',
-        label: 'Hours',
+        label: 'Anything else about their hours',
         value: p.hours,
-        hint: 'However you would say it. Mon-Fri 7am-9pm, Sat 8-6, closed Sunday.',
+        hint: 'A note for a person, not for the routing. "Call ahead on Sundays", "shuts early on holidays".',
       })}
 
       <div class="pt-two">
@@ -269,7 +351,30 @@ function partnerFormBody({ partner = null, problem = null }) {
 
 // --- One partner, with the scale history ------------------------------------
 
-function partnerDetailBody({ partner, history, notice }) {
+// WHAT IS ON THEIR FLOOR RIGHT NOW, against what they said they can take.
+//
+// Bags dropped off but not yet weighed are counted separately rather than as
+// zero pounds: a laundromat holding four unweighed bags is not empty, and a
+// figure that quietly says it is would send them a fifth.
+function loadLine(load) {
+  if (!load || !load.bags) return '<span style="color:var(--ink-500);">nothing</span>';
+
+  const parts = [`<strong>${load.used.toFixed(1)} lb</strong>`, `${load.bags} bag${load.bags === 1 ? '' : 's'}`];
+  if (load.unweighed) parts.push(`${load.unweighed} not weighed yet`);
+
+  const tone = load.full ? 'var(--stain-500)' : load.fraction != null && load.fraction > 0.8 ? 'var(--sunbeam-500)' : null;
+  const room =
+    load.capacity == null
+      ? '<span style="color:var(--ink-500);">no capacity set</span>'
+      : load.full
+        ? '<span style="color:var(--stain-500);font-weight:700;">full</span>'
+        : `${load.remaining.toFixed(0)} lb of room left`;
+
+  return `${parts.join(' &middot; ')}<br>
+    <span style="font-size:14px;${tone ? `color:${tone};` : 'color:var(--ink-500);'}">${room}</span>`;
+}
+
+function partnerDetailBody({ partner, history, hours = [], load = null, notice }) {
   const p = partner;
   const laundromat = p.type === 'LAUNDROMAT';
 
@@ -360,13 +465,22 @@ ${
 <div class="pt-cols">
   <div class="card card-xl" style="padding:26px;">
     <p class="eyebrow" style="margin:0 0 6px;">Details</p>
-    ${fact('Address', escapeHtml(addressOf(p) || '&mdash;'))}
-    ${fact('Contact', escapeHtml(p.contact_name || '&mdash;'))}
-    ${fact('Phone', escapeHtml(p.phone || '&mdash;'))}
-    ${fact('Email', escapeHtml(p.email || '&mdash;'))}
+    ${/* The dash is markup, so it must not go through escapeHtml with the
+          value - escaping the whole expression turned an empty field into a
+          literal "&mdash;" on the page. */ ''}
+    ${fact('Address', addressOf(p) ? escapeHtml(addressOf(p)) : '&mdash;')}
+    ${fact('Contact', p.contact_name ? escapeHtml(p.contact_name) : '&mdash;')}
+    ${fact('Phone', p.phone ? escapeHtml(p.phone) : '&mdash;')}
+    ${fact('Email', p.email ? escapeHtml(p.email) : '&mdash;')}
     ${
       laundromat
-        ? fact('Hours', escapeHtml(p.hours || '&mdash;')) +
+        ? fact(
+            'Open',
+            hours.length
+              ? escapeHtml(partners.describeHours(hours))
+              : '<span style="color:var(--stain-500);font-weight:700;">no hours set - routing will not send bags here</span>'
+          ) +
+          (p.hours ? fact('Note', escapeHtml(p.hours)) : '') +
           fact(
             'They charge us',
             p.wholesale_per_lb_cents == null
@@ -377,7 +491,8 @@ ${
             'They charge walk-ins',
             p.retail_per_lb_cents == null ? '&mdash;' : `${escapeHtml(money(p.retail_per_lb_cents))} / lb`
           ) +
-          fact('Daily capacity', p.daily_capacity_lb ? `${p.daily_capacity_lb} lb` : '&mdash;')
+          fact('Daily capacity', p.daily_capacity_lb ? `${p.daily_capacity_lb} lb` : '&mdash;') +
+          fact('With them now', loadLine(load))
         : ''
     }
     ${p.notes ? `<p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:var(--ink-700);white-space:pre-wrap;">${escapeHtml(p.notes)}</p>` : ''}
