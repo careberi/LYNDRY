@@ -2375,6 +2375,106 @@ router.post('/ops/orders/:id/door-scan', guard, may('orders.act'), async (req, r
   }
 });
 
+// --- How many bags, and what each one weighs --------------------------------
+//
+// A driver stands at a door with his hands full, so the run asks how many bags
+// there are, then walks them one at a time: sticker, scale, photo. These two
+// routes are what those steps post to.
+
+router.post('/ops/orders/:id/bag-count', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = backTo(req, order);
+    const count = Math.round(Number((req.body || {}).bag_count));
+
+    if (!Number.isFinite(count) || count < 1 || count > 20) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('How many bags? A number between 1 and 20.')}`
+      );
+    }
+
+    const { error } = await db.from('orders').update({ bag_count: count }).eq('id', order.id);
+    if (error) throw error;
+
+    await orderEvents.record(order.id, {
+      kind: 'NOTE',
+      summary: `${count} bag${count === 1 ? '' : 's'} at the door`,
+      was: order.bag_count == null ? 'not counted' : String(order.bag_count),
+      became: String(count),
+      by: { opsUser: req.opsUser },
+    });
+
+    return res.redirect(303, `${back}?note=${encodeURIComponent(`${count} bags. Sticker the first one.`)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post(
+  '/ops/orders/:id/bag-weight',
+  guard,
+  may('orders.act'),
+  upload.single('photo'),
+  async (req, res, next) => {
+    try {
+      const order = await loadOrderForAction(req.params.id);
+      if (!order) return notFoundPage(res, 'No order with that number.');
+
+      const back = backTo(req, order);
+      const body = req.body || {};
+
+      const result = await bags.recordBagWeight(body.code, body.weight_lb, req.file, { order });
+
+      if (!result.ok) {
+        return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+      }
+
+      // THE ORDER'S WEIGHT IS THE SUM OF ITS BAGS, recomputed here rather than
+      // typed. It stays the authoritative figure - it prices the order and it is
+      // what a laundromat's number is checked against - it is simply added up.
+      //
+      // Written through fulfilment so the price, the audit entry and the text to
+      // the customer all happen the one way they already happen. There is no
+      // second implementation of "this order now weighs X".
+      const totals = await bags.totalWeight(order.id);
+
+      if (totals && totals.allWeighed) {
+        const priced = await fulfilment.recordWeight(order, totals.pounds, null, {
+          by: { opsUser: req.opsUser },
+          // Every bag was photographed on the scale individually, which is
+          // better evidence than the single photo recordWeight would otherwise
+          // insist on.
+          photoOnBags: true,
+        });
+
+        if (!priced.ok) {
+          return res.redirect(303, `${back}?problem=${encodeURIComponent(priced.detail)}`);
+        }
+
+        return res.redirect(
+          303,
+          `${back}?note=${encodeURIComponent(
+            `All ${totals.bags} bags weighed - ${totals.pounds.toFixed(1)} lb altogether.`
+          )}`
+        );
+      }
+
+      return res.redirect(
+        303,
+        `${back}?note=${encodeURIComponent(
+          `Bag logged at ${Number(body.weight_lb).toFixed(1)} lb. ` +
+            `${totals ? totals.bags : 0} of ${totals ? totals.total : 0} done.`
+        )}`
+      );
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 // --- Sticking a label on a bag, and taking it off again ---------------------
 
 router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, next) => {

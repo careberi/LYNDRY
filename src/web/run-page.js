@@ -161,51 +161,66 @@ function taskCard(run) {
 function taskControl(stop, task, order) {
   const back = '?from=run';
 
-  if (task.key === 'label') {
+  if (task.key === 'bag_count') {
     return `
-    ${scanField({
-      action: `/ops/orders/${order.order_number}/label${back}`,
-      label: 'Code off the sticker',
-      buttonLabel: 'Add this bag',
-      autofocus: true,
-      hint: describeCodeFormat(),
-    })}
-    ${
-      task.labels.length
-        ? `<div style="margin-top:14px;font-size:14px;color:var(--ink-700);">
-             On so far: ${task.labels.map((l) => `<code>${escapeHtml(l.code)}</code>`).join(', ')}
-           </div>`
-        : ''
-    }`;
-  }
-
-  if (task.key === 'collected') {
-    return `
-    <form method="post" action="/ops/orders/${order.order_number}/collected${back}" style="margin:0;">
-      <label class="field-label" for="bag_count">How many bags</label>
+    <form method="post" action="/ops/orders/${order.order_number}/bag-count${back}" style="margin:0;">
+      <label class="field-label" for="bag_count">Bags</label>
       <input class="input input-lg" type="number" id="bag_count" name="bag_count" min="1" max="20"
-             value="${escapeHtml(String(order.bag_count || task.labels ? task.labels.length : 1))}"
-             style="width:100%;margin-bottom:16px;">
-      <button type="submit" class="btn btn-primary btn-lg btn-full">In the van</button>
+             inputmode="numeric" required autofocus placeholder="3" style="width:100%;margin-bottom:16px;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">That's how many</button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        Count them first. The screen then walks you through them one at a time.
+      </span>
     </form>`;
   }
 
-  if (task.key === 'weight') {
+  // ONE BAG: a sticker, then the scale and a photo of it. Two forms, one after
+  // the other, because the sticker has to exist before there is anything to
+  // hang a weight on.
+  if (task.key.startsWith('bag_')) {
+    if (task.needsLabel) {
+      return `
+      ${scanField({
+        action: `/ops/orders/${order.order_number}/label${back}`,
+        label: `Code off the sticker for bag ${task.position}`,
+        buttonLabel: `That's bag ${task.position}`,
+        autofocus: true,
+        hint: describeCodeFormat(),
+      })}`;
+    }
+
     return `
-    <form method="post" action="/ops/orders/${order.order_number}/weight${back}"
+    <form method="post" action="/ops/orders/${order.order_number}/bag-weight${back}"
           enctype="multipart/form-data" style="margin:0;">
-      <label class="field-label" for="weight_lb">Pounds</label>
+      <input type="hidden" name="code" value="${escapeHtml(task.label.code)}">
+
+      <p style="margin:0 0 14px;font-size:15px;">
+        Sticker <code style="font-weight:700;">${escapeHtml(task.label.code)}</code> is on it.
+      </p>
+
+      <label class="field-label" for="weight_lb">What does bag ${task.position} weigh?</label>
       <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
              step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus
-             placeholder="24.5" style="width:100%;margin-bottom:16px;">
+             placeholder="12.5" style="width:100%;margin-bottom:16px;">
 
       <label class="field-label" for="photo">Photo of the scale</label>
       <input class="input input-lg" type="file" id="photo" name="photo"
              accept="image/*" capture="environment" required style="width:100%;margin-bottom:16px;">
 
-      <button type="submit" class="btn btn-primary btn-lg btn-full">Save the weight</button>
+      <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag ${task.position}</button>
       <span class="field-hint" style="display:block;margin-top:10px;">
-        The photo settles any argument about the number later.
+        Photograph the display with the bag on it. That photo settles any argument
+        about the number later.
+      </span>
+    </form>`;
+  }
+
+  if (task.key === 'collected') {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/collected${back}" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">In the van</button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        All of them weighed and stickered. Tap this once they are actually loaded.
       </span>
     </form>`;
   }

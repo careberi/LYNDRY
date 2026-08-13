@@ -179,6 +179,26 @@ async function bind(code, order, opsUserId) {
   }
 
   const existing = await forOrder(order.id);
+
+  // NO MORE STICKERS THAN BAGS. The driver counts them before he starts, so a
+  // fourth sticker on a three-bag order is a mistake - a sticker peeled off by
+  // accident, or somebody else's bag. Letting it through leaves the order
+  // waiting on a bag that does not exist, which is exactly what happened in
+  // testing: three bags weighed, and the run still asking for a fourth.
+  //
+  // Only when the count is known. A count nobody has entered yet is not a
+  // limit of zero.
+  if (order.bag_count != null && existing.length >= Number(order.bag_count)) {
+    return {
+      ok: false,
+      reason: 'too_many',
+      detail:
+        `This order is down as ${order.bag_count} bag${order.bag_count === 1 ? '' : 's'} and ` +
+        `${existing.length} already ${existing.length === 1 ? 'has' : 'have'} a sticker. ` +
+        `Change the bag count on the order if there really is another one.`,
+    };
+  }
+
   const position = existing.length + 1;
 
   const { data, error } = await db
@@ -279,7 +299,85 @@ async function recordScan({ code, orderId, outcome, ip, userAgent }) {
   if (error) console.error(`Could not record a label scan: ${error.message}`);
 }
 
+// --- Weighing, one bag at a time --------------------------------------------
+//
+// A driver stands at a door holding ONE bag. He sticks a label on it, puts it
+// on the scale, photographs the display, and picks up the next one. Asking for
+// a single number at the end asks him to add up in his head while his hands are
+// full, and loses which bag was the heavy one.
+//
+// THE ORDER'S WEIGHT IS THE SUM OF ITS BAGS, recomputed here every time one is
+// weighed. `orders.weight_lb` stays the authoritative figure - it is what
+// prices the order and what the laundromat's number is checked against - it is
+// simply added up rather than typed once.
+const WEIGHT_PHOTO_BUCKET = 'weight-photos';
+
+async function recordBagWeight(code, weightLb, photo, { order } = {}) {
+  const label = await findByCode(code);
+  if (!label) return { ok: false, detail: 'No label with that code.' };
+
+  if (order && label.order_id !== order.id) {
+    return { ok: false, detail: `${label.code} is not on this order.` };
+  }
+
+  const weight = Number(weightLb);
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
+    return { ok: false, detail: 'That weight does not look right. Pounds, as a number.' };
+  }
+
+  // The photo goes up BEFORE the weight is written, the same way the
+  // order-level weighing does it: we would rather refuse the step than record a
+  // number whose evidence silently failed to save.
+  let photoPath = label.weight_photo_path || null;
+
+  if (photo && photo.buffer) {
+    const extension = (String(photo.mimetype || '').split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    const path = `${label.order_id}/bag-${label.code}-${Date.now()}.${extension}`;
+
+    const { error: uploadError } = await db.storage
+      .from(WEIGHT_PHOTO_BUCKET)
+      .upload(path, photo.buffer, { contentType: photo.mimetype, upsert: false });
+
+    if (uploadError) {
+      return {
+        ok: false,
+        detail: `The scale photo did not save (${uploadError.message}). Nothing has been weighed - try again.`,
+      };
+    }
+
+    photoPath = path;
+  }
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ weight_lb: weight, weighed_at: new Date().toISOString(), weight_photo_path: photoPath })
+    .eq('id', label.id);
+
+  if (error) throw error;
+
+  return { ok: true, label: { ...label, weight_lb: weight } };
+}
+
+// Add the bags up and put the total on the order.
+//
+// Returns null when nothing is weighed yet, so a caller can tell "no bags on
+// the scale" apart from "the bags weighed nothing".
+async function totalWeight(orderId) {
+  const labels = await forOrder(orderId);
+  const weighed = labels.filter((l) => l.weight_lb != null);
+  if (!weighed.length) return null;
+
+  return {
+    pounds: weighed.reduce((t, l) => t + Number(l.weight_lb), 0),
+    bags: weighed.length,
+    total: labels.length,
+    allWeighed: weighed.length === labels.length && labels.length > 0,
+  };
+}
+
 module.exports = {
+  recordBagWeight,
+  totalWeight,
   ALPHABET,
   CODE_LENGTH,
   generateCode,

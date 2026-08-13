@@ -402,6 +402,28 @@ worked or did not, rather than a spinner that lies. `?done=` and `?problem=` on
 the redirect carry the banner, so refreshing repeats the message and never the
 action. A double-tap is refused by the state machine and shown as a sentence.
 
+**A pickup goes: how many bags, then one bag at a time.** The driver is at a
+door with his hands full, so the run asks for the count first and then walks
+each bag — sticker on it, on the scale, photograph the display — before "in the
+van". Asking for stickers before anybody has said how many bags there are is a
+question out of order, and asking for one total at the end makes him add up in
+his head and loses which bag was the heavy one.
+
+**`orders.weight_lb` is the SUM of `bag_labels.weight_lb`, recomputed whenever a
+bag is weighed.** It is still the authoritative figure — it prices the order and
+it is what a laundromat's number is checked against — it is simply added up
+rather than typed once. Written through `fulfilment.recordWeight()` so the
+price, the audit entry and the text to the customer happen the one way they
+already happen.
+
+**`bind()` refuses more stickers than the order has bags.** A fourth sticker on
+a three-bag order leaves the run waiting on a bag that does not exist. Only once
+the count is known — a count nobody has entered is not a limit of zero.
+
+**Per-bag scale photos satisfy the weight-evidence rule** (`photoOnBags`), and
+that flag must never be confused with "there is a file to upload". Conflating
+the two made `recordWeight` try to store a photo that was never passed.
+
 **Every bag is scanned before the camera exists, then one photo.** While
 anything on the order is unscanned the delivery form is not on the page at all —
 not disabled, absent — and a checklist ticks the codes off one at a time. A

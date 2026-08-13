@@ -182,7 +182,7 @@ async function markReady(order, { by = {} } = {}) {
 // we have the bag, the same way unlocking a locker is an event rather than a
 // state. What it does change is the price, from an estimate to a real number.
 
-async function recordWeight(order, weightLb, photo, { by = {} } = {}) {
+async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = false } = {}) {
   const weight = Number(weightLb);
 
   if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
@@ -209,10 +209,21 @@ async function recordWeight(order, weightLb, photo, { by = {} } = {}) {
   // just made, usually with the bag already gone, and refusing that would
   // leave the wrong number on the order permanently - which is worse than a
   // correction with no new photo. The original photo stays.
+  //
+  // `photoOnBags` is the guided run saying the evidence already exists and is
+  // better than what this asks for: it photographed the scale for EVERY bag
+  // separately, so the order total is the sum of numbers that each have their
+  // own picture. Refusing that for want of one more photo of a pile would be
+  // the rule defeating its own purpose.
   const firstWeighing = order.weight_lb == null;
-  const havePhoto = Boolean(photo && photo.buffer && photo.buffer.length);
 
-  if (firstWeighing && !havePhoto) {
+  // TWO DIFFERENT QUESTIONS, and conflating them uploaded a photo that was
+  // never passed: "is there a file to store" is not "is this number backed by
+  // evidence". photoOnBags answers the second and must not touch the first.
+  const havePhoto = Boolean(photo && photo.buffer && photo.buffer.length);
+  const haveEvidence = havePhoto || photoOnBags;
+
+  if (firstWeighing && !haveEvidence) {
     return {
       ok: false,
       reason: 'invalid',

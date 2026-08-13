@@ -35,35 +35,65 @@ const loadout = require('./loadout');
 // driver who uses the order page, or the JSON API, or a second phone, is still
 // at the same point in the run - because the run is a reading of the orders
 // rather than a thing kept alongside them.
+// A PICKUP, IN THE ORDER A DRIVER ACTUALLY DOES IT.
+//
+// He is standing at a door with his hands full. So: how many bags are there?
+// Then one bag at a time - sticker on it, on the scale, photograph the display -
+// and on to the next. Then they go in the van.
+//
+// The old order asked for stickers before anybody had said how many bags there
+// were, and then for one total weight at the end, which asks him to add up in
+// his head and loses which bag was the heavy one.
 async function tasksForCollect(order) {
   const labels = await bags.forOrder(order.id);
-  const bagCount = Number(order.bag_count || 1);
+  const known = order.bag_count != null;
+  const bagCount = Number(order.bag_count || 0);
 
-  return [
+  const tasks = [
     {
-      key: 'label',
-      title: labels.length >= bagCount ? 'Bags labelled' : 'Put a sticker on each bag',
-      detail: `${labels.length} of ${bagCount} labelled. Peel one off the roll, stick it on, type the six characters.`,
-      done: labels.length >= bagCount,
-      labels,
-    },
-    {
-      key: 'collected',
-      title: order.collected_at ? 'Collected' : 'Put them in the van',
-      detail: 'Tap this once the bags are actually in the van.',
-      done: Boolean(order.collected_at),
-      // The sticker goes on at the door, before the bag moves. A bag in the van
-      // with no sticker cannot be scanned at the other end.
-      blockedBy: labels.length >= bagCount ? null : 'label',
-    },
-    {
-      key: 'weight',
-      title: order.weight_lb ? `Weighed - ${order.weight_lb} lb` : 'Weigh them, photograph the scale',
-      detail: 'This is what sets the price, so it has to be ours and it has to be right.',
-      done: order.weight_lb != null,
-      blockedBy: order.collected_at ? null : 'collected',
+      key: 'bag_count',
+      title: known
+        ? `${bagCount} bag${bagCount === 1 ? '' : 's'}`
+        : 'How many bags are you picking up?',
+      detail: 'Count them before you start, so the screen knows how many to walk you through.',
+      done: known,
     },
   ];
+
+  // One block of three steps per bag: sticker, scale, photo. The photo is part
+  // of weighing rather than a step of its own - it is one form, and splitting
+  // them would let a weight be recorded with no evidence behind it.
+  for (let position = 1; position <= bagCount; position += 1) {
+    const label = labels.find((l) => l.position === position) || null;
+
+    tasks.push({
+      key: `bag_${position}`,
+      position,
+      label,
+      title: label
+        ? label.weight_lb != null
+          ? `Bag ${position} - ${label.weight_lb} lb`
+          : `Weigh bag ${position}, photograph the scale`
+        : `Put a sticker on bag ${position}`,
+      detail: label
+        ? 'On the scale, then a photo of the display with the bag on it.'
+        : 'Peel one off the roll, stick it on this bag, type the six characters.',
+      // Done only when it is both labelled AND weighed. A stickered bag nobody
+      // put on the scale is not finished with.
+      done: Boolean(label && label.weight_lb != null),
+      needsLabel: !label,
+    });
+  }
+
+  tasks.push({
+    key: 'collected',
+    title: order.collected_at ? 'In the van' : 'Put them in the van',
+    detail: 'Tap this once all of them are actually in the van.',
+    done: Boolean(order.collected_at),
+    blockedBy: tasks.slice(1).every((t) => t.done) ? null : 'bags',
+  });
+
+  return tasks;
 }
 
 async function tasksForDeliver(order) {
@@ -90,6 +120,8 @@ async function tasksForDeliver(order) {
 // Is this stop finished?
 function stopDone(stop) {
   if (stop.kind === 'collect') {
+    // Weight comes from the bags now, but the order total is still what says
+    // the pickup is priced and finished with.
     return Boolean(stop.order.collected_at) && stop.order.weight_lb != null;
   }
   if (stop.kind === 'deliver') {
