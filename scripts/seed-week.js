@@ -31,7 +31,9 @@
 
 const db = require('../src/db');
 const booking = require('../src/core/booking');
+const geocode = require('../src/core/geocode');
 const bags = require('../src/core/bags');
+const driversCore = require('../src/core/drivers');
 
 const WRITE = process.argv.includes('--write');
 const CLEAR = process.argv.includes('--clear');
@@ -161,12 +163,11 @@ async function clear() {
     process.exit(0);
   }
 
-  const { data: team } = await db
-    .from('ops_users')
-    .select('id, name')
-    .eq('role', 'DRIVER')
-    .eq('status', 'ACTIVE')
-    .order('name');
+  // drivers.active() rather than a hand-rolled query: it selects the base
+  // columns, and without them baseOf() falls back to the service base for
+  // EVERY driver, every distance ties, and nearest() hands the whole county to
+  // whoever sorts first. Which is exactly what happened.
+  const team = await driversCore.active();
 
   if (!team || !team.length) {
     console.log('\nNo drivers. Run `npm run seed:team -- --write` first.');
@@ -222,6 +223,17 @@ async function clear() {
 
   console.log(` ${ids.length} ready`);
 
+  // Cached, because the same customer comes round again on a later day and
+  // there is no reason to fetch them twice.
+  const rowCache = new Map();
+  async function customerRow(id) {
+    if (!rowCache.has(id)) {
+      const { data } = await db.from('customers').select('*').eq('id', id).single();
+      rowCache.set(id, data);
+    }
+    return rowCache.get(id);
+  }
+
   let made = 0;
   let cursor = 0;
   let partnerTurn = 0;
@@ -237,7 +249,17 @@ async function clear() {
 
       const time = HOURS[i % HOURS.length];
       const window = booking.windowFor(date, time);
-      const driver = team[made % team.length];
+
+      // NEAREST BASE, the way orders.create() actually assigns them.
+      //
+      // This was round-robin, which spread every driver across the whole county
+      // and produced exactly the question it should have: why is the Fair Lawn
+      // driver collecting in Jersey City? He was not - the seed put him there.
+      // Seed data that does not assign the way the system assigns makes the
+      // routing look broken when it is not.
+      const at = await geocode.locate(await customerRow(customerId));
+      const best = at ? await driversCore.nearest(at, { drivers: team }) : null;
+      const driver = best ? best.driver : team[made % team.length];
 
       const { error } = await db.from('orders').insert({
         customer_id: customerId,
@@ -270,7 +292,10 @@ async function clear() {
 
       const pounds = 12 + ((i * 7) % 26);
       const partner = partners && partners.length ? partners[partnerTurn++ % partners.length] : null;
-      const driver = team[made % team.length];
+
+      const at = await geocode.locate(await customerRow(customerId));
+      const best = at ? await driversCore.nearest(at, { drivers: team }) : null;
+      const driver = best ? best.driver : team[made % team.length];
       const when = (h) => new Date(`${booking.addDays(date, -1)}T${String(h).padStart(2, '0')}:00:00Z`).toISOString();
 
       const { data: order, error } = await db

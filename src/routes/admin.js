@@ -936,7 +936,16 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       return t && t.overdue;
     });
 
-    const owed = all.filter((o) => ['FAILED', 'UNPAID'].includes(o.payment_status) && o.price_cents);
+    // OWED MEANS DELIVERED AND NOT PAID, not merely unpaid.
+    //
+    // The card is charged at the door, so everything still in the van, at a
+    // laundromat or out for delivery is legitimately unpaid - that is the whole
+    // design, not a debt. Counting it as owed made a normal day look like a
+    // collections problem: thirteen orders "owed" when one had actually been
+    // delivered without paying.
+    const owed = all.filter(
+      (o) => o.delivered_at && ['FAILED', 'UNPAID'].includes(o.payment_status) && o.price_cents
+    );
     const owedTotal = owed.reduce((sum, o) => sum + (o.price_cents || 0), 0);
 
     // A driver does the round; they have no business seeing the books. The

@@ -26,6 +26,7 @@ const db = require('../src/db');
 const booking = require('../src/core/booking');
 const bags = require('../src/core/bags');
 const geocode = require('../src/core/geocode');
+const driversCore = require('../src/core/drivers');
 
 const WRITE = process.argv.includes('--write');
 const CLEAR = process.argv.includes('--clear');
@@ -110,12 +111,10 @@ async function clear() {
     process.exit(0);
   }
 
-  const { data: team } = await db
-    .from('ops_users')
-    .select('id, name')
-    .eq('role', 'DRIVER')
-    .eq('status', 'ACTIVE')
-    .order('name');
+  // drivers.active(), not a hand-rolled query - it carries the base columns,
+  // and without them every distance ties and the whole county goes to whoever
+  // sorts first.
+  const team = await driversCore.active();
 
   if (!team || !team.length) {
     console.log('\nNo drivers. Run `npm run seed:team -- --write` first.');
@@ -179,9 +178,14 @@ async function clear() {
     const date = booking.addDays(today, item.day);
     const window = booking.windowFor(date, '10:00');
 
-    // Round-robin the drivers rather than using nearest-base, so every driver
-    // has work whichever corner of the county they are in.
-    const driver = team[PLAN.indexOf(item) % team.length];
+    // NEAREST BASE, the way orders.create() actually assigns. Round-robin gave
+    // every driver work but scattered each of them across the whole county,
+    // which makes the routing look broken when it is not - a Fair Lawn driver
+    // with a Jersey City pickup is a seed-data artefact, not a decision.
+    const { data: cust } = await db.from('customers').select('*').eq('id', customerId).single();
+    const at = await geocode.locate(cust);
+    const best = at ? await driversCore.nearest(at, { drivers: team }) : null;
+    const driver = best ? best.driver : team[0];
 
     const { data: order, error } = await db
       .from('orders')
