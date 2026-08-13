@@ -47,10 +47,15 @@
       </ul>
     </div>
 
-    <!-- The emphasis card: Sunbeam fill, lifted, with the badge. A flex column
-         so the button sits on the bottom edge however tall the row grows. -->
+    <!-- The emphasis card: Sunbeam fill and the badge. A flex column so the
+         button sits on the bottom edge however tall the row grows.
+
+         NOT lifted. The design handoff offset this card by -14px, and because
+         all three are the same height the only visible effect was three cards
+         whose tops and bottoms did not line up, which reads as a mistake
+         rather than as emphasis. The fill and the badge carry it. -->
     <div class="card card-lg card-xl card-accent"
-         style="padding:30px;transform:translateY(-14px);display:flex;flex-direction:column;" data-reveal>
+         style="padding:30px;display:flex;flex-direction:column;" data-reveal>
       <span class="badge badge-ink" style="margin-bottom:18px;">One price</span>
       <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Wash &amp; fold</p>
       <div style="display:flex;align-items:baseline;gap:8px;">
