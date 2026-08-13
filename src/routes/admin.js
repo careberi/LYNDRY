@@ -16,6 +16,7 @@ const issues = require('../core/issues');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
+const { journeyBody } = require('../web/journey');
 const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
 const orderEvents = require('../core/order-events');
@@ -222,7 +223,13 @@ const OPS_MENUS = Object.freeze([
   {
     label: 'Help',
     // No permission: the process page is the one you hand a new driver.
-    items: [{ href: '/ops/process', label: 'How it all works', permission: null }],
+    items: [
+      { href: '/ops/process', label: 'How it all works', permission: null },
+      // The physical walkthrough. Same group and same no-permission rule as the
+      // page above: it holds no customer detail and no wholesale figure, and it
+      // is the other thing you hand somebody before their first round.
+      { href: '/ops/journey', label: 'What happens to a bag', permission: null },
+    ],
   },
 ]);
 
@@ -2878,6 +2885,23 @@ router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
 // Most of what it shows is read from the running system rather than written
 // out again, so it cannot quietly disagree with the code. See src/web/process.js.
 // ---------------------------------------------------------------------------
+
+// GET /ops/journey - one bag, doorstep to laundromat to doorstep.
+//
+// Sits beside /ops/process rather than inside it: that page is the system by
+// perspective, this one is the physical sequence. src/web/journey.js explains
+// which belongs where before either is edited.
+router.get('/ops/journey', guard, withIssues, (req, res) => {
+  res.type('html').send(
+    adminPage({
+      title: 'What happens to a bag',
+      active: '/ops/journey',
+      body: journeyBody(),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+    })
+  );
+});
 
 router.get('/ops/process', guard, withIssues, (req, res) => {
   res.type('html').send(

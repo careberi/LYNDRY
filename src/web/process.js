@@ -630,7 +630,7 @@ function processBody(user) {
   ${sees(['ADMIN', 'SALES']) ? section(
     'money',
     'The money',
-    'One charge, at the scale',
+    'One charge, at the door',
     `The card is touched exactly once in an order's life, and it is not when they
      book.`,
     `

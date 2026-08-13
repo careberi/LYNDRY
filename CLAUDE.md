@@ -387,10 +387,18 @@ an order twice or charge for it twice.
 on that order — never today's rate. Changing the price must not re-price work
 already quoted.
 
-**Delivery photos go in a private Supabase Storage bucket**, and the customer
-gets a signed link that expires after 30 days. A photo of somebody's front door
-must not be publicly readable forever. **Do not put these behind a link
-shortener** — carriers treat shortened links as a spam signal in 10DLC.
+**Delivery photos go in a private Supabase Storage bucket**, and what the
+customer is texted is `lyndry.com/p/<order-uuid>` — our own domain, which
+**re-signs a fresh one-hour storage URL on every visit and redirects**. So the
+texted link never stops working, while a storage URL copied out of the address
+bar dies within the hour. What keeps it private is that the order id is a random
+UUID and nothing on the page reveals another.
+
+Two reasons it is not the storage URL directly: carriers distrust links to
+domains that are not yours, which matters for 10DLC registration, and a signed
+storage URL is enormous and would break the day its signature expired. **Do not
+put these behind a link shortener either** — carriers treat shortened links as a
+spam signal.
 
 `npm run driver` is the terminal equivalent, and still the fastest way to test
 an order through its whole day.
@@ -485,6 +493,7 @@ GET  /ops/issues             everything still waiting on a person
 GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
+GET  /ops/journey            what happens to a bag, doorstep to doorstep
 GET  /ops/loadout            scan bags into the van, build the run
 GET  /ops/run                the driver's round: one stop, one thing to do
 POST /ops/run/here           "I'm here"
@@ -778,6 +787,16 @@ plain text box in a plain form. `BarcodeDetector` fills it where it exists, and
 the button is hidden where it does not — which includes every iPhone. Never use
 the HTML `hidden` attribute on a `.btn`: the class sets `display` and beats it,
 so the button renders and does nothing.
+
+**`/ops/journey` is the physical walkthrough, and `/ops/process` is the map.**
+They cover the same business and are deliberately not the same page: journey is
+one bag in the order the steps actually happen, process is organised by
+perspective — the customer, the driver, the laundromat, the money, the AI, the
+technology. A change to the physical sequence goes in journey; a change to how
+the system is built goes in process; a change to who does what goes in both. The
+header comment in `src/web/journey.js` says the same thing to whoever opens it
+first. Both carry a reviewed date and both read their figures from the running
+system.
 
 **`/ops/process` explains the service and must be updated with it.** It is the
 page you hand a new driver: what LYNDRY is, what the customer, the driver and
