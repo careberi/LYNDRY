@@ -348,6 +348,15 @@ function processBody() {
       )}
       ${step(
         2,
+        'Sticker every bag, and enter its code',
+        `A label off the roll in the van goes on each bag, and the six
+         characters printed under the QR go into the order page. That is what
+         binds a sticker to a bag. Print more from the order page when the roll
+         runs low. A sticker means nothing until it is entered - blank stock is
+         just paper.`
+      )}
+      ${step(
+        3,
         'Collect the bag, tap Collected',
         `Every step is a full-width button on the order page. There is no
          JavaScript on that screen on purpose: on two bars of signal in a
@@ -355,7 +364,7 @@ function processBody() {
          spinner that lies. Tapping twice is refused and shown as a sentence.`
       )}
       ${step(
-        3,
+        4,
         'WEIGH IT BEFORE IT LEAVES YOUR HANDS',
         `The most important step on the round. The weight sets the price and
          <strong>charges the customer's card</strong>, so it has to be our
@@ -365,7 +374,7 @@ function processBody() {
          ten is a four-figure charge on somebody's card.`
       )}
       ${step(
-        4,
+        5,
         'Drop it at the laundromat, collect it when it is done',
         `Two taps, and they are the two the customer never hears about. Where
          the washing happens is our business, not theirs. If we wash it
@@ -373,7 +382,7 @@ function processBody() {
          for delivery and nothing forces a partner visit that did not happen.`
       )}
       ${step(
-        5,
+        6,
         'Deliver it, and photograph it',
         `<strong>No photo, no delivery.</strong> The button will not complete
          without one. The photo is the answer to "you never delivered it" and
@@ -404,30 +413,56 @@ function processBody() {
       ${step(
         1,
         'They take a bag off our driver',
-        `We hand over a bag that we have already weighed. They wash, dry and
-         fold it the way we asked.`
+        `We hand over a bag we have already weighed, with a sticker on it. They
+         wash, dry and fold it the way we asked.`
       )}
       ${step(
         2,
+        'They point a phone at the sticker',
+        `The QR opens one page. It shows the bag's code, which bag of how many,
+         how it should be washed, and how long is left on the promise. No app,
+         no install, no login, no password - it works on whatever cracked
+         Android is behind the counter.`
+      )}
+      ${step(
+        3,
         'They tell our driver it is done',
-        `However they like - a text to him, a phone call, or he just comes back.
-         The driver records it in the system. They do not.`
+        `However they like. The driver records it in the system.`
       )}
     </ol>
     <div class="pr-note" style="margin-top:26px;">
-      <h3>There are no partner accounts, and no partner logins</h3>
+      <h3>What that page deliberately does not show</h3>
       <p>
-        Two reasons. The first is that weighing is what charges a customer's
-        card, so our own driver belongs between that number and somebody's
-        money. The second is simpler: <strong>there is no signed partner.</strong>
-        No laundromat has agreed terms with us, no wholesale rate is settled,
-        and nothing on the website promises a revenue share or a per-pound rate,
-        because none of it has been decided.
+        <strong>No name, no phone number, no address, no history, no
+        price.</strong> A laundromat needs to know how to wash a bag. It does
+        not need to know whose bag it is, and information that never reaches the
+        page cannot leak from it. The query behind it asks for the specific
+        columns it is allowed to show rather than the whole row, so a field
+        somebody adds upstream next year does not quietly appear on a stranger's
+        screen.
       </p>
       <p>
-        Enquiries from laundromats and landlords come in through
-        <code>/partners</code> on the website and land on the Partners screen.
-        That is the entire partner-facing system today.
+        Three things keep it closed: the code is one of a billion and never
+        sequential, the QR carries a signature so a guessed address is refused
+        before the database is touched, and it only resolves while the label is
+        on a live bag. Delivering an order releases its stickers, so one out of
+        a bin is worth nothing. Every scan is logged, resolved or not.
+      </p>
+    </div>
+    <div class="pr-note" style="margin-top:20px;">
+      <h3>There are still no partner accounts and no partner logins</h3>
+      <p>
+        Scanning a sticker is not signing in. There is nothing to log into, and
+        <strong>a laundromat cannot change anything</strong> - the page is read
+        only. Weighing is what charges a customer's card, so our own driver
+        belongs between that number and somebody's money.
+      </p>
+      <p>
+        And <strong>no laundromat has signed.</strong> No terms are agreed, no
+        wholesale rate is settled, and nothing on the website promises a revenue
+        share or a per-pound rate, because none of it has been decided.
+        Enquiries arrive through <code>/partners</code> and land on the Partners
+        screen.
       </p>
     </div>`
   )}

@@ -3,6 +3,7 @@
 const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
+const bags = require('./bags');
 const recurring = require('./recurring');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
@@ -79,10 +80,12 @@ async function collect(order, { bagCount } = {}) {
 
   if (!result.ok) return result;
 
-  const bags = Number(bagCount) || order.bag_count || null;
-  if (bags && bags !== order.bag_count) {
-    await db.from('orders').update({ bag_count: bags }).eq('id', order.id);
-    result.order.bag_count = bags;
+  // Named `count`, not `bags` — that is the label module now, and a shadowed
+  // import is the kind of thing that works until somebody adds a line.
+  const count = Number(bagCount) || order.bag_count || null;
+  if (count && count !== order.bag_count) {
+    await db.from('orders').update({ bag_count: count }).eq('id', order.id);
+    result.order.bag_count = count;
   }
 
   return result;
@@ -380,6 +383,15 @@ async function deliver(order, file) {
       .eq('id', order.id);
     result.order.delivery_photo_url = photoUrl;
   }
+
+  // The stickers come off, logically. The bag is back with its owner and the
+  // labels return to being blank stock, so one fished out of a bin points at
+  // nothing. This is what keeps a printed sticker from being a permanent
+  // window into somebody's order, and it is why the QR carries no expiry of
+  // its own - the binding IS the expiry.
+  //
+  // After the transition, so a failed delivery does not orphan the bags.
+  await bags.releaseOrder(order.id);
 
   result.photo = Boolean(photoUrl);
   return result;

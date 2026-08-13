@@ -13,6 +13,7 @@ const sms = require('./routes/sms');
 const ops = require('./routes/ops');
 const admin = require('./routes/admin');
 const account = require('./routes/account');
+const bag = require('./routes/bag');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 
@@ -120,6 +121,11 @@ app.use('/', ops.router);
 // Where a customer signs in and books a pickup. Before the website router so
 // /account/... is never mistaken for a marketing page.
 app.use('/', account.router);
+
+// The page behind the QR on a bag label. Deliberately short and deliberately
+// public: a laundromat points a camera at a sticker and reads it, with no app,
+// no login and nothing to install.
+app.use('/', bag);
 
 // The public website and the signup form.
 app.use('/', web.router);

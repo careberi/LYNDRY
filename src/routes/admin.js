@@ -15,6 +15,8 @@ const issues = require('../core/issues');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
+const { labelSheetBody } = require('../web/labels');
+const bags = require('../core/bags');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -809,6 +811,79 @@ function statCard(label, value, bg = 'var(--paper-050)', fg = 'var(--ink-900)') 
 }
 
 // ---------------------------------------------------------------------------
+// The bags on an order, and the stickers on the bags.
+//
+// A sticker means nothing until it is on a bag. Binding is a driver typing or
+// scanning the six characters printed under the QR, which is why the input is
+// a plain text box: the camera in phase 9c fills the same box, and on the day
+// the camera will not focus in a dark basement the driver reads the code out
+// and types it. The fallback is the primary path with one step added, not a
+// separate worse mode.
+// ---------------------------------------------------------------------------
+
+function bagsCard(order, labels, canAct) {
+  const total = labels.length;
+  const done = ['DELIVERED', 'CANCELED'].includes(order.status);
+
+  const rows = labels
+    .map(
+      (l) => `
+    <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+      <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;">
+        ${escapeHtml(l.code)}
+      </span>
+      <span class="eyebrow" style="margin:0;">Bag ${l.position} of ${total}</span>
+      <span style="flex:1;"></span>
+      ${
+        canAct && !done
+          ? `<form method="post" action="/ops/orders/${order.order_number}/label/${l.id}/release" style="margin:0;">
+               <button type="submit" class="btn btn-outline btn-sm">Take off</button>
+             </form>`
+          : ''
+      }
+    </div>`
+    )
+    .join('');
+
+  return `
+  <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:6px;">
+      ${sectionHeading('The bags', total ? `${total} labelled` : 'No labels yet')}
+      <a href="/ops/labels" style="font-size:14px;font-weight:600;">Print more stickers</a>
+    </div>
+
+    ${
+      total
+        ? rows
+        : `<p style="color:var(--ink-500);font-size:15px;line-height:1.6;margin:4px 0 0;">
+             Nothing labelled yet. Stick a label on each bag as you pick it up and
+             enter its code here, so the bag can be identified without opening it.
+           </p>`
+    }
+
+    ${
+      canAct && !done
+        ? `<form method="post" action="/ops/orders/${order.order_number}/label" style="margin:20px 0 0;">
+             <label class="eyebrow" for="label_code" style="display:block;margin-bottom:8px;">
+               Add a bag
+             </label>
+             <div style="display:flex;gap:12px;align-items:flex-start;">
+               <input class="input input-lg" type="text" id="label_code" name="code" required
+                      autocomplete="off" autocapitalize="characters" spellcheck="false"
+                      inputmode="text" maxlength="12" placeholder="Code under the QR"
+                      style="flex:1;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.08em;">
+               <button type="submit" class="btn btn-ink btn-lg">Add</button>
+             </div>
+             <span class="field-hint" style="display:block;margin-top:8px;">
+               Six characters. O reads as zero and I or L as one, so a misread still finds the right bag.
+             </span>
+           </form>`
+        : ''
+    }
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // GET /ops/orders/:id — one order, in full
 // ---------------------------------------------------------------------------
 
@@ -856,6 +931,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         <span style="font-size:16px;text-align:right;">${value}</span>
       </div>`;
 
+    // Which stickers are on this order's bags.
+    const labels = await bags.forOrder(order.id);
+
     const body = `
       <a href="/ops" style="font-size:15px;font-weight:600;">&larr; All orders</a>
 
@@ -881,9 +959,18 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
       ${workCard(order, {
         canAct: roles.can(req.opsUser, 'orders.act'),
-        notice: req.query.done ? DONE_MESSAGES[String(req.query.done)] || null : null,
+        // ?note= carries a sentence the action wrote itself, for steps where a
+        // fixed banner cannot say enough. Sliced and escaped like any other
+        // thing a person put in a URL.
+        notice: req.query.note
+          ? String(req.query.note).slice(0, 200)
+          : req.query.done
+            ? DONE_MESSAGES[String(req.query.done)] || null
+            : null,
         problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
       })}
+
+      ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'))}
 
       <div class="grid-2" style="align-items:start;">
 
@@ -1189,6 +1276,9 @@ const DONE_MESSAGES = Object.freeze({
   'at-partner': 'Marked as dropped at the partner.',
   ready: 'Marked ready for collection.',
   weight: 'Weight saved. The price is set and the card has been charged.',
+  // The label banner carries its own sentence in ?note=, because "added" and
+  // "was already there" and "taken off" are three different things.
+  label: null,
   'out-for-delivery': 'Out for delivery. The customer has been texted.',
   delivered: 'Delivered. The customer has been texted.',
 });
@@ -1247,6 +1337,152 @@ orderAction('ready', (order) => fulfilment.markReady(order));
 orderAction('weight', (order, req) => fulfilment.recordWeight(order, (req.body || {}).weight_lb));
 orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
 orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
+
+// --- Sticking a label on a bag, and taking it off again ---------------------
+
+router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const result = await bags.bind((req.body || {}).code, order, req.opsUser && req.opsUser.id);
+
+    if (!result.ok) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    // Scanning the same sticker twice is not a mistake worth a red banner.
+    const note = result.already
+      ? 'That label was already on this order.'
+      : `Bag ${result.position} labelled.`;
+
+    return res.redirect(303, `${back}?done=label&note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/orders/:id/label/:labelId/release', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const label = await bags.release(req.params.labelId);
+
+    if (!label) return res.redirect(303, `${back}?problem=${encodeURIComponent('No such label.')}`);
+
+    // The remaining bags close the gap, so they never read "1 of 2" and
+    // "3 of 2" at the same time.
+    await bags.renumber(order.id);
+
+    return res.redirect(303, `${back}?done=label&note=${encodeURIComponent(`Label ${label.code} taken off.`)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bag stickers: printing a roll of them
+//
+// Behind orders.act rather than an admin permission, because running out of
+// stickers is an operational problem and whoever is working should be able to
+// print more. Not in the nav: it is reached from an order, which is where you
+// discover you need one.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res, next) => {
+  try {
+    const { count: blank } = await db
+      .from('bag_labels')
+      .select('id', { count: 'exact', head: true })
+      .is('order_id', null);
+
+    const { count: inUse } = await db
+      .from('bag_labels')
+      .select('id', { count: 'exact', head: true })
+      .not('order_id', 'is', null);
+
+    const body = `
+      <div style="max-width:640px;">
+        <p class="eyebrow" style="margin:0 0 8px;">Stickers</p>
+        <h1 style="margin:0 0 16px;font-size:40px;line-height:1.05;">Bag labels</h1>
+        <p style="font-size:16px;line-height:1.65;color:var(--ink-700);">
+          A label is a blank sticker until a driver puts it on a bag and enters
+          its code. Print a roll, keep them in the van. They are what lets a bag
+          be identified without opening it, and what a laundromat scans.
+        </p>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:20px;margin:32px 0;">
+        ${statCard('Blank, in the van', blank == null ? '?' : blank)}
+        ${statCard('On a bag right now', inUse == null ? '?' : inUse, 'var(--suds-500)')}
+      </div>
+
+      <div class="card card-xl" style="padding:28px;max-width:560px;">
+        ${sectionHeading('Print', 'A fresh sheet')}
+        <form method="post" action="/ops/labels" style="margin:18px 0 0;">
+          <label class="eyebrow" for="count" style="display:block;margin-bottom:8px;">How many</label>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <input class="input input-lg" type="number" id="count" name="count"
+                   min="1" max="300" step="30" value="30" required style="flex:1;">
+            <button type="submit" class="btn btn-lg">Make them</button>
+          </div>
+          <span class="field-hint" style="display:block;margin-top:10px;">
+            30 to a sheet on Avery 5160 address labels, which is the standard
+            30-per-sheet size sold everywhere. Print at 100% scale.
+          </span>
+        </form>
+      </div>`;
+
+    return res.type('html').send(
+      adminPage({ title: 'Bag labels', active: '', body, user: req.opsUser, openIssues: req.openIssues })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const wanted = Math.max(1, Math.min(300, Number((req.body || {}).count) || 30));
+
+    // Stamped a moment before minting so the sheet can find exactly this batch
+    // again on a refresh, without a redirect carrying 30 codes in the URL.
+    const from = new Date(Date.now() - 1000).toISOString();
+    await bags.mint(wanted);
+
+    return res.redirect(303, `/ops/labels/sheet?from=${encodeURIComponent(from)}&n=${wanted}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/ops/labels/sheet', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const n = Math.max(1, Math.min(300, Number(req.query.n) || 30));
+    const from = String(req.query.from || '');
+
+    let query = db.from('bag_labels').select('*').order('printed_at', { ascending: true }).limit(n);
+    if (from) query = query.gte('printed_at', from);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Print labels',
+        active: '',
+        body: await labelSheetBody(data || []),
+        user: req.opsUser,
+        openIssues: 0,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // GET /ops/economics — what one route cycle actually earns
