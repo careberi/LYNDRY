@@ -40,16 +40,19 @@ const PREFS = (spot) => ({
 
 // Real streets across the service area, so the map and the routing have
 // somewhere plausible to put everybody.
+// BERGEN COUNTY ONLY. Hawthorne is Passaic, Jersey City and Hoboken are
+// Hudson - they were in here and they are not the county one van covers.
 const PEOPLE = [
-  { n: 11, name: 'Bernard Hollis',  line: '71 Braen Ave',      city: 'Hawthorne',   zip: '07506', spot: 'On the porch' },
+  { n: 11, name: 'Bernard Hollis',  line: '16-50 Chandler Dr', city: 'Fair Lawn',   zip: '07410', spot: 'On the porch' },
   { n: 12, name: 'Trey Alvarez',    line: '25 Windham Pl',     city: 'Glen Rock',   zip: '07452', spot: 'Side door' },
-  { n: 13, name: 'Priya Raman',     line: '16-50 Chandler Dr', city: 'Fair Lawn',   zip: '07410', spot: 'Behind the screen door' },
+  { n: 13, name: 'Priya Raman',     line: '340 Franklin Ave',  city: 'Ridgewood',   zip: '07450', spot: 'Behind the screen door' },
   { n: 14, name: 'Dolores Whitby',  line: '210 Main St',       city: 'Hackensack',  zip: '07601', spot: 'Buzz 3B' },
   { n: 15, name: 'Marcus Oyelaran', line: '480 Cedar Ln',      city: 'Teaneck',     zip: '07666', spot: 'Front step' },
-  { n: 16, name: 'Ivy Chen',        line: '35 Chestnut St',    city: 'Ridgewood',   zip: '07450', spot: 'Left of the door' },
-  { n: 17, name: 'Sam Okafor',      line: '95 Christopher Columbus Dr', city: 'Jersey City', zip: '07302', spot: 'Lobby desk' },
-  { n: 18, name: 'Renata Fiore',    line: '120 Washington St', city: 'Hoboken',     zip: '07030', spot: 'Under the stoop' },
+  { n: 16, name: 'Ivy Chen',        line: '120 Century Rd',    city: 'Paramus',     zip: '07652', spot: 'Left of the door' },
+  { n: 17, name: 'Sam Okafor',      line: '88 Washington Ave', city: 'Bergenfield', zip: '07621', spot: 'By the garage' },
+  { n: 18, name: 'Renata Fiore',    line: '45 Grand Ave',      city: 'Englewood',   zip: '07631', spot: 'Under the stoop' },
 ];
+
 
 const phoneFor = (n) => `+1201555${String(n).padStart(4, '0')}`;
 

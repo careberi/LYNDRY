@@ -39,19 +39,22 @@ const WRITE = process.argv.includes('--write');
 const CLEAR = process.argv.includes('--clear');
 
 // Where the vans actually go, with a real centre for each town.
+// BERGEN COUNTY ONLY. Hawthorne and Clifton are Passaic, Jersey City and
+// Hoboken are Hudson - they were in this list and they are not the county one
+// van covers. A round spread over three counties is not a round anybody drives.
 const TOWNS = [
-  { town: 'Fair Lawn',   zip: '07410', lat: 40.9404, lng: -74.1182, streets: ['Berdan Ave', 'Chandler Dr', 'Morlot Ave', 'Fair Lawn Ave'] },
+  { town: 'Fair Lawn',   zip: '07410', lat: 40.9404, lng: -74.1182, streets: ['Berdan Ave', 'Chandler Dr', 'Morlot Ave'] },
   { town: 'Glen Rock',   zip: '07452', lat: 40.9629, lng: -74.1291, streets: ['Windham Pl', 'Rock Rd', 'Harristown Rd'] },
   { town: 'Ridgewood',   zip: '07450', lat: 40.9793, lng: -74.1165, streets: ['Chestnut St', 'Franklin Ave', 'Maple Ave'] },
-  { town: 'Hawthorne',   zip: '07506', lat: 40.9490, lng: -74.1540, streets: ['Braen Ave', 'Lafayette Ave', 'Goffle Rd'] },
   { town: 'Paramus',     zip: '07652', lat: 40.9445, lng: -74.0754, streets: ['Century Rd', 'Farview Ave', 'Spring Valley Rd'] },
   { town: 'Hackensack',  zip: '07601', lat: 40.8859, lng: -74.0435, streets: ['Main St', 'Prospect Ave', 'Essex St'] },
   { town: 'Teaneck',     zip: '07666', lat: 40.8976, lng: -74.0160, streets: ['Cedar Ln', 'Queen Anne Rd', 'Palisade Ave'] },
   { town: 'Englewood',   zip: '07631', lat: 40.8929, lng: -73.9726, streets: ['Palisade Ave', 'Dean St', 'Grand Ave'] },
-  { town: 'Clifton',     zip: '07011', lat: 40.8584, lng: -74.1638, streets: ['Main Ave', 'Van Houten Ave', 'Piaget Ave'] },
-  { town: 'Jersey City', zip: '07302', lat: 40.7178, lng: -74.0431, streets: ['Christopher Columbus Dr', 'Grove St', 'Newark Ave'] },
-  { town: 'Hoboken',     zip: '07030', lat: 40.7440, lng: -74.0324, streets: ['Washington St', 'Bloomfield St', 'Garden St'] },
   { town: 'Bergenfield', zip: '07621', lat: 40.9276, lng: -73.9974, streets: ['Washington Ave', 'New Bridge Rd'] },
+  { town: 'Maywood',     zip: '07607', lat: 40.9026, lng: -74.0621, streets: ['Maywood Ave', 'Pleasant Ave'] },
+  { town: 'Oradell',     zip: '07649', lat: 40.9548, lng: -74.0335, streets: ['Kinderkamack Rd', 'Oradell Ave'] },
+  { town: 'Dumont',      zip: '07628', lat: 40.9404, lng: -73.9932, streets: ['Washington Ave', 'Madison Ave'] },
+  { town: 'Rutherford',  zip: '07070', lat: 40.8262, lng: -74.1068, streets: ['Park Ave', 'Union Ave'] },
 ];
 
 const FIRST = ['Ana', 'Ben', 'Clara', 'Dev', 'Elena', 'Femi', 'Grace', 'Hugo', 'Ines', 'Jonah',
@@ -140,13 +143,20 @@ async function clear() {
   // `done` is work already finished TODAY - delivered and charged - so the
   // Grossed figure on the routing board has something in it. Without any, cash
   // in reads zero all day and looks broken rather than early.
+  // SIZED FOR ONE VAN. Four drivers could absorb 22 pickups a day; one cannot -
+  // it came to 43 stops, 194 miles and 11 hours, with the van over its bag
+  // limit. That is a true answer to a made-up question, and it drowns out
+  // everything else on the board.
+  //
+  // Ten pickups, five deliveries and four already done is a full day that
+  // still fits: roughly 19 stops inside the 480-minute day, which is what a
+  // single van in one county actually looks like.
   const DAYS = [
-    { day: 0, pickups: 22, deliveries: 14, done: 9 },
-    { day: 1, pickups: 20, deliveries: 0, done: 0 },
-    { day: 2, pickups: 18, deliveries: 0, done: 0 },
-    { day: 3, pickups: 16, deliveries: 0, done: 0 },
-    { day: 4, pickups: 14, deliveries: 0, done: 0 },
-    { day: 5, pickups: 12, deliveries: 0, done: 0 },
+    { day: 0, pickups: 10, deliveries: 5, done: 4 },
+    { day: 1, pickups: 10, deliveries: 0, done: 0 },
+    { day: 2, pickups: 8, deliveries: 0, done: 0 },
+    { day: 3, pickups: 7, deliveries: 0, done: 0 },
+    { day: 4, pickups: 6, deliveries: 0, done: 0 },
   ];
 
   const totalPickups = DAYS.reduce((t, d) => t + d.pickups, 0);

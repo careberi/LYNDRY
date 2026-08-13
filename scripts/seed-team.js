@@ -17,9 +17,13 @@
 // nowhere - which is the point: they exist so the routing, the assignment and
 // the round strip have something to work with.
 //
-// The bases are spread across the service area on purpose. With every driver in
-// one town, assignment picks the same person every time and nothing about
-// nearest-base routing can be seen working.
+// ONE DRIVER, ONE VAN, BERGEN COUNTY. That is the business as it actually is,
+// and seed data that pretends otherwise makes every screen read wrong - a round
+// spread over three counties is not a round anybody drives.
+//
+// Adding a second entry here is all it takes to test multi-driver assignment
+// again; give them a base in a different part of the county so nearest-base
+// has something to distinguish.
 // ---------------------------------------------------------------------------
 
 const db = require('../src/db');
@@ -32,24 +36,14 @@ const TEAM = [
   {
     name: 'Dan Reyes',
     phone: '+12015550101',
+    // Fair Lawn is roughly the middle of Bergen County, which is what you want
+    // from a single van's base - nowhere in the county is far from it.
     base: { line1: '12 Berdan Ave', city: 'Fair Lawn', state: 'NJ', zip: '07410' },
     van: { name: 'Van 1', maxWeightLb: 500, maxBags: 45, clips: 50 },
-  },
-  {
-    name: 'Marisol Ortega',
-    phone: '+12015550102',
-    base: { line1: '210 Main St', city: 'Hackensack', state: 'NJ', zip: '07601' },
-    van: { name: 'Van 2', maxWeightLb: 400, maxBags: 40, clips: 50 },
-  },
-  {
-    name: 'Ade Okonkwo',
-    phone: '+12015550103',
-    // The southern end of the service area, so a Jersey City pickup has an
-    // obviously nearer driver than the two up in Bergen County.
-    base: { line1: '95 Christopher Columbus Dr', city: 'Jersey City', state: 'NJ', zip: '07302' },
-    van: { name: 'Van 3', maxWeightLb: 300, maxBags: 25, clips: 30 },
+    wagePerHour: 22,
   },
 ];
+
 
 async function clear() {
   const phones = TEAM.map((t) => t.phone);
@@ -101,6 +95,7 @@ async function clear() {
       base_city: person.base.city,
       base_state: person.base.state,
       base_postal_code: person.base.zip,
+      wage_cents_hour: person.wagePerHour ? person.wagePerHour * 100 : null,
     };
 
     const { data: existing } = await db

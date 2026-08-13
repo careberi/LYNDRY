@@ -31,6 +31,9 @@ const NOTE = 'Seeded demo partner. Invented - no agreement exists and no rate ha
 // Spread deliberately: three in Bergen County, two mid-county, two down the
 // Hudson waterfront, one out west. Rates and turnarounds vary so that cheap,
 // near and fast are rarely the same place.
+// BERGEN COUNTY ONLY, spread across it so cheapest, nearest and fastest are
+// rarely the same place. Rates, capacities, turnarounds and cutoffs differ on
+// purpose - with them all the same the cost model has nothing to decide.
 const PARTNERS = [
   {
     name: 'Fold & Fluff Bergen',
@@ -53,36 +56,24 @@ const PARTNERS = [
   {
     name: 'Meadowlands Wash',
     line: '900 Paterson Plank Rd', town: 'Carlstadt', zip: '07072', lat: 40.8237, lng: -74.0554,
-    // The cheap one, and slow enough that it fails a next-day promise on a late
-    // drop - which is exactly the trade-off worth being able to see.
+    // The cheap one, and slow enough to fail a next-day promise on a late drop -
+    // which is exactly the trade-off worth being able to see.
     wholesale: 72, retail: 150, capacity: 600, turnaround: 30, cutoff: '14:00',
     open: '06:00', close: '18:00', closedOn: [0],
-  },
-  {
-    name: 'Passaic Valley Laundry',
-    line: '325 Main Ave', town: 'Clifton', zip: '07011', lat: 40.8592, lng: -74.1651,
-    wholesale: 90, retail: 170, capacity: 300, turnaround: 16, cutoff: null,
-    open: '07:00', close: '21:00', closedOn: [],
-  },
-  {
-    name: 'Grove Street Laundry',
-    line: '110 Grove St', town: 'Jersey City', zip: '07302', lat: 40.7195, lng: -74.0428,
-    wholesale: 125, retail: 210, capacity: 250, turnaround: 8, cutoff: null,
-    open: '06:00', close: '23:00', closedOn: [],
-  },
-  {
-    name: 'Hoboken Soap Works',
-    line: '412 Washington St', town: 'Hoboken', zip: '07030', lat: 40.7448, lng: -74.0301,
-    // Dearest and fastest. Worth it for something promised back tomorrow that
-    // was collected late.
-    wholesale: 135, retail: 225, capacity: 200, turnaround: 6, cutoff: null,
-    open: '07:00', close: '22:00', closedOn: [],
   },
   {
     name: 'Palisade Wash House',
     line: '188 Palisade Ave', town: 'Englewood', zip: '07631', lat: 40.8934, lng: -73.9740,
     wholesale: 100, retail: 180, capacity: 450, turnaround: 12, cutoff: '16:30',
     open: '07:00', close: '20:00', closedOn: [],
+  },
+  {
+    name: 'Route 17 Laundry',
+    line: '240 Route 17', town: 'Paramus', zip: '07652', lat: 40.9451, lng: -74.0740,
+    // Dearest and fastest. Worth it for something collected late that still has
+    // to be back tomorrow.
+    wholesale: 130, retail: 215, capacity: 250, turnaround: 6, cutoff: null,
+    open: '07:00', close: '22:00', closedOn: [],
   },
 ];
 
