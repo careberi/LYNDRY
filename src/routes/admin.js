@@ -14,6 +14,7 @@ const booking = require('../core/booking');
 const issues = require('../core/issues');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
+const { processBody } = require('../web/process');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -181,6 +182,10 @@ ${head}
         ${roles.can(user, 'money.view') ? tab('/ops/planner', 'Planner') : ''}
         ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
         ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
+        <!-- No permission on this one. It is the page you hand a new driver on
+             their first morning, and it holds no customer and no wholesale
+             figure - only how the service works. -->
+        ${tab('/ops/process', 'Process')}
       </nav>
       <form method="post" action="/ops/logout" style="margin:0;display:flex;align-items:center;gap:12px;">
         ${
@@ -1279,6 +1284,31 @@ router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
       active: '/ops/planner',
       head: routePlannerHead(),
       body: routePlannerBody(),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+    })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/process — how the whole thing works
+//
+// The one page that explains the service rather than operating it: what LYNDRY
+// is, what the customer, the driver and the laundromat each do, and what the
+// technology underneath is. Reference material, so no permission beyond being
+// signed in — a driver on their first morning is exactly who it is for, and it
+// carries no customer details and no wholesale rate.
+//
+// Most of what it shows is read from the running system rather than written
+// out again, so it cannot quietly disagree with the code. See src/web/process.js.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/process', guard, withIssues, (req, res) => {
+  res.type('html').send(
+    adminPage({
+      title: 'How it works',
+      active: '/ops/process',
+      body: processBody(),
       user: req.opsUser,
       openIssues: req.openIssues,
     })

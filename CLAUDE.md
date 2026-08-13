@@ -402,6 +402,7 @@ GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 GET  /ops/issues             everything still waiting on a person
 GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
+GET  /ops/process            how the whole thing works
 GET  /ops/partners           enquiries from /partners, newest first
 POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
 GET  /ops/team               who can sign in; add and disable people
@@ -432,6 +433,21 @@ at. **Never let it silently mix the two**, and never quietly drop the badge; a
 mileage figure whose provenance is invisible is worse than no figure. If the
 demo server becomes unreliable, the replacement is a paid routing key, not a
 quiet return to estimates.
+
+**`/ops/process` explains the service and must be updated with it.** It is the
+page you hand a new driver: what LYNDRY is, what the customer, the driver and
+the laundromat each do, how the money works, and what the technology is. It is
+the only ops page with no permission beyond being signed in, because it holds
+no customer detail and no wholesale figure.
+
+Most of it is **read from the running system** rather than written down twice —
+the price, the minimum, the turnaround, the windows, the order states and which
+of them text the customer (`STEPS[].texts`), the AI's tools and model, the role
+table, and whether Stripe is off, in test or live. Those cannot drift. **The
+prose can**, so it carries a reviewed date in `src/web/process.js`. Changing how
+the service works means correcting the affected section and bumping that date,
+in the same commit. A process document that is wrong is worse than none,
+because people act on it.
 
 **Two credentials, for two kinds of caller.** Don't collapse them.
 
@@ -554,6 +570,21 @@ amount of clever texting should move a charge.
 moment an amount exists. Two authorisations are already on record by then: the
 consent given on the Stripe page, and the booking confirmation naming the card.
 There is no third "reply YES to pay" step, on purpose.
+
+**The card is charged exactly once per order, and booking takes nothing.** For
+a while there was a $25 minimum collected at booking with the balance taken on
+delivery — two charges, two idempotency keys, two things to refund, and a
+customer watching money leave before anybody had touched their laundry. It is
+gone. **The minimum is a floor on `price_cents`, not a payment**: an 8 lb load
+costs $25 and is billed in one go with the rest. `deposit_*` and
+`refundDeposit()` survive only because two real orders were taken under the old
+rules and their money has to stay refundable; nothing writes a new one.
+
+**A booking is confirmed by having a card on file, not by a cleared payment.**
+That is what keeps an unbillable order off the driver's run sheet. The order is
+still written *before* the card is asked for — a customer sent away to pay
+before their booking exists comes back to nothing, which happened to a real one.
+Saving the card confirms it automatically from the webhook.
 
 **A declined card never holds up a delivery.** We deliver and chase by text.
 Holding someone's clothes over a decline is a bad look and legally murky; the

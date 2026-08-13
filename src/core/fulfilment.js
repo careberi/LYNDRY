@@ -393,12 +393,16 @@ async function deliver(order, file) {
 // about it.
 // ---------------------------------------------------------------------------
 
+// `texts` is whether the customer hears about this step. It is not decoration:
+// /ops/process draws the whole customer-facing timeline from it, so the two
+// silent steps stay visibly deliberate rather than looking like an oversight
+// somebody should go and fix.
 const STEPS = Object.freeze([
-  { to: 'IN_PROCESS', action: 'collected', label: 'Collected', hint: 'Bag is in the van' },
-  { to: 'AT_PARTNER', action: 'at-partner', label: 'Dropped at partner', hint: 'Left at the laundromat' },
-  { to: 'READY', action: 'ready', label: 'Ready for collection', hint: 'Partner has finished it' },
-  { to: 'OUT_FOR_DELIVERY', action: 'out-for-delivery', label: 'Out for delivery', hint: 'On the van, going back' },
-  { to: 'DELIVERED', action: 'delivered', label: 'Delivered', hint: 'Needs a photo' },
+  { to: 'IN_PROCESS', action: 'collected', label: 'Collected', hint: 'Bag is in the van', texts: true },
+  { to: 'AT_PARTNER', action: 'at-partner', label: 'Dropped at partner', hint: 'Left at the laundromat', texts: false },
+  { to: 'READY', action: 'ready', label: 'Ready for collection', hint: 'Partner has finished it', texts: false },
+  { to: 'OUT_FOR_DELIVERY', action: 'out-for-delivery', label: 'Out for delivery', hint: 'On the van, going back', texts: true },
+  { to: 'DELIVERED', action: 'delivered', label: 'Delivered', hint: 'Needs a photo', texts: true },
 ]);
 
 // The steps legal from where this order is now, in the order they appear above.
