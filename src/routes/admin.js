@@ -351,6 +351,7 @@ function workCard(order, { canAct, notice, problem }) {
       canWeigh
         ? `
       <form method="post" action="/ops/orders/${order.order_number}/weight"
+            enctype="multipart/form-data"
             style="margin:${mustWeighFirst ? '18px' : '26px'} 0 0;${
               // No divider when the scale IS the task: a rule under a
               // yellow "weigh it first" note reads as a separate section.
@@ -365,13 +366,28 @@ function workCard(order, { canAct, notice, problem }) {
                  ${mustWeighFirst ? 'autofocus' : ''}
                  style="flex:1;" value="${weighed ? escapeHtml(String(order.weight_lb)) : ''}"
                  placeholder="Pounds">
-          <button type="submit" class="btn btn-${mustWeighFirst ? 'primary' : 'ink'} btn-lg">Save</button>
         </div>
-        <span class="field-hint" style="display:block;margin-top:8px;">
+
+        <!-- capture="environment" opens the back camera straight away rather
+             than a file picker. On the first weighing it is required; on a
+             correction it is optional, because a typo is usually spotted after
+             the bag has gone and refusing the fix would leave the wrong number
+             on the order for good. -->
+        <label class="field-label" for="weight_photo" style="display:block;margin-top:18px;">
+          ${weighed ? 'New photo of the scale (optional)' : 'Photo of the scale'}
+        </label>
+        <input class="input input-lg" type="file" id="weight_photo" name="photo"
+               accept="image/*" capture="environment" ${weighed ? '' : 'required'}
+               style="width:100%;">
+
+        <button type="submit" class="btn btn-${mustWeighFirst ? 'primary' : 'ink'} btn-lg btn-full"
+                style="margin-top:16px;">Save the weight</button>
+
+        <span class="field-hint" style="display:block;margin-top:10px;">
           This sets the price and charges the card. ${
             weighed
               ? 'It has already been weighed once, so saving again is a correction and the customer is told so.'
-              : 'It is the only moment money moves.'
+              : 'Photograph the display with the bag on it - that photo is what settles any argument about the number later.'
           }
         </span>
       </form>`
@@ -906,7 +922,10 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // No special_instructions here — those live on the customer's
       // preferences, not on the order, and asking for them makes the whole
       // query fail rather than just returning null.
-      .select(`${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at`)
+      .select(
+        `${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at, ` +
+          'weight_photo_path, partner_weight_lb, partner_weight_at'
+      )
       .eq(byNumber ? 'order_number' : 'id', wanted)
       .maybeSingle();
 
@@ -1027,7 +1046,38 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             })()
           }
           ${detail('Bags', order.bag_count || '—')}
-          ${detail('Weight', order.weight_lb ? `${order.weight_lb} lb` : 'not weighed yet')}
+          ${detail(
+            'Weight',
+            order.weight_lb
+              ? `${order.weight_lb} lb` +
+                (order.weight_photo_path
+                  ? ` &middot; <a href="/ops/orders/${order.order_number}/scale-photo">scale photo</a>`
+                  : ' <span style="color:var(--ink-500);">(no photo, weighed before we asked for one)</span>')
+              : 'not weighed yet'
+          )}
+          ${
+            // Only when they gave one. A missing partner weight is the normal
+            // case and an empty row would read as something being wrong.
+            order.partner_weight_lb != null
+              ? detail(
+                  'Laundromat said',
+                  (() => {
+                    const theirs = Number(order.partner_weight_lb);
+                    const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+                    const gap = ours == null ? null : Math.abs(ours - theirs);
+                    const off = gap != null && gap > 1;
+                    return (
+                      `${theirs.toFixed(1)} lb` +
+                      (off
+                        ? ` <span style="color:var(--stain-500);font-weight:700;">&middot; ${gap.toFixed(
+                            1
+                          )} lb out</span>`
+                        : ' <span style="color:var(--ink-500);">&middot; agrees</span>')
+                    );
+                  })()
+                )
+              : ''
+          }
           ${
             showMoney
               ? detail('Rate', money(order.price_per_lb_cents) + ' / lb') +
@@ -1334,9 +1384,40 @@ function orderAction(action, run, middleware = null) {
 orderAction('collected', (order, req) => fulfilment.collect(order, { bagCount: (req.body || {}).bag_count }));
 orderAction('at-partner', (order) => fulfilment.dropAtPartner(order));
 orderAction('ready', (order) => fulfilment.markReady(order));
-orderAction('weight', (order, req) => fulfilment.recordWeight(order, (req.body || {}).weight_lb));
+// Multipart now: the scale photo rides along with the number it evidences.
+orderAction(
+  'weight',
+  (order, req) => fulfilment.recordWeight(order, (req.body || {}).weight_lb, req.file),
+  upload.single('photo')
+);
 orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
 orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
+
+// --- The scale photo --------------------------------------------------------
+//
+// Internal evidence, so unlike a delivery photo there is no public link and no
+// 30-day window: it is signed for a minute at a time and only for somebody
+// already signed in to ops. money.view rather than orders.view, because the
+// whole reason the photo exists is the charge it justifies.
+
+router.get('/ops/orders/:id/scale-photo', guard, may('money.view'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+    if (!order.weight_photo_path) return notFoundPage(res, 'No scale photo on that order.');
+
+    const { data: signed, error } = await db.storage
+      .from(fulfilment.WEIGHT_PHOTO_BUCKET)
+      .createSignedUrl(order.weight_photo_path, 60);
+
+    if (error) throw error;
+
+    res.set('Cache-Control', 'no-store, private');
+    return res.redirect(302, signed.signedUrl);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // --- Sticking a label on a bag, and taking it off again ---------------------
 

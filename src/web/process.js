@@ -365,12 +365,14 @@ function processBody() {
       )}
       ${step(
         4,
-        'WEIGH IT BEFORE IT LEAVES YOUR HANDS',
+        'WEIGH IT BEFORE IT LEAVES YOUR HANDS, AND PHOTOGRAPH THE SCALE',
         `The most important step on the round. The weight sets the price and
          <strong>charges the customer's card</strong>, so it has to be our
-         number on our scale - never the laundromat's figure taken on trust. The
-         system refuses to let a bag go to a partner, or onto the van for
-         delivery, without a weight recorded. Getting it wrong by a factor of
+         number on our scale - never the laundromat's figure taken on trust.
+         The button will not save without a photo of the display with the bag
+         on it; ten seconds of work that settles every later argument in both
+         directions. The system refuses to let a bag go to a partner, or onto
+         the van, without a weight recorded. Getting it wrong by a factor of
          ten is a four-figure charge on somebody's card.`
       )}
       ${step(
@@ -426,6 +428,16 @@ function processBody() {
       )}
       ${step(
         3,
+        'They type in what their scale said',
+        `One number, on the same page. It is a <strong>cross-check, not a
+         price</strong> - our driver's weight is what charged the card, and the
+         laundromat's figure is never read by any pricing code. When the two
+         disagree by more than a pound, an issue is raised for a person to look
+         at and the laundromat is told so plainly. A bad scale in either
+         direction is money, and this is what catches one.`
+      )}
+      ${step(
+        4,
         'They tell our driver it is done',
         `However they like. The driver records it in the system.`
       )}
@@ -433,13 +445,22 @@ function processBody() {
     <div class="pr-note" style="margin-top:26px;">
       <h3>What that page deliberately does not show</h3>
       <p>
-        <strong>No name, no phone number, no address, no history, no
-        price.</strong> A laundromat needs to know how to wash a bag. It does
-        not need to know whose bag it is, and information that never reaches the
-        page cannot leak from it. The query behind it asks for the specific
-        columns it is allowed to show rather than the whole row, so a field
-        somebody adds upstream next year does not quietly appear on a stranger's
-        screen.
+        <strong>No name, no phone number, no address, no history, no price, and
+        no free text of any kind.</strong> A laundromat needs to know how to
+        wash a bag. It does not need to know whose bag it is.
+      </p>
+      <p>
+        The wash settings on that page come from an <strong>allowlist of five
+        structured fields</strong> - water, detergent, softener, hang-dry,
+        separate-darks. Anything a customer typed themselves is never printed
+        there, however laundry-ish it looks. That is not caution for its own
+        sake: a real saved preference on this system reads "Deliver to 16-51
+        Chandler Dr, Fair Lawn, NJ", and somebody writing "separate the shirts
+        with the Bergen Pediatrics name tags" would hand a stranger their
+        employer. <strong>No pattern catches the second one</strong> - there is
+        no regex for a company name - so the fix cannot be redaction. The field
+        is simply never printed. If a real instruction does not fit those five,
+        the driver says it out loud when he hands the bag over.
       </p>
       <p>
         Three things keep it closed: the code is one of a billion and never
@@ -494,7 +515,8 @@ function processBody() {
          authorisations are on record: the consent given on the Stripe page,
          and the booking confirmation naming the card. There is no third "reply
          YES to pay" step. The customer gets the weight, the total and the
-         charge in one text.`
+         charge in one text, and the driver cannot save the number without
+         photographing the scale that produced it.`
       )}
       ${step(
         3,

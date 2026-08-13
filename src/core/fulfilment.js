@@ -33,6 +33,11 @@ const { site } = require('../web/site');
 
 const PHOTO_BUCKET = 'delivery-photos';
 
+// Kept apart from the delivery photos on purpose. A delivery photo is shown to
+// the customer on a link that expires; a scale photo is internal evidence
+// nobody outside the business ever sees. Two lives, two buckets.
+const WEIGHT_PHOTO_BUCKET = 'weight-photos';
+
 function money(cents) {
   return `$${(cents / 100).toFixed(2)}`;
 }
@@ -136,7 +141,7 @@ async function markReady(order) {
 // we have the bag, the same way unlocking a locker is an event rather than a
 // state. What it does change is the price, from an estimate to a real number.
 
-async function recordWeight(order, weightLb) {
+async function recordWeight(order, weightLb, photo) {
   const weight = Number(weightLb);
 
   if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
@@ -149,6 +154,29 @@ async function recordWeight(order, weightLb) {
 
   if (!orders.IN_FLIGHT.includes(order.status)) {
     return { ok: false, reason: 'illegal', detail: `That order is ${order.status}.` };
+  }
+
+  // NO PHOTO OF THE SCALE, NO WEIGHT.
+  //
+  // Same rule as the delivery photo and for the same reason: this number
+  // charges a card, and ten seconds of a driver's time is what makes it
+  // answerable afterwards. It settles the argument in both directions - the
+  // customer certain their bag was not 40 lb, and the laundromat whose invoice
+  // says 44.
+  //
+  // Only on the FIRST weighing. A correction is a driver fixing a typo they
+  // just made, usually with the bag already gone, and refusing that would
+  // leave the wrong number on the order permanently - which is worse than a
+  // correction with no new photo. The original photo stays.
+  const firstWeighing = order.weight_lb == null;
+  const havePhoto = Boolean(photo && photo.buffer && photo.buffer.length);
+
+  if (firstWeighing && !havePhoto) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail: 'Photograph the scale display. The weight charges the card, so it needs evidence.',
+    };
   }
 
   // The terms stored on the order, never today's terms. Changing the price or
@@ -167,11 +195,35 @@ async function recordWeight(order, weightLb) {
   const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
   const priceCents = Math.max(byWeight, floor);
 
+  // The photo goes up BEFORE the weight is written. If storage is having a bad
+  // day we would rather refuse the whole step than record a charge whose
+  // evidence silently failed to save.
+  let photoPath = order.weight_photo_path || null;
+
+  if (havePhoto) {
+    const extension = (String(photo.mimetype || '').split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    const path = `${order.id}/${Date.now()}.${extension}`;
+
+    const { error: uploadError } = await db.storage
+      .from(WEIGHT_PHOTO_BUCKET)
+      .upload(path, photo.buffer, { contentType: photo.mimetype, upsert: false });
+
+    if (uploadError) {
+      return {
+        ok: false,
+        reason: 'invalid',
+        detail: `The scale photo did not save (${uploadError.message}). Nothing has been weighed or charged - try again.`,
+      };
+    }
+
+    photoPath = path;
+  }
+
   // Weight and price are written together; the database refuses one without
   // the other, so an order can never carry a charge no weight justifies.
   const { data: updated, error } = await db
     .from('orders')
-    .update({ weight_lb: weight, price_cents: priceCents })
+    .update({ weight_lb: weight, price_cents: priceCents, weight_photo_path: photoPath })
     .eq('id', order.id)
     .select('*')
     .single();
@@ -474,4 +526,5 @@ module.exports = {
   TURNAROUND_HOURS,
   STEPS,
   PHOTO_BUCKET,
+  WEIGHT_PHOTO_BUCKET,
 };

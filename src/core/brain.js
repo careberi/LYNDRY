@@ -158,6 +158,8 @@ const TOOLS = [
             'water_temp',
             'detergent',
             'fabric_softener',
+            'hang_dry',
+            'separate_darks',
             'special_instructions',
             'default_pickup_method',
           ],

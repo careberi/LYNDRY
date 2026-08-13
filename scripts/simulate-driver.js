@@ -12,7 +12,8 @@
 //   npm run driver -- today                 same thing
 //
 //   npm run driver -- collected <order-id>  you have the bag
-//   npm run driver -- weight <order-id> 18.5   record pounds, sets the price
+//   npm run driver -- weight <order-id> 18.5   record pounds, price it, charge
+//   npm run driver -- weight <order-id> 18.5 ./scale.jpg   send a real photo
 //   npm run driver -- out <order-id>        out for delivery
 //   npm run driver -- delivered <order-id>  delivered, with a photo
 //
@@ -138,7 +139,11 @@ const TINY_PNG = Buffer.from(
 // --- Run --------------------------------------------------------------------
 
 async function main() {
-  const [command, orderId, extra] = process.argv.slice(2);
+  const [command, orderId, extra, fourth] = process.argv.slice(2);
+
+  // `weight` takes pounds then an optional photo path; `delivered` takes the
+  // photo path in the third slot. One name for whichever slot holds a file.
+  const photoPath = command === 'weight' ? fourth : extra;
 
   if (!command || command === 'today') return showToday();
 
@@ -157,7 +162,23 @@ async function main() {
         console.error('\n  How many pounds? e.g. npm run driver -- weight <id> 18.5\n');
         process.exit(1);
       }
-      report('weighed', await call('POST', '/ops/weight', { body: { order_id: orderId, weight_lb: Number(extra) } }));
+
+      // Multipart, because a first weighing needs a photo of the scale - the
+      // real screen makes the driver take one, and a test path that skips it
+      // would stop testing the thing that matters. A third argument is a real
+      // photo; without one this sends the same placeholder as `delivered`.
+      const scale = photoPath ? fs.readFileSync(photoPath) : TINY_PNG;
+      const form = new FormData();
+      form.append('order_id', orderId);
+      form.append('weight_lb', String(Number(extra)));
+      form.append(
+        'photo',
+        new Blob([scale], { type: photoPath ? 'image/jpeg' : 'image/png' }),
+        photoPath || 'scale.png'
+      );
+
+      report('weighed', await call('POST', '/ops/weight', { form }));
+      if (!photoPath) console.log('  (used a placeholder scale photo — pass a file path to send a real one)\n');
       break;
     }
 

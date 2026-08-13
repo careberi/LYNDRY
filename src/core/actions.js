@@ -283,6 +283,12 @@ const PREFERENCE_KEYS = [
   'water_temp',
   'detergent',
   'fabric_softener',
+  // Structured on purpose. These are the two things beyond temperature,
+  // detergent and softener that change what somebody does at a machine, and
+  // having them as fields is what stops them being typed into free text - the
+  // one place a customer will also type an address or a company name.
+  'hang_dry',
+  'separate_darks',
   'special_instructions',
   'default_pickup_method',
 ];

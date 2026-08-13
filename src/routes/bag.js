@@ -6,6 +6,7 @@ const db = require('../db');
 const bags = require('../core/bags');
 const fulfilment = require('../core/fulfilment');
 const throttle = require('../core/throttle');
+const issues = require('../core/issues');
 const { site } = require('../web/site');
 const { escapeHtml, CSS_BASE, logo } = require('../web/layout');
 
@@ -53,11 +54,21 @@ function clientIp(req) {
 
 // The wash, in the words a person at a machine needs.
 //
-// Read from the customer's saved preferences, but only these four fields. The
-// preferences object is handed here whole and it would be easy to print all of
-// it; naming the fields one at a time is what stops a future field - a gate
-// code, a phone number, a "leave it with my neighbour Sarah" - appearing on a
-// stranger's screen because somebody added it upstream.
+// THIS IS AN ALLOWLIST, AND THAT IS THE WHOLE SECURITY MODEL OF THE PAGE.
+//
+// Only these five structured fields are ever rendered. FREE TEXT NEVER CROSSES
+// - not special_instructions, not dropoff_spot, not notes on the order, no
+// matter how laundry-ish it looks.
+//
+// This is not theoretical. A real customer's saved preferences contain
+// "Deliver to 16-51 Chandler Dr, Fair Lawn, NJ" in a free-text field, and
+// somebody typing "separate the shirts with the Bergen Pediatrics name tags"
+// would hand a stranger their employer. No regex catches the second one -
+// there is no pattern for a company name - so the fix cannot be redaction. It
+// has to be that the field is never printed here at all.
+//
+// If a genuine instruction does not fit these five, the driver says it out
+// loud when he hands the bag over. That is the interface to a laundromat.
 function washLines(preferences) {
   const p = preferences || {};
   const out = [];
@@ -65,8 +76,76 @@ function washLines(preferences) {
   if (p.water_temp) out.push(['Water', String(p.water_temp).toLowerCase()]);
   out.push(['Detergent', p.detergent === 'HYPOALLERGENIC' ? 'Hypoallergenic' : 'Standard']);
   out.push(['Softener', p.fabric_softener ? 'Yes' : 'No']);
+  if (p.hang_dry) out.push(['Drying', 'Hang dry, do not tumble']);
+  if (p.separate_darks) out.push(['Sorting', 'Wash darks separately']);
 
   return out;
+}
+
+// The one thing a laundromat may write.
+//
+// NEIL'S CALL, and it needs stating precisely because it looks like the
+// opposite of a rule elsewhere in the codebase. Both scales get recorded; only
+// ours bills. A partner weighs the bag anyway for their own invoice, so asking
+// for that figure costs them nothing and catches a bad scale on either side -
+// the customer certain their bag was not 40 lb, and the laundromat whose
+// invoice says 44.
+//
+// What it does NOT do is set a price. `partner_weight_lb` is never read by the
+// pricing code, and if it ever is, the control Neil asked for two sessions ago
+// has been removed: a partner scale reading 400 instead of 40 would be a
+// $1,000 charge on a customer's card with nobody of ours in between.
+function weightCard(order, code, token, justSaved) {
+  const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+  const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
+
+  if (theirs != null) {
+    const gap = ours == null ? null : Math.abs(ours - theirs);
+    // A pound either way is two scales, not a problem. More than that is worth
+    // somebody looking at, and they are told so plainly rather than being left
+    // to wonder why their number vanished.
+    const disagrees = gap != null && gap > 1;
+
+    return `
+    <div class="card" style="padding:28px;">
+      <p class="eyebrow" style="margin:0 0 10px;">Your weight</p>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
+        ${escapeHtml(theirs.toFixed(1))} lb
+      </div>
+      <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:12px 0 0;">
+        ${
+          disagrees
+            ? 'Thanks. That differs from ours by more than a pound, so we have flagged it for someone to check. Nothing for you to do.'
+            : 'Thanks, that matches ours.'
+        }
+      </p>
+    </div>`;
+  }
+
+  return `
+    <div class="card" style="padding:28px;">
+      <p class="eyebrow" style="margin:0 0 10px;">What did it weigh?</p>
+      <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:0 0 18px;">
+        Your own figure, off your scale. We have already weighed it too - this
+        is a cross-check so a bad scale gets spotted, and it does not change
+        what anybody is charged.
+      </p>
+      ${
+        justSaved === 'bad'
+          ? `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--stain-500);color:var(--paper-050);font-weight:600;">
+               That did not look like a weight in pounds.
+             </p>`
+          : ''
+      }
+      <form method="post" action="/o/${encodeURIComponent(code)}/weight?t=${encodeURIComponent(token || '')}"
+            style="display:flex;gap:12px;align-items:flex-start;">
+        <input class="input input-lg" type="number" name="weight_lb" required
+               step="0.1" min="0.1" max="200" inputmode="decimal" placeholder="Pounds"
+               style="flex:1;">
+        <button type="submit" class="btn btn-lg">Save</button>
+      </form>
+    </div>`;
 }
 
 function page({ title, body }) {
@@ -156,7 +235,9 @@ router.get('/o/:code', async (req, res, next) => {
     // a stranger's screen the day somebody adds a field.
     const { data: order, error } = await db
       .from('orders')
-      .select('id, order_number, status, collected_at, weight_lb, customers(preferences)')
+      .select(
+        'id, order_number, status, collected_at, weight_lb, partner_weight_lb, customers(preferences)'
+      )
       .eq('id', label.order_id)
       .maybeSingle();
 
@@ -215,7 +296,7 @@ router.get('/o/:code', async (req, res, next) => {
       </dl>
     </div>
 
-    <div class="card" style="padding:28px;background:${
+    <div class="card" style="padding:28px;margin-bottom:20px;background:${
       clock && clock.urgent ? 'var(--stain-500)' : 'var(--sunbeam-500)'
     };${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
       <p class="eyebrow" style="margin:0 0 8px;${
@@ -226,11 +307,104 @@ router.get('/o/:code', async (req, res, next) => {
       </div>
     </div>
 
+    ${weightCard(order, code, req.query.t, req.query.weighed)}
+
     <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
       Questions about this bag: ${escapeHtml(site.publicPhoneDisplay)}.
     </p>`,
       })
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /o/<code>/weight - the laundromat's own figure
+//
+// The only write on the whole public surface, and it is deliberately tiny: one
+// number, onto one order, that nothing prices anything from.
+//
+// It goes through exactly the same gate as the page - the signature, the
+// binding, the live-order check - because a form action is a URL like any
+// other and "they must have come from the page" is not a check.
+// ---------------------------------------------------------------------------
+
+const WEIGH_LIMIT = 20;
+
+router.post('/o/:code/weight', async (req, res, next) => {
+  const raw = req.params.code;
+  const ip = clientIp(req);
+  const userAgent = req.headers['user-agent'] || null;
+
+  try {
+    if (throttle.hit(`labelweigh:${ip}`, WEIGH_LIMIT, SCAN_WINDOW_MS)) {
+      await bags.recordScan({ code: raw, outcome: 'THROTTLED', ip, userAgent });
+      return res.status(429).type('html').send(nothingHere());
+    }
+
+    const code = bags.normaliseCode(raw);
+    if (!code || !bags.verifyCode(code, req.query.t)) {
+      await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
+      return res.status(404).type('html').send(nothingHere());
+    }
+
+    const label = await bags.findByCode(code);
+    if (!label || !label.order_id) {
+      await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
+      return res.status(404).type('html').send(nothingHere());
+    }
+
+    // The customer comes along only so an issue can be raised against them if
+    // the two scales disagree. Nothing about them is rendered on this page.
+    const { data: order, error } = await db
+      .from('orders')
+      .select('id, order_number, status, weight_lb, partner_weight_lb, customers(id, name, phone)')
+      .eq('id', label.order_id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!order || ['DELIVERED', 'CANCELED'].includes(order.status)) {
+      await bags.recordScan({ code, orderId: order && order.id, outcome: 'UNBOUND', ip, userAgent });
+      return res.status(404).type('html').send(nothingHere());
+    }
+
+    const back = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
+    const weight = Number((req.body || {}).weight_lb);
+
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
+      return res.redirect(303, `${back}&weighed=bad`);
+    }
+
+    // First answer wins. Somebody re-scanning a sticker should not be able to
+    // quietly revise a figure that has already been compared against ours.
+    if (order.partner_weight_lb != null) return res.redirect(303, back);
+
+    await db
+      .from('orders')
+      .update({ partner_weight_lb: weight, partner_weight_at: new Date().toISOString() })
+      .eq('id', order.id);
+
+    // Two scales are never going to agree exactly. More than a pound apart is
+    // worth a person looking at, and it goes on the Issues screen rather than
+    // into a log nobody reads - a bad scale in either direction is money.
+    const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+
+    if (ours != null && Math.abs(ours - weight) > 1 && order.customers) {
+      await issues
+        .raise({
+          customer: order.customers,
+          order,
+          reason:
+            `Scales disagree: we weighed it ${ours} lb, the laundromat says ${weight} lb. ` +
+            `Ours is what was charged. Check which scale is wrong before it happens again.`,
+        })
+        .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
+    }
+
+    await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
+    return res.redirect(303, back);
   } catch (err) {
     return next(err);
   }
