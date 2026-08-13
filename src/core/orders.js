@@ -135,6 +135,7 @@ async function create({
   pickupMethod,
   bagCount,
   notes,
+  fromSchedule,
 }) {
   const { data, error } = await db
     .from('orders')
@@ -153,6 +154,10 @@ async function create({
       // already told in a text message sitting on their phone.
       pickup_window_start: pickupWindowStart || null,
       pickup_window_end: pickupWindowEnd || null,
+
+      // True when a standing order created this rather than the customer
+      // asking for it in the moment.
+      from_schedule: Boolean(fromSchedule),
 
       pickup_method: pickupMethod || null,
       bag_count: bagCount || null,

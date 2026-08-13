@@ -328,7 +328,7 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 //   { ok: false, reason: 'needs_card' }
 // ---------------------------------------------------------------------------
 
-async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes } = {}) {
+async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes, fromSchedule } = {}) {
   if (!hasAddress(customer)) return { ok: false, reason: 'no_address' };
 
   // Checked at booking rather than only at signup, because an address can be
@@ -374,6 +374,9 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     pickupTime: normaliseTime(pickupTime),
     pickupWindowStart: window.start,
     pickupWindowEnd: window.end,
+    // Marks an auto-booked pickup so it can be told apart on the ops board
+    // from one somebody actually asked for.
+    fromSchedule: Boolean(fromSchedule),
     // Their saved default, unless they asked for something else this time.
     pickupMethod: PICKUP_METHODS.includes(pickupMethod)
       ? pickupMethod
@@ -424,12 +427,27 @@ function whenLine(order) {
 function confirmationMessage(customer, order, { rolled = false, opener = null } = {}) {
   const prefs = customer.preferences || {};
 
-  // Where and how the bag changes hands, with their standing note folded in.
-  const spot = prefs.special_instructions ? ` (${prefs.special_instructions})` : '';
-  const handover =
-    order.pickup_method === 'HAND_TO_DRIVER'
-      ? `We'll knock when we arrive${spot}.`
-      : `Leave the bag outside${spot} and we'll text you as soon as we've got it.`;
+  // Where the bag changes hands, BOTH WAYS.
+  //
+  // Dropoff is not asked for as a separate question. The spot they named for
+  // pickup is where it comes back, stated plainly here so they can correct it
+  // if they want somewhere else. A fourth setup question to collect something
+  // that is the same answer 95% of the time is friction for nothing.
+  const pickupSpot = (prefs.special_instructions || '').trim();
+  const dropoffSpot = (prefs.dropoff_spot || '').trim();
+
+  let handover;
+  if (order.pickup_method === 'HAND_TO_DRIVER') {
+    handover = `We'll knock when we arrive, and again when we bring it back.`;
+  } else if (dropoffSpot && dropoffSpot !== pickupSpot) {
+    handover =
+      `Leave the bag ${pickupSpot ? `at the ${pickupSpot}` : 'outside your door'}, ` +
+      `and we'll drop it back at the ${dropoffSpot}.`;
+  } else if (pickupSpot) {
+    handover = `Leave the bag at the ${pickupSpot}, and that's where we'll bring it back.`;
+  } else {
+    handover = `Leave the bag outside your door, and that's where we'll bring it back.`;
+  }
 
   // Their wash, as they chose it. Drops out entirely if somehow unset.
   const wash = prefs.water_temp

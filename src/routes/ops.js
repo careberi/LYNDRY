@@ -13,6 +13,7 @@ const { site } = require('../web/site');
 const { readableDate } = require('../core/actions');
 const booking = require('../core/booking');
 const fulfilment = require('../core/fulfilment');
+const recurring = require('../core/recurring');
 
 const router = express.Router();
 
@@ -263,6 +264,37 @@ router.post('/ops/waive', async (req, res, next) => {
     }
 
     res.json({ ok: true, order_id: order.id, payment_status: 'WAIVED' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/cron/recurring — book tomorrow's standing orders
+//
+// Run once a day by Railway's scheduler, or by hand while testing. Not a job
+// queue, which stays on the do-not-build list: one endpoint, behind the same
+// admin key as everything else here, doing one pass.
+//
+// Safe to run twice, ten times, or at any hour. It books nothing for anybody
+// who already has a pickup waiting, so a double-fire is a no-op rather than a
+// double booking and a double charge.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/cron/recurring', async (req, res, next) => {
+  try {
+    // A date can be passed in to test a specific day. Without one it does
+    // tomorrow, which is the point: the warning text lands the evening before.
+    const result = await recurring.bookDue({ date: req.body && req.body.date });
+
+    res.json({
+      ok: true,
+      date: result.date,
+      booked: result.booked.map((o) => ({ order_number: o.order_number, customer_id: o.customer_id })),
+      // Anything that could not be booked, with why. A customer whose card
+      // died should show up here rather than silently stop getting laundry.
+      not_booked: result.failed.map((f) => ({ phone: f.customer.phone, reason: f.reason })),
+    });
   } catch (err) {
     next(err);
   }

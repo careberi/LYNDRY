@@ -38,13 +38,26 @@ function money(cents) {
 // individual charge back to a specific YES in the message log.
 function consentText() {
   return (
-    `You're authorising ${site.legalName} (LYNDRY) to save this card and charge it for ` +
+    // The trading name in brackets only when it differs from the legal one.
+    // No legal entity has been formed yet, so both are "LYNDRY" today and
+    // "LYNDRY (LYNDRY)" on a payment page reads like a bug.
+    `You're authorising ${site.legalName}${
+      site.legalName === site.name ? '' : ` (${site.name})`
+    } to save this card and charge it for ` +
     `each pickup you book. We take a ${money(config.pricing.minimumCents)} minimum when you book. ` +
     `Wash and fold is ${site.pricePerLb} a pound, so once we weigh your bag we charge the ` +
     `difference if it comes to more. If it comes to less, the ${money(config.pricing.minimumCents)} ` +
     `minimum is the price and nothing is refunded. We text you the weight and the total every ` +
-    `time. Cancel before we collect and the minimum comes back. No subscription and no ` +
-    `recurring charge. Reply STOP any time.`
+    `time. Cancel before we collect and the minimum comes back. ` +
+    // A standing order takes the minimum on a repeating basis, so the old
+    // "no recurring charge" was about to become false. It is not a
+    // subscription - there is no fee for having one and every pickup is still
+    // priced by weight - but a repeating charge has to be disclosed on the
+    // page the customer authorises it from, because that page is what card
+    // networks read in a dispute.
+    `If you set up a repeating pickup, this covers those too: we text you the day ` +
+    `before each one and you can skip or stop any time. There is no subscription ` +
+    `and no fee for having a schedule. Reply STOP any time.`
   );
 }
 

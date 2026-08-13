@@ -4,6 +4,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const { site } = require('../web/site');
 const booking = require('./booking');
+const recurring = require('./recurring');
 
 // ---------------------------------------------------------------------------
 // The brain.
@@ -226,9 +227,17 @@ const TOOLS = [
         pickup_spot: {
           type: 'string',
           description:
-            'Where they said the driver should look, in their words: "behind the ' +
-            'side gate", "with the doorman". Saved as a standing instruction the ' +
-            'driver sees on every order.',
+            'Where they said the driver should look, in their words: "front door", ' +
+            '"behind the side gate", "with the doorman". Saved as a standing ' +
+            'instruction the driver sees on every order.',
+        },
+        dropoff_spot: {
+          type: 'string',
+          description:
+            'ONLY if they want the clean laundry left somewhere DIFFERENT from ' +
+            'where it was collected. Never ask for this: the confirmation already ' +
+            'says it comes back to the same spot, and most people want exactly ' +
+            'that. Set it only when they say otherwise.',
         },
         pickup_date: {
           type: 'string',
@@ -241,6 +250,52 @@ const TOOLS = [
         pickup_time: {
           type: 'string',
           description: 'The time they mentioned, if any, as 24-hour HH:MM.',
+        },
+      },
+      required: [],
+    },
+  },
+
+  {
+    // Standing orders. Offered at the END of a delivery, never at booking:
+    // nobody commits to a weekly habit before they have seen the service work.
+    name: 'set_pickup_schedule',
+    description:
+      'Set up, change or stop a repeating pickup. Use when the customer says ' +
+      'they want us to come regularly ("yes make it weekly", "same time every ' +
+      'other Tuesday"), or when they want to stop or pause one. Every pickup it ' +
+      'creates is still an ordinary order they are told about the day before.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cadence: {
+          type: 'string',
+          enum: ['WEEKLY', 'FORTNIGHTLY', 'OFF'],
+          description:
+            'WEEKLY for every week, FORTNIGHTLY for every other week, OFF to stop ' +
+            'the schedule entirely. Those are the only two frequencies we offer, ' +
+            'so never promise anything else.',
+        },
+        weekday: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 6,
+          description:
+            'Which day it lands on. 0 is Sunday, 1 Monday, up to 6 Saturday. ' +
+            'Required unless cadence is OFF. If they say "same day as usual", use ' +
+            'the day of the pickup you can see in their orders below.',
+        },
+        skip_next: {
+          type: 'boolean',
+          description:
+            'True when they want to miss the next one but keep the schedule: ' +
+            '"skip this week", "not this Tuesday". Leave the cadence alone.',
+        },
+        pause_until: {
+          type: 'string',
+          description:
+            'A YYYY-MM-DD date to skip everything up to, for "pause until I am ' +
+            'back from holiday on the 3rd". Keeps the schedule alive.',
         },
       },
       required: [],
@@ -339,6 +394,12 @@ If they mention a time, whether that is "at 6", "sixish", "after work" or "first
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
 Wash preferences are chosen ONCE, by the customer, during their first setup. There are no defaults and you never invent one: if the notes below say NONE YET, ask before their first booking, in one message: "cold or warm water, regular or hypoallergenic detergent, and softener or no?" Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
 Never state a price as a fact. If asked what it will cost, say it is ${site.pricePerLb} a pound and a typical bag runs about ${site.estimateRange}, weighed after pickup.
+REPEATING PICKUPS
+We come every week or every other week, on a day they choose. Those are the only two frequencies; never offer a third.
+It is offered ONCE, after a delivery, when they have just seen the service work. Never pitch it while somebody is still arranging their first pickup, and never pitch it twice: if the notes below show a schedule, or show they have already said no, drop it.
+It is not a subscription and must never be called one. Nothing is charged for having a schedule. Every pickup it creates is an ordinary order, priced by weight, and they get a text the day before with the window and a way to skip it.
+"Skip this week", "pause until the 3rd" and "stop the weekly" are all set_pickup_schedule. Skipping one week is not stopping the schedule, so do not treat it as one.
+
 WHEN SOMETHING HAS GONE WRONG
 If the customer is upset, something is damaged or missing, they ask for a person, or you are unsure what they mean, this goes to a manager. Guessing is worse than handing over.
 Before you hand over, work out whether it is about a specific order. A stain, a missing item, a late or absent delivery, a wrong charge: all about an order. "Do you reach Hoboken" is not.
@@ -408,6 +469,10 @@ function customerContext(customer, order, recentMessages, recentOrders) {
     prefs.default_pickup_method
       ? `Usual pickup: ${prefs.default_pickup_method === 'HAND_TO_DRIVER' ? 'hands it to the driver' : 'leaves the bag outside'}`
       : 'Usual pickup: not chosen yet; ask where the driver should find the bag.',
+    recurring.isScheduled(customer)
+      ? `Repeating pickup: ${recurring.describe(customer)}, next on ${recurring.nextDate(customer)}` +
+        (customer.recurring_paused_until ? ` (paused until ${customer.recurring_paused_until})` : '')
+      : 'Repeating pickup: none. Offer one only after a delivery, and only once.',
   ];
 
   if (prefs.special_instructions) {

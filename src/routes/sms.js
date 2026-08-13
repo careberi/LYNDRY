@@ -106,7 +106,9 @@ async function handleInbound(inbound) {
   console.log(`SMS in  ${from}: ${text}`);
 
   // --- Compliance keywords, before anything else ---------------------------
-  const keyword = compliance.classify(text);
+  // The customer is passed so that "yes" only counts as an opt-in from
+  // somebody who actually opted out. STOP, START and HELP are unaffected.
+  const keyword = compliance.classify(text, customer);
 
   if (keyword) {
     const newStatus = compliance.statusFor(keyword);

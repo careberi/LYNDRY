@@ -284,10 +284,16 @@ function workCard(order, { canAct, notice, problem }) {
       ? `
       <form method="post" action="/ops/orders/${order.order_number}/delivered"
             enctype="multipart/form-data" style="margin:0;display:flex;flex-direction:column;gap:10px;">
-        <label class="field-label" for="photo">Photo at the door</label>
-        <input class="input" type="file" id="photo" name="photo" accept="image/*" capture="environment">
+        <label class="field-label" for="photo">Photo at the door &mdash; required</label>
+        <!-- The required attribute stops the tap before it costs a round
+             trip. The real enforcement is in src/core/fulfilment.js, because
+             the JSON API reaches the same code and a form attribute guards
+             neither of them. -->
+        <input class="input" type="file" id="photo" name="photo" accept="image/*" capture="environment" required>
         <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
-        <span class="field-hint">The customer gets a link to this that expires after 30 days.</span>
+        <span class="field-hint">
+          This is the proof of delivery. The customer gets a link to it that expires after 30 days.
+        </span>
       </form>`
       : `
       <form method="post" action="/ops/orders/${order.order_number}/${s.action}" style="margin:0;">
@@ -621,7 +627,11 @@ const may = (permission) => roles.requirePermission(permission, refuse);
 
 const ORDER_FIELDS =
   'id, order_number, status, pickup_date, pickup_time, pickup_window_start, pickup_window_end, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
-  'delivery_photo_url, notes, created_at, customers(id, name, phone, address_line1, address_line2, city, postal_code)';
+  'delivery_photo_url, notes, created_at, from_schedule, ' +
+  // preferences carries where the driver should look and how it gets washed.
+  // Without it the order page could show "leave outside" but not "front door",
+  // which is the half the driver actually needs.
+  'customers(id, name, phone, address_line1, address_line2, city, postal_code, preferences, recurring_cadence, recurring_weekday)';
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
@@ -853,6 +863,44 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             order.pickup_time ? escapeHtml(booking.readableTime(order.pickup_time)) : 'no time'
           )}
           ${detail('Method', escapeHtml((order.pickup_method || '').replace(/_/g, ' ').toLowerCase() || '—'))}
+          ${
+            // WHERE THE DRIVER SHOULD LOOK, in the customer's own words.
+            //
+            // The single most operationally useful line on this page, and it
+            // was missing: a customer said "front door" and the page showed
+            // only "leave outside", so the driver never saw the half that
+            // tells them where to go.
+            detail(
+              'Where to find it',
+              (() => {
+                const spot = ((c.preferences || {}).special_instructions || '').trim();
+                return spot
+                  ? `<strong>${escapeHtml(spot)}</strong>`
+                  : '<span style="color:var(--ink-500);">not specified</span>';
+              })()
+            )
+          }
+          ${
+            // One-off instructions for THIS pickup, as opposed to their
+            // standing spot above. Only drawn when there are some.
+            order.notes
+              ? detail('Just this time', escapeHtml(order.notes))
+              : ''
+          }
+          ${
+            // What the partner needs to know. On the order rather than only on
+            // the customer, because this is the page open while a bag is being
+            // handed over.
+            (() => {
+              const p = c.preferences || {};
+              if (!p.water_temp) return '';
+              const wash =
+                `${String(p.water_temp).toLowerCase()} water, ` +
+                `${p.detergent === 'HYPOALLERGENIC' ? 'hypoallergenic' : 'standard'} detergent, ` +
+                `${p.fabric_softener ? 'softener' : 'no softener'}`;
+              return detail('Wash', escapeHtml(wash));
+            })()
+          }
           ${detail('Bags', order.bag_count || '—')}
           ${detail('Weight', order.weight_lb ? `${order.weight_lb} lb` : 'not weighed yet')}
           ${

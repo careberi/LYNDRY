@@ -3,6 +3,7 @@
 const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
+const recurring = require('./recurring');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -228,6 +229,20 @@ async function outForDelivery(order) {
 // storage URL would eventually expire and break the photo.
 
 async function deliver(order, file) {
+  // NO PHOTO, NO DELIVERY.
+  //
+  // The photo is the proof. It is the answer to "you never delivered it" and
+  // the reason a customer trusts leaving a bag outside at all, so it cannot be
+  // the optional half of the most consequential button on the screen. Enforced
+  // here rather than only in the form, because the JSON API reaches this too.
+  if (!file || !file.buffer || !file.buffer.length) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail: 'A photo is required to mark an order delivered. Take one at the door.',
+    };
+  }
+
   let photoPath = null;
   let photoUrl = null;
 
@@ -279,7 +294,17 @@ async function deliver(order, file) {
       price = ` ${money(order.price_cents)} is still outstanding, the card link we sent will settle it.`;
     }
 
-    return `Delivered! Your laundry is at your door.${price}${photo}`;
+    // The one moment worth asking about a standing order: they have just
+    // seen the service work, start to finish. Asked once, only if they have
+    // no schedule already, and only when the delivery went cleanly - nobody
+    // wants to be sold a weekly habit in the same breath as a failed card.
+    const customer = order.customers || {};
+    const offer =
+      !recurring.isScheduled(customer) && (charge.ok || charge.coveredByMinimum)
+        ? ` Want us to make this a regular thing? We can come every week or every other week.`
+        : '';
+
+    return `Delivered! Your laundry is at your door.${price}${photo}${offer}`;
   });
 
   if (!result.ok) return result;

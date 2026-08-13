@@ -5,6 +5,7 @@ const orders = require('./orders');
 const billing = require('./billing');
 const booking = require('./booking');
 const issues = require('./issues');
+const recurring = require('./recurring');
 const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -309,6 +310,12 @@ async function saveDetails(customer, input) {
     prefs.special_instructions = clean(input.pickup_spot, 200);
     prefsChanged = true;
   }
+  // Only set when they want it back somewhere else. Unset means "the same
+  // place", which is what the confirmation promises.
+  if (clean(input.dropoff_spot, 200)) {
+    prefs.dropoff_spot = clean(input.dropoff_spot, 200);
+    prefsChanged = true;
+  }
 
   if (prefsChanged) changes.preferences = prefs;
 
@@ -392,6 +399,57 @@ async function saveDetails(customer, input) {
     `You're all set, ${first}! ${site.pricePerLb} a pound with a ` +
     `${billing.money(config.pricing.minimumCents)} minimum, back within ${site.turnaround}. ` +
     `When would you like your first pickup?`
+  );
+}
+
+// --- set_pickup_schedule ----------------------------------------------------
+
+async function setPickupSchedule(customer, input) {
+  const first = String(customer.name || '').trim().split(/\s+/)[0];
+
+  // Skipping one, or pausing for a while, without touching the cadence.
+  if (input.skip_next || input.pause_until) {
+    if (!recurring.isScheduled(customer)) {
+      return `You haven't got a repeating pickup set up, so there's nothing to skip.`;
+    }
+
+    // "Skip this week" means pause up to and including the next one.
+    const until = input.pause_until || recurring.nextDate(customer);
+    const updated = await recurring.pauseUntil(customer, until);
+
+    return (
+      `No problem, skipped. Your next one is ${booking.readableDate(recurring.nextDate(updated))}. ` +
+      `Text me any time if you want one sooner.`
+    );
+  }
+
+  if (input.cadence === 'OFF') {
+    if (!recurring.isScheduled(customer)) {
+      return `You haven't got a repeating pickup running, so there's nothing to stop.`;
+    }
+
+    await recurring.stop(customer);
+    return `Done, no more repeating pickups. Just text me whenever you want one.`;
+  }
+
+  if (!recurring.CADENCES[input.cadence]) {
+    return `Would you like us every week, or every other week?`;
+  }
+
+  const weekday = Number(input.weekday);
+  if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+    return `Which day suits you?`;
+  }
+
+  const updated = await recurring.setSchedule(customer, { cadence: input.cadence, weekday });
+  const next = recurring.nextDate(updated);
+
+  // No mention of a total, because there isn't one: a schedule costs nothing
+  // and each pickup is priced by weight exactly as it always was.
+  return (
+    `Sorted${first ? `, ${first}` : ''}! We'll come ${recurring.describe(updated)} from now on, ` +
+    `starting ${booking.readableDate(next)}. We'll text you the day before each one, ` +
+    `and you can skip a week or stop any time by texting me.`
   );
 }
 
@@ -482,6 +540,8 @@ async function run(name, input, customer, helpers = {}) {
       return updateProfile(customer, input);
     case 'save_details':
       return saveDetails(customer, input);
+    case 'set_pickup_schedule':
+      return setPickupSchedule(customer, input);
     case 'handoff_to_human':
       return handoffToHuman(customer, input, helpers);
     default:
