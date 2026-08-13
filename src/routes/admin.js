@@ -2198,6 +2198,22 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
 
     const board = await dispatch.board(date, from, driverId);
 
+    // WHERE THAT DRIVER ACTUALLY IS RIGHT NOW.
+    //
+    // The board is what is LEFT - a stop disappears from it the moment it is
+    // done - so on its own it cannot say whether somebody is at their first
+    // stop or their last. The run already works this out for the driver's own
+    // screen; the same call answers it here, so the two can never disagree
+    // about how far through he is.
+    //
+    // Only for a real driver on today. "Everybody" has no single progress, and
+    // a future day has not started.
+    // board.date, not the raw query param - that is null when no day was asked
+    // for, so comparing it to today was false on the very page somebody lands
+    // on and the card never appeared.
+    const progress =
+      driverId && board.date === booking.today() ? await runCore.forDriver(driverId) : null;
+
     let quote = null;
     let problem = null;
 
@@ -2223,6 +2239,7 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
           problem,
           drivers: team,
           driverId,
+          progress,
           lockedToSelf: !canPickAnyone,
           // A driver gets the run sheet; the customer's name and the money on
           // it are not theirs, exactly as on the order page.

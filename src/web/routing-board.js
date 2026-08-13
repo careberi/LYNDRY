@@ -178,6 +178,68 @@ function partnerCard(p, { showMoney }) {
   </div>`;
 }
 
+// WHERE THIS DRIVER IS UP TO, drawn from the same reading of the orders that
+// his own screen uses.
+//
+// The stop list below is what is LEFT, because the board is built from live
+// queries and a finished stop drops out of it. That is right for "what remains"
+// and useless for "how far through is he", which is the question somebody at a
+// desk is actually asking - so the answer comes from the run rather than being
+// inferred from a list that no longer contains the past.
+function whereTheyAre(run) {
+  const pct = run.total ? Math.round((run.done / run.total) * 100) : 0;
+
+  const doing = run.finished
+    ? 'Finished the round.'
+    : run.current
+      ? `${run.arrived ? 'At' : 'On the way to'} ${
+          run.current.name
+            ? escapeHtml(run.current.name)
+            : escapeHtml(run.current.address || 'the next stop')
+        }${
+          run.current.order ? ` &mdash; #${run.current.order.order_number}` : ''
+        }, to ${escapeHtml((KIND_TONE[run.current.kind] || {}).word || 'work on it').toLowerCase()}.`
+      : 'Nothing on.';
+
+  return `
+  <div class="card card-xl" style="padding:22px;margin-bottom:26px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px;">
+      <p class="eyebrow" style="margin:0;">Where they are now</p>
+      <span class="eyebrow" style="margin:0;">
+        Stop ${Math.min(run.done + 1, run.total)} of ${run.total} &middot; ${run.done} done
+      </span>
+    </div>
+
+    <div style="height:14px;border:2px solid var(--ink-900);border-radius:999px;overflow:hidden;
+                background:var(--paper-000);margin-bottom:14px;">
+      <div style="height:100%;width:${pct}%;background:var(--suds-500);"></div>
+    </div>
+
+    <p style="font-size:16px;line-height:1.5;margin:0 0 14px;font-weight:600;">${doing}</p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      ${run.stops
+        .map(
+          (s, i) => `
+        <span style="display:flex;align-items:center;gap:7px;padding:6px 11px;border:2px solid var(--ink-900);
+                     border-radius:999px;font-size:13px;
+                     background:${
+                       s.done
+                         ? 'var(--suds-300)'
+                         : s === run.current
+                           ? 'var(--sunbeam-500)'
+                           : 'var(--paper-050)'
+                     };">
+          <span style="font-family:var(--font-mono);font-weight:700;">${i + 1}</span>
+          ${escapeHtml((KIND_TONE[s.kind] || {}).word || s.kind)}
+          ${s.done ? '&check;' : s === run.current ? '&larr; here' : ''}
+        </span>`
+        )
+        .join('')}
+    </div>
+  </div>`;
+}
+
 function statCard(label, value, tone) {
   return `
   <div style="flex:1 1 130px;min-width:0;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
@@ -198,6 +260,7 @@ function routingBoardBody({
   drivers = [],
   driverId = null,
   lockedToSelf = false,
+  progress = null,
 }) {
   const r = config.routing;
 
@@ -257,6 +320,8 @@ function routingBoardBody({
     the bags go to, and when the driver should be at each door. Nothing here
     changes anything - it is a picture, not a button.
   </p>
+
+  ${progress && progress.total ? whereTheyAre(progress) : ''}
 
   ${
     // WITHOUT A DRIVER THIS IS NOT A ROUTE ANYBODY DRIVES. Everybody's stops
