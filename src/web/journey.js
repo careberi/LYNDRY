@@ -30,7 +30,7 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '13 August 2026';  // written
+const REVIEWED = '13 August 2026';  // bag legs, the dead zone, and two-scale pricing
 
 // A step in one of the three legs. `who` is who physically does it, which is
 // the thing a reader most often wants and the thing prose is worst at keeping
@@ -192,6 +192,7 @@ function journeyBody() {
       <a href="#choose">Choosing a laundromat</a>
       <a href="#shop">At the laundromat</a>
       <a href="#back">Back to the door</a>
+      <a href="#identity">Whose laundry is whose</a>
       <a href="#texts">What the customer hears</a>
       <a href="#rules">The rules underneath</a>
     </nav>
@@ -230,11 +231,14 @@ function journeyBody() {
       ${step('In the van', 'Driver',
         `Tapped once all of them are actually loaded. The customer gets a text.`)}
 
-      ${step('The price is set', 'Automatic',
+      ${step('A price is worked out, but it is not final yet', 'Automatic',
         `The bag weights are added up, multiplied by the rate stored on that order -
          never today's rate, so changing the price never re-prices work already
-         quoted - and floored at the ${esc(minimum)} minimum. The customer is texted
-         the price straight away. <strong>No money moves yet.</strong>`)}
+         quoted - and floored at the ${esc(minimum)} minimum.
+         <strong>Nothing is texted and nothing is charged here.</strong> The
+         laundromat weighs the same laundry when they take it in, and if their
+         figure is higher that is what gets billed - so quoting ours now would be
+         promising a price we might not honour.`)}
     </ol>
 
     <div class="jn-note jn-stop">
@@ -347,20 +351,36 @@ function journeyBody() {
     </div>
 
     <div class="jn-note">
-      <h3>Our scale bills. Theirs is a cross-check.</h3>
+      <h3>Two scales decide the price. A person decides when they disagree.</h3>
       <p>
-        The laundromat's figure is <strong>never read by the pricing code</strong>.
-        Wiring their number into the price would remove the control that having our
-        own driver on the scale exists to provide.
+        Our driver weighs it at the door and the laundromat weighs it when they
+        take it in. Once both are in:
       </p>
       <p>
-        Their bag weights are added up and compared against ours only once
-        <em>every</em> bag has been weighed - comparing a half-weighed order against
-        a full one would flag every laundromat as light. Past the tolerance an issue
-        is raised for a person. The tolerance is the larger of ${esc(toleranceLb)} and
-        ${esc(tolerancePct)} of the bag: a flat ${esc(toleranceLb)} is far too tight
-        on a 60 lb load, and a flat ${esc(tolerancePct)} is far too loose on a 10 lb
-        one.
+        <strong>Within the tolerance</strong> - the customer is billed on the
+        <strong>higher of the two</strong>, the card is charged, and they are
+        texted the total. That one message is the first and only thing they are
+        told about the price.
+      </p>
+      <p>
+        <strong>Past the tolerance</strong> - everything stops. No charge, no
+        text, and it goes on the issues screen until somebody settles it by hand.
+        A customer told a figure we are still arguing about internally has been
+        told the wrong thing, and taking the money first turns a decision into a
+        refund.
+      </p>
+      <p>
+        The tolerance is the larger of ${esc(toleranceLb)} and ${esc(tolerancePct)}
+        of the load: a flat ${esc(toleranceLb)} is far too tight on a 60 lb load,
+        and a flat ${esc(tolerancePct)} far too loose on a 10 lb one. It is also
+        what makes reading a partner's number into a bill safe at all - a
+        laundromat can move a price by less than the tolerance on their own, and
+        by nothing whatever past it.
+      </p>
+      <p>
+        <strong>If they never enter a weight, ours settles it at delivery.</strong>
+        Entering it is voluntary, and an order that waited for ever would be
+        delivered and never billed.
       </p>
     </div>`)}
 
@@ -388,10 +408,15 @@ function journeyBody() {
          were.`)}
 
       ${step('Delivered', 'Automatic',
-        `The card is charged, once. The customer is texted a link on our own domain
-         to the photo. Every sticker on the order is retired at this point, so one
-         pulled out of a bin later opens nothing - though the order page still shows
-         which codes were on which bag.`)}
+        `The customer is texted a link on our own domain to the photo. Every sticker
+         on the order is retired at this point, so one pulled out of a bin later
+         opens nothing - though the order page still shows which codes were on which
+         bag.
+         <strong>The card is charged here only if it was not already.</strong> Most
+         orders are paid for the moment the two scales agree; this is the backstop
+         for the ones where the laundromat never entered a weight. A held or
+         declined order is still delivered - money is our problem, not a reason to
+         stand on somebody's step holding their clothes.`)}
     </ol>
 
     <div class="jn-note jn-stop">
@@ -412,6 +437,97 @@ function journeyBody() {
       </p>
     </div>`)}
 
+  <section class="jn-section" id="identity">
+    <p class="eyebrow" style="margin:0 0 8px;">The hard part</p>
+    <h2 style="font-size:32px;line-height:1.05;margin:0 0 14px;">Keeping track of whose laundry is whose</h2>
+    <p class="jn-lead" style="margin-bottom:18px;">
+      Two problems sit underneath this whole process, and both come from the same
+      fact: <strong>a customer's laundry arrives in whatever they own</strong> - a
+      trash bag, an IKEA tote, a duffel - and that bag is emptied and thrown away
+      at the laundromat. "Bring any bag" is the promise, and this is what it costs
+      to keep it.
+    </p>
+
+    <div class="jn-split">
+      <div class="jn-cannot">
+        <h3>1. Bags in is not bags out</h3>
+        <p>
+          The laundromat washes the <em>contents</em> and packs them into their own
+          bags. Two bags in can come back as one. One can come back as three. Neither
+          number predicts the other, and nobody knows the second one until the work
+          is finished.
+        </p>
+      </div>
+      <div class="jn-cannot">
+        <h3>2. The dead zone</h3>
+        <p>
+          Every code we have is on an intake bag. The moment those bags are emptied
+          and binned, the clothes are in a machine with nothing on them that says
+          which order they are. That gap runs from intake to folding.
+        </p>
+      </div>
+    </div>
+
+    <div class="jn-note" style="margin-top:22px;">
+      <h3>What answers the first one: the order, and the weight</h3>
+      <p>
+        <strong>The order number is the identity; bags are just containers.</strong>
+        So the two legs are counted separately and never against each other. The
+        bags collected are one set, the bags returned are another, and the system
+        never assumes they match - a returning bag is not a spare pickup bag, and
+        the check at the door asks only about the bags actually going to that door.
+      </p>
+      <p>
+        <strong>What proves nothing was lost is the weight, not the count.</strong>
+        25 lb collected and 25 lb returned means it is all there, whether it came
+        back in one bag or in four. The two totals are compared under the one order
+        number, using the same tolerance as the scales, and a gap raises an issue.
+        It never re-prices anything - the customer was billed on a settled figure
+        and a discrepancy is a question for a person.
+      </p>
+    </div>
+
+    <div class="jn-note" style="margin-top:18px;">
+      <h3>What answers the second one: a sticker on their ticket</h3>
+      <p>
+        <strong>A laundromat already keeps jobs apart</strong> - through washer,
+        dryer and folding table. They have to; it is the whole trade. We are not
+        introducing that discipline and we should not try to replace it.
+      </p>
+      <p>
+        So the answer is one more sticker, carrying the same order, that never goes
+        on a bag at all: <strong>it goes on the laundromat's own ticket</strong>,
+        which already follows the load. It outlives every intake bag, and it stays
+        scannable for the whole job - which matters, because that QR is how they
+        give us a weight and how they tell us the load is ready.
+      </p>
+      <p>
+        Nothing physical of ours has to come back. Two other answers were tried on
+        paper and dropped: a numbered plastic tag we lend out (our stock, in
+        somebody else's building, relying on it being returned) and a sticker on the
+        cart (a cart gets emptied into a dryer, and the tag is then on the wrong
+        object).
+      </p>
+      <p style="border-top:2px solid var(--ink-900);padding-top:14px;">
+        <strong>Not built yet.</strong> The legs, the independent counts and the
+        weight reconciliation above are all live. The load sticker is the agreed
+        answer and is still a decision rather than a feature - until it exists, the
+        driver identifies the finished work at the counter and labels it there.
+      </p>
+    </div>
+
+    <div class="jn-note" style="margin-top:18px;">
+      <h3>It is a blind drop-off</h3>
+      <p>
+        Whatever we hand a laundromat carries the code and the order number and
+        <strong>nothing else</strong>. No name, no street, no phone. The page behind
+        the QR works the same way - five structured wash fields, which bag, and a
+        countdown. Free text never crosses, however laundry-ish it looks, because a
+        real saved note reads "deliver to 16-51 Chandler Dr".
+      </p>
+    </div>
+  </section>
+
   <section class="jn-section" id="texts">
     <p class="eyebrow" style="margin:0 0 8px;">The thread</p>
     <h2 style="font-size:32px;line-height:1.05;margin:0 0 14px;">What the customer hears, and when</h2>
@@ -426,7 +542,8 @@ function journeyBody() {
         </thead>
         <tbody>
           <tr><td>In the van</td><td class="c jn-yes">Yes</td><td>We have collected it</td></tr>
-          <tr><td>Weighed</td><td class="c jn-yes">Yes</td><td>The weight, and what it will cost</td></tr>
+          <tr><td>Weighed at the door</td><td class="c jn-no">No</td><td>&mdash; the figure can still move</td></tr>
+          <tr><td>Price settled</td><td class="c jn-yes">Yes</td><td>The weight, the total, and that the card has been charged</td></tr>
           <tr><td>At the laundromat</td><td class="c jn-no">No</td><td>&mdash;</td></tr>
           <tr><td>Finished washing</td><td class="c jn-no">No</td><td>&mdash;</td></tr>
           <tr><td>Out for delivery</td><td class="c jn-yes">Yes</td><td>It is on the van, coming back</td></tr>
