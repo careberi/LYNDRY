@@ -51,6 +51,10 @@ async function recordInbound({ providerMessageId, text, from }, customerId) {
 // status texts and these replies are recorded identically.
 const reply = require('../core/notify').sendAndLog;
 
+// The same normaliser the send path uses, so "did we just say this?" compares
+// the words that actually went out rather than the ones we composed.
+const { toPlainText } = require('../core/notify');
+
 // Writes the carrier's verdict onto the message we sent.
 //
 // A failure here is the single most useful line in the logs when someone says
@@ -276,6 +280,31 @@ async function answerWithBrain(customer, text, from) {
       // true, so that is what gets sent if deciding the next step fails.
       console.error('Follow-up decision failed:', err.message);
     }
+  }
+
+  // SAYING THE SAME THING TWICE MEANS WE ARE STUCK.
+  //
+  // A customer answered "what?", "I don't understand" and "i am confused" and
+  // got the identical sentence back four times. Whatever the cause, a reply
+  // that repeats the last one word for word is never the right answer: either
+  // the customer did not understand it, or we did not understand them.
+  //
+  // So the repeat is treated as what it is - a conversation the AI cannot
+  // move - and handed to a person, which is the whole point of having a
+  // handoff. Checked on the words actually sent, after normalising, so a
+  // stray space does not defeat it.
+  const lastFromUs = [...(recentMessages || [])].reverse().find((m) => m.direction === 'OUTBOUND');
+  const same = (a, b) => toPlainText(String(a || '')).trim() === toPlainText(String(b || '')).trim();
+
+  if (lastFromUs && same(lastFromUs.body, message)) {
+    console.warn(`LOOP    ${from}: about to repeat the last reply. Handing over.`);
+
+    message = await actions.run(
+      'handoff_to_human',
+      { reason: 'The AI repeated itself and could not move the conversation on.' },
+      customer,
+      { ...helpers, customerSaid: text }
+    );
   }
 
   await reply(from, message, customer.id);

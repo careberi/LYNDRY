@@ -116,6 +116,14 @@ async function getOrderStatus(customer) {
       return `Got your laundry in the locker, it's on the next collection.`;
     case 'IN_PROCESS':
       return `Got it, it's being washed now. Back with you within ${site.turnaround}.`;
+    // AT_PARTNER and READY were missing entirely, so both fell through to
+    // "let me check on that" - useless, and it invited the AI to explain
+    // itself, which is how a customer got told their laundry was at a partner.
+    // Neither answer mentions where the work happens, because that is ours.
+    case 'AT_PARTNER':
+      return `It's being washed and folded now. Back with you within ${site.turnaround}.`;
+    case 'READY':
+      return `All washed and folded. It goes out for delivery next.`;
     case 'OUT_FOR_DELIVERY':
       return `Washed, folded and out for delivery today.`;
     case 'DELIVERED': {
