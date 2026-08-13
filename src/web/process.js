@@ -131,11 +131,19 @@ function processBody() {
   );
 
   // Whether the money side is actually switched on right now, and which mode.
-  const stripeState = !payments.isConfigured
-    ? { tone: 'pr-pill-wait', label: 'Off', note: 'No Stripe key is set here, so nothing is charged and no card can be saved.' }
-    : config.stripeSecretKey && config.stripeSecretKey.startsWith('sk_live_')
-      ? { tone: 'pr-pill-live', label: 'Live', note: 'Real cards, real money.' }
-      : { tone: 'pr-pill-test', label: 'Test mode', note: 'Cards are Stripe test cards. No real money moves.' };
+  //
+  // Asks the payments provider rather than re-deriving it from a key prefix.
+  // The first version read config.stripeSecretKey, which does not exist - it is
+  // config.stripe.secretKey - so it silently answered "test mode" no matter
+  // what was in Railway. On a page whose entire job is to be true about the
+  // system, a wrong badge about whether real money is moving is the worst
+  // possible bug, and re-deriving a fact the program already knows is what
+  // caused it.
+  const stripeState = {
+    off: { tone: 'pr-pill-wait', label: 'Off', note: 'No Stripe key is set here, so nothing is charged and no card can be saved.' },
+    test: { tone: 'pr-pill-test', label: 'Test mode', note: 'Cards are Stripe test cards. No real money moves.' },
+    live: { tone: 'pr-pill-live', label: 'Live', note: 'Real cards, real money.' },
+  }[payments.mode];
 
   return `
 <style>
