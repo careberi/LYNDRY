@@ -587,16 +587,25 @@ async function handoffToHuman(customer, input, helpers = {}) {
 
   const about = order ? ` about order #${order.order_number}` : '';
 
-  // Already flagged. Saying the identical sentence again is what made three
-  // angry messages get three identical replies in testing.
+  // SOMEBODY WITH A PROBLEM IS NOT A DUPLICATE.
+  //
+  // The first version of this said "You're already with a manager and they've
+  // got everything you've sent", which reads as "stop asking". A customer
+  // chasing something that went wrong is not being a nuisance; they are
+  // waiting, and often worried. So the follow-up acknowledges the wait and
+  // confirms the new message was added, rather than restating a queue
+  // position.
   if (!isNew) {
     return (
-      `You're already with a manager${about} and they've got everything you've ` +
-      `sent. They'll be in touch as soon as they can.`
+      `I've passed that straight on as well${about}, so they have everything. ` +
+      `Sorry you're waiting on this, and thank you for bearing with us.`
     );
   }
 
-  return `Let me get a manager on this${about}. They'll reach out to you shortly.`;
+  return (
+    `I'm sorry about this. I've passed it to a manager${about} with everything ` +
+    `you've told me, and they'll come back to you shortly.`
+  );
 }
 
 // ---------------------------------------------------------------------------

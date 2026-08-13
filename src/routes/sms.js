@@ -188,17 +188,20 @@ async function handleInbound(inbound) {
 async function answerWithBrain(customer, text, from) {
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
-  const [order, recentMessages, recentOrders] = await Promise.all([
+  const [order, recentMessages, recentOrders, openIssue] = await Promise.all([
     orders.findLatestInFlight(customer.id),
     recentConversation(customer.id),
     // Their own order numbers, so a complaint can be tied to the right one and
     // the AI can name it rather than asking blind.
     recentOrdersFor(customer.id),
+    // Anything already with a manager, so somebody chasing a problem gets an
+    // answer rather than their place in a queue read back to them.
+    openIssueFor(customer.id),
   ]);
 
   let decision;
   try {
-    decision = await brain.decide({ customer, order, recentMessages, recentOrders, message: text });
+    decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text });
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.
     console.error('Claude call failed:', err.message);
@@ -308,6 +311,23 @@ async function answerWithBrain(customer, text, from) {
   }
 
   await reply(from, message, customer.id);
+}
+
+// Whatever is already with a manager for this customer, or null.
+async function openIssueFor(customerId) {
+  const { data, error } = await db
+    .from('issues')
+    .select('reason, created_at, order_id')
+    .eq('customer_id', customerId)
+    .eq('status', 'OPEN')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Could not read the open issue:', error.message);
+    return null;
+  }
+
+  return data;
 }
 
 // The order numbers a customer might refer to. Enough to answer "which one

@@ -414,7 +414,9 @@ If the customer is upset, something is damaged or missing, they ask for a person
 Before you hand over, work out whether it is about a specific order. A stain, a missing item, a late or absent delivery, a wrong charge: all about an order. "Do you reach Hoboken" is not.
 If it IS about an order and you do not already know which, ask for the order number first, in one short question, naming what you can see: "Sorry about that. Which order number is it? Your last one was #1042." Their orders are listed below, so if they only have one, use it and do not ask at all.
 Then call handoff_to_human with the reason and the order number. Our code checks the order really is theirs, records it so it cannot be forgotten, and texts a manager.
-Once you have handed over, STOP. If they text again about the same thing, do not hand over a second time and do not repeat yourself word for word: say it is already with a manager and that they will hear back. Three identical "someone will come back to you shortly" replies to three angry messages is exactly what not to do.
+ONCE AN ISSUE IS OPEN, TREAT EVERY MESSAGE WITH CARE. Somebody chasing something that went wrong is not a nuisance and is not a duplicate; they are waiting, often worried, and possibly out of pocket. Never brush them off with a queue position. "You're already with a manager" is exactly the sentence not to send.
+If they ask something NEW while an issue is open, answer THAT. "Can you rush it?" deserves a real answer about the order, not a repeat of the handoff. Only hand over again if it is genuinely a second, different problem.
+If there is nothing new to say, be human about the wait: acknowledge it, say their message has been passed on too, and thank them for bearing with us. Do not say the same sentence twice. Three identical "someone will come back to you shortly" replies to three angry messages is exactly what not to do.
 
 HOW TO WRITE
 You are texting this person directly. Say "you" and "your". NEVER say "they", "them", "their", "the customer" or "this customer". The notes below are written in the third person because they are notes to you, and echoing that voice back is the single most obvious way to sound like a machine. "They've got a pickup booked" is wrong. "You've got a pickup booked" is right.
@@ -451,7 +453,7 @@ One exclamation mark in a message is plenty. Friendly, not breathless. Never say
 // What Claude gets to see about this customer
 // ---------------------------------------------------------------------------
 
-function customerContext(customer, order, recentMessages, recentOrders) {
+function customerContext(customer, order, recentMessages, recentOrders, openIssue) {
   const prefs = customer.preferences || {};
 
   const address = [
@@ -478,6 +480,12 @@ function customerContext(customer, order, recentMessages, recentOrders) {
     prefs.default_pickup_method
       ? `Usual pickup: ${prefs.default_pickup_method === 'HAND_TO_DRIVER' ? 'hands it to the driver' : 'leaves the bag outside'}`
       : 'Usual pickup: not chosen yet; ask where the driver should find the bag.',
+    openIssue
+      ? `OPEN ISSUE with a manager since ${String(openIssue.created_at).slice(0, 16).replace('T', ' ')}: ` +
+        `"${openIssue.reason}". They are WAITING on a person. Be gentle, answer what they ` +
+        `actually ask, and never tell them again that it is with a manager as if that ` +
+        `settles it.`
+      : 'No open issue.',
     recurring.isScheduled(customer)
       ? `Repeating pickup: ${recurring.describe(customer)}, next on ${recurring.nextDate(customer)}` +
         (customer.recurring_paused_until ? ` (paused until ${customer.recurring_paused_until})` : '')
@@ -566,7 +574,7 @@ function customerContext(customer, order, recentMessages, recentOrders) {
 // exists because one message can carry two jobs — "good to go" at a recap
 // both saves a correction and books the pickup — and a single action per
 // message meant the model picked one and silently dropped the other.
-async function decide({ customer, order, recentMessages, recentOrders, message, followUp }) {
+async function decide({ customer, order, recentMessages, recentOrders, openIssue, message, followUp }) {
   // New Jersey's date, not the server's. After 8pm ET the two disagree, and
   // telling Claude it is already tomorrow makes "pickup today" impossible.
   const now = booking.nowInService();
@@ -581,7 +589,7 @@ async function decide({ customer, order, recentMessages, recentOrders, message, 
     output_config: { effort: 'low' },
 
     system:
-      `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages, recentOrders)}` +
+      `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
       (followUp
         ? `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
           `The reply queued to send them is: "${followUp.reply}"\n` +
