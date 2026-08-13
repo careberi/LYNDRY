@@ -220,6 +220,52 @@ async function openLocker(customer) {
   return `Locker unlocking isn't switched on yet. Email ${site.email} and we'll sort it out.`;
 }
 
+// --- What may still be changed, and when ------------------------------------
+//
+// Once a bag is in our hands, some things are settled and some are not:
+//
+//   ADDRESS        locked. A bag already on the van does not get redirected to
+//                  a different building, and "send it somewhere else" on an
+//                  order in flight is also the shape most delivery fraud takes.
+//   WASH SETTINGS  locked. It may already be washed. Promising warm water to
+//                  somebody whose clothes went through cold an hour ago is a
+//                  promise we cannot keep.
+//   WHERE TO LEAVE IT   open right up until delivery. "Actually put it in the
+//                  garage" is the same address and the same driver, so there
+//                  is no reason to refuse it.
+//
+// Enforced here rather than in the prompt, because a model asked nicely is not
+// a control. The prompt explains the rules so the AI does not promise
+// something this will then refuse.
+
+const ADDRESS_FIELDS = ['address_line1', 'address_line2', 'city', 'state', 'postal_code'];
+const WASH_FIELDS = ['water_temp', 'detergent', 'fabric_softener'];
+
+// Returns a sentence if this change is not allowed right now, or null.
+async function lockedWhileWithUs(customer, fields) {
+  const wantsAddress = fields.some((f) => ADDRESS_FIELDS.includes(f));
+  const wantsWash = fields.some((f) => WASH_FIELDS.includes(f));
+
+  if (!wantsAddress && !wantsWash) return null;
+
+  const held = await orders.findInOurHands(customer.id);
+  if (!held) return null;
+
+  if (wantsAddress) {
+    return (
+      `We've already got order #${held.order_number}, so I can't change the address it ` +
+      `goes back to. It'll come back to ${customer.address_line1}. I can change where ` +
+      `at the property we leave it, though, so tell me if you'd like that somewhere else.`
+    );
+  }
+
+  return (
+    `Order #${held.order_number} is already with us and may well be washed by now, so ` +
+    `I can't change how it's done this time. I've kept your usual settings and I'll ` +
+    `apply any change from your next pickup, just say the word.`
+  );
+}
+
 // --- update_profile ---------------------------------------------------------
 
 // Columns on the customer row, versus keys inside the preferences JSON.
@@ -237,6 +283,9 @@ async function updateProfile(customer, input) {
   const value = String(input.value || '').trim();
 
   if (!value) return `What would you like me to change it to?`;
+
+  const locked = await lockedWhileWithUs(customer, [field]);
+  if (locked) return locked;
 
   if (PROFILE_COLUMNS.includes(field)) {
     const stored = field === 'state' ? value.toUpperCase() : value;
@@ -273,6 +322,17 @@ const DEFAULT_STATE = 'NJ';
 
 async function saveDetails(customer, input) {
   const clean = (value, max) => String(value || '').trim().slice(0, max);
+
+  // The same locks as update_profile. This tool can set an address and a wash
+  // in one call, so it has to obey them too, or the rule would depend on which
+  // tool the model happened to reach for.
+  const attempted = [
+    ...ADDRESS_FIELDS.filter((f) => clean(input[f], 200)),
+    ...WASH_FIELDS.filter((f) => input[f]),
+  ];
+
+  const locked = await lockedWhileWithUs(customer, attempted);
+  if (locked) return locked;
 
   const changes = {};
   if (clean(input.name, 80)) changes.name = clean(input.name, 80);
@@ -359,7 +419,18 @@ async function saveDetails(customer, input) {
   // Address done. If they have not said WHEN yet, that comes before anything
   // about detergent: it is what they came here for, and it is what tells them
   // we can actually do it.
+  //
+  // Unless they already have laundry with us or a pickup booked, in which case
+  // asking "when would you like it picked up?" is nonsense - a real customer
+  // updating where to leave an order that was already at the laundromat got
+  // exactly that.
   if (!input.pickup_date) {
+    const busy =
+      (await orders.findInOurHands(customer.id)) ||
+      (await orders.findAwaitingCollection(customer.id));
+
+    if (busy) return `Done, that's updated on order #${busy.order_number}.`;
+
     return `Thanks ${first}! When would you like it picked up?`;
   }
 

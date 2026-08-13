@@ -109,6 +109,26 @@ async function findLatestInFlight(customerId) {
   return data;
 }
 
+// The order whose laundry we are physically holding right now, or null.
+//
+// Different from findLatestInFlight, which also counts a booking nobody has
+// collected yet. This is the one that decides what a customer may still
+// change: once we have the bag, the address it goes back to and the way it
+// gets washed are settled.
+async function findInOurHands(customerId) {
+  const { data, error } = await db
+    .from('orders')
+    .select('*')
+    .eq('customer_id', customerId)
+    .in('status', IN_OUR_HANDS)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 async function findMostRecent(customerId) {
   const { data, error } = await db
     .from('orders')
@@ -250,6 +270,7 @@ module.exports = {
   isCancellable,
   findAwaitingCollection,
   findLatestInFlight,
+  findInOurHands,
   findMostRecent,
   create,
   transition,
