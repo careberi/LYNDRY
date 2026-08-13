@@ -127,6 +127,12 @@ const config = Object.freeze({
     // "is today already full".
     workingDayMinutes: Number(process.env.ROUTING_DAY_MINUTES || 480),
 
+    // WHAT THE CARD PROCESSOR TAKES. Stripe's standard US card rate. It is a
+    // real cost per order and belongs in any margin figure - on a $50 order it
+    // is $1.75, which is not nothing when the whole margin is $8.
+    cardFeePercent: Number(process.env.CARD_FEE_PERCENT || 2.9),
+    cardFeeFixedCents: Number(process.env.CARD_FEE_FIXED_CENTS || 30),
+
     // How many numbered clips are in a van. They are physical stock: the
     // system hands out the free ones and takes them back when a bag is dropped
     // at the laundromat, so this is how many exist, not how many to invent.

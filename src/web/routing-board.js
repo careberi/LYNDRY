@@ -425,6 +425,40 @@ function routingBoardBody({
   </div>
 
   ${
+    // THE MARGIN, SHOWING ITS WORKING.
+    //
+    // A single number invites being read as profit. It is not: it is what the
+    // day leaves after the wash, the van, the wage and the card fees, and there
+    // is a real list of things it does not cover. Spelling that out costs a few
+    // lines and stops a figure being trusted further than it deserves.
+    showMoney && board.money.marginCents != null
+      ? `<div class="card card-xl" style="padding:22px;margin-bottom:26px;">
+           <p class="eyebrow" style="margin:0 0 12px;">What the day leaves</p>
+
+           <div style="display:flex;flex-wrap:wrap;gap:10px 26px;font-size:15px;line-height:1.6;">
+             <span><strong>${escapeHtml(money(board.money.revenueCents))}</strong> billed
+               <span style="color:var(--ink-500);">(${board.money.poundsWashed.toFixed(0)} lb)</span></span>
+             <span style="color:var(--ink-500);">
+               &minus; ${escapeHtml(money(board.money.wholesaleCents))} wash
+               &minus; ${escapeHtml(money(board.money.labourCents))} wage
+               &minus; ${escapeHtml(money(board.money.vehicleCents))} van
+               &minus; ${escapeHtml(money(board.money.cardFeeCents))} card fees
+             </span>
+             <span>= <strong>${escapeHtml(money(board.money.marginCents))}</strong></span>
+           </div>
+
+           <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:12px 0 0;">
+             The wage counts <strong>every paid minute</strong>, on the road and on the
+             ground. Bags not yet weighed are billed at what that customer's laundry
+             usually weighs.
+             <strong>This is not profit</strong> - insurance, the phone, the software
+             and your own time are not in it.
+           </p>
+         </div>`
+      : ''
+  }
+
+  ${
     // THE VAN PHYSICALLY WILL NOT HOLD IT. Shown, never silently trimmed - what
     // comes off the van is the driver's call, not the router's.
     board.load && board.load.overloaded

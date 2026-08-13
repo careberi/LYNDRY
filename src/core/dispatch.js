@@ -704,19 +704,59 @@ async function board(dateIso, fromTime, driverId = null) {
   const serviceMin = stops.reduce((t, s) => t + serviceMinutes(s.kind), 0);
   const driveMin = minutesFor(walk.miles);
 
-  // What the day is worth, against what it costs to drive. Only bags with a
-  // real weight count - an unweighed pickup has no price yet and guessing one
-  // would put an invented number next to real ones.
-  const billable = [...(inHand || [])].filter((o) => o.weight_lb != null);
-  const revenueCents = billable.reduce((t, o) => t + estimatedBill(o.weight_lb), 0);
+  // WHAT THE DAY IS ACTUALLY WORTH.
+  //
+  // This was a gross figure dressed up as a margin, and it was wrong in two
+  // directions at once.
+  //
+  //   LABOUR was only counted while the van was MOVING. The wage is inside
+  //   perMile(), so time on the ground - four minutes a door, ten at a
+  //   laundromat - was free. On a nine-stop afternoon that is 42 paid minutes
+  //   and $14 of a $22 "margin".
+  //
+  //   REVENUE counted only bags already on a scale, while the driving cost
+  //   covered the whole route including every pickup still to be made. A day of
+  //   mostly-collections looked like all cost and no income.
+  //
+  // So: every paid minute counts, and a pickup contributes what it is expected
+  // to bill using the same weight estimate the router already uses for
+  // capacity. Card fees are in too - 2.9% and 30c is real money on a $50 order.
+  //
+  // IT IS STILL A CONTRIBUTION MARGIN, NOT PROFIT. Insurance, the phone, the
+  // software, and Neil's own time are not in it, and the page says so.
+  const r2 = R();
+
+  // Bags with a real weight bill their real weight; a pickup not yet collected
+  // bills what this customer's laundry usually weighs.
+  const weighed = (inHand || []).filter((o) => o.weight_lb != null);
+  const expected = (pickups || []).map((o) => assumedPounds(o.customers));
+
+  const revenueCents =
+    weighed.reduce((t, o) => t + estimatedBill(o.weight_lb), 0) +
+    expected.reduce((t, lb) => t + estimatedBill(lb), 0);
+
+  const poundsWashed =
+    weighed.reduce((t, o) => t + Number(o.weight_lb), 0) +
+    expected.reduce((t, lb) => t + lb, 0);
+
   const wholesaleCents =
     choice.chosen && choice.chosen.wholesale_per_lb_cents != null
-      ? Math.round(
-          billable.reduce((t, o) => t + Number(o.weight_lb), 0) *
-            choice.chosen.wholesale_per_lb_cents
-        )
+      ? Math.round(poundsWashed * choice.chosen.wholesale_per_lb_cents)
       : null;
-  const drivingCents = Math.round(walk.miles * perMile() * 100);
+
+  // Fuel and wear only - the wage comes out separately below, so that a minute
+  // parked at a door costs the same as a minute driving, which it does.
+  const perMileVehicle = r2.gasPerGallon / r2.milesPerGallon + r2.wearPerMile;
+  const vehicleCents = Math.round(walk.miles * perMileVehicle * 100);
+
+  // EVERY paid minute, not just the moving ones.
+  const labourCents = Math.round(((driveMin + serviceMin) / 60) * r2.wagePerHour * 100);
+
+  // One charge per order that will actually be billed.
+  const charges = weighed.length + expected.length;
+  const cardFeeCents = Math.round(
+    (revenueCents * r2.cardFeePercent) / 100 + charges * r2.cardFeeFixedCents
+  );
 
   return {
     date,
@@ -753,9 +793,19 @@ async function board(dateIso, fromTime, driverId = null) {
     money: {
       revenueCents,
       wholesaleCents,
-      drivingCents,
-      // Null rather than a number when we do not know what the wash costs.
-      marginCents: wholesaleCents == null ? null : revenueCents - wholesaleCents - drivingCents,
+      vehicleCents,
+      labourCents,
+      cardFeeCents,
+      poundsWashed,
+      // Everything except the wash, which we cannot price without an agreed
+      // rate. Kept separate so the page can show a partial figure honestly
+      // rather than a whole one that is wrong.
+      knownCostCents: vehicleCents + labourCents + cardFeeCents,
+      // Null rather than a number when the wash cannot be priced.
+      marginCents:
+        wholesaleCents == null
+          ? null
+          : revenueCents - wholesaleCents - vehicleCents - labourCents - cardFeeCents,
     },
   };
 }

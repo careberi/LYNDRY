@@ -706,6 +706,19 @@ load-out pass sequences by scanning bags, and a pickup has no bag to scan, so
 pickups were in no run at all — a quote against a delivery-only run measures
 against half a day's work.
 
+**The margin on the routing board is a CONTRIBUTION MARGIN, not profit**, and
+the page says so. Revenue minus the wash, the van, the wage and the card fees.
+Insurance, the phone, the software and Neil's own time are not in it.
+
+Two things it used to get wrong, both in the flattering direction. **The wage
+was only counted while the van was moving** — it lives inside `perMile()`, so
+four minutes at a door and ten at a laundromat were free; on one nine-stop
+afternoon that was $14 of a $22 "margin". And **revenue counted only bags
+already on a scale** while the driving cost covered the whole route, so a day of
+mostly collections looked like all cost and no income. Now every paid minute
+counts, and a pickup contributes what it is expected to bill using the same
+weight estimate the router uses for capacity.
+
 **The cost model lives in `config.routing`**, env-overridable. A mile is about
 $1.17 and roughly 70% of that is the driver's wage, which is why every answer is
 in minutes first and miles second. Straight-line distance times a road factor —
