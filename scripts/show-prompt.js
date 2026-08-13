@@ -53,12 +53,12 @@ console.log(
       status: 'REQUESTED',
       pickup_date: '2026-08-13',
       pickup_time: '15:00',
-      pickup_window_start: '15:00',
-      pickup_window_end: '18:00',
+      pickup_window_start: '14:00',
+      pickup_window_end: '17:00',
     },
     [
       { direction: 'INBOUND', body: 'hey can you grab my laundry tomorrow' },
-      { direction: 'OUTBOUND', body: "Of course! We'll be there Thursday 13 Aug between 3 and 6pm." },
+      { direction: 'OUTBOUND', body: "Of course! We'll be there Thursday 13 Aug between 2 and 5pm." },
     ]
   )
 );

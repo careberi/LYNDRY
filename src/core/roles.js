@@ -32,6 +32,11 @@ const PERMISSIONS = Object.freeze({
   // Prices, payment status, what is owed, lifetime billed. Kept separate from
   // orders.view so a driver can do the round without seeing the books.
   'money.view': 'See prices and payment status',
+  // The change log on an order — who moved it, what a weight was corrected
+  // from, when a card was charged. It is the record of how the business
+  // handled somebody, and it carries money, so it is not the driver's to
+  // browse even though the driver is in it.
+  'orders.audit': 'Read the change log on an order',
 });
 
 const ROLES = Object.freeze({
@@ -45,9 +50,12 @@ const ROLES = Object.freeze({
   DRIVER: {
     label: 'Driver',
     description: "Today's work. No customer list, no money, no team.",
-    // A driver needs the stop in front of them and the buttons to complete it.
-    // They see a customer's address and phone on the order they are working —
-    // that is the job — but cannot browse everyone, and cannot see prices.
+    // A driver needs the stop in front of them and the buttons to complete it:
+    // where to go, when, how to get in, where the bag is, how many, and what it
+    // weighed. Not the customer's name, not their phone, not the thread, not
+    // the change log, not the money. The address is the one piece of somebody's
+    // personal detail a driver gets, because you cannot drive to a stop without
+    // it. Everything else is a file on a person, and a round does not need one.
     permissions: ['orders.view', 'orders.act'],
   },
 
@@ -64,6 +72,7 @@ const ROLES = Object.freeze({
       'issues.manage',
       'partners.view',
       'partners.manage',
+      'orders.audit',
     ],
   },
 });

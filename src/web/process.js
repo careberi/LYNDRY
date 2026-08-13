@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the next-day clock
+const REVIEWED = '13 August 2026';  // bumped with role-scoping and the wider pickup windows
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -68,7 +68,20 @@ function section(id, eyebrow, heading, lead, body) {
 </section>`;
 }
 
-function processBody() {
+function processBody(user) {
+  // WHAT SOMEBODY IS SHOWN DEPENDS ON WHAT THEY DO.
+  //
+  // A driver needs the round: what he does, where a bag can be, what the
+  // laundromat does. He does not need the books, the AI's internals, the
+  // vendor list or the permission matrix - and the point is that they are not
+  // rendered for him at all, rather than hidden with styling. A page that
+  // never contained a thing cannot leak it.
+  //
+  // Absent sections are absent from the contents list too, so nothing reads as
+  // missing.
+  const role = roles.roleOf(user);
+  const sees = (allowed) => !allowed || allowed.includes(role);
+
   const minimum = money(config.pricing.minimumCents);
   const perLb = site.pricePerLb;
   const minimumLb = config.pricing.minimumCents / config.pricing.perPoundCents;
@@ -229,23 +242,33 @@ function processBody() {
       are changing first.
     </p>
     <p style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);margin:0 0 22px;">
+      ${
+        role === 'ADMIN'
+          ? 'The whole system.'
+          : `The parts of this that are yours as ${esc(roles.labelFor(role).toLowerCase())}.`
+      }
       Prose last checked against the code on ${esc(REVIEWED)}. Every figure,
       table and status on this page is read live from the running system.
     </p>
     <nav class="pr-toc">
-      <a href="#what">What it is</a>
-      <a href="#customer">The customer</a>
-      <a href="#driver">The driver</a>
-      <a href="#partner">The laundromat</a>
-      <a href="#money">The money</a>
-      <a href="#states">The states</a>
-      <a href="#ai">The AI</a>
-      <a href="#tech">The technology</a>
-      <a href="#who">Who sees what</a>
+      ${[
+      { id: 'what', label: 'What it is', allowed: null },
+      { id: 'customer', label: 'The customer', allowed: null },
+      { id: 'driver', label: 'The driver', allowed: ['ADMIN', 'DRIVER'] },
+      { id: 'partner', label: 'The laundromat', allowed: ['ADMIN', 'DRIVER', 'SALES'] },
+      { id: 'money', label: 'The money', allowed: ['ADMIN', 'SALES'] },
+      { id: 'states', label: 'The states', allowed: ['ADMIN', 'DRIVER', 'SALES'] },
+      { id: 'ai', label: 'The AI', allowed: ['ADMIN', 'SALES'] },
+      { id: 'tech', label: 'The technology', allowed: ['ADMIN'] },
+      { id: 'who', label: 'Who sees what', allowed: ['ADMIN'] },
+      ]
+        .filter((t) => sees(t.allowed))
+        .map((t) => `<a href="#${t.id}">${esc(t.label)}</a>`)
+        .join('')}
     </nav>
   </header>
 
-  ${section(
+  ${sees(null) ? section(
     'what',
     'Start here',
     'What LYNDRY is',
@@ -281,9 +304,9 @@ function processBody() {
       <dt>Cancellation</dt><dd>Free until the driver collects. Not possible after.</dd>
       <dt>Who does the work</dt><dd>One driver. The washing may happen at a laundromat we pay, or by us.</dd>
     </dl>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(null) ? section(
     'customer',
     'Perspective one',
     'What the customer does',
@@ -337,9 +360,9 @@ function processBody() {
          and shows up on the Issues screen until somebody deals with it.`
       )}
     </ol>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN', 'DRIVER']) ? section(
     'driver',
     'Perspective two',
     'What the driver does',
@@ -411,17 +434,22 @@ function processBody() {
         `You already have the bag, chosen by the number on its tag. The scan
          either agrees or shouts <strong>WRONG BAG</strong>. That is the net
          that catches a mis-clipped tag before it becomes two customers holding
-         each other's laundry and a second trip out. A three-bag order will not
-         complete until all three have been scanned.`
+         each other's laundry and a second trip out.
+         <strong>Every bag on the order is scanned before anything else
+         happens</strong> - the screen lists them, ticks them off one at a time,
+         and shows no camera at all until the last one is in. A three-bag order
+         means three scans.`
       )}
       ${step(
         8,
-        'Photograph it on the doorstep',
+        'Then one photo on the doorstep',
         `<strong>No photo, no delivery.</strong> The button will not complete
-         without one. The photo is the answer to "you never delivered it" and
-         the reason somebody is willing to leave a bag outside at all. It goes
-         into private storage and the customer gets a link that expires after
-         30 days.`
+         without one. However many bags there were, it is a single picture -
+         it is a photo of where you left them, not of each bag, and the scans
+         are what proved which bags they are. The photo is the answer to "you
+         never delivered it" and the reason somebody is willing to leave a bag
+         outside at all. It goes into private storage and the customer gets a
+         link that expires after 30 days.`
       )}
     </ol>
     <div class="pr-note" style="margin-top:26px;">
@@ -450,9 +478,9 @@ function processBody() {
         that gets recorded as waived rather than quietly marked paid.
       </p>
     </div>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN', 'DRIVER', 'SALES']) ? section(
     'partner',
     'Perspective three',
     'What the laundromat does',
@@ -533,15 +561,28 @@ function processBody() {
         only. Weighing is what charges a customer's card, so our own driver
         belongs between that number and somebody's money.
       </p>
+      ${
+        // WHERE WE STAND WITH THEM COMMERCIALLY IS NOT A DRIVER'S BUSINESS.
+        // The handover is; what we pay a laundromat is not, and it is the one
+        // wholesale figure that would otherwise reach this page.
+        sees(['ADMIN', 'SALES'])
+          ? `
       <p>
         And <strong>no laundromat has signed.</strong> No terms are agreed, no
         wholesale rate is settled, and nothing on the website promises a revenue
         share or a per-pound rate, because none of it has been decided.
-      </p>
+      </p>`
+          : ''
+      }
       <p>
-        The ones we do work with are added by hand on the Partners screen -
+        ${
+          sees(['ADMIN', 'SALES'])
+            ? `The ones we do work with are added by hand on the Partners screen -
         name, address, hours, what they charge us, what they charge walk-ins,
-        and how much they can take in a day. Which laundromat had a bag is
+        and how much they can take in a day.`
+            : 'The ones we do work with are set up in advance.'
+        }
+        Which laundromat had a bag is
         recorded when the driver drops it off, and <strong>their weights are
         kept against them</strong>: one bag two pounds out is two scales, and
         the same partner heavy on forty bags in a row is something else.
@@ -550,9 +591,9 @@ function processBody() {
         not the same thing.
       </p>
     </div>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN', 'SALES']) ? section(
     'money',
     'The money',
     'One charge, at the scale',
@@ -605,9 +646,9 @@ function processBody() {
       Accepting a real card number anywhere in this codebase would put the
       business inside PCI DSS.
     </p>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN', 'DRIVER', 'SALES']) ? section(
     'states',
     'The machine',
     'Where a bag can be',
@@ -648,9 +689,9 @@ function processBody() {
       ${cancellableFrom.map((s) => `<code>${esc(s)}</code>`).join(', ')} -
       in plain terms, right up until the bag is in the van, and never after.
     </p>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN', 'SALES']) ? section(
     'ai',
     'The AI',
     'What Claude is actually allowed to do',
@@ -690,9 +731,9 @@ function processBody() {
         a link, and when to charge.
       </p>
     </div>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN']) ? section(
     'tech',
     'The technology',
     'Four vendors and a database',
@@ -739,9 +780,9 @@ function processBody() {
       rewriting the application. The same rule applies to Stripe and to the
       locks that are currently shelved.
     </p>`
-  )}
+  ) : ''}
 
-  ${section(
+  ${sees(['ADMIN']) ? section(
     'who',
     'Access',
     'Who sees what',
@@ -762,9 +803,9 @@ function processBody() {
       next click rather than in thirty days when their session lapses. Deleting
       them would lose the record of who did what.
     </p>`
-  )}
+  ) : ''}
 
-  <div class="pr-note" id="upkeep">
+  ${sees(['ADMIN']) ? `<div class="pr-note" id="upkeep">
     <h3>Keeping this page true</h3>
     <p>
       Everything numbered, tabled or named above is read from the running system
@@ -779,7 +820,7 @@ function processBody() {
       <code>src/web/process.js</code>. A process document that is wrong is worse
       than no process document, because people act on it.
     </p>
-  </div>
+  </div>` : ''}
 
 </div>`;
 }

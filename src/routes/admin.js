@@ -382,7 +382,7 @@ function table(headings, rows) {
 // rather than a spinner that lies.
 // ---------------------------------------------------------------------------
 
-function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true }, laundromats = [] }) {
+function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true, labels: [] }, laundromats = [] }) {
   const weighed = order.weight_lb != null;
 
   // Weighing is an event rather than a step, so it is offered the whole time
@@ -414,19 +414,47 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
   // gone and both customers need a second trip.
   const stepButton = (s) =>
     s.to === 'DELIVERED'
-      ? `
-      ${
+      ? // EVERY BAG SCANNED FIRST, THEN ONE PHOTO.
+        //
+        // While anything is unscanned the camera is not on the page at all -
+        // not disabled, absent. A driver who photographs the doorstep and then
+        // discovers he is holding the wrong bag has already done the step that
+        // says "delivered" in his head, and the scan becomes a formality he is
+        // motivated to get past.
+        //
+        // However many bags there are, there is exactly ONE photo: it is a
+        // picture of the drop-off, not of each bag.
         bagScan.total && !bagScan.allScanned
-          ? `
-      <div style="margin:0 0 20px;padding:20px;border:2px solid var(--ink-900);border-radius:14px;background:var(--sunbeam-500);">
+        ? `
+      <div style="padding:20px;border:2px solid var(--ink-900);border-radius:14px;background:var(--sunbeam-500);">
         <p style="margin:0 0 6px;font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.15;">
-          Scan the bags at the door
+          Scan ${bagScan.total === 1 ? 'the bag' : `all ${bagScan.total} bags`} first
         </p>
         <p style="margin:0 0 16px;font-size:15px;line-height:1.55;">
           ${bagScan.scanned} of ${bagScan.total} done. Grab the bag with the right
-          number on its tag and scan it - this checks you have the right one before
-          you put it down.
+          number on its tag and scan it - this checks you have the right one
+          before you put it down. The camera opens once they are all in.
         </p>
+
+        <div style="margin:0 0 18px;">
+          ${(bagScan.labels || [])
+            .map(
+              (l) => `
+          <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(16,18,16,0.15);">
+            <span style="flex:none;width:22px;height:22px;border:2px solid var(--ink-900);border-radius:6px;
+                         background:${l.delivered_at ? 'var(--suds-500)' : 'var(--paper-050)'};
+                         display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;">
+              ${l.delivered_at ? '&check;' : ''}
+            </span>
+            <span style="font-family:var(--font-mono);font-size:16px;font-weight:700;letter-spacing:0.06em;">
+              ${escapeHtml(l.code)}
+            </span>
+            <span style="font-size:14px;">Bag ${l.position} of ${bagScan.total}</span>
+          </div>`
+            )
+            .join('')}
+        </div>
+
         ${scanField({
           action: `/ops/orders/${order.order_number}/door-scan`,
           label: 'Bag in your hand',
@@ -435,24 +463,27 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
           hint: describeCodeFormat(),
         })}
       </div>`
-          : ''
-      }
+        : `
       <form method="post" action="/ops/orders/${order.order_number}/delivered"
             enctype="multipart/form-data" style="margin:0;display:flex;flex-direction:column;gap:10px;">
+        ${
+          bagScan.total
+            ? `<p style="margin:0 0 6px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
+                         background:var(--suds-300);font-size:15px;font-weight:600;">
+                 All ${bagScan.total} bag${bagScan.total === 1 ? '' : 's'} scanned. Take the photo.
+               </p>`
+            : ''
+        }
         <label class="field-label" for="photo">Photo at the door &mdash; required</label>
         <!-- The required attribute stops the tap before it costs a round
              trip. The real enforcement is in src/core/fulfilment.js, because
              the JSON API reaches the same code and a form attribute guards
              neither of them. -->
         <input class="input" type="file" id="photo" name="photo" accept="image/*" capture="environment" required>
-        <button type="submit" class="btn btn-primary btn-lg btn-full"
-                ${bagScan.total && !bagScan.allScanned ? 'disabled' : ''}>${s.label}</button>
+        <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
         <span class="field-hint">
-          ${
-            bagScan.total && !bagScan.allScanned
-              ? 'Every bag has to be scanned before this opens.'
-              : 'This is the proof of delivery. The customer gets a link to it that expires after 30 days.'
-          }
+          One photo of where you left it, however many bags there were. The
+          customer gets a link to it that expires after 30 days.
         </span>
       </form>`
       : `
@@ -897,12 +928,21 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       return `<span class="badge" style="background:${tone};color:${ink};white-space:nowrap;">${escapeHtml(t.text)}</span>`;
     };
 
+    const showNames = roles.can(req.opsUser, 'customers.view');
+
     const row = (o) => {
       const c = o.customers || {};
       return [
         `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
-        `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
-         <div style="font-size:13px;color:var(--ink-500);">${escapeHtml(addressOf(c))}</div>`,
+        // A DRIVER PICKS A STOP OFF THIS BOARD BY WHERE IT IS, NOT BY WHO.
+        // With the name gone the address moves up and carries the column on
+        // its own - it is the half a round is planned with anyway.
+        showNames
+          ? `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
+         <div style="font-size:13px;color:var(--ink-500);">${escapeHtml(addressOf(c))}</div>`
+          : `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${
+              escapeHtml(addressOf(c)) || 'No address'
+            }</a>`,
         // The window under the day, because "Wednesday" is not enough to plan a
         // round with once customers start naming times.
         `${shortDate(o.pickup_date)}${
@@ -917,7 +957,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       ];
     };
 
-    const headings = ['Order', 'Customer', 'Pickup', 'Status', 'Clock', 'Weight'];
+    const headings = ['Order', showNames ? 'Customer' : 'Where', 'Pickup', 'Status', 'Clock', 'Weight'];
     if (showMoney) headings.push('Price', 'Payment');
 
     // A section is only drawn when it has something in it, so the board is a
@@ -1221,6 +1261,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       total: doorScan.total,
       scanned: doorScan.scanned,
       allScanned: doorScan.ok,
+      // The individual bags, so a three-bag order can show WHICH one is still
+      // missing rather than only that one is.
+      labels: doorScan.labels || [],
     };
 
     const body = `
@@ -1229,11 +1272,22 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin:18px 0 32px;">
         <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0;">
           <span style="font-variant-numeric:tabular-nums;">#${order.order_number}</span>
-          <span style="color:var(--ink-400);">&middot;</span>
-          ${escapeHtml(c.name || 'Unknown customer')}
+          ${
+            // The order number identifies the stop; the name is the customer's,
+            // and a driver working the round is not shown one. Without this the
+            // whole page can be locked down and the heading still says who
+            // lives there.
+            roles.can(req.opsUser, 'customers.view')
+              ? `<span style="color:var(--ink-400);">&middot;</span>
+          ${escapeHtml(c.name || 'Unknown customer')}`
+              : ''
+          }
         </h1>
         ${statusBadge(order.status)}
-        ${paymentBadge(order)}
+        ${
+          // PAID / UNPAID is the books, same as a price is.
+          roles.can(req.opsUser, 'money.view') ? paymentBadge(order) : ''
+        }
         ${
           // The promise, counting down. Only while we are holding it.
           (() => {
@@ -1264,12 +1318,48 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'))}
       ${scannerScript()}
 
-      <div style="margin-top:28px;">${historyCard(history)}</div>
+      ${(() => {
 
-      <div class="grid-2" style="align-items:start;">
+      // WHAT A DRIVER IS SHOWN IS THE STOP, NOT THE CUSTOMER.
+      //
+      // A round needs: where, when, how to get in, where the bag is, how many,
+      // what it weighed. It does not need a name, a phone number, the thread,
+      // the change log or the money - those are a file on a person, and the
+      // permissions below are what keep them off the page rather than a role
+      // check written out here (see src/core/roles.js).
+      //
+      // The address is the one personal detail that survives, because you
+      // cannot drive to a stop without it.
+      const seeCustomer = roles.can(req.opsUser, 'customers.view');
+      const seeThread = roles.can(req.opsUser, 'messages.view');
+      const seeAudit = roles.can(req.opsUser, 'orders.audit');
+
+      // With both side cards gone the two-column grid would leave a column of
+      // nothing, so the details card takes the full width instead.
+      const sideColumn = seeCustomer || seeThread;
+
+      return `
+      ${seeAudit ? `<div style="margin-top:28px;">${historyCard(history)}</div>` : ''}
+
+      <div class="${sideColumn ? 'grid-2' : ''}" style="align-items:start;">
 
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading('The order', 'Details')}
+          ${
+            // FIRST ROW, FOR EVERYONE. It used to sit in the customer card,
+            // which meant hiding that card from a driver would have hidden the
+            // one thing they cannot work without.
+            detail(
+              'Address',
+              (() => {
+                const where = addressOf(c);
+                if (!where) return '<span style="color:var(--ink-500);">no address on file</span>';
+                return `<a href="https://maps.google.com/?q=${encodeURIComponent(
+                  where
+                )}" target="_blank" rel="noopener"><strong>${escapeHtml(where)}</strong></a>`;
+              })()
+            )
+          }
           ${detail('Pickup', shortDate(order.pickup_date))}
           ${detail(
             'Window',
@@ -1309,10 +1399,11 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           ${
             // What the partner needs to know. On the order rather than only on
             // the customer, because this is the page open while a bag is being
-            // handed over.
+            // handed over. The laundromat reads it off the QR page instead, so
+            // a driver does not need it here.
             (() => {
               const p = c.preferences || {};
-              if (!p.water_temp) return '';
+              if (!seeCustomer || !p.water_temp) return '';
               const wash =
                 `${String(p.water_temp).toLowerCase()} water, ` +
                 `${p.detergent === 'HYPOALLERGENIC' ? 'hypoallergenic' : 'standard'} detergent, ` +
@@ -1333,7 +1424,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           ${
             // Only when they gave one. A missing partner weight is the normal
             // case and an empty row would read as something being wrong.
-            order.partner_weight_lb != null
+            order.partner_weight_lb != null && roles.can(req.opsUser, 'partners.view')
               ? detail(
                   'Laundromat said',
                   (() => {
@@ -1367,8 +1458,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
                   : '')
               : ''
           }
-          ${detail('Booked', dateTime(order.created_at))}
-          ${order.notes ? detail('Notes', escapeHtml(order.notes)) : ''}
+          ${seeAudit ? detail('Booked', dateTime(order.created_at)) : ''}
           ${
             order.delivery_photo_url
               ? `<div style="padding-top:20px;">
@@ -1380,21 +1470,20 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           }
         </div>
 
+        ${sideColumn ? `
         <div>
+          ${seeCustomer ? `
           <div class="card card-xl" style="padding:28px;margin-bottom:22px;">
             ${sectionHeading('Who', 'Customer')}
             ${detail('Name', escapeHtml(c.name || '—'))}
             ${detail('Phone', `<a href="tel:${escapeHtml(c.phone)}">${escapeHtml(c.phone || '—')}</a>`)}
             ${detail('Address', escapeHtml(addressOf(c)) || '—')}
             <div style="padding-top:20px;">
-              ${
-                roles.can(req.opsUser, 'customers.view')
-                  ? `<a href="/ops/customers/${c.id}" class="btn btn-outline">Full profile ${icon('arrow-right', '16')}</a>`
-                  : ''
-              }
+              <a href="/ops/customers/${c.id}" class="btn btn-outline">Full profile ${icon('arrow-right', '16')}</a>
             </div>
-          </div>
+          </div>` : ''}
 
+          ${seeThread ? `
           <div class="card card-xl" style="padding:28px;">
             ${sectionHeading('Thread', 'Recent messages')}
             ${
@@ -1412,10 +1501,11 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
                     .join('')
                 : '<p style="font-size:15px;color:var(--ink-500);margin:0;">No messages yet.</p>'
             }
-          </div>
-        </div>
+          </div>` : ''}
+        </div>` : ''}
 
       </div>`;
+      })()}`;
 
     res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
@@ -2232,7 +2322,9 @@ router.get('/ops/process', guard, withIssues, (req, res) => {
     adminPage({
       title: 'How it works',
       active: '/ops/process',
-      body: processBody(),
+      // The page is built for the person reading it - a driver is never sent
+      // the sections that are not his.
+      body: processBody(req.opsUser),
       user: req.opsUser,
       openIssues: req.openIssues,
     })

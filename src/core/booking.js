@@ -187,18 +187,31 @@ function dateProblem(iso) {
 // can. A customer names a time; we put them in the window that contains it and
 // tell them the window. We never quote a minute, and we never negotiate.
 //
-// THESE ARE PLACEHOLDER VALUES taken from Neil's example and not yet confirmed
-// against a real round. They are the only place windows are defined: change
-// them here and every quote, confirmation and ops screen follows. Existing
-// orders are unaffected, because the window they were promised is stored on
-// the order itself rather than recomputed.
+// These are the only place windows are defined: change them here and every
+// quote, confirmation and ops screen follows. Existing orders are unaffected,
+// because the window they were promised is stored on the order itself rather
+// than recomputed - so widening a window never needs a backfill and never
+// changes what somebody was already told.
 //
-// A gap between windows is deliberate and fine. A time that falls in one gets
-// the next window that starts after it.
+// They may be left with gaps between them. A time that falls in a gap gets the
+// next window that starts after it.
+// Roughly three hours each, and they run back to back from six in the morning
+// to nine at night. The width is the point: a van doing a whole county cannot
+// promise a half-hour, and a window we miss is worse than a wide one we keep.
+//
+// They are not all exactly three hours because the day is not shaped that way.
+// Midday to two is the short one - it is the lunch gap, and the run tends to be
+// thin there. Five to nine is the long one, because it is when most people are
+// home, so it takes the most stops and needs the most room.
+//
+// Six in the morning and nine at night are the outer edges: early enough for
+// somebody leaving for work, late enough for somebody getting back from it.
 const PICKUP_WINDOWS = Object.freeze([
+  Object.freeze({ start: '06:00', end: '09:00' }),
   Object.freeze({ start: '09:00', end: '12:00' }),
-  Object.freeze({ start: '13:00', end: '14:00' }),
-  Object.freeze({ start: '15:00', end: '18:00' }),
+  Object.freeze({ start: '12:00', end: '14:00' }),
+  Object.freeze({ start: '14:00', end: '17:00' }),
+  Object.freeze({ start: '17:00', end: '21:00' }),
 ]);
 
 // How much of a window must be LEFT for it to still take a booking. Measured
@@ -207,6 +220,10 @@ const PICKUP_WINDOWS = Object.freeze([
 // 3:32, belongs in the 3 to 6 window, and the first version of this rule
 // threw it to tomorrow, which put a real order on the wrong day.
 const WINDOW_CUTOFF_MIN = 60;
+
+// Where the day starts for somebody who did not name a time. The early window
+// exists for people who ask for it, not for people who said nothing.
+const DEFAULT_FROM = '09:00';
 
 // Accepts what a form sends ("18:00") and what Postgres returns ("18:00:00"),
 // and returns a clean "HH:MM" — or null if it is not a time at all.
@@ -307,15 +324,37 @@ function chooseWindow(date, requestedTime) {
 
   if (!usable.length) return null;
 
+  // SOMEBODY WHO NAMES NO TIME DOES NOT GET THE FIRST WINDOW OF THE DAY.
+  //
+  // "Laundry tomorrow" is not a request to be knocked on at six in the morning.
+  // The day now opens at 6am for the people who want it, so taking the earliest
+  // window as the default would quietly promise every silent customer the one
+  // slot almost none of them meant. Default to the first window starting at or
+  // after DEFAULT_FROM, and only fall back to the earliest when the day is too
+  // far gone for anything else.
   const clean = normaliseTime(requestedTime);
-  if (!clean) return { date, ...usable[0] };
+  if (!clean) {
+    const sensible = usable.find((w) => toMinutes(w.start) >= toMinutes(DEFAULT_FROM));
+    return { date, ...(sensible || usable[0]) };
+  }
 
   const asked = toMinutes(clean);
 
+  // END-EXCLUSIVE, because the windows now run back to back and every boundary
+  // belongs to two of them. Somebody who says "noon" means the start of the
+  // midday run, not the last minute of the morning one - inclusive matching
+  // took the earlier window and quietly promised them a van before they asked
+  // for it.
   const containing = usable.find(
-    (w) => asked >= toMinutes(w.start) && asked <= toMinutes(w.end)
+    (w) => asked >= toMinutes(w.start) && asked < toMinutes(w.end)
   );
   if (containing) return { date, ...containing };
+
+  // The one time end-exclusive gets wrong: the very last minute of the day.
+  // "Nine at night" has no window starting after it, and it is exactly the
+  // close of the evening run rather than something later.
+  const last = usable[usable.length - 1];
+  if (asked === toMinutes(last.end)) return { date, ...last };
 
   const next = usable.find((w) => toMinutes(w.start) >= asked);
   if (next) return { date, ...next };

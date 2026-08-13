@@ -402,6 +402,17 @@ worked or did not, rather than a spinner that lies. `?done=` and `?problem=` on
 the redirect carry the banner, so refreshing repeats the message and never the
 action. A double-tap is refused by the state machine and shown as a sentence.
 
+**Every bag is scanned before the camera exists, then one photo.** While
+anything on the order is unscanned the delivery form is not on the page at all —
+not disabled, absent — and a checklist ticks the codes off one at a time. A
+driver who photographs the doorstep and then finds he is holding the wrong bag
+has already done the step that means "delivered" in his head, and the scan
+becomes a formality he is motivated to get past. **However many bags there are,
+there is exactly one photo**: it is a picture of the drop-off, not of each bag,
+and the scans are what prove which bags they were. `fulfilment.deliver()`
+refuses regardless — the JSON API reaches the same code and markup guards
+neither.
+
 **An order number identifies an order to a person; the UUID is for the
 database.** `orders.order_number` starts at 1001, appears on the board, heads
 the order page, rides along on the booking confirmation text, and is what
@@ -658,6 +669,26 @@ proves you're allowed. **Adding a page means adding both.**
 **`money.view` is separate from `orders.view`** so a driver can work the round
 without seeing the books. Prices are left out of the markup entirely rather
 than hidden with CSS — a value that never reaches the page cannot leak from it.
+
+**A driver is shown the stop, not the customer.** The order page and the board
+give them where, when, how to get in, where the bag is, how many and what it
+weighed — and nothing else. No name, no phone, no thread, no change log, no
+money. **The address is the one personal detail that survives**, because you
+cannot drive to a stop without it; it is the first row of the details card and
+it is the board's second column in place of the name.
+
+This is enforced by permissions, never by a role check in a template —
+`customers.view` hides the customer card and the name in the heading,
+`messages.view` hides the thread, `money.view` hides the payment badge, and
+`orders.audit` (Admin and Sales) hides the change log. **The name in the page
+heading and the payment badge beside it are the two that get missed**: locking
+down every card below still leaves an `<h1>` naming who lives there.
+
+**`/ops/process` is scoped the same way.** Each section carries a role list and
+both the sections and the contents list are filtered, so a driver is never sent
+the money, the AI internals, the vendor list or the permission table — and the
+page says whose view it is. What we pay a laundromat is the one wholesale figure
+that would otherwise reach it. Adding a section means deciding who it is for.
 
 **New people default to `DRIVER`**, the least privileged role, and an
 unrecognised role posted to the form falls back to it too. Promoting is
@@ -934,15 +965,36 @@ GET  /account/login/code       six-digit code } reachable signed out
 
 **A customer may name a time, and gets a window back.** `orders.pickup_time` is
 the time they *asked for*, nullable because "tomorrow" with no time is a real
-answer and must not be turned into one. The window we promise is arithmetic
-around it — 30 minutes before, 60 after — and those two numbers live in one
-constant in `src/core/booking.js`. Widening the window is a one-line change and
-never needs a backfill, which is exactly why the asked-for time is stored rather
-than the quoted window. The window is clamped to the same calendar day so a
-late-evening pickup can't quote a time on Tuesday for a Monday booking.
+answer and must not be turned into one. What we promise back is the band it
+falls in, from `PICKUP_WINDOWS` in `src/core/booking.js` — the single place
+windows are defined, and the only thing to edit to change them:
+
+| | |
+|---|---|
+| 6–9am | early, for somebody leaving for work |
+| 9am–12pm | |
+| 12–2pm | the short one — the lunch gap, where the run is thin |
+| 2–5pm | |
+| 5–9pm | the long one — when most people are home, so the most stops |
+
+Roughly three hours each. The width is the point: a van doing a whole county
+cannot promise a half-hour, and a window we miss is worse than a wide one we
+keep. **Existing orders are never affected** — the window a customer was
+promised is stored on the order rather than recomputed, so widening one is a
+one-line change and never needs a backfill.
+
+**The bands run back to back, so every boundary belongs to two of them and the
+containing test is end-exclusive.** Somebody who says "noon" means the start of
+the midday run, not the last minute of the morning one. The one exception is the
+very last minute of the day, which has no window after it.
+
+**Somebody who names no time does not get the first window of the day.**
+`DEFAULT_FROM` is 9am: the early window exists for people who ask for it, and
+defaulting to it would quietly promise every silent customer a 6am knock.
 
 This is **not** a menu of slots. There are still no fixed route days and no list
-to choose from; the customer says when suits them, or says nothing.
+to choose from; the customer says when suits them, or says nothing, and the code
+picks the band. Never offer them the list.
 
 **Anything about "when" uses New Jersey's clock, via `booking.today()` and
 `booking.nowInService()`.** Never `new Date().toISOString()` — that is UTC, and
