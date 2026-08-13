@@ -2475,23 +2475,58 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
     const labelRow = (l) => {
       const state = labelState(l);
       const tone = LABEL_STATES[state];
+
+      // THE URL IS PRINTED ON THE STICKER, so every label has one whatever
+      // state it is in - it is physically there, under the QR, from the moment
+      // the sheet comes out of the printer. What changes is what it resolves
+      // to: nothing yet while the sticker is blank, the bag page while it is on
+      // an order, and nothing again once that order is delivered and the label
+      // is released. Showing it only for bound labels would suggest the others
+      // have no address, which is not true of the thing in your hand.
+      const url = bags.labelUrl(l.code);
+
       return `
-      <div style="display:flex;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;">
-        <span style="flex:none;width:12px;height:12px;border:2px solid var(--ink-900);border-radius:50%;
+      <div style="display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px 14px;
+                  align-items:start;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        <span style="width:12px;height:12px;margin-top:6px;border:2px solid var(--ink-900);border-radius:50%;
                      background:${tone.colour};"></span>
-        <span style="font-family:var(--font-mono);font-size:18px;font-weight:700;letter-spacing:0.06em;
-                     ${state === 'EXPIRED' ? 'color:var(--ink-500);' : ''}">${escapeHtml(l.code)}</span>
-        <span class="badge" style="background:${tone.colour};">${escapeHtml(tone.label)}</span>
-        <span style="flex:1;"></span>
-        <span style="font-size:14px;color:var(--ink-700);white-space:nowrap;">
+
+        <div style="min-width:0;">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <span style="font-family:var(--font-mono);font-size:18px;font-weight:700;letter-spacing:0.06em;
+                         ${state === 'EXPIRED' ? 'color:var(--ink-500);' : ''}">${escapeHtml(l.code)}</span>
+            <span class="badge" style="background:${tone.colour};">${escapeHtml(tone.label)}</span>
+          </div>
+
+          ${
+            state === 'EXPIRED'
+              ? `<div style="font-family:var(--font-mono);font-size:12px;line-height:1.5;margin-top:5px;
+                             color:var(--ink-500);overflow-wrap:anywhere;">
+                   <s>${escapeHtml(url)}</s><br>
+                   <span style="color:var(--stain-500);font-weight:700;">dead - the order was delivered</span>
+                 </div>`
+              : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"
+                    style="display:block;font-family:var(--font-mono);font-size:12px;line-height:1.5;
+                           margin-top:5px;overflow-wrap:anywhere;">${escapeHtml(url)}</a>
+                 ${
+                   state === 'OUTSTANDING'
+                     ? `<div style="font-size:12px;color:var(--ink-500);margin-top:3px;">
+                          Opens, but says the sticker is not on a bag yet.
+                        </div>`
+                     : ''
+                 }`
+          }
+        </div>
+
+        <div style="text-align:right;font-size:14px;color:var(--ink-700);white-space:nowrap;">
           ${
             l.orders
-              ? `<a href="/ops/orders/${l.orders.order_number}">#${l.orders.order_number}</a>${
-                  l.position ? ` &middot; bag ${l.position}` : ''
+              ? `<a href="/ops/orders/${l.orders.order_number}" style="font-weight:700;">#${l.orders.order_number}</a>${
+                  l.position ? `<br><span style="font-size:13px;color:var(--ink-500);">bag ${l.position}</span>` : ''
                 }`
-              : '<span style="color:var(--ink-500);">unused</span>'
+              : '<span style="color:var(--ink-500);">no order</span>'
           }
-        </span>
+        </div>
       </div>`;
     };
 
