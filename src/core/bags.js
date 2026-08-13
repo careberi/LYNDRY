@@ -144,23 +144,54 @@ async function findByCode(code) {
   return data || null;
 }
 
-// Every label currently on this order, in bag order.
-async function forOrder(orderId) {
-  const { data, error } = await db
-    .from('bag_labels')
-    .select('*')
-    .eq('order_id', orderId)
-    .order('position', { ascending: true });
+// The labels on an order, optionally just one leg of the journey.
+//
+// LEG MATTERS AND THE DEFAULT IS DELIBERATELY "ALL". A caller asking "what is
+// on this order" wants everything - the order page, the audit trail. A caller
+// asking "are all the bags here" must name a leg, because the two counts have
+// nothing to do with each other: the laundromat repacks a customer's two bags
+// into one of its own, or one into two.
+async function forOrder(orderId, leg = null) {
+  let query = db.from('bag_labels').select('*').eq('order_id', orderId);
+  if (leg) query = query.eq('leg', leg);
+
+  const { data, error } = await query.order('position', { ascending: true });
 
   if (error) throw error;
   return data || [];
+}
+
+// The bags collected from the customer. These carry the weight that priced the
+// order and that a laundromat's figure is checked against.
+function pickupBags(orderId) {
+  return forOrder(orderId, 'PICKUP');
+}
+
+// The bags coming back from the laundromat. These are what gets scanned at the
+// door, and there may be more or fewer of them than were collected.
+function deliveryBags(orderId) {
+  return forOrder(orderId, 'DELIVERY');
+}
+
+// Which leg a sticker being put on RIGHT NOW belongs to.
+//
+// Worked out from where the order is rather than asked, because the person
+// holding the sticker is standing at a counter with his hands full and the
+// answer is never in doubt: before the laundromat has finished, a bag is one we
+// collected; after, it is one they packed.
+//
+// AT_PARTNER stays PICKUP deliberately. The bags are on their floor, so a
+// sticker going on then is a driver correcting one he missed at the door, not a
+// finished bag - he is not there to collect yet.
+function legForStatus(status) {
+  return ['READY', 'OUT_FOR_DELIVERY'].includes(status) ? 'DELIVERY' : 'PICKUP';
 }
 
 // Sticks a label on a bag.
 //
 // Returns a reason rather than throwing, because every caller is a person
 // standing next to a bag who needs a sentence, not a stack trace.
-async function bind(code, order, opsUserId) {
+async function bind(code, order, opsUserId, { leg = 'PICKUP' } = {}) {
   const label = await findByCode(code);
   if (!label) return { ok: false, reason: 'unknown', detail: 'No label with that code.' };
 
@@ -178,7 +209,10 @@ async function bind(code, order, opsUserId) {
     return { ok: true, label, already: true };
   }
 
-  const existing = await forOrder(order.id);
+  // COUNTED WITHIN THE LEG, NEVER ACROSS IT. A delivery sticker is not a fourth
+  // pickup bag; it is delivery bag 1. Counting all the labels on the order
+  // together was the bug - it made a returning bag look like a spare one.
+  const existing = await forOrder(order.id, leg);
 
   // NO MORE STICKERS THAN BAGS. The driver counts them before he starts, so a
   // fourth sticker on a three-bag order is a mistake - a sticker peeled off by
@@ -186,16 +220,20 @@ async function bind(code, order, opsUserId) {
   // waiting on a bag that does not exist, which is exactly what happened in
   // testing: three bags weighed, and the run still asking for a fourth.
   //
-  // Only when the count is known. A count nobody has entered yet is not a
-  // limit of zero.
-  if (order.bag_count != null && existing.length >= Number(order.bag_count)) {
+  // Each leg has its OWN count, and they are unrelated: bag_count is what was
+  // collected, return_bag_count is what the laundromat handed back. Only when
+  // the count is known - a count nobody has entered yet is not a limit of zero.
+  const limit = leg === 'DELIVERY' ? order.return_bag_count : order.bag_count;
+
+  if (limit != null && existing.length >= Number(limit)) {
+    const what = leg === 'DELIVERY' ? 'coming back' : 'collected';
     return {
       ok: false,
       reason: 'too_many',
       detail:
-        `This order is down as ${order.bag_count} bag${order.bag_count === 1 ? '' : 's'} and ` +
+        `This order is down as ${limit} bag${Number(limit) === 1 ? '' : 's'} ${what} and ` +
         `${existing.length} already ${existing.length === 1 ? 'has' : 'have'} a sticker. ` +
-        `Change the bag count on the order if there really is another one.`,
+        `Change the count on the order if there really is another one.`,
     };
   }
 
@@ -205,6 +243,7 @@ async function bind(code, order, opsUserId) {
     .from('bag_labels')
     .update({
       order_id: order.id,
+      leg,
       position,
       bound_at: new Date().toISOString(),
       bound_by: opsUserId || null,
@@ -222,7 +261,7 @@ async function bind(code, order, opsUserId) {
     return { ok: false, reason: 'in_use', detail: 'That label was just taken. Use a fresh sticker.' };
   }
 
-  return { ok: true, label: data, position };
+  return { ok: true, label: data, position, leg };
 }
 
 // Takes a label off an order, and closes the gap so the remaining bags stay
@@ -362,8 +401,14 @@ async function recordBagWeight(code, weightLb, photo, { order } = {}) {
 //
 // Returns null when nothing is weighed yet, so a caller can tell "no bags on
 // the scale" apart from "the bags weighed nothing".
-async function totalWeight(orderId) {
-  const labels = await forOrder(orderId);
+// The weight of one leg's bags, added up.
+//
+// DEFAULTS TO PICKUP, AND THAT DEFAULT IS LOAD-BEARING. This figure is what
+// prices the order. Summing every label on the order would, the moment a
+// returning bag was weighed at a laundromat counter, quietly add the clean
+// weight to the dirty one and DOUBLE what the customer is charged.
+async function totalWeight(orderId, leg = 'PICKUP') {
+  const labels = await forOrder(orderId, leg);
   const weighed = labels.filter((l) => l.weight_lb != null);
   if (!weighed.length) return null;
 
@@ -483,6 +528,9 @@ module.exports = {
   mint,
   findByCode,
   forOrder,
+  pickupBags,
+  deliveryBags,
+  legForStatus,
   bind,
   release,
   renumber,

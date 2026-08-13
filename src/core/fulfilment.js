@@ -8,6 +8,7 @@ const booking = require('./booking');
 const loadout = require('./loadout');
 const events = require('./order-events');
 const recurring = require('./recurring');
+const partners = require('./partners');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -752,7 +753,87 @@ function turnaround(order) {
   };
 }
 
+// --- Did it all come back? --------------------------------------------------
+
+// Compares what went out with what came back, under one order number.
+//
+// THE COUNT PROVES NOTHING AND THE WEIGHT PROVES EVERYTHING. A customer's
+// laundry arrives in whatever they own and the laundromat repacks it into their
+// own bags, so two bags in can be one bag out or four. Comparing the two counts
+// would flag every single order. Comparing the two weights is the real check:
+// 25 lb collected and 25 lb returned means it is all there, however it was
+// carried.
+//
+// IT NEVER RE-PRICES. price_cents was set by the pickup scale, texted to the
+// customer and agreed to. A clean weight that reads differently is a question
+// for a person, not an authority to move money - exactly the rule that keeps a
+// laundromat's own figure out of the pricing code.
+//
+// Clean laundry is legitimately a little lighter than dirty: water and grit
+// come out of it. So this uses the same tolerance as the partner cross-check
+// rather than demanding the numbers match.
+async function reconcileReturn(order, returned, { by = {} } = {}) {
+  const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+  const back = Number(returned.pounds);
+
+  await db
+    .from('orders')
+    .update({ return_weight_lb: back.toFixed(2) })
+    .eq('id', order.id);
+
+  const check = partners.compareWeights({ weight_lb: ours, partner_weight_lb: back });
+
+  const bagsPhrase =
+    `${returned.bags} bag${returned.bags === 1 ? '' : 's'} back ` +
+    `(we collected ${order.bag_count == null ? 'an unrecorded number of' : order.bag_count})`;
+
+  await events.record(order.id, {
+    kind: 'WEIGHT',
+    summary: check
+      ? `${bagsPhrase}, ${back.toFixed(1)} lb - ` +
+        `${check.absolute.toFixed(1)} lb ${check.heavier ? 'heavier' : 'lighter'} than we collected`
+      : `${bagsPhrase}, ${back.toFixed(1)} lb`,
+    was: ours == null ? null : `${ours} lb collected`,
+    became: `${back.toFixed(1)} lb returned`,
+    by,
+    reason: check && check.overThreshold ? 'Outside the tolerance, so an issue was raised' : null,
+  });
+
+  if (check && check.overThreshold) {
+    const issues = require('./issues');
+
+    await issues
+      .raise({
+        customer: order.customers || null,
+        order,
+        reason:
+          `Weight back does not match weight out: ${ours} lb collected, ` +
+          `${back.toFixed(1)} lb returned - ${check.absolute.toFixed(1)} lb apart, ` +
+          `and we allow ${check.tolerance.toFixed(1)}. ` +
+          `${check.heavier ? 'More came back than went out.' : 'Something may still be at the laundromat.'} ` +
+          `The customer was charged on the ${ours} lb we collected and that has not changed.`,
+      })
+      .catch((err) => console.error(`Could not raise a return mismatch: ${err.message}`));
+
+    return {
+      overThreshold: true,
+      check,
+      detail:
+        `${back.toFixed(1)} lb came back against ${ours} lb collected - ` +
+        `${check.absolute.toFixed(1)} lb out. Raised for someone to look at. ` +
+        `Nothing about the price has changed.`,
+    };
+  }
+
+  return {
+    overThreshold: false,
+    check,
+    detail: `All ${returned.bags} bags weighed - ${back.toFixed(1)} lb back against ${ours} lb collected.`,
+  };
+}
+
 module.exports = {
+  reconcileReturn,
   updateWeightEstimate,
   collect,
   dropAtPartner,

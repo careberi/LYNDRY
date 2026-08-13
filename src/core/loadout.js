@@ -114,12 +114,23 @@ async function scanOut(labelId) {
 
   // If that was the last bag of the order, the order is no longer loaded and
   // drops out of the run rather than sitting there as an empty stop.
-  const siblings = await bags.forOrder(label.order_id);
+  const siblings = await bagsInVan(label.order_id);
   if (!siblings.some((b) => b.loaded_at)) {
     await db.from('orders').update({ loaded_at: null, stop_number: null }).eq('id', label.order_id);
   }
 
   return label;
+}
+
+// The bags physically in the van for this order.
+//
+// After a laundromat leg that is the DELIVERY labels - its own bags, its own
+// count. Before one, or when we washed it ourselves, it is the pickup labels,
+// because those bags never left the van. One helper so the fallback is written
+// once and the three callers cannot disagree about it.
+async function bagsInVan(orderId) {
+  const delivery = await bags.forOrder(orderId, 'DELIVERY');
+  return delivery.length ? delivery : bags.forOrder(orderId, 'PICKUP');
 }
 
 // --- The run itself ---------------------------------------------------------
@@ -139,7 +150,7 @@ async function currentRun() {
 
   // The bags on each, so the screen can say "3 bags" and the door can count.
   for (const order of orders) {
-    order.bags = await bags.forOrder(order.id);
+    order.bags = await bagsInVan(order.id);
   }
 
   return orders;
@@ -219,8 +230,23 @@ async function scanAtDoor(rawCode, order) {
 //
 // An order with no labels at all passes: labelling is new, and refusing to
 // deliver a bag that was picked up before stickers existed would strand it.
+// Is every bag that is actually going to this door in the driver's hands?
+//
+// DELIVERY LABELS ONLY. This asked about every label on the order, which was
+// right only while a bag made the round trip. It does not: the laundromat
+// washes the contents and repacks into its own bags, so a three-bag collection
+// can come back as one. Counting the pickup labels here left two stickers that
+// could never be scanned - the camera never appeared and the order could not be
+// delivered at all.
+//
+// An order with no delivery labels falls back to the pickup ones. That is for
+// orders already in flight when this shipped, and for the day we wash something
+// ourselves and it never goes to a laundromat - in both cases the bags at the
+// door ARE the bags collected. An order with no labels at all still passes,
+// because labelling is newer than the oldest orders.
 async function allBagsScanned(orderId) {
-  const labels = await bags.forOrder(orderId);
+  const labels = await bagsInVan(orderId);
+
   if (!labels.length) return { ok: true, total: 0, scanned: 0 };
 
   const scanned = labels.filter((l) => l.delivered_at).length;
@@ -230,6 +256,7 @@ async function allBagsScanned(orderId) {
 
 module.exports = {
   LOADABLE,
+  bagsInVan,
   scanIn,
   scanOut,
   currentRun,

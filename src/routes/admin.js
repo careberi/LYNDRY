@@ -2482,6 +2482,42 @@ router.post(
         return res.redirect(303, `${back}?problem=${encodeURIComponent(clipped.detail)}`);
       }
 
+      // A RETURNING BAG IS WEIGHED, NEVER PRICED.
+      //
+      // The laundromat repacks into its own bags, so what comes back is a
+      // different number of different objects. What proves nothing was lost is
+      // not the count - it is the WEIGHT under one order number: 25 lb collected
+      // and 25 lb returned means it is all there, in one bag or in three.
+      //
+      // This must never touch price_cents. The pickup scale is the figure the
+      // customer was texted and agreed to, and re-pricing from a clean weight
+      // would move money nobody authorised - the same rule that keeps a
+      // laundromat's own figure out of the pricing code.
+      if ((result.label.leg || 'PICKUP') === 'DELIVERY') {
+        const back_ = await bags.totalWeight(order.id, 'DELIVERY');
+
+        if (!back_ || !back_.allWeighed) {
+          return res.redirect(
+            303,
+            `${back}?note=${encodeURIComponent(
+              `Clip ${clipped.clip} on that one. ${back_ ? back_.bags : 0} of ` +
+                `${back_ ? back_.total : 0} bags coming back weighed.`
+            )}`
+          );
+        }
+
+        const check = await fulfilment.reconcileReturn(order, back_, {
+          by: { opsUser: req.opsUser },
+        });
+
+        return res.redirect(
+          303,
+          check.overThreshold
+            ? `${back}?problem=${encodeURIComponent(check.detail)}`
+            : `${back}?note=${encodeURIComponent(check.detail)}`
+        );
+      }
+
       // THE ORDER'S WEIGHT IS THE SUM OF ITS BAGS, recomputed here rather than
       // typed. It stays the authoritative figure - it prices the order and it is
       // what a laundromat's number is checked against - it is simply added up.
@@ -2489,7 +2525,7 @@ router.post(
       // Written through fulfilment so the price, the audit entry and the text to
       // the customer all happen the one way they already happen. There is no
       // second implementation of "this order now weighs X".
-      const totals = await bags.totalWeight(order.id);
+      const totals = await bags.totalWeight(order.id, 'PICKUP');
 
       if (totals && totals.allWeighed) {
         const priced = await fulfilment.recordWeight(order, totals.pounds, null, {
@@ -2534,21 +2570,35 @@ router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, 
     if (!order) return notFoundPage(res, 'No order with that number.');
 
     const back = backTo(req, order);
-    const result = await bags.bind((req.body || {}).code, order, req.opsUser && req.opsUser.id);
+
+    // Which leg this sticker belongs to is worked out from where the order is,
+    // never asked. A sticker going on at a laundromat counter after the wash is
+    // a bag THEY packed, and has nothing to do with how many we collected.
+    const leg = bags.legForStatus(order.status);
+
+    const result = await bags.bind(
+      (req.body || {}).code,
+      order,
+      req.opsUser && req.opsUser.id,
+      { leg }
+    );
 
     if (!result.ok) {
       return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
     }
 
     // Scanning the same sticker twice is not a mistake worth a red banner.
+    const what = leg === 'DELIVERY' ? 'Bag coming back' : 'Bag';
     const note = result.already
       ? 'That label was already on this order.'
-      : `Bag ${result.position} labelled.`;
+      : `${what} ${result.position} labelled.`;
 
     if (!result.already) {
       await orderEvents.record(order.id, {
         kind: 'LABEL',
-        summary: `Label ${result.label.code} put on bag ${result.position}`,
+        summary:
+          `Label ${result.label.code} put on ` +
+          `${leg === 'DELIVERY' ? 'returning bag' : 'bag'} ${result.position}`,
         became: result.label.code,
         by: { opsUser: req.opsUser },
       });

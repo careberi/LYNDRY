@@ -152,6 +152,11 @@ function weightCard(label, order, siblings, code, token, justSaved) {
   // laundromat weighing work they have taken in. The form was rendered
   // regardless of status, so a bag could be "weighed by the laundromat" while
   // it was still on the road.
+  // A DELIVERY BAG IS THEIR OWN PACKING. They weighed what we handed them; the
+  // bags they packed afterwards are not a second thing for them to weigh, and
+  // a figure against one would never be compared to anything.
+  if ((label.leg || 'PICKUP') === 'DELIVERY') return '';
+
   if (order.status !== 'AT_PARTNER') {
     return `
     <div class="card" style="padding:28px;margin-bottom:20px;">
@@ -360,7 +365,11 @@ router.get('/o/:code', async (req, res, next) => {
       return res.status(404).type('html').send(nothingHere());
     }
 
-    const siblings = await bags.forOrder(order.id);
+    // COUNTED WITHIN THE BAG'S OWN LEG. "Bag 2 of 3" has to mean two of the
+    // three bags in front of them - and after a laundromat has repacked, the
+    // pickup bags and the delivery bags are different objects in different
+    // numbers. Counting both sets together made a two-bag order read "of 5".
+    const siblings = await bags.forOrder(order.id, label.leg || 'PICKUP');
     const total = siblings.length || 1;
 
     await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
@@ -481,6 +490,12 @@ router.post('/o/:code/weight', async (req, res, next) => {
       return res.redirect(303, `${back}&weighed=bad`);
     }
 
+    // Same guard on the route as on the card. This is the page with no sign-in,
+    // so a form that is merely absent from the markup is not a guard at all.
+    if ((label.leg || 'PICKUP') === 'DELIVERY') {
+      return res.redirect(303, `${back}&weighed=notyours`);
+    }
+
     // NOT UNTIL THE BAG IS ACTUALLY WITH THEM.
     //
     // The form is hidden before hand-over, but a hidden form whose route still
@@ -506,7 +521,12 @@ router.post('/o/:code/weight', async (req, res, next) => {
     // the sum of the bags rather than whatever the first person typed. A
     // half-weighed order compared against a full one would flag every
     // laundromat as light.
-    const allBags = await bags.forOrder(order.id);
+    // PICKUP BAGS ONLY. These are the bags they were handed; the delivery bags
+    // are their own packing and are not theirs to weigh. Counting both sets
+    // would also mean the total never completed - a delivery label can never
+    // carry a partner weight, so "every bag weighed" would stay false for ever
+    // and orders.partner_weight_lb would never be written.
+    const allBags = await bags.forOrder(order.id, 'PICKUP');
     const weighedBags = allBags.filter((b) => b.partner_weight_lb != null);
 
     if (weighedBags.length < allBags.length) {

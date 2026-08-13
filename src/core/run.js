@@ -45,7 +45,10 @@ const loadout = require('./loadout');
 // were, and then for one total weight at the end, which asks him to add up in
 // his head and loses which bag was the heavy one.
 async function tasksForCollect(order) {
-  const labels = await bags.forOrder(order.id);
+  // PICKUP labels only. A delivery sticker bound later at the laundromat is not
+  // a spare bag at this door, and counting it here would make the collect stop
+  // look like it had one more bag than the driver is standing in front of.
+  const labels = await bags.forOrder(order.id, 'PICKUP');
   const known = order.bag_count != null;
   const bagCount = Number(order.bag_count || 0);
 
