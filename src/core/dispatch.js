@@ -238,9 +238,9 @@ function serviceMinutes(kind) {
 // This is the "hour by hour" half of the board. It is an estimate and the page
 // says so - the point is not the minute, it is seeing that the run runs out of
 // day before it runs out of stops.
-function withEtas(stops, startMinutes) {
+function withEtas(stops, startMinutes, base) {
   let clock = startMinutes;
-  let from = geocode.BASE;
+  let from = base;
   let miles = 0;
 
   for (const stop of stops) {
@@ -257,7 +257,7 @@ function withEtas(stops, startMinutes) {
     clock += serviceMinutes(stop.kind);
   }
 
-  const backMiles = from === geocode.BASE ? 0 : milesBetween(from, geocode.BASE);
+  const backMiles = from === base ? 0 : milesBetween(from, base);
 
   return {
     miles: miles + backMiles,
@@ -267,7 +267,7 @@ function withEtas(stops, startMinutes) {
 
 // Sequence one leg, keeping anything already numbered in the van in its
 // existing order and solving the rest around it.
-function sequenceLeg(stops) {
+function sequenceLeg(stops, base) {
   const numbered = stops
     .filter((s) => s.order && s.order.stop_number != null)
     .sort((a, b) => a.order.stop_number - b.order.stop_number);
@@ -278,14 +278,19 @@ function sequenceLeg(stops) {
 
   const { ordered } = geocode.sequence(
     placed.map((s) => ({ at: s.at, stop: s })),
-    geocode.BASE
+    base
   );
 
   return [...numbered, ...ordered.map((o) => o.stop), ...unplaced];
 }
 
 // The whole board for one day, from one time of day onward.
-async function board(dateIso, fromTime) {
+//
+// `driverId` narrows it to one person's work and routes from THEIR home base.
+// Without a driver it is everybody's work from the service base, which is what
+// the board was before drivers had bases - useful for seeing the whole day at
+// once, but it is not a route anybody drives.
+async function board(dateIso, fromTime, driverId = null) {
   const date = dateIso || booking.today();
   const now = booking.nowInService();
   const start = fromTime || (date === now.date ? now.time : '09:00');
@@ -299,22 +304,36 @@ async function board(dateIso, fromTime) {
   const [y, m, d] = date.split('-').map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
+  // --- whose day is this, and where does it start ---------------------------
+  //
+  // Required lazily: drivers.js reads roles and geocode, and a top-level
+  // require here would close a loop through orders.js.
+  const driversCore = require('./drivers');
+  const driver = driverId ? await driversCore.find(driverId) : null;
+  const base = driver ? driversCore.baseOf(driver) : { ...geocode.BASE, own: false };
+
   // --- everything in flight -------------------------------------------------
 
-  const { data: pickups, error: pickupError } = await db
+  let pickupQuery = db
     .from('orders')
     .select(BOARD_FIELDS)
     .eq('pickup_date', date)
     .in('status', ['REQUESTED', 'ASSIGNED', 'DEPOSITED']);
+  if (driverId) pickupQuery = pickupQuery.eq('driver_id', driverId);
+
+  const { data: pickups, error: pickupError } = await pickupQuery;
   if (pickupError) throw pickupError;
 
   // Bags we are holding that still need washing, and bags a laundromat has
   // finished. Not filtered by date: a bag collected yesterday and still in the
   // van is today's problem whatever its pickup date says.
-  const { data: inHand, error: handError } = await db
+  let handQuery = db
     .from('orders')
     .select(BOARD_FIELDS)
     .in('status', ['IN_PROCESS', 'READY', 'OUT_FOR_DELIVERY']);
+  if (driverId) handQuery = handQuery.eq('driver_id', driverId);
+
+  const { data: inHand, error: handError } = await handQuery;
   if (handError) throw handError;
 
   // --- the laundromats ------------------------------------------------------
@@ -369,9 +388,9 @@ async function board(dateIso, fromTime) {
 
   // Where the van is when it goes to the laundromat: the last pickup, or base
   // if there are none.
-  const orderedCollect = sequenceLeg(collectStops);
+  const orderedCollect = sequenceLeg(collectStops, base);
   const lastCollect = [...orderedCollect].reverse().find((s) => s.at);
-  const fromPoint = lastCollect ? lastCollect.at : geocode.BASE;
+  const fromPoint = lastCollect ? lastCollect.at : base;
 
   const choice = chooseLaundromat(fromPoint, partnerRows, {
     weekday,
@@ -415,14 +434,14 @@ async function board(dateIso, fromTime) {
 
   // --- put the day together -------------------------------------------------
 
-  const stops = [...orderedCollect, ...partnerStops, ...sequenceLeg(deliverStops)];
+  const stops = [...orderedCollect, ...partnerStops, ...sequenceLeg(deliverStops, base)];
 
   stops.forEach((s, i) => {
     s.position = i + 1;
     s.leg = LEGS[s.kind];
   });
 
-  const walk = withEtas(stops, startMinutes);
+  const walk = withEtas(stops, startMinutes, base);
   const r = R();
   const serviceMin = stops.reduce((t, s) => t + serviceMinutes(s.kind), 0);
   const driveMin = minutesFor(walk.miles);
@@ -445,6 +464,8 @@ async function board(dateIso, fromTime) {
     date,
     start,
     weekday,
+    driver,
+    base,
     stops,
     partners: partnerRows,
     choice,

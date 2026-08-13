@@ -439,14 +439,16 @@ GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
 GET  /ops/loadout            scan bags into the van, build the run
-GET  /ops/dispatch           the live day on a map; ?date= and ?from= pick it
+GET  /ops/routing            the live day on a map; ?date= ?from= ?driver= pick it
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
 GET  /ops/partners           the businesses we work with, added by hand
 GET  /ops/partners/:id       one partner, and their scale against ours
 GET  /ops/partners/enquiries leads from the website form
 POST /ops/partners/enquiries/:id/status   NEW / CONTACTED / CLOSED
-GET  /ops/team               who can sign in; add and disable people
+GET  /ops/team               who can sign in, their home bases, add and disable
+POST /ops/team/:id/base      where that person starts and ends the day
+POST /ops/orders/:id/driver  move an order to a different driver
 GET  /ops/login              phone number     } the only two pages
 GET  /ops/login/code         six-digit code   } reachable signed out
 ```
@@ -457,21 +459,21 @@ made-up numbers in and they answer "would a day like this work". Both are behind
 `money.view` — they show the wholesale wash rate, which is not a driver's to
 browse — and nothing typed into either changes anything anywhere else.
 
-**`/ops/dispatch` is the planner's twin, and the difference is the whole point.**
+**`/ops/routing` is the planner's twin, and the difference is the whole point.**
 The planner is a day you invent; dispatch is the day that actually exists. Same
 map, same pins, same shape of numbers, but every stop on it is a real order.
 Keeping both is deliberate: a planner that could only show real orders cannot
 answer "what if we had twelve stops in Hoboken" before those twelve orders
 exist, and that is the question that decides whether to go there at all.
 
-**On dispatch the run sheet is server-rendered and only the map is JavaScript.**
+**On routing the run sheet is server-rendered and only the map is JavaScript.**
 The order of the stops, the times, the laundromat and the pounds are in the
 HTML and work with scripting off, exactly like every other ops page — that is
 the part somebody drives. The map is a picture OF the run sheet rather than the
 source of it, so losing it costs you the picture and nothing else. **The
 sequence must never move because the map loaded.**
 
-**The planner and dispatch are the only pages that depend on an outside
+**The planner and routing are the only pages that depend on an outside
 service at runtime.** Three of them, none needing an account or a key: Leaflet
 for the map, CARTO/OpenStreetMap for the tiles, and OSRM for real driving
 distances between the stops. Leaflet is pinned to an exact version with an
@@ -610,7 +612,7 @@ same fact and the two would disagree the first time anything went wrong.
 still on their floor. Bags dropped off before they were weighed are counted
 separately rather than as zero pounds.
 
-**`/ops/dispatch` also answers "can we take this one".** Cheapest insertion of a
+**`/ops/routing` also answers "can we take this one".** Cheapest insertion of a
 pickup into today's run: where it slots, minutes added, cost, and whether it is
 under `routing.autoAcceptUnderMinutes`. Three rules it must keep:
 
@@ -716,6 +718,56 @@ proves you're allowed. **Adding a page means adding both.**
 **`money.view` is separate from `orders.view`** so a driver can work the round
 without seeing the books. Prices are left out of the markup entirely rather
 than hidden with CSS — a value that never reaches the page cannot leak from it.
+
+## Drivers
+
+**A driver works out of somewhere, and an order belongs to one of them.** The
+system ran for a long time on the unstated assumption that there was exactly one
+driver: the route started at a single hardcoded point in `src/core/geocode.js`
+and an order knew who had collected it only afterwards, as a name in
+`order_events`. `src/core/drivers.js` is where that assumption was made explicit
+and then removed.
+
+**The home base is an address on the person's row**, geocoded through the same
+rate-limited lookup as a customer's and a partner's. **Blank falls back to the
+service base** — which is what every route used before this existed, so nothing
+breaks on the day a driver is added and their base is not filled in yet. Fair
+Lawn is not Maryland, and a route solved from the wrong start point is wrong
+from the first mile.
+
+**An order is assigned automatically to whichever active driver's base is
+nearest, and is reassignable by hand.** The automatic answer knows about
+distance and nothing at all about who is off sick, who is already carrying a
+full van, or who is better with a difficult building — so it is a starting
+position, not a verdict. `drivers.assign()` never moves an order that already
+has a driver, so an automatic pass can never quietly undo a human decision.
+`npm run assign` backfills; it is a dry run unless given `--write`.
+
+**`orders.driver_id` is nullable and that is a real state, not a gap to tidy
+away.** Nobody has a base set, every driver was disabled, the geocoder was
+down. The board shows unassigned orders in their own red banner rather than
+hiding them, because **an order nobody owns is exactly the one that does not get
+collected**.
+
+**Where a driver is up to is derived, never stored.** `progressOf()` reads the
+timestamps already on the orders — `collected_at`, `delivered_at`,
+`stop_number`. A progress column would be a second copy of the same fact and
+would go stale the first time somebody used the JSON API instead of the buttons.
+Same rule as the partner load.
+
+**A driver sees their own round and nobody else's.** Filtered in the query, not
+after it, so another driver's stops never reach the process — the same reason
+prices are left out of the markup rather than hidden with CSS. **The board, the
+order page and every action route each check it**, because a board that hides a
+stop while the route behind it still fires is not access control. An *unassigned*
+order stays open to everybody on purpose: it is the one most likely to be
+missed, and locking it away from whoever is nearest helps nobody.
+
+**Reassigning is behind `customers.view`, not `orders.act`.** A driver can work
+an order but cannot hand it to somebody else — that is a scheduling decision,
+not a step in the round. Every move is logged as a `DRIVER` event, because "who
+was supposed to collect this" is exactly the question asked after one goes
+missing.
 
 **A driver is shown the stop, not the customer.** The order page and the board
 give them where, when, how to get in, where the bag is, how many and what it

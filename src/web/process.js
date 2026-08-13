@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the dispatch board and structured partner hours
+const REVIEWED = '13 August 2026';  // bumped with drivers, home bases and the routing board
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -380,7 +380,7 @@ function processBody(user) {
       )}
       ${step(
         2,
-        'Look at Dispatch for the shape of the day',
+        'Look at Routing for the shape of your day',
         `Everything live in the queue for one day, on a map, in the order it gets
          driven: the doorsteps to collect from, which laundromat the bags go to,
          and the doorsteps to deliver back to. It works out the sequence and the
@@ -388,6 +388,10 @@ function processBody(user) {
          order for a physical reason</strong> - you cannot drop bags you have
          not picked up, and you cannot deliver laundry you have not collected
          from the laundromat.
+         <br><br>
+         <strong>It is your day, not everybody's.</strong> Orders are given to
+         whichever driver's home base is nearest, the route starts and ends at
+         yours, and you see your own stops and nobody else's.
          <br><br>
          It also answers the question that comes up mid-round: an order has just
          come in, does it fit into what you are already doing, and what does

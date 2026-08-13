@@ -20,7 +20,8 @@ const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
 const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
-const { dispatchBoardBody } = require('../web/dispatch-board');
+const drivers = require('../core/drivers');
+const { routingBoardBody } = require('../web/routing-board');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
@@ -190,7 +191,7 @@ const OPS_MENUS = Object.freeze([
       // Dispatch sits beside the planner because they are the same picture of
       // the same thing: the planner is a day you invent, this is the day that
       // actually exists.
-      { href: '/ops/dispatch', label: 'Dispatch', permission: 'orders.act' },
+      { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
       { href: '/ops/labels', label: 'Bag labels', permission: 'orders.act' },
     ],
   },
@@ -874,11 +875,23 @@ const ORDER_FIELDS =
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
-    const { data, error } = await db
+    // A DRIVER SEES THEIR OWN ROUND AND NOBODY ELSE'S.
+    //
+    // Filtered in the query rather than after it, so another driver's stops
+    // never reach this process at all - the same reason prices are left out of
+    // the markup instead of hidden with CSS. Anyone who can browse customers
+    // sees the whole business.
+    const ownRoundOnly = !roles.can(req.opsUser, 'customers.view');
+
+    let query = db
       .from('orders')
-      .select(`${ORDER_FIELDS}, collected_at, at_partner_at, ready_at, delivered_at`)
+      .select(`${ORDER_FIELDS}, collected_at, at_partner_at, ready_at, delivered_at, driver_id`)
       .order('pickup_date', { ascending: false })
       .order('pickup_time', { ascending: true, nullsFirst: false });
+
+    if (ownRoundOnly) query = query.eq('driver_id', req.opsUser.id);
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -975,6 +988,84 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       </section>`
         : '';
 
+    // WHERE EACH DRIVER IS, right under the totals.
+    //
+    // Only for somebody who can see the whole business - a driver gets their
+    // own stops on this board and does not need a picture of everybody else's
+    // day. Drawn from the timestamps already on the orders rather than a
+    // progress column, so it cannot drift from what actually happened.
+    const crew = roles.can(req.opsUser, 'customers.view') ? await drivers.board(booking.today()) : null;
+
+    const driverCard = (r) => {
+      const p = r.progress;
+      const pct = p.fraction == null ? 0 : Math.round(p.fraction * 100);
+
+      const where = p.idle
+        ? '<span style="color:var(--ink-500);">nothing on today</span>'
+        : p.nextStop
+          ? `on the round &middot; next is stop ${p.nextStop.stop_number}, #${p.nextStop.order_number}`
+          : p.toCollect
+            ? `${p.toCollect} still to collect`
+            : p.carrying
+              ? `carrying ${p.carrying}, nothing loaded yet`
+              : 'everything done';
+
+      return `
+      <a href="/ops/routing?driver=${escapeHtml(r.driver.id)}"
+         style="display:block;text-decoration:none;color:inherit;flex:1 1 260px;min-width:0;
+                padding:18px 20px;border:2px solid var(--ink-900);border-radius:14px;
+                background:var(--paper-050);box-shadow:var(--shadow-pop-xs);">
+        <div style="display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;">
+          <span style="font-weight:700;font-size:17px;">${escapeHtml(r.driver.name)}</span>
+          <span class="eyebrow" style="margin:0;">${
+            r.base.own ? escapeHtml(r.driver.base_city || 'own base') : 'service base'
+          }</span>
+        </div>
+
+        <div style="height:12px;border:2px solid var(--ink-900);border-radius:999px;overflow:hidden;
+                    background:var(--paper-000);margin:12px 0 8px;">
+          <div style="height:100%;width:${pct}%;background:var(--suds-500);"></div>
+        </div>
+
+        <div style="font-size:14px;line-height:1.5;">
+          ${p.done} of ${p.total} delivered &middot; ${where}
+        </div>
+        <div style="font-size:13px;color:var(--ink-500);margin-top:4px;">
+          ${p.toCollect} to collect &middot; ${p.carrying} in hand
+        </div>
+      </a>`;
+    };
+
+    const driverStrip = crew
+      ? `
+      <section style="margin-bottom:44px;">
+        ${sectionHeading('Where everybody is', 'The round', crew.rows.length)}
+        <div style="display:flex;flex-wrap:wrap;gap:16px;">
+          ${
+            crew.rows.length
+              ? crew.rows.map(driverCard).join('')
+              : `<p style="margin:0;font-size:15px;color:var(--ink-500);line-height:1.6;">
+                   Nobody on the team can drive yet. Add somebody at
+                   <a href="/ops/team">Team</a>.
+                 </p>`
+          }
+        </div>
+        ${
+          crew.orphans.length
+            ? `<p style="margin:16px 0 0;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                          background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+                 <strong>${crew.orphans.length} order${crew.orphans.length === 1 ? '' : 's'} with no driver:</strong>
+                 ${crew.orphans
+                   .map((o) => `<a href="/ops/orders/${o.order_number}" style="color:var(--paper-050);">#${o.order_number}</a>`)
+                   .join(', ')}.
+                 Nobody is going to collect ${crew.orphans.length === 1 ? 'it' : 'them'} until somebody owns
+                 ${crew.orphans.length === 1 ? 'it' : 'them'}.
+               </p>`
+            : ''
+        }
+      </section>`
+      : '';
+
     const body = `
       <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
         ${statCard('To collect', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
@@ -985,6 +1076,8 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         ${late.length ? statCard('Late', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
         ${showMoney && owed.length ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)') : ''}
       </div>
+
+      ${driverStrip}
 
       ${board('Not in a group', 'Unclassified', g.stray, 'These match no stage. That is a bug worth reporting.')}
       ${board('Ready', 'Ready to collect from the partner', g.ready, 'Washed and folded. Collect these and get them out.')}
@@ -1225,7 +1318,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // query fail rather than just returning null.
       .select(
         `${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at, ` +
-          'weight_photo_path, partner_weight_lb, partner_weight_at'
+          'weight_photo_path, partner_weight_lb, partner_weight_at, driver_id'
       )
       .eq(byNumber ? 'order_number' : 'id', wanted)
       .maybeSingle();
@@ -1233,8 +1326,28 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     if (error) throw error;
     if (!order) return notFoundPage(res, `No order ${byNumber ? `#${wanted}` : 'with that id'}.`);
 
+    // A DRIVER'S OWN ROUND, HERE TOO. The board already hides other people's
+    // stops, but a board that hides something and a page that serves it anyway
+    // is not access control - it is a missing link. Typing the number reaches
+    // this route directly.
+    //
+    // An order nobody owns stays open to everybody on purpose: it is the one
+    // most likely to be missed, and locking it away from the person standing
+    // nearest helps nobody.
+    if (
+      !roles.can(req.opsUser, 'customers.view') &&
+      order.driver_id &&
+      order.driver_id !== req.opsUser.id
+    ) {
+      return notFoundPage(res, 'That order is on somebody else\'s round.');
+    }
+
     const c = order.customers || {};
     const showMoney = roles.can(req.opsUser, 'money.view');
+
+    // Only fetched for somebody who can actually move the order; a driver has
+    // no reassign control, so the query would be work for nothing.
+    const team = roles.can(req.opsUser, 'customers.view') ? await drivers.active() : [];
 
     // The conversation around this order. There is no order id on a message,
     // so this is the customer's recent thread rather than a per-order log.
@@ -1459,6 +1572,35 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
                 (order.payment_failure_reason
                   ? detail('Decline reason', escapeHtml(order.payment_failure_reason))
                   : '')
+              : ''
+          }
+          ${
+            // WHOSE ORDER IT IS, and a way to move it.
+            //
+            // Automatic assignment knows about distance and nothing about who
+            // is off sick or already carrying a full van, so the answer it
+            // gives has to be correctable. A driver does not get this control -
+            // they cannot hand their own work to somebody else.
+            seeCustomer
+              ? detail(
+                  'Driver',
+                  `<form method="post" action="/ops/orders/${order.order_number}/driver"
+                         style="margin:0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+                     <select class="select" name="driver_id"
+                             style="min-height:36px;padding:4px 10px;font-size:14px;">
+                       <option value=""${order.driver_id ? '' : ' selected'}>Nobody yet</option>
+                       ${team
+                         .map(
+                           (d) =>
+                             `<option value="${escapeHtml(d.id)}"${
+                               d.id === order.driver_id ? ' selected' : ''
+                             }>${escapeHtml(d.name)}${d.base_city ? ` - ${escapeHtml(d.base_city)}` : ''}</option>`
+                         )
+                         .join('')}
+                     </select>
+                     <button class="btn btn-sm btn-outline" type="submit">Move</button>
+                   </form>`
+                )
               : ''
           }
           ${seeAudit ? detail('Booked', dateTime(order.created_at)) : ''}
@@ -1774,12 +1916,69 @@ async function loadOrderForAction(idOrNumber) {
   return data;
 }
 
+// Move an order to a different driver, or to nobody.
+//
+// Behind customers.view rather than orders.act: a driver can work an order but
+// cannot hand it to somebody else, which is a scheduling decision rather than a
+// step in the round. Logged like every other change, because "who was supposed
+// to collect this" is exactly the question asked after one goes missing.
+router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const wanted = String((req.body || {}).driver_id || '').trim();
+    const driverId = /^[0-9a-f-]{36}$/i.test(wanted) ? wanted : null;
+
+    const to = driverId ? await drivers.find(driverId) : null;
+    if (driverId && !to) {
+      return res.redirect(
+        303,
+        `/ops/orders/${order.order_number}?problem=${encodeURIComponent('No such driver.')}`
+      );
+    }
+
+    const from = order.driver_id ? await drivers.find(order.driver_id) : null;
+
+    const { error } = await db.from('orders').update({ driver_id: driverId }).eq('id', order.id);
+    if (error) throw error;
+
+    await orderEvents.record(order.id, {
+      kind: 'DRIVER',
+      summary: to ? `Moved to ${to.name}` : 'Unassigned',
+      was: from ? from.name : 'nobody',
+      became: to ? to.name : 'nobody',
+      by: { opsUser: req.opsUser },
+    });
+
+    return res.redirect(
+      303,
+      `/ops/orders/${order.order_number}?note=${encodeURIComponent(
+        to ? `Moved to ${to.name}.` : 'Unassigned.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // Every button route is this shape, so they are built rather than repeated.
 function orderAction(action, run, middleware = null) {
   const handler = async (req, res, next) => {
     try {
       const order = await loadOrderForAction(req.params.id);
       if (!order) return notFoundPage(res, 'No order with that number.');
+
+      // The same round check the page does. Hiding a button while the route
+      // behind it still fires is not access control, and every one of these is
+      // a plain form post somebody could aim anywhere.
+      if (
+        !roles.can(req.opsUser, 'customers.view') &&
+        order.driver_id &&
+        order.driver_id !== req.opsUser.id
+      ) {
+        return notFoundPage(res, "That order is on somebody else's round.");
+      }
 
       const back = `/ops/orders/${order.order_number}`;
 
@@ -1829,7 +2028,7 @@ orderAction('delivered', (order, req) =>
 );
 
 // ---------------------------------------------------------------------------
-// GET /ops/dispatch — can we take this one?
+// GET /ops/routing — the day, on a map, from the live queue
 //
 // A GET with the address in the query string on purpose. It writes nothing, so
 // it is safe to refresh, safe to bookmark and safe to send to somebody - which
@@ -1841,7 +2040,15 @@ orderAction('delivered', (order, req) =>
 // answer is whoever is being asked to take the order.
 // ---------------------------------------------------------------------------
 
-router.get('/ops/dispatch', guard, withIssues, may('orders.act'), async (req, res, next) => {
+// The screen was called Dispatch until Neil renamed it. Anything already
+// bookmarked or pasted into a message still lands, query string and all, so a
+// link somebody saved this morning does not 404 this afternoon.
+router.get('/ops/dispatch', (req, res) => {
+  const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  res.redirect(301, `/ops/routing${query}`);
+});
+
+router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res, next) => {
   try {
     const address = String(req.query.address || '').trim().slice(0, 200);
     const lb = String(req.query.lb || '').trim().slice(0, 6);
@@ -1856,7 +2063,16 @@ router.get('/ops/dispatch', guard, withIssues, may('orders.act'), async (req, re
       ? String(req.query.from)
       : null;
 
-    const board = await dispatch.board(date, from);
+    // WHOSE DAY. A driver is locked to their own - they see the stop, not the
+    // business, and that holds here exactly as it does on the order page.
+    // Anyone who can see customers picks from the list.
+    const canPickAnyone = roles.can(req.opsUser, 'customers.view');
+    const team = canPickAnyone ? await drivers.active() : [];
+
+    const asked = /^[0-9a-f-]{36}$/i.test(String(req.query.driver || '')) ? String(req.query.driver) : null;
+    const driverId = canPickAnyone ? asked : req.opsUser.id;
+
+    const board = await dispatch.board(date, from, driverId);
 
     let quote = null;
     let problem = null;
@@ -1873,14 +2089,17 @@ router.get('/ops/dispatch', guard, withIssues, may('orders.act'), async (req, re
 
     return res.type('html').send(
       adminPage({
-        title: 'Dispatch',
-        active: '/ops/dispatch',
+        title: 'Routing',
+        active: '/ops/routing',
         head: routePlannerHead(),
-        body: dispatchBoardBody({
+        body: routingBoardBody({
           board,
           quote,
           form: { address, lb },
           problem,
+          drivers: team,
+          driverId,
+          lockedToSelf: !canPickAnyone,
           // A driver gets the run sheet; the customer's name and the money on
           // it are not theirs, exactly as on the order page.
           showNames: roles.can(req.opsUser, 'customers.view'),
@@ -3034,7 +3253,11 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
   try {
     const { data: people, error } = await db
       .from('ops_users')
-      .select('id, name, phone, status, role, last_login_at, created_at')
+      .select(
+        'id, name, phone, status, role, last_login_at, created_at, ' +
+          'base_address_line1, base_address_line2, base_city, base_state, ' +
+          'base_postal_code, base_lat, base_lng, base_geocode_failed'
+      )
       .order('created_at', { ascending: true });
 
     if (error) throw error;
@@ -3080,6 +3303,19 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : '<span class="badge">DISABLED</span>',
+        // Only somebody who actually drives has a base. Showing the column
+        // for sales would invite filling it in for no reason.
+        roles.can(p, 'orders.act')
+          ? p.base_address_line1
+            ? `${escapeHtml(p.base_city || p.base_address_line1)}${
+                p.base_lat == null
+                  ? p.base_geocode_failed
+                    ? ' <span style="color:var(--stain-500);font-size:13px;">not on the map</span>'
+                    : ' <span style="color:var(--ink-500);font-size:13px;">locating</span>'
+                  : ''
+              }`
+            : '<span style="color:var(--ink-500);">service base</span>'
+          : '<span style="color:var(--ink-400);">&mdash;</span>',
         p.last_login_at ? dateTime(p.last_login_at) : 'never',
         // You cannot switch yourself off — that is the one way to lock
         // everybody out of a tool with no other way back in.
@@ -3098,6 +3334,14 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
       ${sectionHeading('Who can sign in', 'Team', (people || []).length)}
 
       ${
+        req.query.based
+          ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
+               <p style="font-size:16px;margin:0;">Base saved. Putting it on the map now - the
+               route and the assignment start using it as soon as it lands.</p>
+             </div>`
+          : ''
+      }
+      ${
         req.query.added
           ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
                <p style="font-size:16px;margin:0;">Added. They can sign in with that number now.</p>
@@ -3112,7 +3356,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
           : ''
       }
 
-      ${table(['Name', 'Mobile', 'Role', 'Status', 'Last signed in', ''], rows)}
+      ${table(['Name', 'Mobile', 'Role', 'Status', 'Home base', 'Last signed in', ''], rows)}
 
       <div class="grid-2" style="align-items:start;margin-top:44px;">
 
@@ -3165,6 +3409,80 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
             .join('')}
         </div>
 
+      </div>
+
+      <div class="card card-xl" style="padding:28px;margin-top:28px;">
+        ${sectionHeading('Where each of them starts the day', 'Home bases')}
+        <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 20px;">
+          A route is solved from wherever the driver leaves from, and an order is
+          given to whichever driver's base is nearest. <strong>Left blank they
+          fall back to the service base</strong>, which is what every route used
+          before this existed - so nothing breaks, but two drivers with no bases
+          set look identical to the assignment.
+        </p>
+
+        <style>
+          .tb-row { display:grid; grid-template-columns:140px minmax(0,2fr) minmax(0,1.2fr) 70px 100px auto;
+                    gap:10px; align-items:end; padding:14px 0; border-bottom:1px solid var(--ink-100); }
+          .tb-row > * { min-width:0; }
+          .tb-row .field-label { margin-bottom:4px; }
+          .tb-name { font-weight:700; font-size:15px; padding-bottom:10px; }
+          @media (max-width: 780px) {
+            .tb-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+            .tb-name { grid-column:1 / -1; padding-bottom:0; }
+          }
+        </style>
+
+        ${
+          (people || []).filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.act')).length
+            ? (people || [])
+                .filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.act'))
+                .map(
+                  (p) => `
+        <form method="post" action="/ops/team/${p.id}/base" class="tb-row">
+          <div class="tb-name">
+            ${escapeHtml(p.name)}
+            <div style="font-weight:400;font-size:13px;color:var(--ink-500);">
+              ${
+                p.base_lat != null
+                  ? 'on the map'
+                  : p.base_address_line1
+                    ? p.base_geocode_failed
+                      ? '<span style="color:var(--stain-500);">address not found</span>'
+                      : 'locating'
+                    : 'service base'
+              }
+            </div>
+          </div>
+          <div>
+            <label class="field-label" for="b1_${p.id}">Street</label>
+            <input class="input" type="text" id="b1_${p.id}" name="base_address_line1"
+                   value="${escapeHtml(p.base_address_line1 || '')}" placeholder="12 Berdan Ave" style="width:100%;">
+          </div>
+          <div>
+            <label class="field-label" for="bc_${p.id}">Town</label>
+            <input class="input" type="text" id="bc_${p.id}" name="base_city"
+                   value="${escapeHtml(p.base_city || '')}" placeholder="Fair Lawn" style="width:100%;">
+          </div>
+          <div>
+            <label class="field-label" for="bs_${p.id}">State</label>
+            <input class="input" type="text" id="bs_${p.id}" name="base_state" maxlength="2"
+                   value="${escapeHtml(p.base_state || '')}" placeholder="NJ" style="width:100%;">
+          </div>
+          <div>
+            <label class="field-label" for="bz_${p.id}">Zip</label>
+            <input class="input" type="text" id="bz_${p.id}" name="base_postal_code"
+                   value="${escapeHtml(p.base_postal_code || '')}" placeholder="07410" style="width:100%;">
+          </div>
+          <button class="btn btn-sm btn-outline" type="submit">Save</button>
+        </form>`
+                )
+                .join('')
+            : `<p style="margin:0;font-size:15px;color:var(--ink-500);line-height:1.6;">
+                 Nobody on the team can drive yet. Add somebody as a Driver, or give an
+                 existing person that role, and their base appears here.
+               </p>`
+        }
       </div>`;
 
     res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues }));
@@ -3203,6 +3521,23 @@ router.post('/ops/team', guard, may('team.manage'), async (req, res, next) => {
     }
 
     return res.redirect(303, '/ops/team?added=1');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Where somebody starts and ends the day.
+//
+// No self-edit guard here, unlike role and status: setting your own base cannot
+// lock anybody out of anything, and an admin who also drives has the most
+// reason to set their own.
+router.post('/ops/team/:id/base', guard, may('team.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    await drivers.saveBase(req.params.id, req.body || {});
+
+    return res.redirect(303, '/ops/team?based=1');
   } catch (err) {
     return next(err);
   }

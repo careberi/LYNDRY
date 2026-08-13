@@ -5,7 +5,7 @@ const { config } = require('../config');
 const partnersCore = require('../core/partners');
 
 // ---------------------------------------------------------------------------
-// /ops/dispatch - the day, on a map, from the live queue.
+// /ops/routing - the day, on a map, from the live queue.
 //
 // The planner's twin. It looks the same on purpose - the same map, the same
 // pins, the same shape of numbers - because they answer the same question about
@@ -188,14 +188,27 @@ function statCard(label, value, tone) {
   </div>`;
 }
 
-function dispatchBoardBody({ board, quote, form = {}, problem = null, showNames, showMoney }) {
+function routingBoardBody({
+  board,
+  quote,
+  form = {},
+  problem = null,
+  showNames,
+  showMoney,
+  drivers = [],
+  driverId = null,
+  lockedToSelf = false,
+}) {
   const r = config.routing;
 
   // Only the pins go to the browser. Not a name, not an address, not a price -
   // the map needs a dot and a number, and anything more would be personal
   // detail sitting in a script tag for no reason.
   const mapData = {
-    base: { lat: 40.9404, lng: -74.1182 },
+    // Whose base the route starts and ends at. Read from the board rather than
+    // written down here - a driver out of Fair Lawn and one out of Maryland
+    // must not share a hardcoded pin.
+    base: { lat: board.base.lat, lng: board.base.lng },
     stops: board.stops
       .filter((s) => s.at)
       .map((s) => ({ n: s.position, lat: s.at.lat, lng: s.at.lng, kind: s.kind })),
@@ -226,7 +239,7 @@ function dispatchBoardBody({ board, quote, form = {}, problem = null, showNames,
   .db-mk.base { width: 24px; height: 24px; border-radius: 5px; background: var(--lilac-500); }
   .db-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 26px; align-items: start; }
   .db-cols > * { min-width: 0; }
-  .db-when { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 12px; align-items: end; }
+  .db-when { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) auto; gap: 12px; align-items: end; }
   .db-partners { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
   @media (max-width: 900px) {
     .db-cols { grid-template-columns: minmax(0, 1fr); }
@@ -236,14 +249,35 @@ function dispatchBoardBody({ board, quote, form = {}, problem = null, showNames,
 </style>
 
 <div style="max-width:1180px;">
-  <p class="eyebrow" style="margin:0 0 8px;">Dispatch</p>
+  <p class="eyebrow" style="margin:0 0 8px;">Routing</p>
   <h1 style="margin:0 0 14px;font-size:40px;line-height:1.05;">The day, as it stands</h1>
-  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
+  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 22px;">
     Everything live in the queue for one day, put in the order it gets driven.
     Pick a day and a starting time and it works out the route, which laundromat
     the bags go to, and when the driver should be at each door. Nothing here
     changes anything - it is a picture, not a button.
   </p>
+
+  ${
+    // WITHOUT A DRIVER THIS IS NOT A ROUTE ANYBODY DRIVES. Everybody's stops
+    // solved from the service base looks like a plan and is not one - two
+    // drivers cannot both drive it, and neither starts where it starts.
+    board.driver
+      ? `<p style="font-size:15px;line-height:1.55;margin:0 0 26px;">
+           <strong>${escapeHtml(board.driver.name)}</strong>, out of
+           ${
+             board.base.own
+               ? escapeHtml(board.driver.base_city || board.driver.base_address_line1)
+               : 'the service base - they have no base of their own set'
+           }.
+         </p>`
+      : `<p style="margin:0 0 26px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                    background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
+           <strong>Everybody's stops at once, from the service base.</strong>
+           Useful for seeing the whole day, but nobody drives this - pick a
+           driver to get a route that starts where they do.
+         </p>`
+  }
 
   ${
     problem
@@ -253,7 +287,7 @@ function dispatchBoardBody({ board, quote, form = {}, problem = null, showNames,
   }
 
   <div class="card card-xl" style="padding:22px;margin-bottom:26px;">
-    <form method="get" action="/ops/dispatch" class="db-when">
+    <form method="get" action="/ops/routing" class="db-when">
       <div>
         <label class="field-label" for="date">Which day</label>
         <input class="input input-lg" type="date" id="date" name="date"
@@ -264,6 +298,27 @@ function dispatchBoardBody({ board, quote, form = {}, problem = null, showNames,
         <input class="input input-lg" type="time" id="from" name="from"
                value="${escapeHtml(board.start)}" style="width:100%;">
       </div>
+      ${
+        // A driver only ever sees their own day, so there is nothing to pick
+        // and the control would be a dropdown with one entry in it.
+        lockedToSelf
+          ? ''
+          : `
+      <div>
+        <label class="field-label" for="driver">Whose day</label>
+        <select class="select input-lg" id="driver" name="driver" style="width:100%;">
+          <option value="">Everybody</option>
+          ${drivers
+            .map(
+              (d) =>
+                `<option value="${escapeHtml(d.id)}"${d.id === driverId ? ' selected' : ''}>${escapeHtml(
+                  d.name
+                )}${d.base_city ? ` - ${escapeHtml(d.base_city)}` : ''}</option>`
+            )
+            .join('')}
+        </select>
+      </div>`
+      }
       <button type="submit" class="btn btn-lg">Show it</button>
       ${form.address ? `<input type="hidden" name="address" value="${escapeHtml(form.address)}">` : ''}
       ${form.lb ? `<input type="hidden" name="lb" value="${escapeHtml(form.lb)}">` : ''}
@@ -392,9 +447,10 @@ function dispatchBoardBody({ board, quote, form = {}, problem = null, showNames,
           being driven, and what saying yes costs.
         </p>
 
-        <form method="get" action="/ops/dispatch">
+        <form method="get" action="/ops/routing">
           <input type="hidden" name="date" value="${escapeHtml(board.date)}">
           <input type="hidden" name="from" value="${escapeHtml(board.start)}">
+          ${driverId ? `<input type="hidden" name="driver" value="${escapeHtml(driverId)}">` : ''}
 
           <label class="field-label" for="address">Where is it</label>
           <input class="input" type="text" id="address" name="address"
@@ -600,4 +656,4 @@ function quoteAnswer(q, { showMoney }) {
   </div>`;
 }
 
-module.exports = { dispatchBoardBody };
+module.exports = { routingBoardBody };

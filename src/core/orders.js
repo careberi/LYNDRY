@@ -188,10 +188,30 @@ async function create({
       price_per_lb_cents: config.pricing.perPoundCents,
       minimum_cents: config.pricing.minimumCents,
     })
-    .select('*')
+    .select('*, customers(*)')
     .single();
 
   if (error) throw error;
+
+  // WHOSE ORDER IS IT. Assigned to whichever active driver's home base is
+  // nearest, and reassignable afterwards - the automatic answer knows about
+  // distance and nothing about who is off sick.
+  //
+  // Required lazily to keep the require graph acyclic: drivers.js reaches
+  // geocode and roles, and a top-level require here would close a loop through
+  // whatever else pulls orders in.
+  //
+  // Best effort, and after the insert. A geocoder having a slow minute must
+  // never fail a booking somebody is waiting on - the order exists either way
+  // and an unassigned one is a real state that the boards show as its own row.
+  try {
+    const drivers = require('./drivers');
+    const driverId = await drivers.assign(data);
+    if (driverId) data.driver_id = driverId;
+  } catch (err) {
+    console.warn(`could not assign order ${data.order_number} to a driver:`, err.message);
+  }
+
   return data;
 }
 

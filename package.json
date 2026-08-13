@@ -13,7 +13,8 @@
     "ops:user": "node --use-system-ca scripts/ops-user.js",
     "cron:recurring": "node --use-system-ca scripts/cron-recurring.js",
     "test:signature": "node scripts/test-signature.js",
-    "prompt": "node scripts/show-prompt.js"
+    "prompt": "node scripts/show-prompt.js",
+    "assign": "node --use-system-ca scripts/assign-drivers.js"
   },
   "engines": {
     "node": ">=20"
