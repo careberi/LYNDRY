@@ -113,8 +113,15 @@ async function locate(driver) {
   return found ? { ...driver, base_lat: found.lat, base_lng: found.lng } : driver;
 }
 
-// Save a base from the team form. Clearing the address clears the pin with it,
-// otherwise a driver who moved would keep routing from where they used to be.
+// Save a base from the profile form. Clearing the address clears the pin with
+// it, otherwise somebody who moved would keep routing from where they used to
+// be.
+//
+// ONLY RE-PINS WHEN THE ADDRESS ACTUALLY CHANGED. This used to null the pin on
+// every call, which was harmless while it had its own button and is not now
+// that it is part of saving a whole profile: correcting a typo in somebody's
+// name would have thrown their location away and spent a geocoder request
+// putting it back, and left them routing from the service base in between.
 async function saveBase(id, form) {
   const clean = (value, max) => {
     const text = String(value == null ? '' : value).trim();
@@ -129,19 +136,27 @@ async function saveBase(id, form) {
     base_city: clean(form.base_city, 80),
     base_state: state ? state.toUpperCase() : null,
     base_postal_code: clean(form.base_postal_code, 10),
-    // Any edit re-pins from scratch. Working out whether the change was
-    // material would be more code than one geocoder call for something that
-    // happens a handful of times a year.
-    base_lat: null,
-    base_lng: null,
-    base_geocoded_at: null,
-    base_geocode_failed: false,
   };
+
+  const before = await find(id);
+
+  const moved =
+    !before ||
+    before.base_address_line1 !== row.base_address_line1 ||
+    before.base_city !== row.base_city ||
+    before.base_postal_code !== row.base_postal_code;
+
+  if (moved) {
+    row.base_lat = null;
+    row.base_lng = null;
+    row.base_geocoded_at = null;
+    row.base_geocode_failed = false;
+  }
 
   const { data, error } = await db.from('ops_users').update(row).eq('id', id).select(DRIVER_FIELDS).single();
   if (error) throw error;
 
-  if (row.base_address_line1) locate(data).catch(() => {});
+  if (moved && row.base_address_line1) locate(data).catch(() => {});
 
   return data;
 }

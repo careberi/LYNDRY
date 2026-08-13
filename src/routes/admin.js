@@ -24,6 +24,7 @@ const drivers = require('../core/drivers');
 const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
 const { runBody } = require('../web/run-page');
+const { teamMemberBody, ROLE_TONE } = require('../web/team-page');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
@@ -3420,64 +3421,26 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
     if (error) throw error;
 
-    const ROLE_TONE = {
-      ADMIN: 'var(--sunbeam-500)',
-      DRIVER: 'var(--suds-300)',
-      SALES: 'var(--lilac-300)',
-    };
-
-    const roleControl = (p, isMe) => {
-      // You cannot change your own role, for the same reason you cannot switch
-      // yourself off: demoting yourself out of team management locks the door
-      // behind you.
-      if (isMe) {
-        return `<span class="badge" style="background:${ROLE_TONE[p.role]};">${escapeHtml(
-          roles.labelFor(p.role)
-        )}</span>`;
-      }
-
-      return `
-        <form method="post" action="/ops/team/${p.id}/role" style="margin:0;display:flex;gap:8px;">
-          <select class="select" name="role" style="min-height:36px;padding:4px 10px;font-size:14px;">
-            ${Object.keys(roles.ROLES)
-              .map(
-                (key) =>
-                  `<option value="${key}"${key === p.role ? ' selected' : ''}>${escapeHtml(
-                    roles.labelFor(key)
-                  )}</option>`
-              )
-              .join('')}
-          </select>
-          <button class="btn btn-sm btn-outline">Save</button>
-        </form>`;
-    };
-
+    // A LIST IS A LIST. Every control that used to be wedged into a row -
+    // the role dropdown, the driving toggle, the switch-off button - now lives
+    // on the person's own page, along with the two things nothing could edit at
+    // all: their name and their number. One place, one save.
     const rows = (people || []).map((p) => {
       const isMe = p.id === req.opsUser.id;
       return [
-        `${escapeHtml(p.name)}${isMe ? ' <span style="color:var(--ink-400);">(you)</span>' : ''}`,
+        `<a href="/ops/team/${p.id}" style="font-weight:700;">${escapeHtml(p.name)}</a>${
+          isMe ? ' <span style="color:var(--ink-400);">(you)</span>' : ''
+        }`,
         escapeHtml(formatPhone(p.phone)),
-        roleControl(p, isMe),
+        `<span class="badge" style="background:${ROLE_TONE[p.role]};">${escapeHtml(
+          roles.labelFor(p.role)
+        )}</span>`,
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : '<span class="badge">DISABLED</span>',
-        // Only somebody on the round has a base. An admin who has not switched
-        // driving on has no route to start, so the field would change nothing.
-        // ON THE ROUND OR NOT.
-        //
-        // A driver always is - that is the role, and a toggle offering to take
-        // them off it would be a lie. An admin chooses, because the owner
-        // drives some days and not others. Sales never does.
-        p.role === 'ADMIN'
-          ? `<form method="post" action="/ops/team/${p.id}/drives" style="margin:0;">
-               <button class="btn btn-sm ${p.drives ? '' : 'btn-outline'}"
-                       name="drives" value="${p.drives ? 'no' : 'yes'}">
-                 ${p.drives ? 'On the round' : 'Not driving'}
-               </button>
-             </form>`
-          : p.role === 'DRIVER'
-            ? '<span class="badge" style="background:var(--suds-300);">On the round</span>'
-            : '<span style="color:var(--ink-400);">&mdash;</span>',
+        roles.can(p, 'orders.drive')
+          ? '<span class="badge" style="background:var(--suds-300);">On the round</span>'
+          : '<span style="color:var(--ink-400);">&mdash;</span>',
         roles.can(p, 'orders.drive')
           ? p.base_address_line1
             ? `${escapeHtml(p.base_city || p.base_address_line1)}${
@@ -3490,16 +3453,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
             : '<span style="color:var(--ink-500);">service base</span>'
           : '<span style="color:var(--ink-400);">&mdash;</span>',
         p.last_login_at ? dateTime(p.last_login_at) : 'never',
-        // You cannot switch yourself off — that is the one way to lock
-        // everybody out of a tool with no other way back in.
-        isMe
-          ? '<span style="color:var(--ink-400);font-size:14px;">—</span>'
-          : `<form method="post" action="/ops/team/${p.id}/status" style="margin:0;">
-               <button class="btn btn-sm ${p.status === 'ACTIVE' ? 'btn-outline' : 'btn-primary'}"
-                       name="status" value="${p.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'}">
-                 ${p.status === 'ACTIVE' ? 'Switch off' : 'Switch on'}
-               </button>
-             </form>`,
+        `<a class="btn btn-sm btn-outline" href="/ops/team/${p.id}">Edit</a>`,
       ];
     });
 
@@ -3591,79 +3545,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
       </div>
 
-      <div class="card card-xl" style="padding:28px;margin-top:28px;">
-        ${sectionHeading('Where each of them starts the day', 'Home bases')}
-        <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 20px;">
-          A route is solved from wherever the driver leaves from, and an order is
-          given to whichever driver's base is nearest. <strong>Left blank they
-          fall back to the service base</strong>, which is what every route used
-          before this existed - so nothing breaks, but two drivers with no bases
-          set look identical to the assignment.
-        </p>
-
-        <style>
-          .tb-row { display:grid; grid-template-columns:140px minmax(0,2fr) minmax(0,1.2fr) 70px 100px auto;
-                    gap:10px; align-items:end; padding:14px 0; border-bottom:1px solid var(--ink-100); }
-          .tb-row > * { min-width:0; }
-          .tb-row .field-label { margin-bottom:4px; }
-          .tb-name { font-weight:700; font-size:15px; padding-bottom:10px; }
-          @media (max-width: 780px) {
-            .tb-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
-            .tb-name { grid-column:1 / -1; padding-bottom:0; }
-          }
-        </style>
-
-        ${
-          (people || []).filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.drive')).length
-            ? (people || [])
-                .filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.drive'))
-                .map(
-                  (p) => `
-        <form method="post" action="/ops/team/${p.id}/base" class="tb-row">
-          <div class="tb-name">
-            ${escapeHtml(p.name)}
-            <div style="font-weight:400;font-size:13px;color:var(--ink-500);">
-              ${
-                p.base_lat != null
-                  ? 'on the map'
-                  : p.base_address_line1
-                    ? p.base_geocode_failed
-                      ? '<span style="color:var(--stain-500);">address not found</span>'
-                      : 'locating'
-                    : 'service base'
-              }
-            </div>
-          </div>
-          <div>
-            <label class="field-label" for="b1_${p.id}">Street</label>
-            <input class="input" type="text" id="b1_${p.id}" name="base_address_line1"
-                   value="${escapeHtml(p.base_address_line1 || '')}" placeholder="12 Berdan Ave" style="width:100%;">
-          </div>
-          <div>
-            <label class="field-label" for="bc_${p.id}">Town</label>
-            <input class="input" type="text" id="bc_${p.id}" name="base_city"
-                   value="${escapeHtml(p.base_city || '')}" placeholder="Fair Lawn" style="width:100%;">
-          </div>
-          <div>
-            <label class="field-label" for="bs_${p.id}">State</label>
-            <input class="input" type="text" id="bs_${p.id}" name="base_state" maxlength="2"
-                   value="${escapeHtml(p.base_state || '')}" placeholder="NJ" style="width:100%;">
-          </div>
-          <div>
-            <label class="field-label" for="bz_${p.id}">Zip</label>
-            <input class="input" type="text" id="bz_${p.id}" name="base_postal_code"
-                   value="${escapeHtml(p.base_postal_code || '')}" placeholder="07410" style="width:100%;">
-          </div>
-          <button class="btn btn-sm btn-outline" type="submit">Save</button>
-        </form>`
-                )
-                .join('')
-            : `<p style="margin:0;font-size:15px;color:var(--ink-500);line-height:1.6;">
-                 Nobody on the team can drive yet. Add somebody as a Driver, or give an
-                 existing person that role, and their base appears here.
-               </p>`
-        }
-      </div>`;
+      `;
 
     res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues }));
   } catch (err) {
@@ -3706,45 +3588,102 @@ router.post('/ops/team', guard, may('team.manage'), async (req, res, next) => {
   }
 });
 
-// Put an admin on the round, or take them off it.
+// ---------------------------------------------------------------------------
+// One person: GET /ops/team/:id, POST /ops/team/:id
 //
-// ADMIN ONLY. A driver drives by role and there is nothing to toggle; sales
-// never drives. Posting this at either is refused rather than silently ignored,
-// because a button that appears to work and does nothing is worse than one that
-// says no.
-//
-// TAKING SOMEBODY OFF THE ROUND MOVES THEIR WORK. Orders keep pointing at
-// whoever owns them, and a driver who is no longer driving still owning half of
-// today is exactly the silent gap this whole feature exists to close - the
-// board would not list them and nobody would collect. Their open orders are
-// reassigned to the nearest remaining driver, or left unassigned and shown in
-// the red banner if there is nobody left.
-router.post('/ops/team/:id/drives', guard, may('team.manage'), async (req, res, next) => {
+// Everything about a person is edited here, in one form with one save. It
+// replaced four separate routes - role, status, driving, home base - each of
+// which was a control wedged into a table row, and none of which could edit the
+// two things most likely to be wrong: their name and their number. A typo on
+// either used to mean deleting the person and starting again, which loses the
+// record of what they did.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return next();
 
     const person = await drivers.find(req.params.id);
     if (!person) return notFoundPage(res, 'No such person.');
 
-    if (person.role !== 'ADMIN') {
-      return res.redirect(
-        303,
-        '/ops/team?error=' +
-          encodeURIComponent(
-            `${person.name} is a ${roles.labelFor(person.role)}. Only an admin chooses whether they drive - change their role instead.`
-          )
+    return res.type('html').send(
+      adminPage({
+        title: person.name,
+        active: '/ops/team',
+        body: teamMemberBody({
+          person,
+          isMe: person.id === req.opsUser.id,
+          formatPhone,
+          notice: req.query.note ? String(req.query.note).slice(0, 300) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const person = await drivers.find(req.params.id);
+    if (!person) return notFoundPage(res, 'No such person.');
+
+    const isMe = person.id === req.opsUser.id;
+    const back = `/ops/team/${person.id}`;
+    const body = req.body || {};
+    const refuse = (why) => res.redirect(303, `${back}?problem=${encodeURIComponent(why)}`);
+
+    const name = String(body.name || '').trim();
+    if (!name) return refuse('They need a name.');
+
+    const phone = normalisePhone(body.phone);
+    if (!phone) return refuse('That does not look like a US mobile number.');
+
+    // NEITHER OF THESE MAY BE DONE TO YOURSELF, and the form hides both - this
+    // is the half that holds when somebody posts the form anyway. Changing your
+    // own role out of team management, or switching yourself off, locks the
+    // door behind you on a tool with no other way in.
+    const role = !isMe && roles.ROLES[String(body.role || '')] ? String(body.role) : person.role;
+    const status = isMe ? 'ACTIVE' : String(body.active) === 'yes' ? 'ACTIVE' : 'DISABLED';
+
+    // Only an admin has a driving choice. A driver drives by role; sales never
+    // does. Changing somebody INTO a driver clears the flag, so it cannot sit
+    // set on a row where it means nothing.
+    const drives = role === 'ADMIN' ? String(body.drives) === 'yes' : false;
+
+    const row = { name, phone, role, status, drives };
+
+    const { error } = await db.from('ops_users').update(row).eq('id', person.id);
+
+    if (error) {
+      return refuse(
+        /duplicate|unique/i.test(error.message)
+          ? 'Someone is already set up with that number.'
+          : error.message
       );
     }
 
-    const on = String((req.body || {}).drives) === 'yes';
+    // The base is saved separately because it re-pins from scratch and that
+    // costs a geocoder call. Only for somebody who is actually on the round -
+    // there is nothing for a route to start from otherwise.
+    const willDrive = roles.can({ ...person, role, drives }, 'orders.drive');
+    if (willDrive) await drivers.saveBase(person.id, body);
 
-    const { error } = await db.from('ops_users').update({ drives: on }).eq('id', person.id);
-    if (error) throw error;
-
+    // WORK DOES NOT FOLLOW SOMEBODY OFF THE ROUND. An order still pointing at
+    // a person who no longer drives appears on no board and gets collected by
+    // nobody, which is the exact gap driver_id exists to close.
     let moved = 0;
     let stranded = 0;
 
-    if (!on) {
+    const wasDriving = roles.can(person, 'orders.drive');
+    const stillActive = status === 'ACTIVE';
+
+    if ((wasDriving && !willDrive) || !stillActive) {
       const { data: theirs } = await db
         .from('orders')
         .select('id, order_number, customers(*)')
@@ -3755,91 +3694,19 @@ router.post('/ops/team/:id/drives', guard, may('team.manage'), async (req, res, 
         // Cleared first, so nearest() cannot hand it straight back to somebody
         // who is no longer in the pool.
         await db.from('orders').update({ driver_id: null }).eq('id', order.id);
-
-        const to = await drivers.assign({ ...order, driver_id: null });
-        if (to) moved += 1;
+        if (await drivers.assign({ ...order, driver_id: null })) moved += 1;
         else stranded += 1;
       }
     }
 
-    const note = on
-      ? `${person.name} is on the round. Set their home base below.`
-      : `${person.name} is off the round.` +
-        (moved ? ` ${moved} order${moved === 1 ? '' : 's'} moved to another driver.` : '') +
-        (stranded
-          ? ` ${stranded} order${stranded === 1 ? '' : 's'} left with nobody - there is no other driver.`
-          : '');
+    const note =
+      'Saved.' +
+      (moved ? ` ${moved} order${moved === 1 ? '' : 's'} moved to another driver.` : '') +
+      (stranded
+        ? ` ${stranded} order${stranded === 1 ? '' : 's'} left with nobody - there is no other driver.`
+        : '');
 
-    return res.redirect(303, `/ops/team?note=${encodeURIComponent(note)}`);
-  } catch (err) {
-    return next(err);
-  }
-});
-
-// Where somebody starts and ends the day.
-//
-// No self-edit guard here, unlike role and status: setting your own base cannot
-// lock anybody out of anything, and an admin who also drives has the most
-// reason to set their own.
-router.post('/ops/team/:id/base', guard, may('team.manage'), async (req, res, next) => {
-  try {
-    if (!UUID.test(req.params.id)) return next();
-
-    await drivers.saveBase(req.params.id, req.body || {});
-
-    return res.redirect(303, '/ops/team?based=1');
-  } catch (err) {
-    return next(err);
-  }
-});
-
-router.post('/ops/team/:id/role', guard, may('team.manage'), async (req, res, next) => {
-  try {
-    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That person id is not valid.');
-
-    const role = String((req.body || {}).role || '');
-    if (!roles.ROLES[role]) return notFoundPage(res, 'That is not a role.');
-
-    // Same reasoning as switching yourself off: demoting yourself out of team
-    // management locks the door behind you.
-    if (req.params.id === req.opsUser.id) {
-      return res.redirect(
-        303,
-        '/ops/team?error=' + encodeURIComponent('You cannot change your own role.')
-      );
-    }
-
-    const { error } = await db.from('ops_users').update({ role }).eq('id', req.params.id);
-    if (error) throw error;
-
-    return res.redirect(303, '/ops/team');
-  } catch (err) {
-    return next(err);
-  }
-});
-
-router.post('/ops/team/:id/status', guard, may('team.manage'), async (req, res, next) => {
-  try {
-    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That person id is not valid.');
-
-    const status = String((req.body || {}).status || '');
-    if (!['ACTIVE', 'DISABLED'].includes(status)) {
-      return notFoundPage(res, 'That is not a status a person can have.');
-    }
-
-    // Belt and braces: the page hides the button, and this refuses it anyway.
-    // Switching yourself off is how a tool with no other way in gets locked.
-    if (req.params.id === req.opsUser.id) {
-      return res.redirect(
-        303,
-        '/ops/team?error=' + encodeURIComponent('You cannot switch yourself off.')
-      );
-    }
-
-    const { error } = await db.from('ops_users').update({ status }).eq('id', req.params.id);
-    if (error) throw error;
-
-    return res.redirect(303, '/ops/team');
+    return res.redirect(303, `${back}?note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
   }

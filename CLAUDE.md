@@ -449,8 +449,9 @@ GET  /ops/partners           the businesses we work with, added by hand
 GET  /ops/partners/:id       one partner, and their scale against ours
 GET  /ops/partners/enquiries leads from the website form
 POST /ops/partners/enquiries/:id/status   NEW / CONTACTED / CLOSED
-GET  /ops/team               who can sign in, their home bases, add and disable
-POST /ops/team/:id/base      where that person starts and ends the day
+GET  /ops/team               everyone who can sign in
+GET  /ops/team/:id           one person: name, number, role, driving, home base
+POST /ops/team/:id           save all of it, in one go
 POST /ops/orders/:id/driver  move an order to a different driver
 GET  /ops/login              phone number     } the only two pages
 GET  /ops/login/code         six-digit code   } reachable signed out
@@ -873,8 +874,23 @@ exact silent gap `driver_id` exists to close.
 unrecognised role posted to the form falls back to it too. Promoting is
 deliberate.
 
+**A person is edited on their own page, `/ops/team/:id`, in one form with one
+save.** It replaced four separate routes — role, status, driving, home base —
+each of which was a control wedged into a table row, and none of which could
+edit the two things most likely to be wrong: a name and a phone number. A typo
+on either meant deleting the person and starting again, which loses the record
+of what they did. The list is now a list.
+
 **Nobody can change their own role or switch themselves off.** Both would let
-an admin lock themselves — and possibly everyone — out of team management.
+an admin lock themselves — and possibly everyone — out of team management. The
+form hides both and the route refuses them anyway, because a hidden control
+whose route still fires is not a guard.
+
+**Saving a profile only re-pins the home base when the address actually
+changed.** It used to null the pin on every call, which was harmless while it
+had its own button: now that it is part of saving a whole person, correcting a
+typo in a name would have thrown their location away, spent a geocoder request
+putting it back, and left them routing from the service base in between.
 
 **The `x-admin-key` machine credential bypasses roles entirely.** It is our own
 scripts, it has no person attached, and it gets everything.
