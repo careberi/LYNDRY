@@ -403,6 +403,9 @@ GET  /ops/issues             everything still waiting on a person
 GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
+GET  /ops/loadout            scan bags into the van, build the run
+GET  /ops/labels             print a sheet of bag stickers
+GET  /o/<code>               the page behind the QR on a bag (public)
 GET  /ops/partners           enquiries from /partners, newest first
 POST /ops/partners/:id/status   NEW / CONTACTED / CLOSED
 GET  /ops/team               who can sign in; add and disable people
@@ -433,6 +436,42 @@ at. **Never let it silently mix the two**, and never quietly drop the badge; a
 mileage figure whose provenance is invisible is worse than no figure. If the
 demo server becomes unreliable, the replacement is a paid routing key, not a
 quiet return to estimates.
+
+**Bag labels are pre-printed and bound later.** A sticker has to exist at a
+customer's door and there is no printer in the van, so blank labels are printed
+in batches from `/ops/labels`, live in the van, and the driver enters the code
+to bind one to a bag. `bag_labels` is a reusable pointer, not an identity — the
+order is the identity. **Delivery releases every label on the order**, so a
+sticker out of a bin points at nothing.
+
+**`/o/<code>` is the only page in the system with no login at all**, and that is
+the point: a laundromat points a camera at a sticker. Its whole design is what
+is safe to put on a page like that. It shows the code, which bag of how many,
+five structured wash fields and a countdown. **Free text never crosses** — not
+`special_instructions`, not `dropoff_spot`, however laundry-ish it looks. A real
+saved preference on this system reads "Deliver to 16-51 Chandler Dr", and no
+regex catches "the Bergen Pediatrics name tags", so the fix is an allowlist
+rather than redaction. Add a field to that page only by adding it to
+`washLines()` deliberately.
+
+**The scale photo is required, and the partner's weight is a cross-check.**
+`/ops/weight` will not save a first weighing without a photo of the display —
+the number charges a card. A laundromat may enter its own figure on the QR page;
+**`partner_weight_lb` is never read by the pricing code**. Ours bills. More than
+a pound apart raises an issue. Wiring their number into `price_cents` removes
+the control Neil asked for.
+
+**The load-out pass turns the van into a sequence.** Scan every bag out of the
+laundromat, build the run, load in REVERSE — highest stop deepest, stop 1 by the
+door. At the door the scan is a confirmation, not a search, and a multi-bag
+order will not complete until every bag has been scanned. Stop numbers are
+cleared on delivery: they describe one afternoon, not the order.
+
+**The camera is an accelerator, never the mechanism.** Every scan field is a
+plain text box in a plain form. `BarcodeDetector` fills it where it exists, and
+the button is hidden where it does not — which includes every iPhone. Never use
+the HTML `hidden` attribute on a `.btn`: the class sets `display` and beats it,
+so the button renders and does nothing.
 
 **`/ops/process` explains the service and must be updated with it.** It is the
 page you hand a new driver: what LYNDRY is, what the customer, the driver and

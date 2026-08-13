@@ -33,7 +33,7 @@ const payments = require('../providers/payments');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';
+const REVIEWED = '13 August 2026';  // bumped with phase 9c
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -385,7 +385,27 @@ function processBody() {
       )}
       ${step(
         6,
-        'Deliver it, and photograph it',
+        'Scan every bag out of the laundromat, then load in reverse',
+        `The load-out screen. One continuous pass - scan each bag as it goes in,
+         you are touching it anyway. That records that it left the partner with
+         us, builds the round from everything scanned, and gives each bag a
+         stop number to write on a reusable tag. Then <strong>load
+         backwards</strong>: highest number deepest, stop 1 by the door, so
+         every bag is at the tailgate when you arrive. Numbered tags without
+         reverse loading just means climbing over stop 9 to reach stop 2.`
+      )}
+      ${step(
+        7,
+        'At the door, scan to confirm - not to find',
+        `You already have the bag, chosen by the number on its tag. The scan
+         either agrees or shouts <strong>WRONG BAG</strong>. That is the net
+         that catches a mis-clipped tag before it becomes two customers holding
+         each other's laundry and a second trip out. A three-bag order will not
+         complete until all three have been scanned.`
+      )}
+      ${step(
+        8,
+        'Photograph it on the doorstep',
         `<strong>No photo, no delivery.</strong> The button will not complete
          without one. The photo is the answer to "you never delivered it" and
          the reason somebody is willing to leave a bag outside at all. It goes
@@ -394,6 +414,22 @@ function processBody() {
       )}
     </ol>
     <div class="pr-note" style="margin-top:26px;">
+      <h3>The camera is a shortcut, never the mechanism</h3>
+      <p>
+        Every scan on every screen is a plain text box in a plain form. The
+        camera fills that box and submits it, and where the browser cannot scan
+        - any iPhone, since Safari has no barcode support - the button simply
+        does not appear. The six characters are printed under each QR in large
+        type for exactly this reason: a dark basement, a lens that will not
+        focus, a cracked screen. Read it out, type it, carry on.
+      </p>
+      <p>
+        That is what keeps the no-JavaScript rule on these screens honest. The
+        page still either worked or did not.
+      </p>
+    </div>
+
+    <div class="pr-note" style="margin-top:20px;">
       <h3>The driver never decides money</h3>
       <p>
         There is no discount button and no price field. The only number a driver

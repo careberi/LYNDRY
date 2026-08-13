@@ -4,6 +4,7 @@ const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
 const bags = require('./bags');
+const loadout = require('./loadout');
 const recurring = require('./recurring');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
@@ -375,6 +376,26 @@ async function deliver(order, file) {
     };
   }
 
+  // EVERY BAG, OR NONE.
+  //
+  // A three-bag order cannot be completed having handed over two. The scan at
+  // the door confirms the bag in the driver's hand is the right one; this is
+  // what makes sure he did it for all of them before walking away.
+  //
+  // An order with no labels passes. Labelling is new, and refusing to deliver a
+  // bag picked up before stickers existed would strand it on the van forever.
+  const scanned = await loadout.allBagsScanned(order.id);
+
+  if (!scanned.ok) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail:
+        `${scanned.scanned} of ${scanned.total} bags scanned. Scan the rest before marking it delivered - ` +
+        `the whole order goes to the door together.`,
+    };
+  }
+
   let photoPath = null;
   let photoUrl = null;
 
@@ -444,6 +465,10 @@ async function deliver(order, file) {
   //
   // After the transition, so a failed delivery does not orphan the bags.
   await bags.releaseOrder(order.id);
+
+  // The stop number and the loaded flag describe one afternoon, not the order.
+  // Leaving them is how a driver ends up trusting yesterday's tag.
+  await db.from('orders').update({ stop_number: null, loaded_at: null }).eq('id', order.id);
 
   result.photo = Boolean(photoUrl);
   return result;

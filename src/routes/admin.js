@@ -17,6 +17,9 @@ const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
 const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
+const loadout = require('../core/loadout');
+const { loadoutBody } = require('../web/loadout-page');
+const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -177,6 +180,7 @@ ${head}
            Customers link they would be refused at. -->
       <nav class="site-nav">
         ${roles.can(user, 'orders.view') ? tab('/ops', 'Orders') : ''}
+        ${roles.can(user, 'orders.act') ? tab('/ops/loadout', 'Load out') : ''}
         ${roles.can(user, 'customers.view') ? tab('/ops/customers', 'Customers') : ''}
         ${roles.can(user, 'messages.view') ? tab('/ops/messages', 'Messages') : ''}
         ${roles.can(user, 'issues.manage') ? tab('/ops/issues', 'Issues') : ''}
@@ -280,7 +284,7 @@ function table(headings, rows) {
 // rather than a spinner that lies.
 // ---------------------------------------------------------------------------
 
-function workCard(order, { canAct, notice, problem }) {
+function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true } }) {
   const weighed = order.weight_lb != null;
 
   // Weighing is an event rather than a step, so it is offered the whole time
@@ -304,9 +308,37 @@ function workCard(order, { canAct, notice, problem }) {
               background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
 
   // Delivered needs a photo, so it is a file input rather than a bare button.
+  //
+  // And, on a labelled order, it needs every bag scanned first. The scan at the
+  // door is a CONFIRMATION - the driver already has the bag, chosen by the
+  // number on its tag, and this only agrees or shouts. A refusal here is cheap;
+  // the expensive failure is two doors away when somebody else's laundry is
+  // gone and both customers need a second trip.
   const stepButton = (s) =>
     s.to === 'DELIVERED'
       ? `
+      ${
+        bagScan.total && !bagScan.allScanned
+          ? `
+      <div style="margin:0 0 20px;padding:20px;border:2px solid var(--ink-900);border-radius:14px;background:var(--sunbeam-500);">
+        <p style="margin:0 0 6px;font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.15;">
+          Scan the bags at the door
+        </p>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.55;">
+          ${bagScan.scanned} of ${bagScan.total} done. Grab the bag with the right
+          number on its tag and scan it - this checks you have the right one before
+          you put it down.
+        </p>
+        ${scanField({
+          action: `/ops/orders/${order.order_number}/door-scan`,
+          label: 'Bag in your hand',
+          buttonLabel: 'Check',
+          autofocus: true,
+          hint: describeCodeFormat(),
+        })}
+      </div>`
+          : ''
+      }
       <form method="post" action="/ops/orders/${order.order_number}/delivered"
             enctype="multipart/form-data" style="margin:0;display:flex;flex-direction:column;gap:10px;">
         <label class="field-label" for="photo">Photo at the door &mdash; required</label>
@@ -315,9 +347,14 @@ function workCard(order, { canAct, notice, problem }) {
              the JSON API reaches the same code and a form attribute guards
              neither of them. -->
         <input class="input" type="file" id="photo" name="photo" accept="image/*" capture="environment" required>
-        <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
+        <button type="submit" class="btn btn-primary btn-lg btn-full"
+                ${bagScan.total && !bagScan.allScanned ? 'disabled' : ''}>${s.label}</button>
         <span class="field-hint">
-          This is the proof of delivery. The customer gets a link to it that expires after 30 days.
+          ${
+            bagScan.total && !bagScan.allScanned
+              ? 'Every bag has to be scanned before this opens.'
+              : 'This is the proof of delivery. The customer gets a link to it that expires after 30 days.'
+          }
         </span>
       </form>`
       : `
@@ -879,21 +916,14 @@ function bagsCard(order, labels, canAct) {
 
     ${
       canAct && !done
-        ? `<form method="post" action="/ops/orders/${order.order_number}/label" style="margin:20px 0 0;">
-             <label class="eyebrow" for="label_code" style="display:block;margin-bottom:8px;">
-               Add a bag
-             </label>
-             <div style="display:flex;gap:12px;align-items:flex-start;">
-               <input class="input input-lg" type="text" id="label_code" name="code" required
-                      autocomplete="off" autocapitalize="characters" spellcheck="false"
-                      inputmode="text" maxlength="12" placeholder="Code under the QR"
-                      style="flex:1;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:0.08em;">
-               <button type="submit" class="btn btn-ink btn-lg">Add</button>
-             </div>
-             <span class="field-hint" style="display:block;margin-top:8px;">
-               Six characters. O reads as zero and I or L as one, so a misread still finds the right bag.
-             </span>
-           </form>`
+        ? `<div style="margin:20px 0 0;">
+             ${scanField({
+               action: `/ops/orders/${order.order_number}/label`,
+               label: 'Add a bag',
+               buttonLabel: 'Add',
+               hint: describeCodeFormat(),
+             })}
+           </div>`
         : ''
     }
   </div>`;
@@ -950,8 +980,15 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         <span style="font-size:16px;text-align:right;">${value}</span>
       </div>`;
 
-    // Which stickers are on this order's bags.
+    // Which stickers are on this order's bags, and how many have been scanned
+    // at the door. Both drive the work card.
     const labels = await bags.forOrder(order.id);
+    const doorScan = await loadout.allBagsScanned(order.id);
+    const bagScan = {
+      total: doorScan.total,
+      scanned: doorScan.scanned,
+      allScanned: doorScan.ok,
+    };
 
     const body = `
       <a href="/ops" style="font-size:15px;font-weight:600;">&larr; All orders</a>
@@ -978,6 +1015,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
       ${workCard(order, {
         canAct: roles.can(req.opsUser, 'orders.act'),
+        bagScan,
         // ?note= carries a sentence the action wrote itself, for steps where a
         // fixed banner cannot say enough. Sliced and escaped like any other
         // thing a person put in a URL.
@@ -990,6 +1028,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       })}
 
       ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'))}
+      ${scannerScript()}
 
       <div class="grid-2" style="align-items:start;">
 
@@ -1329,6 +1368,7 @@ const DONE_MESSAGES = Object.freeze({
   // The label banner carries its own sentence in ?note=, because "added" and
   // "was already there" and "taken off" are three different things.
   label: null,
+  door: null,
   'out-for-delivery': 'Out for delivery. The customer has been texted.',
   delivered: 'Delivered. The customer has been texted.',
 });
@@ -1393,6 +1433,74 @@ orderAction(
 orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
 orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
 
+// ---------------------------------------------------------------------------
+// The load-out pass: /ops/loadout
+//
+// Scan every bag into the van at the laundromat, then build the run. Behind
+// orders.act because it is the driver's screen and the driver is the one
+// holding the bags.
+// ---------------------------------------------------------------------------
+
+async function renderLoadout(req, res, { built = false } = {}) {
+  const run = await loadout.currentRun();
+
+  return res.type('html').send(
+    adminPage({
+      title: 'Load out',
+      active: '/ops/loadout',
+      body: loadoutBody({
+        run,
+        built,
+        notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+        problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+      }),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+    })
+  );
+}
+
+router.get('/ops/loadout', guard, withIssues, may('orders.act'), async (req, res, next) => {
+  try {
+    return await renderLoadout(req, res, { built: req.query.built === '1' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/loadout/scan', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const result = await loadout.scanIn((req.body || {}).code, req.opsUser && req.opsUser.id);
+
+    if (!result.ok) {
+      return res.redirect(303, `/ops/loadout?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    const note = result.already
+      ? `${result.label.code} was already in the van.`
+      : `${result.label.code} loaded, order #${result.order.order_number}.`;
+
+    return res.redirect(303, `/ops/loadout?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/loadout/build', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const { orders: sequenced, miles } = await loadout.buildRun();
+
+    const lost = sequenced.filter((o) => !o.located).length;
+    const note =
+      `${sequenced.length} stop${sequenced.length === 1 ? '' : 's'}, about ${miles.toFixed(1)} miles.` +
+      (lost ? ` ${lost} address could not be found and sorted last.` : '');
+
+    return res.redirect(303, `/ops/loadout?built=1&note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // --- The scale photo --------------------------------------------------------
 //
 // Internal evidence, so unlike a delivery photo there is no public link and no
@@ -1414,6 +1522,32 @@ router.get('/ops/orders/:id/scale-photo', guard, may('money.view'), async (req, 
 
     res.set('Cache-Control', 'no-store, private');
     return res.redirect(302, signed.signedUrl);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// --- Scanning a bag at the customer's door ----------------------------------
+
+router.post('/ops/orders/:id/door-scan', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const result = await loadout.scanAtDoor((req.body || {}).code, order);
+
+    if (!result.ok) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    const after = await loadout.allBagsScanned(order.id);
+    const note = result.already
+      ? `${result.label.code} was already scanned. ${after.scanned} of ${after.total} done.`
+      : `${result.label.code} checked. ${after.scanned} of ${after.total} done.` +
+        (after.ok ? ' All bags accounted for - take the photo.' : '');
+
+    return res.redirect(303, `${back}?done=door&note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
   }
