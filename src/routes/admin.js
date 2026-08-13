@@ -3384,10 +3384,18 @@ router.post('/ops/partners/send-overview', guard, may('partners.manage'), async 
 
     // Plain ASCII, one link, on our own domain. notify.js cleans the text
     // anyway, but writing it plain here means what is sent is what was meant.
-    const message =
-      `${who ? `Hi ${who} - ` : ''}it's ${site.name}. ` +
-      `How working with us works, for a laundromat: ${config.baseUrl}/for-laundromats ` +
-      `Reply here with any questions.`;
+    //
+    // Deliberately plain and short. A first text to a business that never
+    // asked for one should read like a person sent it, and every extra clause
+    // makes it read more like a blast.
+    //
+    // The greeting is written with a COMMA rather than a dash. notify.js
+    // rewrites " - " to ", " on the way out - no dashes in a LYNDRY text,
+    // deliberately - and writing the dash anyway left a capital "It's" sitting
+    // mid-sentence after the comma it became.
+    const message = who
+      ? `Hi ${who}, it's ${site.name}. Check out how the process works: ${config.baseUrl}/for-laundromats`
+      : `It's ${site.name}. Check out how the process works: ${config.baseUrl}/for-laundromats`;
 
     await notify.sendAndLog(phone, message, null);
 
