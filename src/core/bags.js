@@ -236,13 +236,27 @@ async function renumber(orderId) {
   return forOrder(orderId);
 }
 
-// Everything comes off when the order is done, so the stickers stop pointing
-// at anybody. Called at delivery.
+// Retire the stickers when the order is done.
+//
+// `released_at` is what stops /o/<code> resolving - a sticker out of a bin must
+// point at nothing. But the LINK is what dies, not the record: order_id and
+// position stay, so the order page can still show which codes were on which
+// bag long after delivery.
+//
+// The first version cleared order_id here as well, and a delivered order then
+// showed "no labels yet" - the history was destroyed to achieve the security
+// property, when only the lookup needed to stop working.
+//
+// This does mean a label is a consumable: one sticker, one order, for good.
+// Which is what it physically is - it goes back to the customer stuck to their
+// bag. `release()` above is the other thing, an error correction, and that one
+// genuinely does hand the sticker back to the blank pile.
 async function releaseOrder(orderId) {
   const { error } = await db
     .from('bag_labels')
-    .update({ order_id: null, position: null, released_at: new Date().toISOString() })
-    .eq('order_id', orderId);
+    .update({ released_at: new Date().toISOString() })
+    .eq('order_id', orderId)
+    .is('released_at', null);
 
   if (error) console.error(`Could not release bag labels for order ${orderId}: ${error.message}`);
 }

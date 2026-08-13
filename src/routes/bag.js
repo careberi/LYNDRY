@@ -273,7 +273,10 @@ router.get('/o/:code', async (req, res, next) => {
       return res.status(404).type('html').send(nothingHere());
     }
 
-    if (!label.order_id) {
+    // released_at is what retires a sticker. order_id stays set after delivery
+    // so the ops screens can still show which codes were on the bag, so it is
+    // no longer enough on its own to tell a live label from a finished one.
+    if (!label.order_id || label.released_at) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
       return res.status(404).type('html').send(nothingHere());
     }
@@ -400,7 +403,7 @@ router.post('/o/:code/weight', async (req, res, next) => {
     }
 
     const label = await bags.findByCode(code);
-    if (!label || !label.order_id) {
+    if (!label || !label.order_id || label.released_at) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
       return res.status(404).type('html').send(nothingHere());
     }
@@ -507,7 +510,7 @@ router.post('/o/:code/ready', async (req, res, next) => {
     }
 
     const label = await bags.findByCode(code);
-    if (!label || !label.order_id) {
+    if (!label || !label.order_id || label.released_at) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
       return res.status(404).type('html').send(nothingHere());
     }

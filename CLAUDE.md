@@ -469,9 +469,13 @@ second pickup for anyone who already has one waiting, so a retry is a no-op.
 **Bag labels are pre-printed and bound later.** A sticker has to exist at a
 customer's door and there is no printer in the van, so blank labels are printed
 in batches from `/ops/labels`, live in the van, and the driver enters the code
-to bind one to a bag. `bag_labels` is a reusable pointer, not an identity — the
-order is the identity. **Delivery releases every label on the order**, so a
-sticker out of a bin points at nothing.
+to bind one to a bag. `bag_labels` is a pointer, not an identity — the
+order is the identity. **Delivery RETIRES every label on the order** — it sets `released_at`, which is
+what stops `/o/<code>` resolving, so a sticker out of a bin points at nothing.
+It does NOT clear `order_id`: the link dies, the record does not, and the order
+page still shows which codes were on which bag afterwards. Clearing it was the
+first version and a delivered order then read "no labels yet". Any query for
+blank stock or labels in use has to check `released_at`, not just `order_id`.
 
 **`/o/<code>` is the only page in the system with no login at all**, and that is
 the point: a laundromat points a camera at a sticker. Its whole design is what

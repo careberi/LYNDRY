@@ -1063,42 +1063,66 @@ function bagsCard(order, labels, canAct) {
   const done = ['DELIVERED', 'CANCELED'].includes(order.status);
 
   const rows = labels
-    .map(
-      (l) => `
+    .map((l) => {
+      const url = bags.labelUrl(l.code);
+      const retired = Boolean(l.released_at);
+
+      return `
     <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;">
       <div style="min-width:0;">
         <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;">
-          <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;">
+          <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;${
+            retired ? 'color:var(--ink-500);' : ''
+          }">
             ${escapeHtml(l.code)}
           </span>
           <span class="eyebrow" style="margin:0;">Bag ${l.position} of ${total}</span>
+          ${retired ? '<span class="badge" style="background:var(--paper-300);">Retired</span>' : ''}
         </div>
-        <!-- What the QR on that sticker actually opens. Here so it can be read,
-             checked or sent to a laundromat by hand when a camera will not
-             cooperate - the printed code alone does not tell anybody where to
-             go. Wraps rather than overflowing; it is longer than a phone. -->
-        <a href="${escapeHtml(bags.labelUrl(l.code))}" target="_blank" rel="noopener"
-           style="display:inline-block;font-family:var(--font-mono);font-size:12px;
-                  color:var(--ink-500);margin-top:6px;word-break:break-all;line-height:1.4;">
-          ${escapeHtml(bags.labelUrl(l.code))}
-        </a>
+        <!-- What the QR on that sticker opens. Here so it can be read, checked
+             or sent to a laundromat by hand when a camera will not cooperate -
+             the printed code alone does not tell anybody where to go.
+
+             A retired one is printed as plain text rather than a link. It is
+             kept because "which sticker was on that bag" is a real question
+             after the fact, but the address deliberately stops working the
+             moment the order is delivered, and a live-looking link that 404s
+             is worse than one that says so. -->
+        ${
+          retired
+            ? `<div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-400);
+                           margin-top:6px;word-break:break-all;line-height:1.4;">
+                 ${escapeHtml(url)}
+               </div>
+               <div style="font-size:12px;color:var(--ink-500);margin-top:3px;">
+                 Stopped working when the order was delivered.
+               </div>`
+            : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"
+                  style="display:inline-block;font-family:var(--font-mono);font-size:12px;
+                         color:var(--ink-500);margin-top:6px;word-break:break-all;line-height:1.4;">
+                 ${escapeHtml(url)}
+               </a>`
+        }
       </div>
       <span style="flex:1;"></span>
       ${
-        canAct && !done
+        canAct && !done && !retired
           ? `<form method="post" action="/ops/orders/${order.order_number}/label/${l.id}/release" style="margin:0;">
                <button type="submit" class="btn btn-outline btn-sm">Take off</button>
              </form>`
           : ''
       }
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 
   return `
   <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
     <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:6px;">
-      ${sectionHeading('The bags', total ? `${total} labelled` : 'No labels yet')}
+      ${sectionHeading(
+        'The bags',
+        total ? `${total} labelled` : done ? 'None were labelled' : 'No labels yet'
+      )}
       <a href="/ops/labels" style="font-size:14px;font-weight:600;">Print more stickers</a>
     </div>
 
@@ -1106,8 +1130,11 @@ function bagsCard(order, labels, canAct) {
       total
         ? rows
         : `<p style="color:var(--ink-500);font-size:15px;line-height:1.6;margin:4px 0 0;">
-             Nothing labelled yet. Stick a label on each bag as you pick it up and
-             enter its code here, so the bag can be identified without opening it.
+             ${
+               done
+                 ? 'This order went through without stickers. Anything labelled from now on stays listed here after delivery.'
+                 : 'Nothing labelled yet. Stick a label on each bag as you pick it up and enter its code here, so the bag can be identified without opening it.'
+             }
            </p>`
     }
 
@@ -1842,15 +1869,19 @@ router.post('/ops/orders/:id/label/:labelId/release', guard, may('orders.act'), 
 
 router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res, next) => {
   try {
+    // Blank stock: never been on a bag.
     const { count: blank } = await db
       .from('bag_labels')
       .select('id', { count: 'exact', head: true })
       .is('order_id', null);
 
+    // On a bag right now. A retired label still has its order_id - that is what
+    // keeps the history - so "in use" has to mean not yet released.
     const { count: inUse } = await db
       .from('bag_labels')
       .select('id', { count: 'exact', head: true })
-      .not('order_id', 'is', null);
+      .not('order_id', 'is', null)
+      .is('released_at', null);
 
     const body = `
       <div style="max-width:640px;">
