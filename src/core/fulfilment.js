@@ -432,11 +432,18 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
 
   const message = `${howPriced} ${settlement}`;
 
-  // Re-saving the same weight is not news. A driver correcting a typo back to
-  // what it already was, or tapping Save twice, should not text the customer
-  // the same figure again.
+  // NOTHING IS TEXTED HERE ANY MORE, and this is the part that changed.
+  //
+  // This number is now provisional. The laundromat weighs the same laundry when
+  // they take it in, and if their figure is higher and within tolerance THAT is
+  // what the customer is billed. Texting our number here and then charging
+  // theirs would mean quoting a price we do not honour - so the price message
+  // moved to settleWeight(), which runs once, when the amount can no longer
+  // move, and says what was actually charged.
+  //
+  // `message` is still built above because it is what the ops screens show back
+  // to the driver as "what this weighs and what it comes to".
   const unchanged = previous != null && previous === weight;
-  if (!unchanged) await sendAndLog(customer.phone, message, customer.id);
 
   // A correction is the single most useful thing in this log: it is the answer
   // to "why was I charged that", and without it a re-weigh is invisible.
@@ -497,7 +504,9 @@ async function outForDelivery(order, { by = {} } = {}) {
 // somebody's front door should not be publicly readable forever, and a signed
 // storage URL would eventually expire and break the photo.
 
-async function deliver(order, file, { by = {} } = {}) {
+async function deliver(orderIn, file, { by = {} } = {}) {
+  // Reassigned as settlement updates it below, so it cannot be a const.
+  let order = orderIn;
   // NO PHOTO, NO DELIVERY.
   //
   // The photo is the proof. It is the answer to "you never delivered it" and
@@ -548,7 +557,28 @@ async function deliver(order, file, { by = {} } = {}) {
     photoUrl = `${config.baseUrl}/p/${order.id}`;
   }
 
-  // THE CARD IS CHARGED HERE, and this is the only place it is.
+  // SETTLE ANYTHING STILL OPEN, FIRST. This is the backstop that stops an order
+  // being delivered and never billed: a laundromat entering its weight is
+  // voluntary and usually never happens, so most orders arrive here with the
+  // price still provisional. Settling on our own scale is what used to happen
+  // at this exact point anyway.
+  //
+  // A HELD ORDER IS NOT CHARGED AND IS STILL DELIVERED. Two scales disagreeing
+  // is our problem, not a reason to stand on somebody's step holding their
+  // clothes - the same rule a declined card already follows.
+  const settlement = await settleWeight(order, { by }).catch((err) => {
+    console.error(`Could not settle order ${order.id}: ${err.message}`);
+    return { ok: false };
+  });
+
+  if (settlement && settlement.held) {
+    order = { ...order, weight_held_at: new Date().toISOString() };
+  } else if (settlement && settlement.priceCents) {
+    order = { ...order, price_cents: settlement.priceCents, payment_status: settlement.charged ? 'PAID' : order.payment_status };
+  }
+
+  // THE CARD IS CHARGED HERE when settlement did not already do it - a price
+  // settled earlier at a laundromat, or one whose card declined then.
   //
   // The doorstep is the moment the work is finished and the customer has their
   // laundry back, and it is the far end of a window that matters: between the
@@ -753,6 +783,155 @@ function turnaround(order) {
   };
 }
 
+// --- What the customer is actually billed ----------------------------------
+
+// Settles the price, and is the ONLY thing allowed to.
+//
+// NEIL'S RULE. Two scales weigh the same laundry - our driver's at the door and
+// the laundromat's when they take it in:
+//
+//   within tolerance   bill the HIGHER of the two, charge the card, text the
+//                      customer what it came to.
+//   outside tolerance  hold it. No charge, no text, and it goes on the issues
+//                      screen until he settles it himself.
+//
+// The tolerance is what makes reading a partner's figure into the price safe at
+// all. It used to be banned outright, because a scale reading 400 instead of 40
+// would be a $1,000 charge with nobody of ours in between. It is now capped
+// instead of banned: a partner can move a bill by less than the tolerance on
+// their own, and by nothing at all past it.
+//
+// IDEMPOTENT, AND THAT IS LOAD-BEARING. It is reached from the laundromat's
+// page, from delivery and from Neil settling a hold by hand, and it charges a
+// card. An order that is already settled returns and does nothing, so a
+// double-tap, a retry or two doors racing cannot charge twice.
+async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {}) {
+  if (order.weight_settled_at) {
+    return { ok: true, already: true, priceCents: order.price_cents };
+  }
+
+  const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+  const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
+
+  let billable = null;
+  let basis = null;
+
+  if (chosenLb != null) {
+    // A person has looked at both and decided. This is the only way out of a
+    // hold, and it wins over any arithmetic.
+    billable = Number(chosenLb);
+    basis = note || 'settled by hand';
+  } else if (ours != null && theirs != null) {
+    const check = partners.compareWeights({ weight_lb: ours, partner_weight_lb: theirs });
+
+    if (check.overThreshold) {
+      // HELD. Nothing is charged and nothing is texted - a customer told a
+      // price we are still arguing about internally has been told the wrong
+      // thing, and taking the money first makes it a refund rather than a
+      // decision.
+      await db
+        .from('orders')
+        .update({ weight_held_at: new Date().toISOString() })
+        .eq('id', order.id);
+
+      await events.record(order.id, {
+        kind: 'WEIGHT',
+        summary:
+          `Price held: we weighed ${ours} lb, the laundromat ${theirs} lb - ` +
+          `${check.absolute.toFixed(1)} lb apart and we allow ${check.tolerance.toFixed(1)}`,
+        by,
+        reason: 'Outside tolerance, so nothing is charged and nothing is texted until it is settled',
+      });
+
+      return { ok: false, held: true, check, ours, theirs };
+    }
+
+    // THE HIGHER OF THE TWO. Neil's call. Within the tolerance the two scales
+    // are describing the same laundry, and the difference is smaller than the
+    // amount either could be out by.
+    billable = Math.max(ours, theirs);
+    basis = billable === theirs && theirs !== ours ? "the laundromat's scale, the higher of the two" : 'our scale, the higher of the two';
+  } else if (ours != null) {
+    // THE BACKSTOP. The laundromat's figure is voluntary and usually never
+    // arrives. Waiting for it for ever would mean delivering laundry and never
+    // billing for it, which is the worst outcome available here.
+    billable = ours;
+    basis = 'our scale; the laundromat did not enter one';
+  } else {
+    return { ok: false, reason: 'no_weight', detail: 'Nothing has been weighed yet.' };
+  }
+
+  // The terms stored on the order, never today's. Same rule as everywhere else:
+  // changing the price must not re-price work already quoted.
+  const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
+  const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
+  const byWeight = Math.round(billable * rate);
+  const priceCents = Math.max(byWeight, floor);
+
+  const { data: settled, error } = await db
+    .from('orders')
+    .update({
+      billable_weight_lb: billable,
+      price_cents: priceCents,
+      weight_settled_at: new Date().toISOString(),
+      weight_held_at: null,
+    })
+    .eq('id', order.id)
+    // Only if nobody has settled it in the meantime. This is the race that
+    // would otherwise charge a card twice.
+    .is('weight_settled_at', null)
+    .select('*')
+    // maybeSingle, NOT single. When the guard above matches nothing - which is
+    // precisely the race this exists to catch - single() throws rather than
+    // returning null, so the losing caller would 500 instead of quietly doing
+    // nothing. Found by settling the same order twice on purpose.
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!settled) return { ok: true, already: true, priceCents: order.price_cents };
+
+  await events.record(order.id, {
+    kind: 'PRICE',
+    summary: `Priced at ${money(priceCents)} on ${billable} lb - ${basis}`,
+    was: ours == null ? null : `${ours} lb ours` + (theirs == null ? '' : `, ${theirs} lb theirs`),
+    became: `${billable} lb billed`,
+    by,
+  });
+
+  const customer = order.customers;
+  const withCustomer = { ...settled, customers: customer };
+
+  // CHARGED HERE, not at the door. The charge sat at the door because a
+  // laundromat might read the weight differently after the money had moved -
+  // and settling against both scales is exactly what closes that window, so by
+  // the time this runs the disagreement can no longer appear.
+  const charge = await billing.chargeOrder(withCustomer, customer).catch((err) => {
+    console.error(`Could not charge order ${order.id}: ${err.message}`);
+    return { ok: false };
+  });
+
+  if (customer) {
+    const minimumApplied = priceCents > byWeight;
+
+    const opening = `Your laundry weighed ${billable} lb`;
+    const howPriced = minimumApplied
+      ? `${opening}, which is under our ${money(floor)} minimum, so the total is ${money(priceCents)}.`
+      : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
+
+    const card = billing.describeCard(customer);
+    const paid =
+      charge && charge.ok
+        ? `We've taken that off your ${card || 'card'}.`
+        : card
+          ? `We'll take it off your ${card}.`
+          : `We'll settle up when we drop it back.`;
+
+    await sendAndLog(customer.phone, `${howPriced} ${paid}`, customer.id);
+  }
+
+  return { ok: true, priceCents, billable, basis, charged: Boolean(charge && charge.ok) };
+}
+
 // --- Did it all come back? --------------------------------------------------
 
 // Compares what went out with what came back, under one order number.
@@ -833,6 +1012,7 @@ async function reconcileReturn(order, returned, { by = {} } = {}) {
 }
 
 module.exports = {
+  settleWeight,
   reconcileReturn,
   updateWeightEstimate,
   collect,

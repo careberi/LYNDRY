@@ -568,7 +568,21 @@ router.post('/o/:code/weight', async (req, res, next) => {
       reason: check && check.overThreshold ? 'Outside the tolerance, so an issue was raised' : null,
     });
 
-    if (check && check.overThreshold && order.customers) {
+    // BOTH SCALES ARE NOW IN, SO THE PRICE CAN BE SETTLED.
+    //
+    // Neil's rule, and settleWeight owns all of it: within tolerance it bills
+    // the HIGHER of the two, charges the card and texts the customer the total;
+    // past the tolerance it holds everything and waits for him. Doing it here
+    // rather than in this route is what stops a second implementation of "what
+    // does this order cost" existing on the page with no login.
+    const settled = await fulfilment
+      .settleWeight({ ...order, partner_weight_lb: weight_ }, { by: { actor: 'partner' } })
+      .catch((err) => {
+        console.error(`Could not settle order ${order.id}: ${err.message}`);
+        return { ok: false };
+      });
+
+    if (settled && settled.held && order.customers) {
       await issues
         .raise({
           customer: order.customers,
@@ -577,7 +591,8 @@ router.post('/o/:code/weight', async (req, res, next) => {
             `Scales disagree: we weighed it ${ours} lb, the laundromat's ${allBags.length} bags ` +
             `come to ${weight_.toFixed(1)} lb - ` +
             `${check.absolute.toFixed(1)} lb apart, and we allow ${check.tolerance.toFixed(1)}. ` +
-            `Ours is what was charged. Check which scale is wrong before it happens again.`,
+            `NOTHING HAS BEEN CHARGED and the customer has not been told a price. ` +
+            `Settle it on the order page and both happen then.`,
         })
         .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
     }
