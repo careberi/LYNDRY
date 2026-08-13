@@ -7,6 +7,9 @@ const bags = require('../core/bags');
 const fulfilment = require('../core/fulfilment');
 const throttle = require('../core/throttle');
 const issues = require('../core/issues');
+const partnersCore = require('../core/partners');
+const { config } = require('../config');
+const { sendAndLog } = require('../core/notify');
 const { site } = require('../web/site');
 const { escapeHtml, CSS_BASE, logo } = require('../web/layout');
 
@@ -100,14 +103,15 @@ function weightCard(order, code, token, justSaved) {
   const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
 
   if (theirs != null) {
-    const gap = ours == null ? null : Math.abs(ours - theirs);
-    // A pound either way is two scales, not a problem. More than that is worth
-    // somebody looking at, and they are told so plainly rather than being left
-    // to wonder why their number vanished.
-    const disagrees = gap != null && gap > 1;
+    // Asks the same function the issue-raising does, rather than carrying its
+    // own idea of "too far apart". This said "more than a pound" while the
+    // real tolerance was 2 lb or 5% of the bag, so a laundromat could be told
+    // it had been flagged when it had not.
+    const check = partnersCore.compareWeights(order);
+    const disagrees = Boolean(check && check.overThreshold);
 
     return `
-    <div class="card" style="padding:28px;">
+    <div class="card" style="padding:28px;margin-bottom:20px;">
       <p class="eyebrow" style="margin:0 0 10px;">Your weight</p>
       <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
         ${escapeHtml(theirs.toFixed(1))} lb
@@ -115,7 +119,7 @@ function weightCard(order, code, token, justSaved) {
       <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:12px 0 0;">
         ${
           disagrees
-            ? 'Thanks. That differs from ours by more than a pound, so we have flagged it for someone to check. Nothing for you to do.'
+            ? 'Thanks. That is further from our figure than we allow for two scales, so it has been flagged for someone to check. Nothing for you to do.'
             : 'Thanks, that matches ours.'
         }
       </p>
@@ -123,7 +127,7 @@ function weightCard(order, code, token, justSaved) {
   }
 
   return `
-    <div class="card" style="padding:28px;">
+    <div class="card" style="padding:28px;margin-bottom:20px;">
       <p class="eyebrow" style="margin:0 0 10px;">What did it weigh?</p>
       <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:0 0 18px;">
         Your own figure, off your scale. We have already weighed it too - this
@@ -144,6 +148,49 @@ function weightCard(order, code, token, justSaved) {
                step="0.1" min="0.1" max="200" inputmode="decimal" placeholder="Pounds"
                style="flex:1;">
         <button type="submit" class="btn btn-lg">Save</button>
+      </form>
+    </div>`;
+}
+
+// The other thing a laundromat needs to be able to say: it is done.
+//
+// Without this there is no way for them to tell us, and the driver is left
+// ringing round or guessing - which is the whole reason a bag sits finished on
+// a shelf for half a day. It is the second of the two events worth asking a
+// partner for, the first being the weight above. Everything else about how a
+// bag moves is ours to record.
+//
+// It is deliberately ONE BUTTON with no options. A laundromat is not going to
+// maintain a pipeline of washing, drying and folding, and asking them to would
+// mean four statuses that rot at the first one while somebody debugs staff
+// compliance instead of software.
+function readyCard(order, code, token) {
+  if (order.status === 'READY') {
+    return `
+    <div class="card" style="padding:28px;margin-bottom:20px;background:var(--suds-500);">
+      <p class="eyebrow" style="margin:0 0 8px;">Marked ready</p>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;">
+        Thanks - we're on our way
+      </div>
+      <p style="font-size:15px;line-height:1.6;margin:12px 0 0;">
+        Our driver has been told. Nothing else to do.
+      </p>
+    </div>`;
+  }
+
+  // Only while the bag is actually with them. Before that it is still in our
+  // van, and after collection there is nothing to declare.
+  if (order.status !== 'AT_PARTNER') return '';
+
+  return `
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 10px;">Finished it?</p>
+      <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:0 0 18px;">
+        Tell us it is washed, dried and folded and we will come and collect it.
+      </p>
+      <form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${encodeURIComponent(token || '')}"
+            style="margin:0;">
+        <button type="submit" class="btn btn-lg btn-full">Ready for collection</button>
       </form>
     </div>`;
 }
@@ -309,6 +356,8 @@ router.get('/o/:code', async (req, res, next) => {
 
     ${weightCard(order, code, req.query.t, req.query.weighed)}
 
+    ${readyCard(order, code, req.query.t)}
+
     <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
       Questions about this bag: ${escapeHtml(site.publicPhoneDisplay)}.
     </p>`,
@@ -390,14 +439,16 @@ router.post('/o/:code/weight', async (req, res, next) => {
     // worth a person looking at, and it goes on the Issues screen rather than
     // into a log nobody reads - a bad scale in either direction is money.
     const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+    const check = partnersCore.compareWeights({ weight_lb: ours, partner_weight_lb: weight });
 
-    if (ours != null && Math.abs(ours - weight) > 1 && order.customers) {
+    if (check && check.overThreshold && order.customers) {
       await issues
         .raise({
           customer: order.customers,
           order,
           reason:
-            `Scales disagree: we weighed it ${ours} lb, the laundromat says ${weight} lb. ` +
+            `Scales disagree: we weighed it ${ours} lb, the laundromat says ${weight} lb - ` +
+            `${check.absolute.toFixed(1)} lb apart, and we allow ${check.tolerance.toFixed(1)}. ` +
             `Ours is what was charged. Check which scale is wrong before it happens again.`,
         })
         .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
@@ -409,5 +460,99 @@ router.post('/o/:code/weight', async (req, res, next) => {
     return next(err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// POST /o/<code>/ready - the laundromat says it is done
+//
+// Goes through fulfilment.markReady like every other caller, so the state
+// machine still refuses anything illegal and there is one implementation of
+// what "ready" means. A partner cannot skip a step or move an order anywhere
+// else; the only transition this can cause is AT_PARTNER to READY.
+//
+// AND IT TEXTS WHOEVER WORKS ORDERS. A status that only lands on a screen
+// nobody is watching is not "letting us know" - the bag would still sit on a
+// shelf until somebody happened to refresh the board. One message, to the
+// people who can actually go and collect it.
+// ---------------------------------------------------------------------------
+
+router.post('/o/:code/ready', async (req, res, next) => {
+  const raw = req.params.code;
+  const ip = clientIp(req);
+  const userAgent = req.headers['user-agent'] || null;
+
+  try {
+    if (throttle.hit(`labelready:${ip}`, WEIGH_LIMIT, SCAN_WINDOW_MS)) {
+      await bags.recordScan({ code: raw, outcome: 'THROTTLED', ip, userAgent });
+      return res.status(429).type('html').send(nothingHere());
+    }
+
+    const code = bags.normaliseCode(raw);
+    if (!code || !bags.verifyCode(code, req.query.t)) {
+      await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
+      return res.status(404).type('html').send(nothingHere());
+    }
+
+    const label = await bags.findByCode(code);
+    if (!label || !label.order_id) {
+      await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
+      return res.status(404).type('html').send(nothingHere());
+    }
+
+    const { data: order, error } = await db
+      .from('orders')
+      .select('*, customers(id, name, phone, address_line1, city)')
+      .eq('id', label.order_id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!order || ['DELIVERED', 'CANCELED'].includes(order.status)) {
+      await bags.recordScan({ code, orderId: order && order.id, outcome: 'UNBOUND', ip, userAgent });
+      return res.status(404).type('html').send(nothingHere());
+    }
+
+    const back = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
+
+    // Already done. Tapping twice is somebody making sure, not an error.
+    if (order.status === 'READY') return res.redirect(303, back);
+
+    const result = await fulfilment.markReady(order);
+    if (!result.ok) return res.redirect(303, back);
+
+    await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
+
+    // Best effort. A texting failure must not make the laundromat think their
+    // tap did not register - the status has already changed and the board
+    // already shows it.
+    try {
+      const numbers = await issues.alertRecipients('orders.act');
+      const where = order.partner_id ? await partnerName(order.partner_id) : null;
+
+      const body =
+        `Order #${order.order_number} is ready for collection` +
+        (where ? ` at ${where}` : '') +
+        `. ${order.weight_lb ? `${order.weight_lb} lb. ` : ''}Collect it at ${config.baseUrl}/ops`;
+
+      for (const to of numbers) await sendAndLog(to, body, null);
+
+      if (!numbers.length) {
+        console.error(`Order #${order.order_number} was marked ready and nobody could be told.`);
+      }
+    } catch (err) {
+      console.error(`Could not announce a ready order: ${err.message}`);
+    }
+
+    return res.redirect(303, back);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Just the name, for the text. A whole partner row is not needed to write one
+// sentence, and asking for one would put their rates in scope for no reason.
+async function partnerName(partnerId) {
+  const { data } = await db.from('partners').select('name').eq('id', partnerId).maybeSingle();
+  return data ? data.name : null;
+}
 
 module.exports = router;

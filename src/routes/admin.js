@@ -288,6 +288,43 @@ ${
   }
 ${body}
   </main>
+  <script>
+  // One menu open at a time.
+  //
+  // <details> has no idea its siblings exist, so opening a second panel leaves
+  // the first one hanging underneath it - three overlapping white boxes across
+  // the top of the page. Closing the others is the one thing the markup cannot
+  // do by itself.
+  //
+  // ENHANCEMENT ONLY. Without this the menus still open, still close, and still
+  // navigate; they just overlap. Nothing here is load-bearing, which is why it
+  // is eight lines at the bottom of the page rather than a dependency.
+  (function () {
+    var menus = [].slice.call(document.querySelectorAll('.ops-menu'));
+    if (!menus.length) return;
+
+    function closeAll(except) {
+      menus.forEach(function (m) { if (m !== except) m.open = false; });
+    }
+
+    menus.forEach(function (menu) {
+      // 'toggle' rather than a click on the summary: it fires however the menu
+      // was opened, including by keyboard.
+      menu.addEventListener('toggle', function () {
+        if (menu.open) closeAll(menu);
+      });
+    });
+
+    // Clicking anywhere else puts them all away, the way a menu should behave.
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest || !e.target.closest('.ops-menu')) closeAll(null);
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeAll(null);
+    });
+  })();
+  </script>
 </body>
 </html>`;
 }
@@ -491,7 +528,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
                 style="margin-top:16px;">Save the weight</button>
 
         <span class="field-hint" style="display:block;margin-top:10px;">
-          This sets the price and charges the card. ${
+          This sets the price. The card is charged when you mark it delivered. ${
             weighed
               ? 'It has already been weighed once, so saving again is a correction and the customer is told so.'
               : 'Photograph the display with the bag on it - that photo is what settles any argument about the number later.'
@@ -951,11 +988,24 @@ function bagsCard(order, labels, canAct) {
   const rows = labels
     .map(
       (l) => `
-    <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
-      <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;">
-        ${escapeHtml(l.code)}
-      </span>
-      <span class="eyebrow" style="margin:0;">Bag ${l.position} of ${total}</span>
+    <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;">
+      <div style="min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;">
+          <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;">
+            ${escapeHtml(l.code)}
+          </span>
+          <span class="eyebrow" style="margin:0;">Bag ${l.position} of ${total}</span>
+        </div>
+        <!-- What the QR on that sticker actually opens. Here so it can be read,
+             checked or sent to a laundromat by hand when a camera will not
+             cooperate - the printed code alone does not tell anybody where to
+             go. Wraps rather than overflowing; it is longer than a phone. -->
+        <a href="${escapeHtml(bags.labelUrl(l.code))}" target="_blank" rel="noopener"
+           style="display:inline-block;font-family:var(--font-mono);font-size:12px;
+                  color:var(--ink-500);margin-top:6px;word-break:break-all;line-height:1.4;">
+          ${escapeHtml(bags.labelUrl(l.code))}
+        </a>
+      </div>
       <span style="flex:1;"></span>
       ${
         canAct && !done
@@ -1439,13 +1489,13 @@ const DONE_MESSAGES = Object.freeze({
   collected: 'Collected. The customer has been texted.',
   'at-partner': 'Marked as dropped at the partner.',
   ready: 'Marked ready for collection.',
-  weight: 'Weight saved. The price is set and the card has been charged.',
+  weight: 'Weight saved. The price is set; the card is charged on delivery.',
   // The label banner carries its own sentence in ?note=, because "added" and
   // "was already there" and "taken off" are three different things.
   label: null,
   door: null,
   'out-for-delivery': 'Out for delivery. The customer has been texted.',
-  delivered: 'Delivered. The customer has been texted.',
+  delivered: 'Delivered. The card has been charged and the customer texted.',
 });
 
 // Loads the order behind an ops button. Accepts the number or the UUID, the

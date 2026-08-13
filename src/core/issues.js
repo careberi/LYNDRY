@@ -25,7 +25,7 @@ const { site } = require('../web/site');
 // because that list is already maintained on the Team page, it survives
 // somebody leaving, and it works for more than one admin. SUPPORT_PHONE is
 // kept as an extra recipient for whoever is not in the table.
-async function alertRecipients() {
+async function alertRecipients(permission = 'issues.manage') {
   const { data, error } = await db
     .from('ops_users')
     .select('id, name, phone, role, status')
@@ -33,8 +33,11 @@ async function alertRecipients() {
 
   if (error) throw error;
 
-  const admins = (data || []).filter((u) => roles.can(u, 'issues.manage'));
-  const numbers = new Set(admins.map((u) => u.phone).filter(Boolean));
+  // Who can actually do something about it. An issue goes to whoever manages
+  // issues; "come and collect this" goes to whoever works orders, which is a
+  // different and usually larger list.
+  const able = (data || []).filter((u) => roles.can(u, permission));
+  const numbers = new Set(able.map((u) => u.phone).filter(Boolean));
 
   if (config.supportPhone) numbers.add(config.supportPhone);
 

@@ -87,7 +87,7 @@ async function createOrder(customer, input) {
       `${booking.whenLine(result.order)} it is. One thing first: we need a card on ` +
       `file before the driver comes out. Nothing gets taken now - it's ` +
       `${site.pricePerLb} a pound with a ${billing.money(config.pricing.minimumCents)} minimum, ` +
-      `charged after we weigh your bag. Our payment provider handles it and we ` +
+      `charged when we drop your laundry back. Our payment provider handles it and we ` +
       `never see the number: ${url}`
     );
   }

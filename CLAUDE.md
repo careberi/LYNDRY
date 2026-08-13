@@ -660,12 +660,21 @@ Code works out whether they have a card, whether to send a link, and when to
 charge. This is the same rule as `open_locker()` taking no arguments — no
 amount of clever texting should move a charge.
 
-**Charging happens automatically at `/ops/weight`,** because that is the first
-moment an amount exists. Two authorisations are already on record by then: the
-consent given on the Stripe page, and the booking confirmation naming the card.
-There is no third "reply YES to pay" step, on purpose.
+**The price is set at `/ops/weight` and the card is charged at `/ops/delivered`.**
+Two authorisations are on record by then: the consent given on the Stripe page,
+and the booking confirmation naming the card. There is no third "reply YES to
+pay" step, on purpose.
 
-**The card is charged exactly once per order, and booking takes nothing.** For
+**The gap between the two is deliberate and load-bearing.** The scale is the
+first moment an amount exists, but the bag then goes to a laundromat that may
+read the weight differently. Charging at the scale — which it briefly did —
+meant the money had already moved by the time a disagreement surfaced, leaving
+only a refund or an awkward conversation. Charging at the door leaves the whole
+turnaround as a window to sort it out, and the customer pays when they have
+their laundry back.
+
+**The card is charged exactly once per order, at the door, and booking takes
+nothing.** For
 a while there was a $25 minimum collected at booking with the balance taken on
 delivery — two charges, two idempotency keys, two things to refund, and a
 customer watching money leave before anybody had touched their laundry. It is

@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the partner directory
+const REVIEWED = '13 August 2026';  // bumped when the charge moved to the door
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -572,21 +572,21 @@ function processBody() {
       )}
       ${step(
         2,
-        `The scale charges the card, in full`,
-        `This is the first moment an amount exists, and by then two
-         authorisations are on record: the consent given on the Stripe page,
-         and the booking confirmation naming the card. There is no third "reply
-         YES to pay" step. The customer gets the weight, the total and the
-         charge in one text, and the driver cannot save the number without
+        `The scale sets the price, the door takes the money`,
+`The weight sets the price and the customer is texted it straight away,
+         but the money moves at the door. That gap is deliberate: between the
+         scale and the doorstep a laundromat may enter a different weight and a
+         person may have to look at it, and charging at the scale would close
+         that window before it opened. The driver cannot save a weight without
          photographing the scale that produced it.`
       )}
       ${step(
         3,
         'A declined card never holds up a delivery',
-        `We wash it, we deliver it, and we chase by text. Holding somebody's
-         clothes over a card is a bad look and legally murky, and the exposure
-         is one order. An unpaid order stays visible until it is settled or
-         deliberately waived.`
+        `The clothes are already on the step. Holding somebody's laundry over
+         a card is a bad look and legally murky, and the exposure is one order,
+         so we deliver and chase by text. An unpaid order stays visible until
+         it is settled or deliberately waived.`
       )}
     </ol>
     <p style="margin-top:22px;">

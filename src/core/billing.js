@@ -46,9 +46,10 @@ function consentText() {
     } to save this card and charge it for ` +
     `each pickup you book. Nothing is taken today and nothing is taken when you book. ` +
     `Wash and fold is ${site.pricePerLb} a pound with a ${money(config.pricing.minimumCents)} minimum, ` +
-    `and your card is charged once, after we weigh your bag - that is the first moment the ` +
-    `amount exists. We text you the weight and the total every time. Cancel before we ` +
-    `collect and there is nothing to cancel: no money has moved. ` +
+    `and your card is charged once, when we deliver your laundry back. We weigh your bag ` +
+    `after pickup and text you the weight and the total straight away, so you always know ` +
+    `the amount before it is taken. Cancel before we collect and there is nothing to ` +
+    `cancel: no money has moved. ` +
     // A standing order takes the minimum on a repeating basis, so the old
     // "no recurring charge" was about to become false. It is not a
     // subscription - there is no fee for having one and every pickup is still
@@ -161,7 +162,7 @@ async function setupLinkMessage(customer) {
   return (
     `Before your first pickup we need a card on file. It takes a minute and it's ` +
     `handled by our payment provider, we never see the number: ${url}\n\n` +
-    `${site.pricePerLb} a pound, charged after we weigh your bag. Nothing recurring.`
+    `${site.pricePerLb} a pound, charged when we deliver it back. Nothing recurring.`
   );
 }
 

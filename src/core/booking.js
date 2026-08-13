@@ -468,8 +468,8 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
   const minimum = billing.money(config.pricing.minimumCents);
 
   const money = card
-    ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum, charged to your ${card} once we weigh it. Nothing until then.`
-    : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum, charged once we weigh it.`;
+    ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} when we drop it back.`
+    : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
 
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 

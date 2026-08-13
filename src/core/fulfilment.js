@@ -250,21 +250,20 @@ async function recordWeight(order, weightLb, photo) {
 
   const customer = order.customers;
 
-  // THIS IS WHERE THE CARD IS CHARGED, and the only place it is.
+  // NOTHING IS CHARGED HERE. Weighing sets the price; delivery collects it.
   //
-  // The scale is the first moment an amount exists, and by then two
-  // authorisations are already on record: the consent given on the payment
-  // page, and the booking confirmation naming the card. There is no third
-  // "reply YES to pay" step, on purpose.
+  // The charge sat here briefly and Neil moved it, for a reason that only
+  // became visible once laundromats started entering their own weight: the
+  // scale is the FIRST moment an amount exists, but the bag then goes to a
+  // partner who may read it differently. Charging at the scale meant the money
+  // had already moved by the time a disagreement surfaced, and the only
+  // remedies left were a refund or an awkward conversation.
   //
-  // It used to be split in two - a minimum at booking, the balance at the door
-  // - which meant two charges, two idempotency keys, two things to refund and
-  // a customer watching money leave before anybody had touched their laundry.
-  // One charge, one moment.
+  // Charging at the door leaves the whole turnaround as a window to sort it
+  // out, and the customer pays at the moment they get their laundry back.
   //
-  // A decline does not stop anything. The bag still gets washed and delivered
-  // and we chase by text; holding somebody's clothes over a card is a bad look
-  // and legally murky, and the exposure is one order.
+  // Still exactly ONE charge. The two-charge model - a minimum at booking and
+  // the balance later - is gone and is not what this is.
   const alreadyPaid = updated.deposit_refunded_at ? 0 : updated.deposit_cents || 0;
   const owed = Math.max(0, priceCents - alreadyPaid);
   const card = billing.describeCard(customer);
@@ -293,46 +292,23 @@ async function recordWeight(order, weightLb, photo) {
     ? `${opening}, which is under our ${money(floor)} minimum, so the total is ${money(priceCents)}.`
     : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
 
-  // Take the money. Skipped entirely when nothing is owed, which today only
-  // happens on an order that paid a minimum under the old rules.
-  const charge = owed > 0 ? await billing.chargeOrder(updated, customer) : { ok: true, nothingDue: true };
-
-  // What the customer is told about the money depends on what actually
-  // happened to it. A weigh text that reads like a receipt when the card was
-  // declined is how an unpaid order quietly becomes a forgotten one.
+  // What happens to the money, said as something still to come. Nothing is
+  // taken here, so a sentence in the past tense would be a lie the customer
+  // reads an hour before the charge actually lands.
   let settlement;
-  if (charge.nothingDue || charge.coveredByMinimum) {
+  if (owed === 0) {
     settlement = `You've already paid that, so there's nothing more to pay.`;
-  } else if (charge.ok) {
-    settlement = `Charged to your ${card || 'card'}.`;
-  } else if (charge.needsCard || charge.declined) {
-    // Two different problems that must not share a sentence. "Your card was
-    // declined" to somebody who never gave us a card is nonsense, and it sends
-    // them looking for a card of theirs to fix.
-    const problem = charge.needsCard
-      ? `We don't have a card on file, so nothing has been taken.`
-      : `Your ${card || 'card'} was declined, so nothing has been taken.`;
-
-    // The link is already inside charge.message, but that message repeats the
-    // weight and the total, which this sentence has just said. Take the link
-    // and leave the rest.
-    settlement = charge.setupUrl
-      ? `${problem} We'll still wash and deliver it - add a card here and we'll settle up: ${charge.setupUrl}`
-      : `${problem} We'll still wash and deliver it and sort the money out.`;
+  } else if (card) {
+    settlement = `We'll take it off your ${card} when we drop it back.`;
   } else {
-    // Payments switched off. Say nothing about money rather than inventing a
-    // status for it.
-    settlement = '';
+    settlement = `We'll settle up when we drop it back.`;
   }
 
-  const message = settlement ? `${howPriced} ${settlement}` : howPriced;
+  const message = `${howPriced} ${settlement}`;
 
   // Re-saving the same weight is not news. A driver correcting a typo back to
   // what it already was, or tapping Save twice, should not text the customer
   // the same figure again.
-  //
-  // The charge above is still safe to re-run: chargeOrder returns early on an
-  // order already marked PAID, and its idempotency key would catch it anyway.
   const unchanged = previous != null && previous === weight;
   if (!unchanged) await sendAndLog(customer.phone, message, customer.id);
 
@@ -343,16 +319,8 @@ async function recordWeight(order, weightLb, photo) {
     weightLb: weight,
     priceCents,
     owedCents: owed,
-    // Same two fields the delivery step reports, so a caller does not have to
-    // learn a second vocabulary for "did the money move".
-    paid: Boolean(charge.ok),
-    paymentNote: charge.ok
-      ? null
-      : charge.needsCard
-        ? 'no card on file'
-        : charge.declined
-          ? 'card declined'
-          : 'payments are switched off',
+    // No payment fields here any more. Weighing prices the order; the delivery
+    // step is what reports whether money moved.
     overMaxOrder: weight > config.pricing.maxOrderLb,
   };
 }
@@ -429,24 +397,43 @@ async function deliver(order, file) {
     photoUrl = `${config.baseUrl}/p/${order.id}`;
   }
 
-  // NOTHING IS CHARGED HERE. The card was charged at the scale, hours ago,
-  // and this is a doorstep photo and a text.
+  // THE CARD IS CHARGED HERE, and this is the only place it is.
   //
-  // The one money case worth a clause is an order that is still unpaid at the
-  // door - a card that was declined when we weighed it. We deliver anyway and
-  // chase, so the delivery text is the last chance to say so before the bag is
-  // out of our hands and the customer stops reading.
-  const outstanding = order.price_cents && order.payment_status !== 'PAID' && order.payment_status !== 'WAIVED';
+  // The doorstep is the moment the work is finished and the customer has their
+  // laundry back, and it is the far end of a window that matters: between the
+  // scale and here, a laundromat may have entered a different weight and a
+  // person may have had to look at it. Charging at the scale closed that window
+  // before it opened.
+  //
+  // Done BEFORE the transition so the delivery text can say what actually
+  // happened to the money rather than guessing.
+  //
+  // A DECLINE DOES NOT STOP THE DELIVERY. The clothes are already on the step;
+  // holding somebody's laundry over a card is a bad look and legally murky, and
+  // the exposure is one order. We deliver and chase by text.
+  const charge =
+    order.price_cents && order.payment_status !== 'PAID' && order.payment_status !== 'WAIVED'
+      ? await billing.chargeOrder(order, order.customers)
+      : { ok: true, nothingDue: true };
+
+  const settled = Boolean(charge.ok);
 
   const result = await step(order, 'DELIVERED', () => {
     const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
 
-    // The total is NOT repeated when it was paid - the weigh text already said
-    // it, and a real thread ended up quoting it four times. It IS repeated
-    // when it is still owed, because that is the one thing left to do.
-    const price = outstanding
-      ? ` ${money(order.price_cents)} is still outstanding - the card link we sent will settle it.`
-      : '';
+    // The total was already said at the scale, so it is only repeated when
+    // something went wrong with it - a real thread ended up quoting the same
+    // figure four times.
+    let price = '';
+    if (charge.nothingDue) {
+      price = '';
+    } else if (charge.ok) {
+      price = ` ${money(order.price_cents)} charged to your ${billing.describeCard(order.customers) || 'card'}.`;
+    } else if (charge.needsCard) {
+      price = ` We don't have a card on file. ${money(order.price_cents)} is outstanding. Add one here and we'll settle it: ${charge.setupUrl || ''}`;
+    } else if (charge.declined) {
+      price = ` Your card was declined. ${money(order.price_cents)} is still outstanding. Update it here and we'll settle it: ${charge.setupUrl || ''}`;
+    }
 
     // The one moment worth asking about a standing order: they have just
     // seen the service work, start to finish. Asked once, only if they have
@@ -454,7 +441,7 @@ async function deliver(order, file) {
     // wants to be sold a weekly habit in the same breath as a failed card.
     const customer = order.customers || {};
     const offer =
-      !recurring.isScheduled(customer) && !outstanding
+      !recurring.isScheduled(customer) && settled
         ? ` Want us to make this a regular thing? We can come every week or every other week.`
         : '';
 
@@ -463,8 +450,14 @@ async function deliver(order, file) {
 
   if (!result.ok) return result;
 
-  result.paid = !outstanding;
-  result.paymentNote = outstanding ? 'still unpaid - the card failed at the scale' : null;
+  result.paid = settled;
+  result.paymentNote = settled
+    ? null
+    : charge.needsCard
+      ? 'no card on file'
+      : charge.declined
+        ? 'card declined'
+        : 'payments are switched off';
 
   if (photoUrl) {
     await db
