@@ -409,18 +409,42 @@ function routingBoardBody({
         }
 
         ${
+          // THE WORKING, not just the name. The laundromat is chosen on total
+          // cost - the wash plus the driving to get there and back - and a
+          // figure whose reasoning is invisible is one nobody can check.
           board.choice.considered.length > 1 || !board.choice.chosen
-            ? `<div style="margin:0 0 18px;font-size:13px;line-height:1.6;color:var(--ink-500);">
+            ? `<div style="margin:0 0 18px;">
                  ${board.choice.considered
                    .map(
-                     (c) =>
-                       `<div>${escapeHtml(c.partner.name)} &mdash; ${
-                         c.chosen
-                           ? '<strong style="color:var(--ink-900);">chosen</strong>'
-                           : escapeHtml(c.why || 'not used')
-                       }</div>`
+                     (c) => `
+                 <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;
+                             padding:7px 0;border-bottom:1px solid var(--ink-100);font-size:13px;line-height:1.5;">
+                   <span style="${c.chosen ? 'font-weight:700;' : 'color:var(--ink-500);'}">
+                     ${escapeHtml(c.partner.name)}
+                     ${c.chosen ? '' : `<br><span style="font-size:12px;">${escapeHtml(c.why || 'not used')}</span>`}
+                   </span>
+                   <span style="text-align:right;white-space:nowrap;${c.chosen ? 'font-weight:700;' : 'color:var(--ink-500);'}">
+                     ${
+                       showMoney && c.totalCents != null
+                         ? `${escapeHtml(money(c.totalCents))}<br>
+                            <span style="font-size:12px;font-weight:400;color:var(--ink-500);">
+                              ${escapeHtml(money(c.washCents))} wash + ${escapeHtml(money(c.drivingCents))} drive
+                            </span>`
+                         : `${c.miles === Infinity ? '&mdash;' : `${c.miles.toFixed(1)} mi`}`
+                     }
+                   </span>
+                 </div>`
                    )
                    .join('')}
+                 ${
+                   showMoney
+                     ? `<p style="font-size:12px;color:var(--ink-500);line-height:1.5;margin:10px 0 0;">
+                          Cheapest all in wins, not nearest. An unweighed pickup is
+                          counted at the ${escapeHtml(String(config.pricing.minimumCents / config.pricing.perPoundCents))} lb
+                          the minimum charge implies.
+                        </p>`
+                     : ''
+                 }
                </div>`
             : ''
         }

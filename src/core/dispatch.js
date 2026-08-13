@@ -174,28 +174,87 @@ const BOARD_FIELDS =
   'collected_at, delivered_at, arrived_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed)';
 
+// WHAT ONE BAG WEIGHS WHEN NOBODY HAS WEIGHED IT YET.
+//
+// A pickup has no weight until the driver puts it on the scale, but the
+// laundromat has to be chosen before that. The minimum is the honest floor: at
+// a $25 minimum and $2 a pound, anything we collect bills as at least 12.5 lb,
+// so that is what it is worth assuming it weighs.
+//
+// Derived from the two numbers rather than written down, so changing either
+// moves this with it.
+function assumedPounds() {
+  return config.pricing.minimumCents / config.pricing.perPoundCents;
+}
+
 // WHICH LAUNDROMAT SHOULD THIS BAG GO TO?
 //
-// Nearest first, then skip anyone who is shut at the time we would arrive or
-// has no room left, and take the next one. Neil's call: a full partner is
-// routed around rather than blocked at, because a driver holding a bag at a
-// loading dock needs somewhere to put it, not an error message.
+// THE CHEAPEST ONE ALL IN, not the nearest. This sorted purely by distance
+// until Neil caught it sending bags past a laundromat charging 30c a pound to
+// one charging $1.10 - a $10 difference on a 12.5 lb bag that no plausible
+// detour makes back, since a mile of van costs about a dollar.
+//
+// All in means both halves:
+//
+//   THE WASH        pounds times their wholesale rate
+//   THE DRIVING     the detour to get there and back out again, at the real
+//                   cost of a mile - fuel at the configured mpg, wear, and the
+//                   driver's wage for the time. All of it is in config.routing
+//                   and applies system-wide, so one set of numbers moves every
+//                   answer the system gives.
+//
+// A partner with no agreed rate is still usable - we simply cannot price the
+// wash, so only the driving counts and the page says the figure is partial. It
+// must not be treated as free, which would make an unpriced partner win every
+// time.
+//
+// Then skip anyone shut at the time we would arrive or with no room left, and
+// take the next cheapest. A full partner is routed around rather than blocked
+// at: a driver holding a bag at a loading dock needs somewhere to put it, not
+// an error message.
 //
 // Capacity that was never entered is UNKNOWN, not zero, and unknown does not
-// disqualify anybody - refusing to use a partner because a form field is blank
-// would quietly take the only laundromat we have out of service.
+// disqualify anybody - refusing a partner over a blank form field would quietly
+// take the only laundromat we have out of service.
 //
-// Returns the chosen partner plus every one that was passed over and why, so
-// the page can show its working rather than an unexplained name.
-function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd }) {
+// Returns the chosen partner plus every one passed over and why, and what each
+// would have cost, so the page can show its working rather than a name.
+function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd, onward = null }) {
+  const perMileCost = perMile();
+
   const considered = candidates
-    .map((p) => ({
-      partner: p,
-      miles: p.at ? milesBetween(from, p.at) : Infinity,
-      open: p.openNow,
-      room: p.capacity.remaining == null ? null : p.capacity.remaining - poundsToAdd >= 0,
-    }))
-    .sort((a, b) => a.miles - b.miles);
+    .map((p) => {
+      // Out to them and back onto the round. Measuring only the trip out would
+      // favour a partner in a dead end, because the miles home are real.
+      const out = p.at ? milesBetween(from, p.at) : Infinity;
+      const back = p.at ? milesBetween(p.at, onward || from) : Infinity;
+      const miles = out + back;
+
+      const washCents =
+        p.wholesale_per_lb_cents == null
+          ? null
+          : Math.round(poundsToAdd * p.wholesale_per_lb_cents);
+
+      const drivingCents = Number.isFinite(miles) ? Math.round(miles * perMileCost * 100) : null;
+
+      return {
+        partner: p,
+        miles,
+        washCents,
+        drivingCents,
+        // Null when we cannot price the wash. Sorted last rather than treated
+        // as zero, so a partner with no agreed rate never wins on a blank.
+        totalCents: washCents == null || drivingCents == null ? null : washCents + drivingCents,
+        open: p.openNow,
+        room: p.capacity.remaining == null ? null : p.capacity.remaining - poundsToAdd >= 0,
+      };
+    })
+    .sort((a, b) => {
+      if (a.totalCents == null && b.totalCents == null) return a.miles - b.miles;
+      if (a.totalCents == null) return 1;
+      if (b.totalCents == null) return -1;
+      return a.totalCents - b.totalCents;
+    });
 
   for (const c of considered) {
     if (!c.partner.at) {
@@ -218,7 +277,10 @@ function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd }) {
     considered
       .filter((other) => !other.chosen && !other.why)
       .forEach((other) => {
-        other.why = 'further away, not needed';
+        other.why =
+          other.totalCents == null
+            ? 'no agreed rate, so we cannot price it'
+            : `costs more all in`;
       });
 
     return { chosen: c.partner, considered, weekday };
@@ -401,9 +463,17 @@ async function board(dateIso, fromTime, driverId = null) {
   const needsWash = (inHand || []).filter(
     (o) => o.status === 'IN_PROCESS' && o.weight_lb != null
   );
+  // WHAT IS GOING TO THE LAUNDROMAT, IN POUNDS.
+  //
+  // Weighed bags contribute what they weigh. A pickup that has not been
+  // weighed yet contributes the minimum-implied weight rather than nothing -
+  // counting it as zero made the pounds tiny, which made the wash cost tiny,
+  // which made the wholesale rate irrelevant and handed the decision back to
+  // distance alone. That is exactly the bug: a 30c partner and a $1.10 partner
+  // look identical if you assume there is no laundry.
   const dropWeight =
     needsWash.reduce((t, o) => t + Number(o.weight_lb || 0), 0) +
-    (pickups || []).length * 0; // a pickup has no weight until it is weighed
+    (pickups || []).length * assumedPounds();
 
   // Where the van is when it goes to the laundromat: the last pickup, or base
   // if there are none.
@@ -411,10 +481,16 @@ async function board(dateIso, fromTime, driverId = null) {
   const lastCollect = [...orderedCollect].reverse().find((s) => s.at);
   const fromPoint = lastCollect ? lastCollect.at : base;
 
+  // Where it goes next, so the miles home from the laundromat are counted too.
+  // The first delivery if there is one, otherwise back to base.
+  const firstDelivery = deliverStops.find((s) => s.at);
+  const onward = firstDelivery ? firstDelivery.at : base;
+
   const choice = chooseLaundromat(fromPoint, partnerRows, {
     weekday,
     time: start,
     poundsToAdd: dropWeight,
+    onward,
   });
 
   const partnerStops = [];
