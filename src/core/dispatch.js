@@ -303,7 +303,7 @@ function serviceMinutes(kind) {
 // This is the "hour by hour" half of the board. It is an estimate and the page
 // says so - the point is not the minute, it is seeing that the run runs out of
 // day before it runs out of stops.
-function withEtas(stops, startMinutes, base) {
+function withEtas(stops, startMinutes, base, home = base) {
   let clock = startMinutes;
   let from = base;
   let miles = 0;
@@ -322,7 +322,7 @@ function withEtas(stops, startMinutes, base) {
     clock += serviceMinutes(stop.kind);
   }
 
-  const backMiles = from === base ? 0 : milesBetween(from, base);
+  const backMiles = from === home ? 0 : milesBetween(from, home);
 
   return {
     miles: miles + backMiles,
@@ -355,6 +355,67 @@ function sequenceLeg(stops, base) {
 // Without a driver it is everybody's work from the service base, which is what
 // the board was before drivers had bases - useful for seeing the whole day at
 // once, but it is not a route anybody drives.
+// WHERE THE VAN ACTUALLY IS, when the day is already underway.
+//
+// The route was always solved from the home base, even at three in the
+// afternoon with the driver standing in Glen Rock - a plan made at six in the
+// morning and redisplayed, rather than one being revised. Everything after the
+// first stop was measured from the wrong place.
+//
+// The last stop he FINISHED is where he is: he is standing at it, or he has
+// just pulled away from it. Nothing else in the system knows his position -
+// there is no phone tracking and there should not be, because a driver's
+// location all day is a thing we would then be holding.
+//
+// Returns null before he has finished anything, which is the honest answer:
+// the day has not started, so the base is still where it starts.
+async function currentPosition(driverId, dateIso) {
+  const from = `${dateIso}T00:00:00`;
+
+  const { data, error } = await db
+    .from('orders')
+    .select(
+      'id, collected_at, at_partner_at, delivered_at, partner_id, ' +
+        'customers(address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed)'
+    )
+    .eq('driver_id', driverId)
+    .or(`collected_at.gte.${from},at_partner_at.gte.${from},delivered_at.gte.${from}`);
+
+  if (error) throw error;
+
+  // The most recent thing that happened, whatever kind of thing it was.
+  let latest = null;
+  for (const order of data || []) {
+    for (const [at, kind] of [
+      [order.collected_at, 'door'],
+      [order.at_partner_at, 'partner'],
+      [order.delivered_at, 'door'],
+    ]) {
+      if (at && at >= from && (!latest || at > latest.at)) {
+        latest = { at, kind, order };
+      }
+    }
+  }
+
+  if (!latest) return null;
+
+  if (latest.kind === 'partner' && latest.order.partner_id) {
+    const { data: partner } = await db
+      .from('partners')
+      .select('lat, lng')
+      .eq('id', latest.order.partner_id)
+      .maybeSingle();
+
+    if (partner && partner.lat != null) {
+      return { lat: Number(partner.lat), lng: Number(partner.lng), at: latest.at, kind: 'partner' };
+    }
+    return null;
+  }
+
+  const where = await geocode.locate(latest.order.customers || {});
+  return where ? { ...where, at: latest.at, kind: 'door' } : null;
+}
+
 async function board(dateIso, fromTime, driverId = null) {
   const date = dateIso || booking.today();
   const now = booking.nowInService();
@@ -375,7 +436,16 @@ async function board(dateIso, fromTime, driverId = null) {
   // require here would close a loop through orders.js.
   const driversCore = require('./drivers');
   const driver = driverId ? await driversCore.find(driverId) : null;
-  const base = driver ? driversCore.baseOf(driver) : { ...geocode.BASE, own: false };
+  const home = driver ? driversCore.baseOf(driver) : { ...geocode.BASE, own: false };
+
+  // THE ROUTE IS SOLVED FROM WHERE HE IS, NOT WHERE HE STARTED.
+  //
+  // Only for today - a future day has not begun, so its route starts at the
+  // base like any plan does. The base is still where the day ENDS, which is why
+  // both are kept: `base` is the point everything is measured from now, `home`
+  // is where he goes back to.
+  const position = driverId && date === now.date ? await currentPosition(driverId, date) : null;
+  const base = position || home;
 
   // --- everything in flight -------------------------------------------------
 
@@ -536,7 +606,7 @@ async function board(dateIso, fromTime, driverId = null) {
     s.leg = LEGS[s.kind];
   });
 
-  const walk = withEtas(stops, startMinutes, base);
+  const walk = withEtas(stops, startMinutes, base, home);
   const r = R();
   const serviceMin = stops.reduce((t, s) => t + serviceMinutes(s.kind), 0);
   const driveMin = minutesFor(walk.miles);
@@ -561,6 +631,11 @@ async function board(dateIso, fromTime, driverId = null) {
     weekday,
     driver,
     base,
+    home,
+    // Null when the day has not started. The page says which of the two the
+    // route was solved from, because "9.4 miles" means different things
+    // measured from a depot and from wherever the van is parked.
+    position,
     stops,
     partners: partnerRows,
     choice,

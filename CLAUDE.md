@@ -713,6 +713,22 @@ the planner uses a real routing service, dispatch deliberately does not, because
 a driver waiting on a network call to find out whether to take an order is worse
 than a rough answer now.
 
+**Today's route is solved from WHERE THE VAN IS, not where it started.** It
+was always measured from the home base, even at three in the afternoon with the
+driver standing in Glen Rock — a plan made at six in the morning and
+redisplayed. `currentPosition()` is the last stop he actually finished: the
+customer's door he collected or delivered at, or the laundromat he dropped at.
+`base` is what everything is measured from now; **`home` is still where the day
+ends**, so both are kept and the trip back is to `home`.
+
+**There is no phone tracking and there should not be.** His position is derived
+from work he has completed, which the system already knows. Following a driver
+around all day is a thing we would then be holding.
+
+**A future day is solved from the base**, because it has not started. The page
+says which of the two it used — "9.4 miles" means different things measured from
+a depot and from wherever the van is parked.
+
 **The load-out pass turns the van into a sequence.** Scan every bag out of the
 laundromat, build the run, load in REVERSE — highest stop deepest, stop 1 by the
 door. At the door the scan is a confirmation, not a search, and a multi-bag

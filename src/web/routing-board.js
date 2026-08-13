@@ -271,7 +271,10 @@ function routingBoardBody({
     // Whose base the route starts and ends at. Read from the board rather than
     // written down here - a driver out of Fair Lawn and one out of Maryland
     // must not share a hardcoded pin.
-    base: { lat: board.base.lat, lng: board.base.lng },
+    base: { lat: board.home.lat, lng: board.home.lng },
+    // Where the van actually is, when the day is underway. Drawn as its own pin
+    // so the route visibly starts from it rather than from the depot.
+    position: board.position ? { lat: board.position.lat, lng: board.position.lng } : null,
     stops: board.stops
       .filter((s) => s.at)
       .map((s) => ({ n: s.position, lat: s.at.lat, lng: s.at.lng, kind: s.kind })),
@@ -300,6 +303,7 @@ function routingBoardBody({
   .db-mk.partner { width: 24px; height: 24px; border-radius: 5px; background: var(--sunbeam-500); }
   .db-mk.partner.unused { background: var(--paper-200); color: var(--ink-500); }
   .db-mk.base { width: 24px; height: 24px; border-radius: 5px; background: var(--lilac-500); }
+  .db-mk.van { width: 28px; height: 28px; border-radius: 50%; background: var(--stain-500); color: var(--paper-050); }
   .db-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 26px; align-items: start; }
   .db-cols > * { min-width: 0; }
   .db-when { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) auto; gap: 12px; align-items: end; }
@@ -331,10 +335,20 @@ function routingBoardBody({
       ? `<p style="font-size:15px;line-height:1.55;margin:0 0 26px;">
            <strong>${escapeHtml(board.driver.name)}</strong>, out of
            ${
-             board.base.own
+             board.home.own
                ? escapeHtml(board.driver.base_city || board.driver.base_address_line1)
                : 'the service base - they have no base of their own set'
            }.
+           ${
+             // A mileage figure means different things measured from a depot at
+             // six in the morning and from wherever the van is parked at three
+             // in the afternoon, so the page says which it is.
+             board.position
+               ? `The route below is solved from <strong>where the van is now</strong>${
+                   board.position.kind === 'partner' ? ' - the laundromat' : ' - their last stop'
+                 }, not from the base.`
+               : 'The day has not started, so the route is solved from there.'
+           }
          </p>`
       : `<p style="margin:0 0 26px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
                     background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
@@ -603,8 +617,17 @@ function routingBoardBody({
 
     var pts = [];
 
-    L.marker([DATA.base.lat, DATA.base.lng], { icon: markerIcon('base', 'B') }).addTo(map);
+    L.marker([DATA.base.lat, DATA.base.lng], { icon: markerIcon('base', 'B') })
+      .addTo(map)
+      .bindTooltip('Base', { direction: 'right', offset: [14, 0] });
     pts.push([DATA.base.lat, DATA.base.lng]);
+
+    if (DATA.position) {
+      L.marker([DATA.position.lat, DATA.position.lng], { icon: markerIcon('van', 'V') })
+        .addTo(map)
+        .bindTooltip('The van is here', { direction: 'right', offset: [14, 0] });
+      pts.push([DATA.position.lat, DATA.position.lng]);
+    }
 
     DATA.partners.forEach(function (p) {
       L.marker([p.lat, p.lng], { icon: markerIcon('partner' + (p.used ? '' : ' unused'), 'L') })
@@ -653,7 +676,7 @@ function routingBoardBody({
   // never mixed and the badge is never quietly dropped - a mileage figure whose
   // provenance is invisible is worse than no figure.
   function roads() {
-    var order = [DATA.base].concat(DATA.stops).concat([DATA.base]);
+    var order = [DATA.position || DATA.base].concat(DATA.stops).concat([DATA.base]);
     var straight = order.map(function (p) { return [p.lat, p.lng]; });
 
     if (DATA.stops.length < 1) {
