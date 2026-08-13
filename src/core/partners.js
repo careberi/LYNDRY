@@ -514,5 +514,9 @@ module.exports = {
   find,
   create,
   update,
+  // Exported so a partner added before the geocoder answered can be put on the
+  // map later. create() calls it best-effort and swallows a failure, which is
+  // right at the time - but something has to be able to try again.
+  locate,
   weightHistory,
 };

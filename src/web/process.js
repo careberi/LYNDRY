@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with role-scoping and the wider pickup windows
+const REVIEWED = '13 August 2026';  // bumped with the dispatch board and structured partner hours
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -376,12 +376,26 @@ function processBody(user) {
         `Sign in at <code>/ops</code> with a mobile number and a six-digit code
          we text. No password, no app. The board shows what is on today, and
          a booking with no card on file is flagged as unconfirmed - do not drive
-         to it, we have no way to bill it. <strong>Dispatch</strong> answers the
-         other question that comes up mid-round: an order has just come in, does
-         it fit into what you are already doing, and what does taking it cost.`
+         to it, we have no way to bill it.`
       )}
       ${step(
         2,
+        'Look at Dispatch for the shape of the day',
+        `Everything live in the queue for one day, on a map, in the order it gets
+         driven: the doorsteps to collect from, which laundromat the bags go to,
+         and the doorsteps to deliver back to. It works out the sequence and the
+         time you should be at each door. <strong>The three legs are in that
+         order for a physical reason</strong> - you cannot drop bags you have
+         not picked up, and you cannot deliver laundry you have not collected
+         from the laundromat.
+         <br><br>
+         It also answers the question that comes up mid-round: an order has just
+         come in, does it fit into what you are already doing, and what does
+         taking it cost. Nothing on that page changes anything - it is a
+         picture, not a button.`
+      )}
+      ${step(
+        3,
         'Sticker every bag, and enter its code',
         `A label off the roll in the van goes on each bag, and the six
          characters printed under the QR go into the order page. That is what
@@ -390,7 +404,7 @@ function processBody(user) {
          just paper.`
       )}
       ${step(
-        3,
+        4,
         'Collect the bag, tap Collected',
         `Every step is a full-width button on the order page. There is no
          JavaScript on that screen on purpose: on two bars of signal in a
@@ -398,7 +412,7 @@ function processBody(user) {
          spinner that lies. Tapping twice is refused and shown as a sentence.`
       )}
       ${step(
-        4,
+        5,
         'WEIGH IT BEFORE IT LEAVES YOUR HANDS, AND PHOTOGRAPH THE SCALE',
         `The most important step on the round. The weight sets the price and
          <strong>charges the customer's card</strong>, so it has to be our
@@ -410,7 +424,7 @@ function processBody(user) {
          ten is a four-figure charge on somebody's card.`
       )}
       ${step(
-        5,
+        6,
         'Drop it at the laundromat, collect it when it is done',
         `Two taps, and they are the two the customer never hears about. Where
          the washing happens is our business, not theirs. If we wash it
@@ -418,7 +432,7 @@ function processBody(user) {
          for delivery and nothing forces a partner visit that did not happen.`
       )}
       ${step(
-        6,
+        7,
         'Scan every bag out of the laundromat, then load in reverse',
         `The load-out screen. One continuous pass - scan each bag as it goes in,
          you are touching it anyway. That records that it left the partner with
@@ -429,7 +443,7 @@ function processBody(user) {
          reverse loading just means climbing over stop 9 to reach stop 2.`
       )}
       ${step(
-        7,
+        8,
         'At the door, scan to confirm - not to find',
         `You already have the bag, chosen by the number on its tag. The scan
          either agrees or shouts <strong>WRONG BAG</strong>. That is the net
@@ -441,7 +455,7 @@ function processBody(user) {
          means three scans.`
       )}
       ${step(
-        8,
+        9,
         'Then one photo on the doorstep',
         `<strong>No photo, no delivery.</strong> The button will not complete
          without one. However many bags there were, it is a single picture -

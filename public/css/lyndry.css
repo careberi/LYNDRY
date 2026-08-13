@@ -767,10 +767,32 @@
 .ops-menu-panel a:hover { background: var(--paper-200); color: var(--ink-900); }
 .ops-menu-panel a[aria-current='page'] { background: var(--suds-500); color: var(--ink-900); }
 
-/* On a phone the panel would otherwise hang off the right edge of the screen
-   for the last menu. Anchored right instead, so it opens inwards. */
+/* On a phone a left-anchored panel hangs off the right edge of the screen, and
+   a panel that overflows makes the whole page scroll sideways - which is the
+   one thing the layout is never allowed to do.
+
+   It is the last TWO menus, not just the last one. The panel is 210px wide, so
+   any menu whose left edge sits within 210px of the right edge overflows, and
+   on a 360px screen that is Tools as well as Resources. Anchoring both to the
+   right makes them open inwards. The clamp is the backstop: whatever the
+   screen, the panel can never be wider than it. */
 @media (max-width: 560px) {
-  .ops-menu:last-of-type .ops-menu-panel { left: auto; right: 0; }
+  /* THE ROW WRAPS RATHER THAN OVERFLOWING. Four menus need about 358px of row
+     and a 360px phone gives the nav 320px, so the last one hung past the edge
+     and took the whole page's horizontal scroll with it. Tightening the gap
+     would buy a few pixels and lose them again the next time a label got
+     longer - "Economics" became "Unit economics" and the row grew. Wrapping
+     cannot be outgrown. */
+  .ops-bar .site-nav { flex-wrap: wrap; gap: 10px 16px; position: relative; }
+
+  /* THE PANEL ANCHORS TO THE NAV, NOT TO ITS OWN MENU. Anchored to the menu it
+     is always wrong somewhere: left-aligned it hangs off the right edge for the
+     last menu, right-aligned it hangs off the LEFT edge for a menu that has
+     wrapped onto the second row. Anchored to the nav and given its full width,
+     it cannot leave the screen in either direction however the row wraps or
+     however long the labels get. */
+  .ops-menu { position: static; }
+  .ops-menu-panel { left: 0; right: 0; width: auto; min-width: 0; }
 }
 
 .site-footer { background: var(--ink-900); color: var(--paper-200); }

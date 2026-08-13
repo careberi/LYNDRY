@@ -439,7 +439,7 @@ GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
 GET  /ops/loadout            scan bags into the van, build the run
-GET  /ops/dispatch           can we take this one? a mid-run pickup quote
+GET  /ops/dispatch           the live day on a map; ?date= and ?from= pick it
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
 GET  /ops/partners           the businesses we work with, added by hand
@@ -451,15 +451,27 @@ GET  /ops/login              phone number     } the only two pages
 GET  /ops/login/code         six-digit code   } reachable signed out
 ```
 
-**`/ops/economics` and `/ops/planner` are the only two ops pages with
-client-side JavaScript, and the only two that read nothing from the database.**
-Everywhere else the plain-HTML rule holds, because a driver on two bars in a
-stairwell needs a page that either worked or did not. These two are calculators
-used at a desk; interactive is the whole point of them. Both are behind
+**`/ops/economics` and `/ops/planner` are the only two ops pages that read
+nothing from the database.** They are calculators used at a desk: you type
+made-up numbers in and they answer "would a day like this work". Both are behind
 `money.view` — they show the wholesale wash rate, which is not a driver's to
 browse — and nothing typed into either changes anything anywhere else.
 
-**The planner is the only page in the codebase that depends on an outside
+**`/ops/dispatch` is the planner's twin, and the difference is the whole point.**
+The planner is a day you invent; dispatch is the day that actually exists. Same
+map, same pins, same shape of numbers, but every stop on it is a real order.
+Keeping both is deliberate: a planner that could only show real orders cannot
+answer "what if we had twelve stops in Hoboken" before those twelve orders
+exist, and that is the question that decides whether to go there at all.
+
+**On dispatch the run sheet is server-rendered and only the map is JavaScript.**
+The order of the stops, the times, the laundromat and the pounds are in the
+HTML and work with scripting off, exactly like every other ops page — that is
+the part somebody drives. The map is a picture OF the run sheet rather than the
+source of it, so losing it costs you the picture and nothing else. **The
+sequence must never move because the map loaded.**
+
+**The planner and dispatch are the only pages that depend on an outside
 service at runtime.** Three of them, none needing an account or a key: Leaflet
 for the map, CARTO/OpenStreetMap for the tiles, and OSRM for real driving
 distances between the stops. Leaflet is pinned to an exact version with an
@@ -533,9 +545,19 @@ rather than redaction. Add a field to that page only by adding it to
 `LAUNDROMAT` carries a wholesale rate, a retail rate, hours and a daily
 capacity, and `PROPERTY_MANAGER` carries none of them — **switching a record's
 type clears the ones that no longer apply**, because a stale wholesale rate on a
-landlord gets read as real a year later. Hours are free text on purpose: nothing
-decides anything from them yet, and seven open/close pairs is a form nobody
-fills in.
+landlord gets read as real a year later.
+
+**Opening hours are structured, in `partner_hours`, one row per weekday.** They
+were free text until the dispatch board started sending bags to a laundromat and
+needed to answer "are they open at three on a Tuesday". **A weekday with no row
+is CLOSED** — absence has to mean closed rather than unknown, because a routing
+decision resolves to yes or no and "we never filled it in" is not something a
+van can act on. Several rows on one weekday is a split shift, so a laundromat
+that shuts for lunch can say so, and a time counts as open if it falls in any of
+them. The containing test is end-exclusive: arriving at the exact closing minute
+is arriving after they closed. `partners.hours` survives as the free-text note
+for a person — "call ahead on Sundays" is worth keeping and is not something to
+route by.
 
 **`orders.partner_id` records which laundromat had the bag**, set when the
 driver drops it off. Without it there is no way to answer "is one partner's
@@ -563,7 +585,32 @@ running 1.9 lb heavy every single time never trips it, so the partner page also
 shows average drift and how many of their bags read heavier than ours. Wiring their number into `price_cents` removes
 the control Neil asked for.
 
-**`/ops/dispatch` answers "can we take this one".** Cheapest insertion of a
+**The day has three legs and they are in that order for a physical reason.**
+Collect dirty bags off doorsteps, visit the laundromat, deliver clean bags back.
+You cannot drop bags you have not picked up, and you cannot deliver laundry you
+have not collected from the laundromat. Sequencing the whole day as one
+travelling-salesman problem gives a shorter route that cannot be driven, which
+is worse than a longer one that can — so each leg is solved on its own and the
+legs stay in order.
+
+**Which laundromat a bag goes to is nearest-first, skipping anyone shut or
+full.** Neil's call: a partner at capacity is routed around rather than blocked
+at, because a driver holding a bag at a loading dock needs somewhere to put it,
+not an error message. **Capacity that was never entered is unknown, not zero,
+and does not disqualify anybody** — refusing a partner over a blank form field
+would quietly take the only laundromat we have out of service. The page shows
+every partner that was passed over and why, because an unexplained name is not
+a decision anybody can check.
+
+**How much is at each laundromat is a query, never a running total.** A bag is
+at a partner when its order says so and its weight is on the order, so
+`orders` IS the ledger; a counter in a column would be a second version of the
+same fact and the two would disagree the first time anything went wrong.
+`AT_PARTNER` and `READY` both count — a finished bag we have not collected is
+still on their floor. Bags dropped off before they were weighed are counted
+separately rather than as zero pounds.
+
+**`/ops/dispatch` also answers "can we take this one".** Cheapest insertion of a
 pickup into today's run: where it slots, minutes added, cost, and whether it is
 under `routing.autoAcceptUnderMinutes`. Three rules it must keep:
 

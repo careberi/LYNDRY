@@ -20,7 +20,7 @@ const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
 const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
-const { dispatchBody } = require('../web/dispatch-page');
+const { dispatchBoardBody } = require('../web/dispatch-board');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
@@ -170,7 +170,6 @@ const OPS_MENUS = Object.freeze([
     items: [
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       { href: '/ops/loadout', label: 'Load out', permission: 'orders.act' },
-      { href: '/ops/dispatch', label: 'Dispatch', permission: 'orders.act' },
       { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
       { href: '/ops/issues', label: 'Issues', permission: 'issues.manage' },
     ],
@@ -188,6 +187,10 @@ const OPS_MENUS = Object.freeze([
     items: [
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
       { href: '/ops/planner', label: 'Planner', permission: 'money.view' },
+      // Dispatch sits beside the planner because they are the same picture of
+      // the same thing: the planner is a day you invent, this is the day that
+      // actually exists.
+      { href: '/ops/dispatch', label: 'Dispatch', permission: 'orders.act' },
       { href: '/ops/labels', label: 'Bag labels', permission: 'orders.act' },
     ],
   },
@@ -1843,7 +1846,17 @@ router.get('/ops/dispatch', guard, withIssues, may('orders.act'), async (req, re
     const address = String(req.query.address || '').trim().slice(0, 200);
     const lb = String(req.query.lb || '').trim().slice(0, 6);
 
-    const run = dispatch.sequence(await dispatch.todaysRun());
+    // A day and a time, both from the query string so the whole board is a URL
+    // somebody can send. Anything unparseable falls back to today and now
+    // rather than erroring - a date box is not worth a 400.
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || ''))
+      ? String(req.query.date)
+      : null;
+    const from = /^\d{1,2}:\d{2}$/.test(String(req.query.from || ''))
+      ? String(req.query.from)
+      : null;
+
+    const board = await dispatch.board(date, from);
 
     let quote = null;
     let problem = null;
@@ -1862,7 +1875,17 @@ router.get('/ops/dispatch', guard, withIssues, may('orders.act'), async (req, re
       adminPage({
         title: 'Dispatch',
         active: '/ops/dispatch',
-        body: dispatchBody({ run, quote, form: { address, lb }, problem }),
+        head: routePlannerHead(),
+        body: dispatchBoardBody({
+          board,
+          quote,
+          form: { address, lb },
+          problem,
+          // A driver gets the run sheet; the customer's name and the money on
+          // it are not theirs, exactly as on the order page.
+          showNames: roles.can(req.opsUser, 'customers.view'),
+          showMoney: roles.can(req.opsUser, 'money.view'),
+        }),
         user: req.opsUser,
         openIssues: req.openIssues,
       })

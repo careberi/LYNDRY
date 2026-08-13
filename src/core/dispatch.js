@@ -139,6 +139,332 @@ function sequence(stops) {
   };
 }
 
+// --- A whole day, in the order it gets driven -------------------------------
+//
+// THE DAY HAS THREE LEGS, AND THEY ARE IN THAT ORDER FOR A PHYSICAL REASON.
+//
+//   1. COLLECT   dirty bags off doorsteps
+//   2. PARTNER   drop those at a laundromat, and pick up whatever they have
+//                finished since last time
+//   3. DELIVER   clean bags back to doorsteps
+//
+// You cannot deliver laundry you have not collected from the laundromat, and
+// you cannot drop bags you have not picked up. Sequencing the whole day as one
+// travelling-salesman problem would produce a shorter route that cannot be
+// driven, which is worse than a longer one that can. So each leg is sequenced
+// geographically on its own and the legs stay in order.
+//
+// Within a leg the rule from the top of this file still holds: anything with a
+// stop number already on it - bags physically in the van - keeps that order,
+// because the van IS the route and re-solving it would send the driver looking
+// for bag 4 where bag 9 actually is.
+
+const LEGS = Object.freeze({
+  collect: { order: 1, label: 'Pick up', blurb: 'Dirty bags off doorsteps' },
+  dropoff: { order: 2, label: 'Drop at laundromat', blurb: 'Hand the dirty bags over' },
+  pickup_partner: { order: 2, label: 'Collect from laundromat', blurb: 'Take the finished bags' },
+  deliver: { order: 3, label: 'Deliver', blurb: 'Clean bags back to the door' },
+});
+
+const BOARD_FIELDS =
+  'id, order_number, status, stop_number, loaded_at, pickup_date, pickup_window_start, ' +
+  'pickup_window_end, pickup_time, bag_count, weight_lb, partner_id, ' +
+  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed)';
+
+// WHICH LAUNDROMAT SHOULD THIS BAG GO TO?
+//
+// Nearest first, then skip anyone who is shut at the time we would arrive or
+// has no room left, and take the next one. Neil's call: a full partner is
+// routed around rather than blocked at, because a driver holding a bag at a
+// loading dock needs somewhere to put it, not an error message.
+//
+// Capacity that was never entered is UNKNOWN, not zero, and unknown does not
+// disqualify anybody - refusing to use a partner because a form field is blank
+// would quietly take the only laundromat we have out of service.
+//
+// Returns the chosen partner plus every one that was passed over and why, so
+// the page can show its working rather than an unexplained name.
+function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd }) {
+  const considered = candidates
+    .map((p) => ({
+      partner: p,
+      miles: p.at ? milesBetween(from, p.at) : Infinity,
+      open: p.openNow,
+      room: p.capacity.remaining == null ? null : p.capacity.remaining - poundsToAdd >= 0,
+    }))
+    .sort((a, b) => a.miles - b.miles);
+
+  for (const c of considered) {
+    if (!c.partner.at) {
+      c.why = 'no address we could put on the map';
+      continue;
+    }
+    if (!c.open) {
+      c.why = `shut at ${time}`;
+      continue;
+    }
+    if (c.room === false) {
+      c.why = 'no room left today';
+      continue;
+    }
+    c.chosen = true;
+
+    // Everyone further down the list was never looked at, and saying so is
+    // different from saying they were rejected. "Further away" is the honest
+    // reason; a bare blank reads as a bug in the working.
+    considered
+      .filter((other) => !other.chosen && !other.why)
+      .forEach((other) => {
+        other.why = 'further away, not needed';
+      });
+
+    return { chosen: c.partner, considered, weekday };
+  }
+
+  return { chosen: null, considered, weekday };
+}
+
+// Minutes on the ground at one stop.
+function serviceMinutes(kind) {
+  const r = R();
+  if (kind === 'deliver') return r.minutesPerDelivery;
+  if (kind === 'dropoff' || kind === 'pickup_partner') return r.minutesPerPartnerVisit;
+  return r.minutesPerPickup;
+}
+
+// Walk the sequence adding drive time and time on the ground, so every stop
+// carries the clock time the driver should be standing there.
+//
+// This is the "hour by hour" half of the board. It is an estimate and the page
+// says so - the point is not the minute, it is seeing that the run runs out of
+// day before it runs out of stops.
+function withEtas(stops, startMinutes) {
+  let clock = startMinutes;
+  let from = geocode.BASE;
+  let miles = 0;
+
+  for (const stop of stops) {
+    if (stop.at) {
+      const legMiles = milesBetween(from, stop.at);
+      miles += legMiles;
+      clock += minutesFor(legMiles);
+      from = stop.at;
+    }
+    stop.etaMinutes = Math.round(clock);
+    stop.eta = `${String(Math.floor(clock / 60) % 24).padStart(2, '0')}:${String(
+      Math.round(clock) % 60
+    ).padStart(2, '0')}`;
+    clock += serviceMinutes(stop.kind);
+  }
+
+  const backMiles = from === geocode.BASE ? 0 : milesBetween(from, geocode.BASE);
+
+  return {
+    miles: miles + backMiles,
+    endMinutes: Math.round(clock + minutesFor(backMiles)),
+  };
+}
+
+// Sequence one leg, keeping anything already numbered in the van in its
+// existing order and solving the rest around it.
+function sequenceLeg(stops) {
+  const numbered = stops
+    .filter((s) => s.order && s.order.stop_number != null)
+    .sort((a, b) => a.order.stop_number - b.order.stop_number);
+
+  const rest = stops.filter((s) => !(s.order && s.order.stop_number != null));
+  const placed = rest.filter((s) => s.at);
+  const unplaced = rest.filter((s) => !s.at);
+
+  const { ordered } = geocode.sequence(
+    placed.map((s) => ({ at: s.at, stop: s })),
+    geocode.BASE
+  );
+
+  return [...numbered, ...ordered.map((o) => o.stop), ...unplaced];
+}
+
+// The whole board for one day, from one time of day onward.
+async function board(dateIso, fromTime) {
+  const date = dateIso || booking.today();
+  const now = booking.nowInService();
+  const start = fromTime || (date === now.date ? now.time : '09:00');
+
+  const [hh, mm] = String(start).split(':').map(Number);
+  const startMinutes = (Number.isFinite(hh) ? hh : 9) * 60 + (Number.isFinite(mm) ? mm : 0);
+
+  // Which day of the week this is, for the opening-hours check. Built from the
+  // ISO date rather than a Date in local time, so a server in another timezone
+  // cannot land on the wrong weekday.
+  const [y, m, d] = date.split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+
+  // --- everything in flight -------------------------------------------------
+
+  const { data: pickups, error: pickupError } = await db
+    .from('orders')
+    .select(BOARD_FIELDS)
+    .eq('pickup_date', date)
+    .in('status', ['REQUESTED', 'ASSIGNED', 'DEPOSITED']);
+  if (pickupError) throw pickupError;
+
+  // Bags we are holding that still need washing, and bags a laundromat has
+  // finished. Not filtered by date: a bag collected yesterday and still in the
+  // van is today's problem whatever its pickup date says.
+  const { data: inHand, error: handError } = await db
+    .from('orders')
+    .select(BOARD_FIELDS)
+    .in('status', ['IN_PROCESS', 'READY', 'OUT_FOR_DELIVERY']);
+  if (handError) throw handError;
+
+  // --- the laundromats ------------------------------------------------------
+
+  const partnersCore = require('./partners');
+  const laundromats = (await partnersCore.list({ type: 'LAUNDROMAT' })).filter(
+    (p) => p.status === 'ACTIVE'
+  );
+  const hoursByPartner = await partnersCore.hoursForAll();
+  const loadByPartner = await partnersCore.loadByPartner();
+
+  const partnerRows = laundromats.map((p) => {
+    const hours = hoursByPartner.get(p.id) || [];
+    return {
+      ...p,
+      at: p.lat != null && p.lng != null ? { lat: Number(p.lat), lng: Number(p.lng) } : null,
+      hours,
+      hoursText: partnersCore.describeHours(hours),
+      openNow: partnersCore.isOpenAt(hours, weekday, start),
+      capacity: partnersCore.capacityOf(p, loadByPartner.get(p.id)),
+    };
+  });
+
+  // --- leg 1: doorstep pickups ---------------------------------------------
+
+  const collectStops = (pickups || []).map((o) => ({ kind: 'collect', order: o }));
+
+  // --- leg 3: doorstep deliveries ------------------------------------------
+  //
+  // OUT_FOR_DELIVERY is on the van now. READY is at a laundromat and will be on
+  // the van once leg 2 has happened, which is exactly why leg 2 comes first.
+  const deliverStops = (inHand || [])
+    .filter((o) => o.status === 'OUT_FOR_DELIVERY' || o.status === 'READY')
+    .map((o) => ({ kind: 'deliver', order: o }));
+
+  for (const stop of [...collectStops, ...deliverStops]) {
+    stop.at = await geocode.locate(stop.order.customers || {});
+  }
+
+  // --- leg 2: the laundromat --------------------------------------------
+  //
+  // Two different visits and they are not the same stop even at the same
+  // address: dropping dirty bags off and collecting finished ones are separate
+  // lines on a run sheet, and merging them hides one of them.
+
+  // Bags to drop: what we are already holding unwashed, plus everything leg 1
+  // is about to pick up.
+  const needsWash = (inHand || []).filter((o) => o.status === 'IN_PROCESS');
+  const dropWeight =
+    needsWash.reduce((t, o) => t + Number(o.weight_lb || 0), 0) +
+    (pickups || []).length * 0; // a pickup has no weight until it is weighed
+
+  // Where the van is when it goes to the laundromat: the last pickup, or base
+  // if there are none.
+  const orderedCollect = sequenceLeg(collectStops);
+  const lastCollect = [...orderedCollect].reverse().find((s) => s.at);
+  const fromPoint = lastCollect ? lastCollect.at : geocode.BASE;
+
+  const choice = chooseLaundromat(fromPoint, partnerRows, {
+    weekday,
+    time: start,
+    poundsToAdd: dropWeight,
+  });
+
+  const partnerStops = [];
+
+  if (needsWash.length || (pickups || []).length) {
+    partnerStops.push({
+      kind: 'dropoff',
+      at: choice.chosen ? choice.chosen.at : null,
+      partner: choice.chosen,
+      choice,
+      bags: needsWash.length + (pickups || []).length,
+      pounds: dropWeight,
+      orders: needsWash,
+    });
+  }
+
+  // Collecting finished bags happens at whichever laundromat actually has them,
+  // which is recorded on the order and is not a choice to make.
+  const readyByPartner = new Map();
+  for (const o of (inHand || []).filter((x) => x.status === 'READY' && x.partner_id)) {
+    if (!readyByPartner.has(o.partner_id)) readyByPartner.set(o.partner_id, []);
+    readyByPartner.get(o.partner_id).push(o);
+  }
+
+  for (const [partnerId, list] of readyByPartner) {
+    const partner = partnerRows.find((p) => p.id === partnerId);
+    partnerStops.push({
+      kind: 'pickup_partner',
+      at: partner ? partner.at : null,
+      partner,
+      bags: list.length,
+      pounds: list.reduce((t, o) => t + Number(o.weight_lb || 0), 0),
+      orders: list,
+    });
+  }
+
+  // --- put the day together -------------------------------------------------
+
+  const stops = [...orderedCollect, ...partnerStops, ...sequenceLeg(deliverStops)];
+
+  stops.forEach((s, i) => {
+    s.position = i + 1;
+    s.leg = LEGS[s.kind];
+  });
+
+  const walk = withEtas(stops, startMinutes);
+  const r = R();
+  const serviceMin = stops.reduce((t, s) => t + serviceMinutes(s.kind), 0);
+  const driveMin = minutesFor(walk.miles);
+
+  // What the day is worth, against what it costs to drive. Only bags with a
+  // real weight count - an unweighed pickup has no price yet and guessing one
+  // would put an invented number next to real ones.
+  const billable = [...(inHand || [])].filter((o) => o.weight_lb != null);
+  const revenueCents = billable.reduce((t, o) => t + estimatedBill(o.weight_lb), 0);
+  const wholesaleCents =
+    choice.chosen && choice.chosen.wholesale_per_lb_cents != null
+      ? Math.round(
+          billable.reduce((t, o) => t + Number(o.weight_lb), 0) *
+            choice.chosen.wholesale_per_lb_cents
+        )
+      : null;
+  const drivingCents = Math.round(walk.miles * perMile() * 100);
+
+  return {
+    date,
+    start,
+    weekday,
+    stops,
+    partners: partnerRows,
+    choice,
+    miles: walk.miles,
+    driveMin,
+    serviceMin,
+    totalMin: driveMin + serviceMin,
+    endMinutes: walk.endMinutes,
+    overDay: driveMin + serviceMin > r.workingDayMinutes,
+    unplaced: stops.filter((s) => !s.at).length,
+    money: {
+      revenueCents,
+      wholesaleCents,
+      drivingCents,
+      // Null rather than a number when we do not know what the wash costs.
+      marginCents: wholesaleCents == null ? null : revenueCents - wholesaleCents - drivingCents,
+    },
+  };
+}
+
 // --- The question -----------------------------------------------------------
 
 // Where does this new stop go, and what does it cost?
@@ -258,6 +584,9 @@ function estimatedBill(lb) {
 }
 
 module.exports = {
+  LEGS,
+  board,
+  chooseLaundromat,
   perMile,
   milesBetween,
   minutesFor,
