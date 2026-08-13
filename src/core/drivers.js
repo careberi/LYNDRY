@@ -26,11 +26,15 @@ const roles = require('./roles');
 // ---------------------------------------------------------------------------
 
 const DRIVER_FIELDS =
-  'id, name, phone, role, status, base_address_line1, base_address_line2, ' +
+  'id, name, phone, role, status, drives, base_address_line1, base_address_line2, ' +
   'base_city, base_state, base_postal_code, base_lat, base_lng, base_geocode_failed';
 
-// Anyone who can actually be sent out. An admin who also drives counts - the
-// permission is what decides, never the role name, exactly as everywhere else.
+// Anyone who actually drives a round.
+//
+// orders.drive, not orders.act. An admin holds orders.act because fixing a
+// fat-fingered weight is admin work, and filtering on that put every admin in
+// the assignment pool - orders were being handed to whoever was at a desk. An
+// admin is an admin; they do not have a round.
 async function active() {
   const { data, error } = await db
     .from('ops_users')
@@ -40,7 +44,7 @@ async function active() {
 
   if (error) throw error;
 
-  return (data || []).filter((u) => roles.can(u, 'orders.act'));
+  return (data || []).filter((u) => roles.can(u, 'orders.drive'));
 }
 
 async function find(id) {

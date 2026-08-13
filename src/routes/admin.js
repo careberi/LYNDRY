@@ -171,9 +171,11 @@ const OPS_MENUS = Object.freeze([
   {
     label: 'Dashboard',
     items: [
-      // First in the menu because for a driver it is the only screen that
-      // matters - everything else is looking something up.
-      { href: '/ops/run', label: 'Your round', permission: 'orders.act' },
+      // First in the menu because for somebody on the round it is the only
+      // screen that matters - everything else is looking something up. Behind
+      // orders.drive, so an admin who has not put themselves on the round is
+      // not offered one.
+      { href: '/ops/run', label: 'Your round', permission: 'orders.drive' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       { href: '/ops/loadout', label: 'Load out', permission: 'orders.act' },
       { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
@@ -1979,7 +1981,7 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
 // else's day, that is what the routing board is for.
 // ---------------------------------------------------------------------------
 
-router.get('/ops/run', guard, withIssues, may('orders.act'), async (req, res, next) => {
+router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
     const state = await runCore.forDriver(req.opsUser.id);
 
@@ -2007,7 +2009,7 @@ router.get('/ops/run', guard, withIssues, may('orders.act'), async (req, res, ne
 // deliberately changes nothing about the order except a flag saying the driver
 // is standing at it. Everything that actually moves an order still goes through
 // the same routes the order page uses.
-router.post('/ops/run/here', guard, may('orders.act'), async (req, res, next) => {
+router.post('/ops/run/here', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const orderId = String((req.body || {}).order_id || '');
     if (!UUID.test(orderId)) return res.redirect(303, '/ops/run');
@@ -2030,7 +2032,7 @@ router.post('/ops/run/here', guard, may('orders.act'), async (req, res, next) =>
 
 // Handing a load over at the laundromat. Several orders, one visit, so this
 // loops fulfilment.dropAtPartner rather than being a new way to do it.
-router.post('/ops/run/dropped', guard, may('orders.act'), async (req, res, next) => {
+router.post('/ops/run/dropped', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const body = req.body || {};
     const partnerId = UUID.test(String(body.partner_id || '')) ? String(body.partner_id) : null;
@@ -3375,7 +3377,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
     const { data: people, error } = await db
       .from('ops_users')
       .select(
-        'id, name, phone, status, role, last_login_at, created_at, ' +
+        'id, name, phone, status, role, drives, last_login_at, created_at, ' +
           'base_address_line1, base_address_line2, base_city, base_state, ' +
           'base_postal_code, base_lat, base_lng, base_geocode_failed'
       )
@@ -3424,9 +3426,24 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : '<span class="badge">DISABLED</span>',
-        // Only somebody who actually drives has a base. Showing the column
-        // for sales would invite filling it in for no reason.
-        roles.can(p, 'orders.act')
+        // Only somebody on the round has a base. An admin who has not switched
+        // driving on has no route to start, so the field would change nothing.
+        // ON THE ROUND OR NOT.
+        //
+        // A driver always is - that is the role, and a toggle offering to take
+        // them off it would be a lie. An admin chooses, because the owner
+        // drives some days and not others. Sales never does.
+        p.role === 'ADMIN'
+          ? `<form method="post" action="/ops/team/${p.id}/drives" style="margin:0;">
+               <button class="btn btn-sm ${p.drives ? '' : 'btn-outline'}"
+                       name="drives" value="${p.drives ? 'no' : 'yes'}">
+                 ${p.drives ? 'On the round' : 'Not driving'}
+               </button>
+             </form>`
+          : p.role === 'DRIVER'
+            ? '<span class="badge" style="background:var(--suds-300);">On the round</span>'
+            : '<span style="color:var(--ink-400);">&mdash;</span>',
+        roles.can(p, 'orders.drive')
           ? p.base_address_line1
             ? `${escapeHtml(p.base_city || p.base_address_line1)}${
                 p.base_lat == null
@@ -3455,6 +3472,13 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
       ${sectionHeading('Who can sign in', 'Team', (people || []).length)}
 
       ${
+        req.query.note
+          ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
+               <p style="font-size:16px;margin:0;">${escapeHtml(String(req.query.note).slice(0, 300))}</p>
+             </div>`
+          : ''
+      }
+      ${
         req.query.based
           ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
                <p style="font-size:16px;margin:0;">Base saved. Putting it on the map now - the
@@ -3477,7 +3501,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
           : ''
       }
 
-      ${table(['Name', 'Mobile', 'Role', 'Status', 'Home base', 'Last signed in', ''], rows)}
+      ${table(['Name', 'Mobile', 'Role', 'Status', 'Driving', 'Home base', 'Last signed in', ''], rows)}
 
       <div class="grid-2" style="align-items:start;margin-top:44px;">
 
@@ -3555,9 +3579,9 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         </style>
 
         ${
-          (people || []).filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.act')).length
+          (people || []).filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.drive')).length
             ? (people || [])
-                .filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.act'))
+                .filter((p) => p.status === 'ACTIVE' && roles.can(p, 'orders.drive'))
                 .map(
                   (p) => `
         <form method="post" action="/ops/team/${p.id}/base" class="tb-row">
@@ -3642,6 +3666,76 @@ router.post('/ops/team', guard, may('team.manage'), async (req, res, next) => {
     }
 
     return res.redirect(303, '/ops/team?added=1');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Put an admin on the round, or take them off it.
+//
+// ADMIN ONLY. A driver drives by role and there is nothing to toggle; sales
+// never drives. Posting this at either is refused rather than silently ignored,
+// because a button that appears to work and does nothing is worse than one that
+// says no.
+//
+// TAKING SOMEBODY OFF THE ROUND MOVES THEIR WORK. Orders keep pointing at
+// whoever owns them, and a driver who is no longer driving still owning half of
+// today is exactly the silent gap this whole feature exists to close - the
+// board would not list them and nobody would collect. Their open orders are
+// reassigned to the nearest remaining driver, or left unassigned and shown in
+// the red banner if there is nobody left.
+router.post('/ops/team/:id/drives', guard, may('team.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const person = await drivers.find(req.params.id);
+    if (!person) return notFoundPage(res, 'No such person.');
+
+    if (person.role !== 'ADMIN') {
+      return res.redirect(
+        303,
+        '/ops/team?error=' +
+          encodeURIComponent(
+            `${person.name} is a ${roles.labelFor(person.role)}. Only an admin chooses whether they drive - change their role instead.`
+          )
+      );
+    }
+
+    const on = String((req.body || {}).drives) === 'yes';
+
+    const { error } = await db.from('ops_users').update({ drives: on }).eq('id', person.id);
+    if (error) throw error;
+
+    let moved = 0;
+    let stranded = 0;
+
+    if (!on) {
+      const { data: theirs } = await db
+        .from('orders')
+        .select('id, order_number, customers(*)')
+        .eq('driver_id', person.id)
+        .not('status', 'in', '(DELIVERED,CANCELED)');
+
+      for (const order of theirs || []) {
+        // Cleared first, so nearest() cannot hand it straight back to somebody
+        // who is no longer in the pool.
+        await db.from('orders').update({ driver_id: null }).eq('id', order.id);
+
+        const to = await drivers.assign({ ...order, driver_id: null });
+        if (to) moved += 1;
+        else stranded += 1;
+      }
+    }
+
+    const note = on
+      ? `${person.name} is on the round. Set their home base below.`
+      : `${person.name} is off the round.` +
+        (moved ? ` ${moved} order${moved === 1 ? '' : 's'} moved to another driver.` : '') +
+        (stranded
+          ? ` ${stranded} order${stranded === 1 ? '' : 's'} left with nobody - there is no other driver.`
+          : '');
+
+    return res.redirect(303, `/ops/team?note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
   }

@@ -850,6 +850,25 @@ the money, the AI internals, the vendor list or the permission table — and the
 page says whose view it is. What we pay a laundromat is the one wholesale figure
 that would otherwise reach it. Adding a section means deciding who it is for.
 
+**`orders.drive` is the one permission a role does not decide on its own.**
+Doing a driver's job and *being* a driver are different things: an admin holds
+`orders.act` because correcting a fat-fingered weight is admin work, and the
+driver pool used to be filtered on exactly that — so orders were assigned to
+whoever was sitting at a desk. A **Driver** has `orders.drive` by role. An
+**Admin** has it while they have switched themselves on to the round, from the
+Team page, because the owner drives some days and not others. **Sales** never
+does. The check lives in `can()` in `src/core/roles.js`, which is where role
+logic belongs — never in a page.
+
+Everything about rounds keys off it: the home base field, the assignment pool,
+the round strip on the board, the driver picker on Routing, and `/ops/run`.
+
+**Taking somebody off the round moves their work.** Their open orders are
+reassigned to the nearest remaining driver, or left unassigned and shown in the
+red banner if there is nobody left. An order still pointing at somebody who no
+longer drives appears on no board and gets collected by nobody, which is the
+exact silent gap `driver_id` exists to close.
+
 **New people default to `DRIVER`**, the least privileged role, and an
 unrecognised role posted to the form falls back to it too. Promoting is
 deliberate.

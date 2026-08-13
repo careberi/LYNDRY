@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the guided run
+const REVIEWED = '13 August 2026';  // bumped with the driving toggle
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -138,7 +138,14 @@ function processBody(user) {
           )
           .join('')}
       </tbody>
-    </table>`;
+    </table>
+    <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin:12px 0 0;">
+      One exception to the table: <code>orders.drive</code> is the only
+      permission a role does not decide on its own. A Driver has it always. An
+      Admin has it while they have switched themselves on to the round from the
+      Team page - the owner drives some days and not others, and that is not a
+      property of a job title.
+    </p>`;
 
   const cancellableFrom = Object.keys(orders.ALLOWED_NEXT).filter((s) =>
     (orders.ALLOWED_NEXT[s] || []).includes('CANCELED')

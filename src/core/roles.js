@@ -15,6 +15,18 @@
 const PERMISSIONS = Object.freeze({
   'orders.view': 'See the orders board and individual orders',
   'orders.act': 'Move an order along — collected, weighed, delivered',
+  // BEING A DRIVER IS NOT THE SAME AS DOING A DRIVER'S JOB, and conflating
+  // them is what this permission exists to stop.
+  //
+  // An admin needs orders.act — correcting a weight somebody fat-fingered, or
+  // marking an order delivered when a driver's phone died, is admin work. It
+  // does not make them one of the people orders get handed to, and filtering
+  // the driver pool on orders.act meant it did.
+  //
+  // A DRIVER holds this by role. An ADMIN holds it while they have switched it
+  // on — see can(). Everything about rounds keys off it: the home base, the
+  // assignment pool, the round strip, and /ops/run.
+  'orders.drive': 'Be on the round: a home base, assigned orders, a day to drive',
   'customers.view': 'Browse customers and their history',
   // Every word anyone has ever texted us, including people who are not
   // customers. Kept separate from customers.view because a conversation holds
@@ -42,9 +54,12 @@ const PERMISSIONS = Object.freeze({
 const ROLES = Object.freeze({
   ADMIN: {
     label: 'Admin',
-    // Everything, including the ability to change everyone else's role.
-    description: 'Full access, including the team and the money.',
-    permissions: Object.keys(PERMISSIONS),
+    description: 'Everything. Can put themselves on the round when they want to.',
+    // Everything except orders.drive, which is not the role's to grant - see
+    // can() below. It used to be a bare Object.keys(PERMISSIONS), which quietly
+    // handed every admin a home base and a place in the assignment pool, so
+    // orders were being given to whoever was sitting at a desk.
+    permissions: Object.keys(PERMISSIONS).filter((p) => p !== 'orders.drive'),
   },
 
   DRIVER: {
@@ -56,7 +71,7 @@ const ROLES = Object.freeze({
     // the change log, not the money. The address is the one piece of somebody's
     // personal detail a driver gets, because you cannot drive to a stop without
     // it. Everything else is a file on a person, and a round does not need one.
-    permissions: ['orders.view', 'orders.act'],
+    permissions: ['orders.view', 'orders.act', 'orders.drive'],
   },
 
   SALES: {
@@ -88,6 +103,19 @@ function can(user, permission) {
   // The machine key (x-admin-key) is not a person and has no role. It is only
   // ever used by our own scripts, so it gets everything.
   if (user && user.isMachine) return true;
+
+  // THE ONE PERMISSION A ROLE DOES NOT DECIDE ON ITS OWN.
+  //
+  // A DRIVER always drives - that is the role. SALES never does. An ADMIN
+  // drives only while they have switched it on, because in a business this
+  // size the owner drives some days and not others, and that is something he
+  // decides on a Tuesday morning rather than a property of his job title.
+  //
+  // The role check is here rather than in a page, which is exactly the rule at
+  // the top of this file: this is where role logic belongs.
+  if (permission === 'orders.drive' && roleOf(user) === 'ADMIN') {
+    return Boolean(user && user.drives);
+  }
 
   return ROLES[roleOf(user)].permissions.includes(permission);
 }
