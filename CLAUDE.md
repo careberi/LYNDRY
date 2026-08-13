@@ -1011,6 +1011,13 @@ nobody can sign in as them — they exist for the boards, the routing picker and
 the assignment. `-- --clear` removes them and puts their orders back in the
 pool.
 
+`npm run seed:partners -- --write` adds eight laundromats from Glen Rock down
+to Hoboken, with rates, capacities, turnarounds and cutoffs that genuinely
+differ, so cheapest, nearest and fastest are rarely the same place. **The names
+are invented and every row says so in its notes** — a plausible laundromat name
+with a wholesale rate beside it gets read as a signed deal within a week, and
+nobody has signed anything.
+
 `npm run seed:week -- --write` is the busy version: 40 customers across 12
 towns, ~50 pickups roughly hourly over four days plus deliveries going back out
 today. For seeing how routing copes with density rather than six stops. It sets

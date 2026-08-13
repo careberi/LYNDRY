@@ -17,7 +17,8 @@
     "assign": "node --use-system-ca scripts/assign-drivers.js",
     "seed:team": "node --use-system-ca scripts/seed-team.js",
     "seed:demo": "node --use-system-ca scripts/seed-demo.js",
-    "seed:week": "node --use-system-ca scripts/seed-week.js"
+    "seed:week": "node --use-system-ca scripts/seed-week.js",
+    "seed:partners": "node --use-system-ca scripts/seed-partners.js"
   },
   "engines": {
     "node": ">=20"
