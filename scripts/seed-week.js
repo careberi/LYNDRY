@@ -137,25 +137,33 @@ async function clear() {
   // Today is a working day: pickups spread across it AND deliveries going back
   // out, because a real day is both at once. The days after are pickups only -
   // their deliveries have not been earned yet.
+  // `done` is work already finished TODAY - delivered and charged - so the
+  // Grossed figure on the routing board has something in it. Without any, cash
+  // in reads zero all day and looks broken rather than early.
   const DAYS = [
-    { day: 0, pickups: 14, deliveries: 8 },
-    { day: 1, pickups: 14, deliveries: 0 },
-    { day: 2, pickups: 12, deliveries: 0 },
-    { day: 3, pickups: 10, deliveries: 0 },
+    { day: 0, pickups: 22, deliveries: 14, done: 9 },
+    { day: 1, pickups: 20, deliveries: 0, done: 0 },
+    { day: 2, pickups: 18, deliveries: 0, done: 0 },
+    { day: 3, pickups: 16, deliveries: 0, done: 0 },
+    { day: 4, pickups: 14, deliveries: 0, done: 0 },
+    { day: 5, pickups: 12, deliveries: 0, done: 0 },
   ];
 
   const totalPickups = DAYS.reduce((t, d) => t + d.pickups, 0);
   const totalDeliveries = DAYS.reduce((t, d) => t + d.deliveries, 0);
+  const totalDone = DAYS.reduce((t, d) => t + (d.done || 0), 0);
 
   console.log(`${COUNT} customers across ${TOWNS.length} towns.\n`);
   for (const d of DAYS) {
     console.log(
       `  ${booking.readableDate(booking.addDays(today, d.day)).padEnd(16)}` +
         `${String(d.pickups).padStart(2)} pickups` +
-        (d.deliveries ? `, ${d.deliveries} deliveries out` : '')
+        (d.deliveries ? `, ${d.deliveries} out` : '') +
+        (d.done ? `, ${d.done} delivered` : '')
     );
   }
-  console.log(`\n  ${totalPickups} pickups and ${totalDeliveries} deliveries in all.`);
+  console.log(`
+  ${totalPickups} pickups, ${totalDeliveries} out, ${totalDone} already delivered.`);
 
   if (!WRITE) {
     console.log('\nNothing was created. Run it again with --write to save.');
@@ -350,6 +358,54 @@ async function clear() {
 
       made += 1;
       process.stdout.write('o');
+    }
+
+    // --- and work already finished today ----------------------------------
+    //
+    // Delivered and charged, so the board's Grossed figure is not zero. One in
+    // nine declines, because "delivered but did not pay" is the only thing that
+    // keeps Grossed apart from delivered and it needs to be visible.
+    for (let i = 0; i < (spec.done || 0); i += 1) {
+      const customerId = ids[cursor % ids.length];
+      cursor += 1;
+
+      const pounds = 10 + ((i * 5) % 30);
+      const at = await geocode.locate(await customerRow(customerId));
+      const best = at ? await driversCore.nearest(at, { drivers: team }) : null;
+      const driver = best ? best.driver : team[0];
+      const partner = partners && partners.length ? partners[partnerTurn++ % partners.length] : null;
+      const when = (h) => new Date(`${date}T${String(h).padStart(2, '0')}:00:00Z`).toISOString();
+      const declined = i % 9 === 8;
+
+      const { error } = await db.from('orders').insert({
+        customer_id: customerId,
+        driver_id: driver.id,
+        status: 'DELIVERED',
+        service: 'WASH_DRY_FOLD',
+        pickup_date: booking.addDays(date, -1),
+        pickup_time: '10:00',
+        pickup_method: 'LEAVE_OUTSIDE',
+        bag_count: 1 + (i % 3),
+        weight_lb: pounds,
+        price_cents: Math.max(2500, pounds * 200),
+        price_per_lb_cents: 200,
+        minimum_cents: 2500,
+        partner_id: partner ? partner.id : null,
+        collected_at: when(8),
+        at_partner_at: when(9),
+        ready_at: when(11),
+        delivered_at: when(12 + (i % 5)),
+        payment_status: declined ? 'FAILED' : 'PAID',
+        paid_at: declined ? null : when(12 + (i % 5)),
+        payment_failure_reason: declined ? 'Card declined' : null,
+      });
+
+      if (!error) {
+        made += 1;
+        process.stdout.write(declined ? 'x' : '+');
+      } else {
+        process.stdout.write('-');
+      }
     }
 
     console.log('');

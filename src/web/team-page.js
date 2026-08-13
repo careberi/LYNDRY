@@ -139,6 +139,26 @@ function teamMemberBody({ person, isMe, notice = null, problem = null, formatPho
         }
       </div>
 
+      ${
+        // Only for somebody on the round: it feeds the margin on their day, and
+        // a wage on a person who never drives changes nothing.
+        drives
+          ? `
+      <div class="field" style="margin-top:20px;">
+        ${field({
+          name: 'wage_dollars_hour',
+          label: 'Paid per hour',
+          value: person.wage_cents_hour == null ? '' : (person.wage_cents_hour / 100).toFixed(2),
+          type: 'number',
+          attrs: 'step="0.25" min="1" max="200" placeholder="20.00"',
+          hint:
+            'Feeds the margin on their round, which charges every paid minute - driving ' +
+            'and standing at a door. Left blank they cost whatever the system default is.',
+        })}
+      </div>`
+          : ''
+      }
+
       <div class="field" style="margin-top:20px;">
         <label class="field-label">Can sign in</label>
         ${

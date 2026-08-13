@@ -414,6 +414,19 @@ function routingBoardBody({
     )}
     ${statCard('Back at', minutesToClock(board.endMinutes))}
     ${
+      // CASH IN, AND CASH COMING. Two different questions, side by side and
+      // never added together: what has actually been charged at a door today,
+      // and what the scale has already decided but is still out there.
+      showMoney
+        ? statCard('Grossed', escapeHtml(money0(board.money.grossedCents))) +
+          statCard(
+            'Expected',
+            escapeHtml(money0(board.money.expectedCents)),
+            board.money.expectedCents ? 'var(--suds-300)' : undefined
+          )
+        : ''
+    }
+    ${
       showMoney && board.money.marginCents != null
         ? statCard(
             'Margin',
@@ -448,7 +461,20 @@ function routingBoardBody({
            </div>
 
            <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:12px 0 0;">
-             The wage counts <strong>every paid minute</strong>, on the road and on the
+             <strong>Grossed</strong> is what has been charged at a door today.
+             <strong>Expected</strong> is weighed and not yet delivered - money the
+             scale has already decided on, sitting in a laundromat or in the van.
+             ${
+               board.money.unpaidCents
+                 ? `<strong style="color:var(--stain-500);">${escapeHtml(
+                     money(board.money.unpaidCents)
+                   )} was delivered today and did not pay</strong>, so it is not in Grossed.`
+                 : ''
+             }
+             <br>
+             The wage is ${escapeHtml(money(board.money.wagePerHour * 100))} an hour for
+             ${board.driver ? escapeHtml(board.driver.name) : 'this round'} and counts
+             <strong>every paid minute</strong>, on the road and on the
              ground. Bags not yet weighed are billed at what that customer's laundry
              usually weighs.
              <strong>This is not profit</strong> - insurance, the phone, the software

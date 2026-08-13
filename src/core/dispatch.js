@@ -749,10 +749,54 @@ async function board(dateIso, fromTime, driverId = null) {
   const perMileVehicle = r2.gasPerGallon / r2.milesPerGallon + r2.wearPerMile;
   const vehicleCents = Math.round(walk.miles * perMileVehicle * 100);
 
-  // EVERY paid minute, not just the moving ones.
-  const labourCents = Math.round(((driveMin + serviceMin) / 60) * r2.wagePerHour * 100);
+  // EVERY paid minute, not just the moving ones, at THIS driver's rate.
+  //
+  // Two drivers are rarely paid the same, and a margin is only worth reading if
+  // it uses what that particular round actually costs. Falls back to the
+  // configured rate when nobody has set one, which is what a business with a
+  // single pay rate wants.
+  const wagePerHour = driver && driver.wage_cents_hour ? driver.wage_cents_hour / 100 : r2.wagePerHour;
+  const labourCents = Math.round(((driveMin + serviceMin) / 60) * wagePerHour * 100);
 
   // One charge per order that will actually be billed.
+  // WHAT WE ACTUALLY GROSSED, and what is still owed to us by the work.
+  //
+  // Two different questions and they must not be added together:
+  //
+  //   GROSSED   delivered. The card is charged at the door, so a delivered
+  //             order is money that has moved. Anything delivered and unpaid is
+  //             a decline, counted separately rather than quietly included -
+  //             it is not cash until it is cash.
+  //
+  //   EXPECTED  weighed but not yet back at a door. A real number, because the
+  //             scale has already decided what it bills. This is the money
+  //             sitting in a laundromat and in the back of the van.
+  //
+  // Unweighed pickups are in NEITHER. Their weight is a guess, and a guess does
+  // not belong in a figure called cash.
+  let deliveredQuery = db
+    .from('orders')
+    .select('price_cents, paid_at, payment_status')
+    .eq('status', 'DELIVERED')
+    .gte('delivered_at', `${date}T00:00:00`)
+    .lte('delivered_at', `${date}T23:59:59`);
+  if (driverId) deliveredQuery = deliveredQuery.eq('driver_id', driverId);
+
+  const { data: deliveredToday } = await deliveredQuery;
+
+  const grossedCents = (deliveredToday || [])
+    .filter((o) => o.paid_at)
+    .reduce((t, o) => t + (o.price_cents || 0), 0);
+
+  const unpaidCents = (deliveredToday || [])
+    .filter((o) => !o.paid_at)
+    .reduce((t, o) => t + (o.price_cents || 0), 0);
+
+  // Already on a scale, not yet through a door - wherever it is.
+  const expectedCents = (inHand || [])
+    .filter((o) => o.weight_lb != null)
+    .reduce((t, o) => t + estimatedBill(o.weight_lb), 0);
+
   const charges = weighed.length + expected.length;
   const cardFeeCents = Math.round(
     (revenueCents * r2.cardFeePercent) / 100 + charges * r2.cardFeeFixedCents
@@ -791,6 +835,12 @@ async function board(dateIso, fromTime, driverId = null) {
     overDay: driveMin + serviceMin > r.workingDayMinutes,
     unplaced: stops.filter((s) => !s.at).length,
     money: {
+      // Cash that has moved today, and cash the scale has already decided on
+      // but which is still out there.
+      grossedCents,
+      unpaidCents,
+      expectedCents,
+      wagePerHour,
       revenueCents,
       wholesaleCents,
       vehicleCents,

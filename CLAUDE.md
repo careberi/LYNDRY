@@ -706,6 +706,18 @@ load-out pass sequences by scanning bags, and a pickup has no bag to scan, so
 pickups were in no run at all — a quote against a delivery-only run measures
 against half a day's work.
 
+**The wage is per person**, in `ops_users.wage_cents_hour`, set on their profile
+and falling back to `config.routing.wagePerHour` when blank. Two drivers are
+rarely paid the same, and a margin is only worth reading if it uses what that
+particular round actually costs.
+
+**Grossed and Expected are two different questions and must never be added.**
+Grossed is what has been **charged at a door today** — a delivered order that
+declined is counted separately and is not cash until it is cash. Expected is
+**weighed but not yet delivered**: money the scale has already decided on,
+sitting in a laundromat or in the van. **An unweighed pickup is in neither** —
+its weight is a guess, and a guess does not belong in a figure called cash.
+
 **The margin on the routing board is a CONTRIBUTION MARGIN, not profit**, and
 the page says so. Revenue minus the wash, the van, the wage and the card fees.
 Insurance, the phone, the software and Neil's own time are not in it.

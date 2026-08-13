@@ -26,7 +26,7 @@ const roles = require('./roles');
 // ---------------------------------------------------------------------------
 
 const DRIVER_FIELDS =
-  'id, name, phone, role, status, drives, base_address_line1, base_address_line2, ' +
+  'id, name, phone, role, status, drives, wage_cents_hour, base_address_line1, base_address_line2, ' +
   'base_city, base_state, base_postal_code, base_lat, base_lng, base_geocode_failed';
 
 // Anyone who actually drives a round.

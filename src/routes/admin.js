@@ -3792,7 +3792,17 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
     // set on a row where it means nothing.
     const drives = role === 'ADMIN' ? String(body.drives) === 'yes' : false;
 
-    const row = { name, phone, role, status, drives };
+    // Entered in dollars because that is how a wage is talked about, stored in
+    // cents like every other money column here. Blank means "use the default",
+    // which is different from zero.
+    const wageText = String(body.wage_dollars_hour || '').trim();
+    const wageNumber = wageText ? Number(wageText) : null;
+    const wage_cents_hour =
+      wageNumber != null && Number.isFinite(wageNumber) && wageNumber > 0
+        ? Math.round(wageNumber * 100)
+        : null;
+
+    const row = { name, phone, role, status, drives, wage_cents_hour };
 
     const { error } = await db.from('ops_users').update(row).eq('id', person.id);
 
