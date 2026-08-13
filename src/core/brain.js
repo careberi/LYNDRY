@@ -101,6 +101,14 @@ const TOOLS = [
           type: 'string',
           description: 'The new day, as YYYY-MM-DD, worked out from today\'s date below.',
         },
+        which_date: {
+          type: 'string',
+          description:
+            'Only needed when they have MORE THAN ONE pickup booked: the day of the ' +
+            'one being moved, as YYYY-MM-DD. With one booked, leave it out. With ' +
+            'several, leave it out and you will be told which days they have so you ' +
+            'can ask - never guess which one they meant.',
+        },
         new_time: {
           type: 'string',
           description:
@@ -118,7 +126,19 @@ const TOOLS = [
     description:
       'Cancel a pickup that has not been collected yet. Use when the customer ' +
       'clearly wants to call it off.',
-    input_schema: { type: 'object', properties: {}, required: [] },
+    input_schema: {
+      type: 'object',
+      properties: {
+        which_date: {
+          type: 'string',
+          description:
+            'Only needed when they have MORE THAN ONE pickup booked: the day of the ' +
+            'one being cancelled, as YYYY-MM-DD. With one booked, leave it out. Never ' +
+            'guess which one - you will be told which days they have so you can ask.',
+        },
+      },
+      required: [],
+    },
   },
 
   {
@@ -422,7 +442,9 @@ ALWAYS name the day AND its date AND the WINDOW in the recap: "today, Wednesday 
 When they say yes, book. If they correct something, apply it, and fold the correction into the booking (update_profile for a lasting change, notes for a one-off) rather than asking anything else.
 This is the ONLY confirmation step. Never re-confirm after booking, and never confirm the same thing twice.
 A returning customer texting "laundry tomorrow" still gets asked no questions at all: their address, wash preferences and usual pickup method are saved and go straight into the recap. One recap, one yes, booked.
-IF THEY ALREADY HAVE A PICKUP BOOKED and they ask for one at a different day or time, they mean CHANGE IT. Call reschedule_order, not create_order. "can you come at 4 instead", "actually make it friday", "I'd like a pickup today at 4" from somebody already booked are all the same request: move the one they have. Only book a second order if they say plainly that they want an additional one as well as the first.
+A CUSTOMER MAY HAVE SEVERAL PICKUPS BOOKED - one per day, as many days as they like. Thursday and Friday is an ordinary thing to want and you book it without comment. The only thing that is refused is a SECOND pickup on a day they already have one, because the van comes to a door once a day.
+IF THEY ALREADY HAVE A PICKUP BOOKED and they ask for one at a different day or time, they usually mean CHANGE IT. "can you come at 4 instead", "actually make it friday", "I'd like a pickup today at 4" from somebody already booked are all the same request: move the one they have, with reschedule_order.
+BUT "another", "a second one", "also", "as well" and "add" mean ADD, and you call create_order. "schedule another pickup for tomorrow at 10" is a new booking, not a change, and treating it as a change would quietly move the one they already had. If you have recapped a second pickup and they say yes, BOOK IT - do not come back and ask whether they meant to move the first one instead. Asking after a yes is confirming twice, and it happened to a real customer who then got handed to a human for something we plainly want to say yes to.
 Never leave somebody with nothing booked when they were trying to book. If you cancel a pickup for somebody who was in the middle of arranging a different one, say so and offer the new time in the same breath.
 If they mention a time, whether that is "at 6", "sixish", "after work" or "first thing", put your best reading of it in pickup_time and book. Do not ask them to confirm the exact minute, and never ask for a time they did not bring up. We quote a window back to them afterwards, so a rough reading is fine.
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
@@ -566,6 +588,28 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     );
   } else {
     lines.push('THEIR CURRENT ORDER', 'None. They have nothing booked right now.');
+  }
+
+  // MORE THAN ONE PICKUP IS ALLOWED - one per day. Listed whenever there are
+  // several, because "move it" and "cancel it" then mean nothing on their own
+  // and the days are what the question has to name.
+  const openPickups = customer.openPickups || [];
+  if (openPickups.length > 1) {
+    lines.push(
+      '',
+      `THEY HAVE ${openPickups.length} PICKUPS BOOKED. "move it" and "cancel it" are`,
+      'ambiguous - ask which, naming the days, and pass which_date when they answer.',
+      'Booking another day as well is fine; only a second one on a day they already',
+      'have is refused.'
+    );
+    for (const o of openPickups) {
+      lines.push(
+        `#${o.order_number}: ${booking.readableDate(o.pickup_date)} (${o.pickup_date})` +
+          (o.pickup_window_start
+            ? `, ${booking.describeWindow(o.pickup_window_start, o.pickup_window_end)}`
+            : '')
+      );
+    }
   }
 
   if (recentMessages && recentMessages.length) {

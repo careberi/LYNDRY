@@ -493,6 +493,29 @@ mileage figure whose provenance is invisible is worse than no figure. If the
 demo server becomes unreliable, the replacement is a paid routing key, not a
 quiet return to estimates.
 
+**A customer may have SEVERAL PICKUPS BOOKED — one per day, as many days as
+they like.** It used to be one, full stop, enforced by a partial unique index
+since `0001`. That index existed so `open_locker()` could resolve a compartment
+from a phone number alone and there had to be exactly one answer — and lockers
+are shelved, so it outlived what it protected. A real customer booked Thursday,
+asked for Friday as well, said yes to the recap and was handed to a human.
+
+**One per day is still right**, and is not the same rule. The van visits a door
+once a day, so a second open pickup on the same date is a mistake rather than a
+request — the same rule standing orders already follow. It also keeps "your
+Thursday pickup" unambiguous.
+
+**`findAwaitingCollection()` returns the SOONEST, not the only one.** It was
+`.maybeSingle()`, which would now throw rather than choose. Anything that must
+not guess between two — rescheduling, cancelling — calls
+`findAllAwaitingCollection()` and **asks which**, naming the days. Acting on
+whichever came first would cancel the wrong laundry, and there is no undo.
+
+**Anything that asks "have they already got one" must ask about the DAY**, via
+`findAwaitingOn()`. Checking for any open pickup was right while there could
+only be one; now it would skip a standing order for ever the moment somebody
+booked a different day by hand.
+
 **A customer may have several standing orders.** `recurring_schedules`, one row
 per arrangement, so Tuesday mornings and Saturday lunchtimes can both exist —
 that was impossible while the schedule lived in four columns on the customer

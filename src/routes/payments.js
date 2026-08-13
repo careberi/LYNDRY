@@ -250,7 +250,12 @@ async function handleEvent(event) {
       // pickup. Before this, they got "card saved" and nothing else, and the
       // pickup they had just asked for was left unconfirmed with no sign that
       // anything was missing. That happened to a real customer.
-      const pending = await orders.findAwaitingCollection(customer.id);
+      // Every booking they are waiting on, not just the soonest. A customer
+      // can have several now, and one card covers all of them - confirming one
+      // and quietly leaving the rest unconfirmed would keep them off the
+      // driver's run sheet with nothing to say why.
+      const allPending = await orders.findAllAwaitingCollection(customer.id);
+      const pending = allPending[0] || null;
 
       // Nothing is charged here. The card being on file is the whole of what
       // was missing, so saving it confirms the booking outright and the money
@@ -258,9 +263,22 @@ async function handleEvent(event) {
       if (pending) {
         // The confirmation names the card itself, so the opener must not name
         // it again - a real customer got the card number twice in one text.
+        //
+        // The others go in the SAME message rather than one text each. A card
+        // covers all of them, and three texts arriving at once for one action
+        // is both a bill and a complaint waiting to happen.
+        const rest = allPending.slice(1);
+        const alsoLine = rest.length
+          ? ' Your other pickup' +
+            (rest.length === 1 ? ' is' : 's are') +
+            ' booked too: ' +
+            rest.map((o) => booking.readableDate(o.pickup_date)).join(', ') +
+            '.'
+          : '';
+
         await sendAndLog(
           customer.phone,
-          booking.confirmationMessage(customer, pending, { opener: 'Card saved' }),
+          booking.confirmationMessage(customer, pending, { opener: 'Card saved' }) + alsoLine,
           customer.id
         );
         return;

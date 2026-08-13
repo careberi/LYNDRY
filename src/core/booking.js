@@ -472,10 +472,16 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   const timeDetail = timeProblem(pickupTime);
   if (timeDetail) return { ok: false, reason: 'bad_time', detail: timeDetail };
 
-  // One order awaiting collection at a time. The database enforces this with a
-  // partial unique index too; catching it here means the customer gets a
-  // sentence instead of a constraint violation.
-  const existing = await orders.findAwaitingCollection(customer.id);
+  // ONE PICKUP PER DAY, not one in total.
+  //
+  // A van makes a single visit to a door on a given day, so a second booking
+  // for the same date is a mistake rather than a request. Booking Thursday and
+  // Friday is a perfectly ordinary thing to want, and refusing it sent a real
+  // customer to a human for something the business plainly wants to say yes to.
+  //
+  // The database enforces the same rule with a partial unique index; catching
+  // it here means the customer gets a sentence instead of a constraint error.
+  const existing = await orders.findAwaitingOn(customer.id, pickupDate);
   if (existing) return { ok: false, reason: 'already_booked', order: existing };
 
   // The order is written BEFORE the card is considered.

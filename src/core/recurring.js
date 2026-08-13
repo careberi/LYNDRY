@@ -158,11 +158,15 @@ async function dueOn(date) {
     if (!schedule.customers || schedule.customers.status !== 'ACTIVE') continue;
     if (nextDate(schedule) !== date) continue;
 
-    // Never book on top of something. They may have arranged this pickup
-    // themselves, the sweep may have already run today, or - now that a
-    // customer can have several schedules - two of them may fall on the same
-    // day, which is one pickup and not two.
-    const existing = await orders.findAwaitingCollection(schedule.customer_id);
+    // Never book on top of something ON THAT DAY. They may have arranged this
+    // pickup themselves, the sweep may have already run, or two of their
+    // schedules may fall on the same day, which is one pickup and not two.
+    //
+    // The day matters, not merely whether they have anything open. Checking for
+    // any open pickup was right while a customer could only have one; now that
+    // they can have several, it would skip a standing order for ever the moment
+    // somebody booked a different day by hand.
+    const existing = await orders.findAwaitingOn(schedule.customer_id, date);
     if (existing) continue;
 
     due.push(schedule);

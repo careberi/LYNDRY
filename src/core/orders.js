@@ -86,15 +86,48 @@ function isCancellable(status) {
 // Reading orders
 // ---------------------------------------------------------------------------
 
-// The one order a customer is waiting to have collected, or null.
+// EVERY pickup a customer is waiting to have collected, soonest first.
 //
-// The database guarantees there is at most one of these per customer, so this
-// can never be ambiguous — which is what open_locker() relies on.
-async function findAwaitingCollection(customerId) {
+// There can be more than one now. The database allows one per DAY rather than
+// one in total, because a van makes a single visit to a door on a given day but
+// there is no reason somebody cannot book Thursday and Friday - which a real
+// customer tried to do and was refused.
+async function findAllAwaitingCollection(customerId) {
   const { data, error } = await db
     .from('orders')
     .select('*')
     .eq('customer_id', customerId)
+    .in('status', AWAITING_COLLECTION)
+    .order('pickup_date', { ascending: true })
+    .order('pickup_window_start', { ascending: true, nullsFirst: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// The NEXT pickup a customer is waiting to have collected, or null.
+//
+// The soonest one, which is what somebody means by "my pickup" nine times in
+// ten. It used to be `.maybeSingle()` on the assumption that there could only
+// ever be one; that assumption is gone, and maybeSingle would now THROW rather
+// than choose - so this orders and takes the first instead.
+//
+// Anything that must not guess between two - rescheduling, cancelling - should
+// call findAllAwaitingCollection and ask which, rather than quietly acting on
+// whichever comes first.
+async function findAwaitingCollection(customerId) {
+  const all = await findAllAwaitingCollection(customerId);
+  return all[0] || null;
+}
+
+// The pickup on one particular day, or null. What "have they already got
+// something booked for Thursday" asks.
+async function findAwaitingOn(customerId, pickupDate) {
+  const { data, error } = await db
+    .from('orders')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('pickup_date', pickupDate)
     .in('status', AWAITING_COLLECTION)
     .maybeSingle();
 
@@ -301,6 +334,8 @@ module.exports = {
   canTransition,
   isCancellable,
   findAwaitingCollection,
+  findAllAwaitingCollection,
+  findAwaitingOn,
   findLatestInFlight,
   findInOurHands,
   findMostRecent,

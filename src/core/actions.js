@@ -138,6 +138,38 @@ async function getOrderStatus(customer) {
   }
 }
 
+// WHICH PICKUP DID THEY MEAN?
+//
+// A customer can have several booked now - one per day - so "move it" and
+// "cancel it" are only unambiguous when there is exactly one. With several,
+// this refuses to guess and hands back a question instead. Acting on whichever
+// happened to be soonest would cancel the wrong laundry, and there is no undo
+// for that.
+//
+// Returns { order } when it is clear, or { ask } with a sentence to send.
+async function whichPickup(customer, whichDate, verb) {
+  const open = await orders.findAllAwaitingCollection(customer.id);
+
+  if (!open.length) return { order: null };
+  if (open.length === 1) return { order: open[0] };
+
+  // The AI named a day: use it, if they actually have one that day.
+  if (whichDate) {
+    const wanted = open.find((o) => o.pickup_date === whichDate);
+    if (wanted) return { order: wanted };
+  }
+
+  // A question, not a menu. "Thursday or Friday?" is what a person would say,
+  // and it is the one case where asking is better than choosing.
+  const days = open.map((o) => booking.readableDate(o.pickup_date));
+  const list =
+    days.length === 2
+      ? `${days[0]} and ${days[1]}`
+      : `${days.slice(0, -1).join(', ')} and ${days[days.length - 1]}`;
+
+  return { ask: `You've got pickups booked for ${list}. Which one did you want to ${verb}?` };
+}
+
 // --- reschedule_order -------------------------------------------------------
 
 async function rescheduleOrder(customer, input) {
@@ -147,7 +179,10 @@ async function rescheduleOrder(customer, input) {
   const timeIssue = timeProblem(input.new_time);
   if (timeIssue) return timeIssue;
 
-  const order = await orders.findAwaitingCollection(customer.id);
+  const chosen = await whichPickup(customer, input.which_date, 'move');
+  if (chosen.ask) return chosen.ask;
+
+  const order = chosen.order;
 
   if (!order) {
     const inFlight = await orders.findLatestInFlight(customer.id);
@@ -182,8 +217,11 @@ async function rescheduleOrder(customer, input) {
 
 // --- cancel_order -----------------------------------------------------------
 
-async function cancelOrder(customer) {
-  const order = await orders.findAwaitingCollection(customer.id);
+async function cancelOrder(customer, input = {}) {
+  const chosen = await whichPickup(customer, input.which_date, 'cancel');
+  if (chosen.ask) return chosen.ask;
+
+  const order = chosen.order;
 
   if (!order) {
     const inFlight = await orders.findLatestInFlight(customer.id);
@@ -654,7 +692,7 @@ async function run(name, input, customer, helpers = {}) {
     case 'reschedule_order':
       return rescheduleOrder(customer, input);
     case 'cancel_order':
-      return cancelOrder(customer);
+      return cancelOrder(customer, input);
     case 'open_locker':
       return openLocker(customer);
     case 'update_profile':

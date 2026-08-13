@@ -320,15 +320,39 @@ function currentOrderCard(order) {
     ${
       canChange
         ? `
+    <details style="margin-bottom:14px;">
+      <summary style="cursor:pointer;font-size:16px;font-weight:600;">Move this one</summary>
+
+      <form method="post" action="/account/reschedule" style="margin:16px 0 0;">
+        <input type="hidden" name="order_id" value="${order.id}">
+        <div class="stack">
+          <div class="field">
+            <label class="field-label" for="d_${order.id}">New day</label>
+            <input class="input input-lg" type="date" id="d_${order.id}" name="new_date" required
+                   value="${escapeHtml(order.pickup_date)}">
+          </div>
+          <div class="field">
+            <label class="field-label" for="t_${order.id}">
+              What time? <span style="font-weight:400;color:var(--ink-500);">Optional</span>
+            </label>
+            <input class="input input-lg" type="time" id="t_${order.id}" name="new_time"
+                   value="${escapeHtml(booking.normaliseTime(order.pickup_time) || '')}">
+            <span class="field-hint">We'll aim for a window around it. Leave it blank if any time works.</span>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg" style="margin-top:18px;">Move it</button>
+      </form>
+    </details>
+
     <div style="display:flex;flex-wrap:wrap;gap:12px;">
       <form method="post" action="/account/cancel" style="margin:0;"
             onsubmit="return confirm('Cancel this pickup? There is no charge.');">
+        <input type="hidden" name="order_id" value="${order.id}">
         <button class="btn btn-outline">Cancel this pickup</button>
       </form>
     </div>
     <p style="font-size:15px;color:var(--ink-500);margin:16px 0 0;">
-      Free to cancel or move any time before we collect. To change the day, use
-      the form below.
+      Free to cancel or move any time before we collect.
     </p>`
         : ''
     }
@@ -339,8 +363,14 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
   try {
     const customer = req.customer;
 
-    const open = await orders.findAwaitingCollection(customer.id);
-    const inFlight = open || (await orders.findLatestInFlight(customer.id));
+    // EVERY pickup they are waiting on. A customer can have one per day now, so
+    // showing only the soonest hid bookings they had made and gave them no way
+    // to change the ones underneath.
+    const openPickups = await orders.findAllAwaitingCollection(customer.id);
+
+    // What is on the page when nothing is booked: whatever is still with us
+    // being washed, so the page is not blank while we hold their laundry.
+    const inFlight = openPickups[0] || (await orders.findLatestInFlight(customer.id));
 
     const { data: history } = await db
       .from('orders')
@@ -364,35 +394,14 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
             ? banner(escapeHtml(String(req.query.error)))
             : '';
 
-    // A booking form is pointless while an order is already open — the rule is
-    // one at a time — so it becomes a reschedule form instead.
-    const formCard = inFlight && orders.AWAITING_COLLECTION.includes(inFlight.status)
-      ? `
-      <div class="card card-xl" style="padding:32px;">
-        <p class="eyebrow" style="margin-bottom:6px;">Change the day</p>
-        <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;margin:0 0 22px;">Move your pickup</h2>
-        <form method="post" action="/account/reschedule">
-          <div class="stack">
-            <div class="field">
-              <label class="field-label" for="new_date">New day</label>
-              <input class="input input-lg" type="date" id="new_date" name="new_date" required
-                     min="${min}" max="${max}" value="${escapeHtml(inFlight.pickup_date)}">
-            </div>
-
-            <div class="field">
-              <label class="field-label" for="new_time">What time? <span style="font-weight:400;color:var(--ink-500);">Optional</span></label>
-              <input class="input input-lg" type="time" id="new_time" name="new_time"
-                     value="${escapeHtml(booking.normaliseTime(inFlight.pickup_time) || '')}">
-              <span class="field-hint">We'll aim for a window around it. Leave it blank if any time works.</span>
-            </div>
-          </div>
-
-          <button type="submit" class="btn btn-primary btn-lg" style="margin-top:20px;">
-            Move it {{ICON_ARROW}}
-          </button>
-        </form>
-      </div>`
-      : `
+    // THE BOOKING FORM IS ALWAYS THERE NOW.
+    //
+    // It used to turn into a reschedule form the moment anything was booked,
+    // because the rule was one pickup at a time. The rule is one pickup PER DAY,
+    // so somebody with Thursday booked must still be able to add Friday - and
+    // each pickup carries its own change and cancel controls on its own card.
+    // Asking for a day they already have is refused with a sentence.
+    const bookingForm = `
       <div class="card card-xl" style="padding:32px;">
         <p class="eyebrow" style="margin-bottom:6px;">Book</p>
         <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;margin:0 0 8px;">Next pickup</h2>
@@ -471,8 +480,14 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
 
 <section class="container" style="max-width:760px;padding-top:48px;padding-bottom:96px;">
   ${flash}
-  ${inFlight ? currentOrderCard(inFlight) : ''}
-  ${formCard}
+  ${
+    openPickups.length
+      ? openPickups.map(currentOrderCard).join('')
+      : inFlight
+        ? currentOrderCard(inFlight)
+        : ''
+  }
+  ${bookingForm}
 
   ${
     (history || []).length
@@ -594,7 +609,7 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
     const timeIssue = booking.timeProblem(newTime);
     if (timeIssue) return back(res, `?error=${encodeURIComponent(timeIssue)}`);
 
-    const order = await orders.findAwaitingCollection(customer.id);
+    const order = await pickupFromForm(customer, req.body);
     if (!order) {
       return back(res, `?error=${encodeURIComponent('There is no pickup to move.')}`);
     }
@@ -621,11 +636,27 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
   }
 });
 
+// WHICH PICKUP DID THE FORM MEAN?
+//
+// A customer can have several booked - one per day - so every change and cancel
+// form carries the order id of the one it belongs to. Falling back to the
+// soonest is only safe when there is exactly one; with several it would move or
+// cancel the wrong laundry, and there is no undo for that.
+async function pickupFromForm(customer, body) {
+  const open = await orders.findAllAwaitingCollection(customer.id);
+  if (!open.length) return null;
+
+  const wanted = String((body || {}).order_id || '');
+  if (wanted) return open.find((o) => o.id === wanted) || null;
+
+  return open.length === 1 ? open[0] : null;
+}
+
 router.post('/account/cancel', auth.requireCustomer, async (req, res, next) => {
   try {
     const customer = req.customer;
 
-    const order = await orders.findAwaitingCollection(customer.id);
+    const order = await pickupFromForm(customer, req.body);
     if (!order) {
       return back(
         res,

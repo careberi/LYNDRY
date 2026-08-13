@@ -206,6 +206,12 @@ async function answerWithBrain(customer, text, from) {
     // more than one, so they come from their own table rather than the row.
     customer.schedules = await recurring.forCustomer(customer.id);
 
+    // EVERY pickup they are waiting on, not just the latest. A customer can
+    // have one booked per day, so "move it" and "cancel it" are ambiguous the
+    // moment there are two - and the AI cannot ask which without knowing the
+    // days.
+    customer.openPickups = await orders.findAllAwaitingCollection(customer.id);
+
     decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text });
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.
