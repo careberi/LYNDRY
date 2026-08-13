@@ -1011,6 +1011,13 @@ nobody can sign in as them — they exist for the boards, the routing picker and
 the assignment. `-- --clear` removes them and puts their orders back in the
 pool.
 
+`npm run seed:week -- --write` is the busy version: 40 customers across 12
+towns, ~50 pickups roughly hourly over four days plus deliveries going back out
+today. For seeing how routing copes with density rather than six stops. It sets
+coordinates directly rather than geocoding — forty lookups through a free
+rate-limited public service for test data is not a reasonable thing to do to
+somebody else's server.
+
 `seed:demo` builds a day with something at every stage: pickups waiting, a bag
 in the van, one at a laundromat, one finished and waiting for the load-out pass,
 one out for delivery with clips on, and two delivered — one paid, one not. Plus
