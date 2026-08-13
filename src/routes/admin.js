@@ -196,6 +196,10 @@ const OPS_MENUS = Object.freeze([
       // calculators - it reads the real queue and nothing on it is invented.
       { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
       { href: '/ops/loadout', label: 'Load the van', permission: 'orders.act' },
+      // Under Today because an open issue is something happening NOW that is
+      // stopping an order moving - it belongs beside the board it is blocking,
+      // not filed with the people it happens to be about.
+      { href: '/ops/issues', label: 'Issues', permission: 'issues.manage' },
     ],
   },
   {
@@ -206,14 +210,15 @@ const OPS_MENUS = Object.freeze([
       // number and holds people who never became customers, which is the whole
       // reason it is worth reading.
       { href: '/ops/messages', label: 'Conversations', permission: 'messages.view' },
-      { href: '/ops/issues', label: 'Needs a person', permission: 'issues.manage' },
       { href: '/ops/team', label: 'Team', permission: 'team.manage' },
+      // Neil's call: a partner is a relationship with a person, so it sits with
+      // the customers and the team rather than with the calculators.
+      { href: '/ops/partners', label: 'Partners', permission: 'partners.view' },
     ],
   },
   {
     label: 'Business',
     items: [
-      { href: '/ops/partners', label: 'Partners', permission: 'partners.view' },
       { href: '/ops/labels', label: 'Bag stickers', permission: 'orders.act' },
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
       // "Route planner" says which of the two it is. This one is a day you
@@ -3040,7 +3045,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     };
 
     const body = `
-      ${sectionHeading('Needs a person', 'Open', open.length)}
+      ${sectionHeading('Issues', 'Open', open.length)}
       ${
         open.length
           ? open.map(card).join('')
@@ -3051,7 +3056,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     `;
 
     res.type('html').send(
-      adminPage({ title: 'Needs a person', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues })
     );
   } catch (err) {
     next(err);

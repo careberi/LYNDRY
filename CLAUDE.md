@@ -840,10 +840,19 @@ two what-if calculators.
 
 | Menu | The question |
 |---|---|
-| **Today** | What is happening right now: Your round, Orders, Routing, Load the van |
-| **People** | Every human in the system: Customers, Conversations, Needs a person, Team |
-| **Business** | What you set up and what it earns: Partners, Bag stickers, Unit economics, Route planner |
-| **Help** | How it all works |
+| **Today** | What is happening right now: Your round, Orders, Routing, Load the van, Issues |
+| **People** | Everyone you deal with: Customers, Conversations, Team, Partners |
+| **Business** | What you set up and what it earns: Bag stickers, Unit economics, Route planner |
+| **Help** | How it all works, What happens to a bag |
+
+**Issues sits under Today**, not with the people it happens to be about. An open
+issue is something happening now that is stopping an order moving, so it belongs
+beside the board it is blocking. It is called **Issues** — "Needs a person" was
+a description of the queue rather than a name for it, and the red banner on the
+board still uses that phrase because there it is a sentence.
+
+**Partners sit under People.** Neil's call: a partner is a relationship with a
+person, not a setting, and it was filed next to two what-if calculators.
 
 **Names say what a screen is, and the page title matches the menu entry** — a
 nav that calls something one thing and a heading that calls it another is a nav
@@ -851,8 +860,8 @@ you cannot trust. "Load out" was jargon; "Routing" and "Planner" were
 indistinguishable until one of them said *route*; "Messages" undersold a screen
 whose point is the people who never became customers.
 
-**The ops nav is four `<details>` menus, not a row of tabs** — Dashboard,
-People, Tools, Resources, defined once in `OPS_MENUS` in `src/routes/admin.js`.
+**The ops nav is four `<details>` menus, not a row of tabs** — Today, People,
+Business, Help, defined once in `OPS_MENUS` in `src/routes/admin.js`.
 Ten flat tabs needed 556px on a 375px phone; four menus need 335px. Built on
 `<details>` like the marketing hamburger, so **they open with no JavaScript** —
 this is the chrome around a driver's action pages and a nav that needs a script
