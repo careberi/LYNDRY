@@ -29,13 +29,13 @@ const PAGES = [
     path: '/',
     file: 'home.html',
     title: 'Home',
-    description: `Laundry pickup and delivery in ${site.serviceArea}. Wash, dry and fold at ${site.pricePerLb} a pound, back at your door within ${site.turnaround}.`,
+    description: `Laundry pickup and delivery in ${site.serviceArea}. Wash, dry and fold at ${site.pricePerLb} a pound, back at your door the ${site.turnaround}.`,
   },
   {
     path: '/how-it-works',
     file: 'how-it-works.html',
     title: 'How it works',
-    description: `How LYNDRY works: text us, leave your bag out, and it comes back washed and folded within ${site.turnaround}. You never need to be home.`,
+    description: `How LYNDRY works: text us, leave your bag out, and it comes back washed and folded the ${site.turnaround}. You never need to be home.`,
   },
   {
     path: '/pricing',

@@ -298,7 +298,7 @@ async function chargeOrder(order, customer) {
         `Your laundry weighed ${order.weight_lb} lb. That's under our ` +
         `${money(config.pricing.minimumCents)} minimum, so it's ` +
         `${money(alreadyPaid)} and nothing more to pay. ` +
-        `We'll have it back to you within ${site.turnaround}.`,
+        `We'll have it back to you the ${site.turnaround}.`,
     };
   }
 
@@ -360,7 +360,7 @@ async function chargeOrder(order, customer) {
       message:
         `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)} at ` +
         `${site.pricePerLb} a pound, charged to your ${describeCard(customer)}. ` +
-        `Back with you within ${site.turnaround}.`,
+        `Back with you the ${site.turnaround}.`,
     };
   }
 

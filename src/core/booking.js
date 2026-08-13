@@ -487,7 +487,7 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
   // called it out. This is the only message allowed to say everything.
   return (
     `${lead} pickup ${whenLine(order)}${address}. ${handover}${wash}${money} ` +
-    `Back with you within ${site.turnaround}.`
+    `Back with you the ${site.turnaround}.`
   );
 }
 function rescheduledMessage(order) {

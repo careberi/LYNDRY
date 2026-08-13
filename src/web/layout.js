@@ -176,7 +176,7 @@ function footer() {
           <div style="margin-bottom:22px;">${logo('footer')}</div>
           <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:var(--paper-300);">
             Laundry that runs on text messages. Picked up from your door, back
-            within ${site.turnaround}.
+            the ${site.turnaround}.
           </p>
           <p style="margin:10px 0 0;font-size:15px;line-height:1.55;color:var(--ink-400);">
             Serving ${site.serviceArea}.

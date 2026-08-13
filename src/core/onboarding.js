@@ -37,7 +37,7 @@ function welcomeMessage() {
   // question they can ignore in favour of asking what we cost.
   return (
     `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
-    `it back to you within ${site.turnaround}, at ${site.pricePerLb} a pound. ` +
+    `it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. ` +
     `Want to schedule a pickup?`
   );
 }

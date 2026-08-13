@@ -242,7 +242,7 @@ function processBody() {
     'What LYNDRY is',
     `A wash, dry and fold service in ${esc(site.serviceArea)}. We collect a bag
      of laundry from somebody's door, wash it, fold it, and bring it back
-     within ${esc(site.turnaround)}. That is the entire product. No dry
+     the ${esc(site.turnaround)}. That is the entire product. No dry
      cleaning, no pressing, no alterations.`,
     `
     <p>

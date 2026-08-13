@@ -713,7 +713,9 @@ rule is only about text messages.
 
 - **Service:** wash, dry and fold only
 - **Price:** $2.50 per pound, weighed after pickup
-- **Turnaround:** 24 hours
+- **Turnaround:** next day. The internal clock is still 24 hours from
+  collection (`TURNAROUND_HOURS`), which is what the ops countdown measures —
+  but nothing customer-facing says "24 hours" any more
 - **Scheduling:** pickup whenever the customer needs — no fixed route days
 - **Model:** door-to-door pickup, for **houses and apartments alike**. An
   apartment customer puts their unit on `address_line2` and the driver comes to

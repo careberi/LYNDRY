@@ -116,13 +116,13 @@ async function getOrderStatus(customer) {
     case 'DEPOSITED':
       return `Got your laundry in the locker, it's on the next collection.`;
     case 'IN_PROCESS':
-      return `Got it, it's being washed now. Back with you within ${site.turnaround}.`;
+      return `Got it, it's being washed now. Back with you the ${site.turnaround}.`;
     // AT_PARTNER and READY were missing entirely, so both fell through to
     // "let me check on that" - useless, and it invited the AI to explain
     // itself, which is how a customer got told their laundry was at a partner.
     // Neither answer mentions where the work happens, because that is ours.
     case 'AT_PARTNER':
-      return `It's being washed and folded now. Back with you within ${site.turnaround}.`;
+      return `It's being washed and folded now. Back with you the ${site.turnaround}.`;
     case 'READY':
       return `All washed and folded. It goes out for delivery next.`;
     case 'OUT_FOR_DELIVERY':
@@ -188,7 +188,7 @@ async function cancelOrder(customer) {
   if (!order) {
     const inFlight = await orders.findLatestInFlight(customer.id);
     if (inFlight) {
-      return `Your laundry is already with us, so that one can't be cancelled. It'll be back within ${site.turnaround}.`;
+      return `Your laundry is already with us, so that one can't be cancelled. It'll be back the ${site.turnaround}.`;
     }
     return `You haven't got anything booked to cancel.`;
   }
@@ -477,7 +477,7 @@ async function saveDetails(customer, input) {
 
   return (
     `You're all set, ${first}! ${site.pricePerLb} a pound with a ` +
-    `${billing.money(config.pricing.minimumCents)} minimum, back within ${site.turnaround}. ` +
+    `${billing.money(config.pricing.minimumCents)} minimum, back the ${site.turnaround}. ` +
     `When would you like your first pickup?`
   );
 }

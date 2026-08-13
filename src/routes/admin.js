@@ -752,7 +752,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       ];
     };
 
-    const headings = ['Order', 'Customer', 'Pickup', 'Status', '24h clock', 'Weight'];
+    const headings = ['Order', 'Customer', 'Pickup', 'Status', 'Clock', 'Weight'];
     if (showMoney) headings.push('Price', 'Payment');
 
     // A section is only drawn when it has something in it, so the board is a
@@ -774,7 +774,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         ${statCard('Ready to collect', g.ready.length, g.ready.length ? 'var(--sunbeam-500)' : undefined)}
         ${statCard('Out for delivery', g.out.length)}
         ${statCard('Pounds with us', poundsWithUs ? `${poundsWithUs} lb` : '0')}
-        ${late.length ? statCard('Past 24h', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
+        ${late.length ? statCard('Late', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
         ${showMoney && owed.length ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)') : ''}
       </div>
 
@@ -952,7 +952,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             if (!t) return '';
             const bg = t.overdue ? 'var(--stain-500)' : t.urgent ? 'var(--sunbeam-500)' : 'var(--ink-100)';
             const fg = t.overdue ? 'var(--paper-050)' : 'var(--ink-900)';
-            return `<span class="badge" style="background:${bg};color:${fg};">${escapeHtml(t.text)} on the 24h promise</span>`;
+            return `<span class="badge" style="background:${bg};color:${fg};">${escapeHtml(t.text)} on the promise</span>`;
           })()
         }
       </div>

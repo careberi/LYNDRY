@@ -68,7 +68,7 @@ const site = Object.freeze({
   maxOrder: `${config.pricing.maxOrderLb} lb`,
   typicalBagWeight: '15 to 18 lb',
 
-  turnaround: '24 hours',
+  turnaround: 'next day',
 
   legalUpdated: 'August 2026',
 });
