@@ -77,6 +77,18 @@ async function scanIn(rawCode, opsUserId) {
 
   await db.from('bag_labels').update({ loaded_at: now }).eq('id', label.id);
 
+  // A CLIP GOES ON THE CLEAN LEG TOO.
+  //
+  // The clip's life is the VAN, not the trip out. A clean bag going back to a
+  // door needs a number on it for exactly the same reason a dirty one did:
+  // "deliver order 1003, clips 4, 6, 7 and 10" is something a driver can act on
+  // and a sticker code is not.
+  //
+  // A fresh number rather than the one it went out under - it was freed the
+  // moment the bag was handed over, and by now something else is probably
+  // wearing it.
+  const clipped = await bags.assignClip({ ...label, clip_number: null }, order.driver_id);
+
   // The order's own loaded_at is set by the FIRST of its bags. It answers "did
   // this order leave the partner", which is true as soon as any of it did.
   if (!order.loaded_at) {
@@ -84,14 +96,16 @@ async function scanIn(rawCode, opsUserId) {
     order.loaded_at = now;
   }
 
-  return { ok: true, label, order };
+  return { ok: true, label, order, clip: clipped.ok ? clipped.clip : null, clipProblem: clipped.ok ? null : clipped.detail };
 }
 
 // Take a bag back out, for when the wrong one was scanned.
 async function scanOut(labelId) {
   const { data: label } = await db
     .from('bag_labels')
-    .update({ loaded_at: null })
+    // The clip comes off with it - a bag that is not in the van is not wearing
+    // one of the van's numbers.
+    .update({ loaded_at: null, unclipped_at: new Date().toISOString() })
     .eq('id', labelId)
     .select('*')
     .maybeSingle();

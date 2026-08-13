@@ -148,6 +148,16 @@ function fromForm(form) {
     wholesale_per_lb_cents: isLaundromat ? centsFrom(form.wholesale_per_lb) : null,
     daily_capacity_lb: isLaundromat ? wholeFrom(form.daily_capacity_lb) : null,
 
+    // Entered in hours because that is how a laundromat talks about it, stored
+    // in minutes because that is what the arithmetic wants.
+    turnaround_minutes: isLaundromat
+      ? (() => {
+          const hours = wholeFrom(form.turnaround_hours);
+          return hours == null ? null : hours * 60;
+        })()
+      : null,
+    dropoff_cutoff: isLaundromat ? clean(form.dropoff_cutoff, 8) : null,
+
     notes: clean(form.notes, 2000),
   };
 }

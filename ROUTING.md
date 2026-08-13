@@ -326,16 +326,22 @@ is what `/ops/run` already does.
 
 ## 9. What to build, in order
 
-**Now — cheap, useful at any volume, no optimiser needed:**
+**Now — cheap, useful at any volume, no optimiser needed. ALL FOUR ARE BUILT
+(migration `0034`).**
 
-1. **Fix the weight estimate.** Rolling mean per customer, 12.5 lb cold start.
-   Corrects a real inaccuracy in partner choice today. *(Small.)*
-2. **Partner turnaround and drop-off cutoff.** Two fields plus a constraint.
-   Without them a cheap slow laundromat can silently break the next-day promise.
-   *(Small.)*
-3. **Vehicle capacity as a hard constraint.** Nothing currently stops an
-   overloaded van. *(Small.)*
-4. **Flexible partner assignment until scanned in.** *(Small.)*
+1. ~~Fix the weight estimate.~~ **Done.** `customers.estimated_weight_lb` is a
+   rolling mean of the last six weighed orders, updated at every weighing;
+   12.5 lb survives only as a cold start.
+2. ~~Partner turnaround and drop-off cutoff.~~ **Done.** Both are hard filters in
+   `chooseLaundromat()`. A 36-hour laundromat is refused for a next-day promise
+   however cheap it is; past the cutoff it is tomorrow's wash. Unknown
+   turnaround is treated as a risk, not as fast.
+3. ~~Vehicle capacity as a hard constraint.~~ **Done.** A `vehicles` row per van;
+   the board flags a day that will not fit rather than silently trimming it —
+   what comes off the van is the driver's call.
+4. ~~Flexible partner assignment until scanned in.~~ **Columns added**
+   (`bag_labels.intended_partner_id`, `partner_locked`); nothing reassigns yet,
+   which needs the re-optimise loop in section 8.
 
 **When there is a second driver or ~15 stops a day:**
 

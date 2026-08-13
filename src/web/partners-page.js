@@ -334,6 +334,24 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
         type: 'number',
         attrs: 'step="1" min="1" placeholder="400"',
       })}
+
+      <div class="pt-two">
+        ${field({
+          name: 'turnaround_hours',
+          label: 'How long they take, in hours',
+          value: p.turnaround_minutes == null ? '' : Math.round(p.turnaround_minutes / 60),
+          type: 'number',
+          attrs: 'step="1" min="1" max="168" placeholder="12"',
+          hint: 'Drop-off to ready. Somewhere cheap that takes 36 hours breaks the next-day promise, so routing will not send bags there.',
+        })}
+        ${field({
+          name: 'dropoff_cutoff',
+          label: 'Latest they will take work',
+          value: p.dropoff_cutoff ? String(p.dropoff_cutoff).slice(0, 5) : '',
+          type: 'time',
+          hint: "Arrive after this and it is tomorrow's wash, whatever time they close.",
+        })}
+      </div>
     </div>
 
     <div class="card card-xl" style="padding:26px;margin-bottom:24px;">
@@ -492,6 +510,16 @@ ${
             p.retail_per_lb_cents == null ? '&mdash;' : `${escapeHtml(money(p.retail_per_lb_cents))} / lb`
           ) +
           fact('Daily capacity', p.daily_capacity_lb ? `${p.daily_capacity_lb} lb` : '&mdash;') +
+          fact(
+            'Turnaround',
+            p.turnaround_minutes == null
+              ? '<span style="color:var(--stain-500);">not known - treated as a risk</span>'
+              : `${Math.round(p.turnaround_minutes / 60)} hours`
+          ) +
+          fact(
+            'Takes work until',
+            p.dropoff_cutoff ? escapeHtml(String(p.dropoff_cutoff).slice(0, 5)) : 'closing time'
+          ) +
           fact('With them now', loadLine(load))
         : ''
     }

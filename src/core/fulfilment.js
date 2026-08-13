@@ -201,6 +201,39 @@ async function markReady(order, { by = {} } = {}) {
 // we have the bag, the same way unlocking a locker is an event rather than a
 // state. What it does change is the price, from an estimate to a real number.
 
+// The mean of what this customer's orders have actually weighed.
+//
+// Deliberately a plain mean over the recent ones rather than anything cleverer:
+// somebody's laundry habits are stable, and a weighted average would be harder
+// to explain than it is worth.
+const ESTIMATE_FROM_LAST = 6;
+
+async function updateWeightEstimate(customerId) {
+  if (!customerId) return null;
+
+  const { data, error } = await db
+    .from('orders')
+    .select('weight_lb')
+    .eq('customer_id', customerId)
+    .not('weight_lb', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(ESTIMATE_FROM_LAST);
+
+  if (error) throw error;
+
+  const weights = (data || []).map((o) => Number(o.weight_lb)).filter((w) => w > 0);
+  if (!weights.length) return null;
+
+  const mean = weights.reduce((t, w) => t + w, 0) / weights.length;
+
+  await db
+    .from('customers')
+    .update({ estimated_weight_lb: Math.round(mean * 10) / 10 })
+    .eq('id', customerId);
+
+  return mean;
+}
+
 async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = false } = {}) {
   const weight = Number(weightLb);
 
@@ -312,6 +345,21 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   if (error) throw error;
 
   const customer = order.customers;
+
+  // WHAT THIS CUSTOMER'S LAUNDRY ACTUALLY WEIGHS, learned from the scale.
+  //
+  // Planning needs a number before a bag has been weighed, and the router used
+  // a flat 12.5 lb - which is where a $25 minimum meets $2 a pound, a BILLING
+  // break-even and not a physical floor. Somebody can hand over 7 lb and owe
+  // $25, so the flat figure over-states small loads and everything built on it
+  // inherits that.
+  //
+  // So it becomes what they have actually weighed. Best effort: a planning
+  // estimate failing to update must never fail a weighing that has already
+  // priced somebody's order.
+  updateWeightEstimate(order.customer_id).catch((err) =>
+    console.warn(`could not update the weight estimate for ${order.customer_id}:`, err.message)
+  );
 
   // NOTHING IS CHARGED HERE. Weighing sets the price; delivery collects it.
   //
@@ -583,6 +631,10 @@ async function deliver(order, file, { by = {} } = {}) {
   // After the transition, so a failed delivery does not orphan the bags.
   await bags.releaseOrder(order.id);
 
+  // The clips come off at the door, which is what puts those numbers back in
+  // the van for the next load. A bag on a doorstep is not wearing one of ours.
+  await bags.unclipOrder(order.id);
+
   // The stop number and the loaded flag describe one afternoon, not the order.
   // Leaving them is how a driver ends up trusting yesterday's tag.
   await db.from('orders').update({ stop_number: null, loaded_at: null }).eq('id', order.id);
@@ -687,6 +739,7 @@ function turnaround(order) {
 }
 
 module.exports = {
+  updateWeightEstimate,
   collect,
   dropAtPartner,
   markReady,

@@ -106,10 +106,25 @@ function taskCard(run) {
   const task = run.task;
   const order = stop.order;
 
+  // WHICH ORDER, AND WHICH CLIPS. "Deliver order 1003, clips 4, 6, 7 and 10" is
+  // something a driver can act on with his hands full; four sticker codes are
+  // not. Only on a delivery - on a pickup the bags do not have clips yet, the
+  // screen is about to tell him which ones to put on.
+  const clips = stop.kind === 'deliver' ? stop.clips || [] : [];
+
   const header = `
     <p class="eyebrow" style="margin:0 0 6px;">
       ${escapeHtml(HEADLINE[stop.kind] || '')}${order ? ` &middot; #${order.order_number}` : ''}
     </p>
+    ${
+      clips.length
+        ? `<p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
+             <strong>Order #${order.order_number}</strong> &mdash;
+             clip${clips.length === 1 ? '' : 's'}
+             <strong style="font-family:var(--font-mono);">${clips.join(', ')}</strong>
+           </p>`
+        : ''
+    }
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 6px;">
       ${escapeHtml(task ? task.title : 'All done here')}
     </h2>

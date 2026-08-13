@@ -243,10 +243,12 @@ async function forDriver(driverId) {
   // going there; the driver needs the numbers clipped to them, because that is
   // what he and the counter assistant can actually say out loud.
   for (const stop of stops) {
-    if (stop.kind !== 'dropoff' && stop.kind !== 'pickup_partner') continue;
+    const orders =
+      stop.orders || (stop.kind === 'deliver' && stop.order ? [stop.order] : null);
+    if (!orders) continue;
 
     const numbers = [];
-    for (const order of stop.orders || []) {
+    for (const order of orders) {
       const labels = await bags.forOrder(order.id);
       numbers.push(...bags.clipsFor(labels));
     }

@@ -425,6 +425,21 @@ function routingBoardBody({
   </div>
 
   ${
+    // THE VAN PHYSICALLY WILL NOT HOLD IT. Shown, never silently trimmed - what
+    // comes off the van is the driver's call, not the router's.
+    board.load && board.load.overloaded
+      ? `<p style="margin:0 0 24px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
+                   background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.55;">
+           <strong>This is more than the van holds.</strong>
+           ${board.load.pounds.toFixed(0)} lb and ${board.load.bags} bags against
+           ${board.load.maxWeightLb} lb and ${board.load.maxBags}${
+             board.load.name ? ` in ${escapeHtml(board.load.name)}` : ''
+           }. Something has to come off, or it takes two trips.
+         </p>`
+      : ''
+  }
+
+  ${
     board.overDay
       ? `<p style="margin:0 0 24px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
                    background:var(--sunbeam-500);font-size:15px;line-height:1.55;">

@@ -53,7 +53,7 @@ function minutesFor(miles) {
 
 const RUN_FIELDS =
   'id, order_number, status, stop_number, loaded_at, pickup_date, weight_lb, ' +
-  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed)';
+  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb)';
 
 // Every stop on today's run, in the order it will be driven.
 //
@@ -172,7 +172,7 @@ const BOARD_FIELDS =
   // The guided run reads its position from these, so they travel with the board
   // rather than being fetched again per stop.
   'collected_at, delivered_at, arrived_at, ' +
-  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed)';
+  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb)';
 
 // WHAT ONE BAG WEIGHS WHEN NOBODY HAS WEIGHED IT YET.
 //
@@ -183,7 +183,21 @@ const BOARD_FIELDS =
 //
 // Derived from the two numbers rather than written down, so changing either
 // moves this with it.
-function assumedPounds() {
+// "14:30" or "14:30:00" -> minutes since midnight.
+function toMinutesOfDay(value) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(value || ''));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+}
+
+function assumedPounds(customer) {
+  // What they have actually weighed, when we know it.
+  const learned = customer && customer.estimated_weight_lb;
+  if (learned != null && Number(learned) > 0) return Number(learned);
+
+  // COLD START ONLY. This figure is where a $25 minimum meets $2 a pound - a
+  // billing break-even, not a physical floor. Somebody can hand over 7 lb and
+  // owe $25, so it over-states a small load and is only defensible until there
+  // is a real number for this customer.
   return config.pricing.minimumCents / config.pricing.perPoundCents;
 }
 
@@ -219,8 +233,13 @@ function assumedPounds() {
 //
 // Returns the chosen partner plus every one passed over and why, and what each
 // would have cost, so the page can show its working rather than a name.
-function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd, onward = null }) {
+function chooseLaundromat(
+  from,
+  candidates,
+  { weekday, time, poundsToAdd, onward = null, promiseMinutes = null }
+) {
   const perMileCost = perMile();
+  const nowMinutes = toMinutesOfDay(time);
 
   const considered = candidates
     .map((p) => {
@@ -237,11 +256,24 @@ function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd, onward
 
       const drivingCents = Number.isFinite(miles) ? Math.round(miles * perMileCost * 100) : null;
 
+      // Would a bag dropped now still be ready in time to go back tomorrow?
+      // Unknown turnaround is treated as a risk rather than as zero: a partner
+      // who has never told us how long they take has not told us they are fast.
+      const readyBy =
+        p.turnaround_minutes == null ? null : nowMinutes + Number(p.turnaround_minutes);
+      const tooSlow = readyBy != null && readyBy > promiseMinutes;
+
+      const cutoff = p.dropoff_cutoff ? toMinutesOfDay(p.dropoff_cutoff) : null;
+      const pastCutoff = cutoff != null && nowMinutes >= cutoff;
+
       return {
         partner: p,
         miles,
         washCents,
         drivingCents,
+        readyBy,
+        tooSlow,
+        pastCutoff,
         // Null when we cannot price the wash. Sorted last rather than treated
         // as zero, so a partner with no agreed rate never wins on a blank.
         totalCents: washCents == null || drivingCents == null ? null : washCents + drivingCents,
@@ -267,6 +299,20 @@ function chooseLaundromat(from, candidates, { weekday, time, poundsToAdd, onward
     }
     if (c.room === false) {
       c.why = 'no room left today';
+      continue;
+    }
+    // PAST THE CUTOFF IS TOMORROW'S WASH, whatever their closing time says. A
+    // laundromat that stops taking work at 4pm is shut for our purposes at 4pm
+    // even with the lights on until 9.
+    if (c.pastCutoff) {
+      c.why = `past their ${c.partner.dropoff_cutoff.slice(0, 5)} drop-off cutoff`;
+      continue;
+    }
+    // TOO SLOW TO KEEP THE PROMISE. A cheap laundromat that takes 30 hours
+    // breaks a next-day promise, and no saving on the wash is worth that -
+    // the promise is a hard constraint, not a cost to weigh against others.
+    if (c.tooSlow) {
+      c.why = `${Math.round(c.partner.turnaround_minutes / 60)}h turnaround - too slow for next day`;
       continue;
     }
     c.chosen = true;
@@ -487,6 +533,8 @@ async function board(dateIso, fromTime, driverId = null) {
       at: p.lat != null && p.lng != null ? { lat: Number(p.lat), lng: Number(p.lng) } : null,
       hours,
       hoursText: partnersCore.describeHours(hours),
+      turnaround_minutes: p.turnaround_minutes,
+      dropoff_cutoff: p.dropoff_cutoff,
       openNow: partnersCore.isOpenAt(hours, weekday, start),
       capacity: partnersCore.capacityOf(p, loadByPartner.get(p.id)),
     };
@@ -543,7 +591,7 @@ async function board(dateIso, fromTime, driverId = null) {
   // look identical if you assume there is no laundry.
   const dropWeight =
     needsWash.reduce((t, o) => t + Number(o.weight_lb || 0), 0) +
-    (pickups || []).length * assumedPounds();
+    (pickups || []).reduce((t, o) => t + assumedPounds(o.customers), 0);
 
   // Where the van is when it goes to the laundromat: the last pickup, or base
   // if there are none.
@@ -556,11 +604,18 @@ async function board(dateIso, fromTime, driverId = null) {
   const firstDelivery = deliverStops.find((s) => s.at);
   const onward = firstDelivery ? firstDelivery.at : base;
 
+  // WHEN A BAG DROPPED NOW HAS TO BE BACK ON THE VAN. The promise is the end of
+  // tomorrow's last window, so a laundromat has until then to finish - anything
+  // slower breaks it. Expressed in minutes from the start of today so it can be
+  // compared against a turnaround.
+  const promiseMinutes = 24 * 60 + toMinutesOfDay(booking.endOfDeliveryDay());
+
   const choice = chooseLaundromat(fromPoint, partnerRows, {
     weekday,
     time: start,
     poundsToAdd: dropWeight,
     onward,
+    promiseMinutes,
   });
 
   const partnerStops = [];
@@ -606,6 +661,44 @@ async function board(dateIso, fromTime, driverId = null) {
     s.leg = LEGS[s.kind];
   });
 
+  // WHAT THE VAN CAN ACTUALLY CARRY.
+  //
+  // A hard constraint, not a cost: a plan that puts 500 lb in a 400 lb van is
+  // not expensive, it is impossible. Nothing checked it before because the van
+  // did not exist as far as the system was concerned.
+  //
+  // Falls back to the configured defaults when nobody has entered a van, so an
+  // unconfigured system plans exactly as it did rather than refusing to plan.
+  let vehicle = null;
+  if (driverId) {
+    const { data } = await db
+      .from('vehicles')
+      .select('*')
+      .eq('driver_id', driverId)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+    vehicle = data || null;
+  }
+
+  const capacity = {
+    maxWeightLb: vehicle ? Number(vehicle.max_weight_lb) : null,
+    maxBags: vehicle ? Number(vehicle.max_bags) : null,
+    name: vehicle ? vehicle.name : null,
+  };
+
+  // The heaviest the van gets: everything collected before the laundromat, plus
+  // whatever clean load is already aboard. Measured at the worst moment rather
+  // than averaged, because that is the moment it either fits or does not.
+  const carryingLb =
+    dropWeight + (inHand || []).filter((o) => o.status === 'READY').reduce((t, o) => t + Number(o.weight_lb || 0), 0);
+
+  const carryingBags =
+    (pickups || []).reduce((t, o) => t + Number(o.bag_count || 1), 0) +
+    (inHand || []).reduce((t, o) => t + Number(o.bag_count || 1), 0);
+
+  const overWeight = capacity.maxWeightLb != null && carryingLb > capacity.maxWeightLb;
+  const overBags = capacity.maxBags != null && carryingBags > capacity.maxBags;
+
   const walk = withEtas(stops, startMinutes, base, home);
   const r = R();
   const serviceMin = stops.reduce((t, s) => t + serviceMinutes(s.kind), 0);
@@ -632,6 +725,17 @@ async function board(dateIso, fromTime, driverId = null) {
     driver,
     base,
     home,
+    vehicle,
+    load: {
+      ...capacity,
+      pounds: carryingLb,
+      bags: carryingBags,
+      overWeight,
+      overBags,
+      // A day that cannot be driven as planned. It is shown rather than
+      // silently trimmed - the driver decides what comes off the van, not us.
+      overloaded: overWeight || overBags,
+    },
     // Null when the day has not started. The page says which of the two the
     // route was solved from, because "9.4 miles" means different things
     // measured from a depot and from wherever the van is parked.
