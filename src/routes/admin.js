@@ -606,6 +606,15 @@ function sectionHeading(eyebrow, heading, count) {
 // from lyndry.com.
 function safeNext(value) {
   const wanted = String(value || '');
+
+  // A `..` segment walks back out. "/ops/../admin" passes a naive starts-with
+  // check, and a browser normalises it to "/admin" before asking for it - so
+  // the constraint this function exists to enforce is gone. Same origin rather
+  // than an open redirect, but it defeats the point.
+  //
+  // Backslashes go too: some clients treat them as separators.
+  if (wanted.includes('..') || wanted.includes('\\')) return '/ops';
+
   return /^\/ops(\/|$)/.test(wanted) ? wanted : '/ops';
 }
 
