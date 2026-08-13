@@ -86,6 +86,17 @@ const PAGES = [
     description: `Get in touch with LYNDRY. Email ${site.email}, or ask about offering LYNDRY in your building.`,
   },
   {
+    // The page Neil SENDS to a laundromat he has already met, as opposed to
+    // /partners, which is the form a stranger fills in. It carries no
+    // commercial terms either - see the note at the top of the file.
+    path: '/for-laundromats',
+    file: 'for-laundromats.html',
+    title: 'For laundromats',
+    description:
+      'How working with LYNDRY works if you run a laundromat: we collect, ' +
+      'you wash, we deliver and bill. No app, no drivers and no customer calls.',
+  },
+  {
     path: '/partners',
     file: 'partners.html',
     title: 'Partners',

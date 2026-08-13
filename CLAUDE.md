@@ -233,6 +233,26 @@ asks for less motion gets none. Any new animation must honour it too.
 **In development, page HTML is re-read on every request** — edit a file in
 `public/pages/`, refresh the browser, done. In production it's cached.
 
+**`/for-laundromats` is the page you SEND, `/partners` is the form strangers
+fill in.** The first explains the arrangement to a laundromat owner Neil has
+already met - what their part is, what we handle, why it is worth having, and
+ten FAQs. `/ops/partners` has a box to text somebody the link, behind
+`partners.manage` rather than `partners.view` because sending something to a
+real phone is a different act from reading a list.
+
+**The same no-commercial-terms rule applies to it, and harder.** It is a sales
+page, so it is exactly where a rate would feel natural and would then be quoted
+back at us. Every money question on it ends at "we agree it with you directly",
+and the volume FAQ says plainly that we will not promise one. What it may claim
+is the *shape* of the deal - we bring the work, do the driving, hold the
+customer, handle the billing - because all of that is true today and none of it
+is a figure.
+
+**The text is one SMS segment and the name field is capped at 30 characters to
+keep it there.** 160 characters is a segment and carriers bill per segment; a
+long shop name pasted into the greeting silently doubles the cost of every
+send.
+
 **`/partners` takes enquiries from laundromats and property managers.** One
 form, one `partner_enquiries` table, a `partner_type` of `LAUNDROMAT` or
 `PROPERTY`. The row is saved first and Neil is texted second — the row is the

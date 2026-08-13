@@ -9,6 +9,7 @@ const { config } = require('../config');
 const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
+const notify = require('../core/notify');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
 const recurring = require('../core/recurring');
@@ -3352,6 +3353,53 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
 // adds will not come with a reminder.
 // ---------------------------------------------------------------------------
 
+// POST /ops/partners/send-overview - text a laundromat the explainer.
+//
+// Behind partners.manage rather than partners.view: this SENDS SOMETHING to a
+// real phone, which is a different kind of act from reading a list, and a
+// driver browsing partners should not be able to do it.
+//
+// The message is deliberately dull and short. It says who we are, what the
+// link is, and stops - a first text to a business that never asked for one
+// should read like a person, and anything longer reads like a blast.
+router.post('/ops/partners/send-overview', guard, may('partners.manage'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const phone = normalisePhone(body.phone);
+
+    if (!phone) {
+      return res.redirect(
+        303,
+        `/ops/partners?problem=${encodeURIComponent(
+          "That number did not look like a US mobile. Try it with the area code."
+        )}`
+      );
+    }
+
+    // Capped at 30, and the cap is about money rather than tidiness. SMS gives
+    // you 160 characters per segment and carriers bill per segment, so a long
+    // shop name pasted in here quietly doubles the cost of every one of these.
+    // 30 fits every real laundromat name and keeps the whole message in one.
+    const who = String(body.name || '').trim().slice(0, 30);
+
+    // Plain ASCII, one link, on our own domain. notify.js cleans the text
+    // anyway, but writing it plain here means what is sent is what was meant.
+    const message =
+      `${who ? `Hi ${who} - ` : ''}it's ${site.name}. ` +
+      `How working with us works, for a laundromat: ${config.baseUrl}/for-laundromats ` +
+      `Reply here with any questions.`;
+
+    await notify.sendAndLog(phone, message, null);
+
+    return res.redirect(
+      303,
+      `/ops/partners?note=${encodeURIComponent(`Overview sent to ${formatPhone(phone)}.`)}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req, res, next) => {
   try {
     const list = await partners.list({ includeEnded: req.query.all === '1' });
@@ -3363,6 +3411,8 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
         body: partnerListBody({
           list,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+          baseUrl: config.baseUrl,
         }),
         user: req.opsUser,
         openIssues: req.openIssues,

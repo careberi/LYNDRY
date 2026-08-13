@@ -66,7 +66,7 @@ function partnerRow(p) {
   </a>`;
 }
 
-function partnerListBody({ list, notice }) {
+function partnerListBody({ list, notice, problem = null, baseUrl = '' }) {
   const laundromats = list.filter((p) => p.type === 'LAUNDROMAT');
   const managers = list.filter((p) => p.type === 'PROPERTY_MANAGER');
 
@@ -95,6 +95,46 @@ ${
                  background:var(--suds-300);font-size:16px;font-weight:600;">${escapeHtml(notice)}</p>`
     : ''
 }
+${
+  problem
+    ? `<p role="alert" style="margin:20px 0 0;padding:14px 17px;border:2px solid var(--stain-500);border-radius:12px;
+                 background:var(--stain-100);font-size:16px;font-weight:600;">${escapeHtml(problem)}</p>`
+    : ''
+}
+
+<!-- Sending somebody the overview.
+     A text rather than an email because that is what actually gets read by
+     somebody standing behind a counter, and because we already have a number
+     for most of them written on a scrap of paper. The link is on our own
+     domain - never a shortener - for the same reason every other link we send
+     is: carriers score a texted link partly by its domain. -->
+<div class="card card-xl" style="padding:26px;margin-top:26px;">
+  <p class="eyebrow" style="margin:0 0 10px;">Send the overview</p>
+  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;max-width:64ch;">
+    Texts a laundromat a link to
+    <a href="/for-laundromats" target="_blank" rel="noopener">the page explaining how working with us
+    works</a> - what their part is, what we handle, and the questions they
+    always ask. No prices on it, because none are agreed.
+  </p>
+  <form method="post" action="/ops/partners/send-overview"
+        style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div style="flex:1 1 240px;min-width:0;">
+      <label class="field-label" for="ov_phone">Their mobile number</label>
+      <input class="field" id="ov_phone" name="phone" type="tel" inputmode="tel"
+             autocomplete="off" placeholder="(201) 555-0134" required>
+    </div>
+    <div style="flex:1 1 200px;min-width:0;">
+      <label class="field-label" for="ov_name">Who they are <span style="font-weight:400;color:var(--ink-500);">(optional)</span></label>
+      <input class="field" id="ov_name" name="name" type="text" autocomplete="off"
+             maxlength="60" placeholder="Cedar Lane Launderette">
+    </div>
+    <button class="btn btn-ink btn-lg" type="submit">Send it</button>
+  </form>
+  <p class="field-hint" style="margin-top:12px;">
+    Goes out from our own number and is logged in the conversation like any
+    other message${baseUrl ? `. The link is <code>${escapeHtml(baseUrl)}/for-laundromats</code>` : ''}.
+  </p>
+</div>
 
 <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:60ch;margin:14px 0 0;">
   Added by hand. This is the short list of places we have a relationship with,

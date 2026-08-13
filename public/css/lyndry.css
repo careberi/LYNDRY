@@ -1188,3 +1188,129 @@
      out at 58px, at which the longer line needs more width than a phone has. */
   .display-1 { font-size: clamp(30px, 9.6vw, 58px); }
 }
+
+
+/* ==========================================================================
+   The laundromat page: a flow strip and an FAQ list.
+   Both are here rather than inline on the page, for the same reason
+   everything else is: a page file holds its own words, not its own styling.
+   ========================================================================== */
+
+/* A row of numbered steps with an arrow between them. Used to show a
+   laundromat how little of the day is theirs - one box in the row is theirs
+   and the rest are ours, which is the entire sales argument made visually. */
+.flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.flow-step {
+  position: relative;
+  background: var(--paper-050);
+  border: 2px solid var(--ink-900);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop-sm);
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Whose step it is. Ours are paper, theirs is Suds - so the one box that is
+   their job is the one that stands out on the row. */
+.flow-step-yours { background: var(--suds-200); box-shadow: var(--shadow-pop-md); }
+
+.flow-who {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+.flow-step-yours .flow-who { color: var(--ink-900); }
+
+.flow-step h3 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 19px;
+  line-height: 1.2;
+  margin: 0;
+}
+.flow-step p { font-size: 15px; line-height: 1.5; color: var(--ink-700); margin: 0; }
+
+/* The arrow between steps. A pseudo-element rather than markup, so the page
+   file stays a list of steps and nobody has to hand-write connectors. */
+.flow-step + .flow-step::before {
+  content: "";
+  position: absolute;
+  left: -11px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--ink-900);
+  border-right: 2px solid var(--ink-900);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* An FAQ, built on <details> so it opens with no JavaScript - the same reason
+   the navigation is. A partner reading this on a bad connection in a shop
+   still gets working answers. */
+.faq { display: flex; flex-direction: column; gap: 12px; }
+
+.faq details {
+  background: var(--paper-050);
+  border: 2px solid var(--ink-900);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop-xs);
+  overflow: hidden;
+}
+
+.faq summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 20px 22px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 1.3;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+}
+.faq summary::-webkit-details-marker { display: none; }
+
+/* The open/closed sign. Text rather than an icon mask, because it has to
+   change with the element's state and a mask cannot. */
+.faq summary::after {
+  content: "+";
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.faq details[open] summary::after { content: "3"; }
+
+.faq summary:focus-visible {
+  outline: 3px solid var(--lilac-500);
+  outline-offset: -3px;
+}
+
+.faq-answer { padding: 0 22px 22px; }
+.faq-answer p { font-size: 16px; line-height: 1.6; color: var(--ink-700); margin: 0 0 12px; }
+.faq-answer p:last-child { margin: 0; }
+
+@media (max-width: 900px) {
+  /* Two by two rather than a single column: the flow reads as a sequence and
+     four stacked boxes lose that entirely. */
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow-step + .flow-step::before { display: none; }
+}
+
+@media (max-width: 520px) {
+  .flow { grid-template-columns: minmax(0, 1fr); }
+}
