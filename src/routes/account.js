@@ -541,19 +541,30 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
         bad_date: result.detail,
         bad_time: result.detail,
         already_booked: 'You already have a pickup booked. Move it rather than booking a second.',
-        needs_card: 'We need a card on file first — check your texts for the link.',
       }[result.reason];
 
-      // A customer with no card gets the setup link texted, the same as they
-      // would over SMS. The website never touches card details.
-      if (result.reason === 'needs_card') {
-        await billing
-          .setupLinkMessage(customer)
-          .then((text) => sendAndLog(customer.phone, text, customer.id))
-          .catch((err) => console.error('Could not send a card link:', err.message));
-      }
-
       return back(res, `?error=${encodeURIComponent(message || 'That did not work.')}`);
+    }
+
+    // Booked, but we have no way to bill it. The pickup is real and stays on
+    // their account; it is simply not confirmed until a card is saved, and the
+    // link goes by text because the website never touches card details.
+    //
+    // The same shape as the SMS door: record the pickup first, ask for the
+    // card second. Somebody who is sent away to pay before their booking
+    // exists comes back to nothing.
+    if (result.needsCard) {
+      await billing
+        .setupLinkMessage(customer)
+        .then((text) => sendAndLog(customer.phone, text, customer.id))
+        .catch((err) => console.error('Could not send a card link:', err.message));
+
+      return back(
+        res,
+        `?error=${encodeURIComponent(
+          'Booked, but we need a card on file before the driver comes out. Check your texts for the link - nothing is charged until we weigh your bag.'
+        )}`
+      );
     }
 
     // Confirm by text, exactly as a booking made over SMS would be — same

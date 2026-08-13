@@ -252,23 +252,15 @@ async function handleEvent(event) {
       // anything was missing. That happened to a real customer.
       const pending = await orders.findAwaitingCollection(customer.id);
 
-      if (pending && !pending.deposit_paid_at) {
-        const deposit = await billing.chargeDeposit(pending, customer);
-
-        if (deposit.ok) {
-          // The confirmation names the card itself when the minimum is taken,
-          // so the opener must not name it again.
-          await sendAndLog(
-            customer.phone,
-            booking.confirmationMessage(customer, deposit.order || pending, { opener: 'Card saved' }),
-            customer.id
-          );
-          return;
-        }
-
+      // Nothing is charged here. The card being on file is the whole of what
+      // was missing, so saving it confirms the booking outright and the money
+      // waits for the scale like every other order.
+      if (pending) {
+        // The confirmation names the card itself, so the opener must not name
+        // it again - a real customer got the card number twice in one text.
         await sendAndLog(
           customer.phone,
-          deposit.message || `Card saved: ${card}, but the minimum didn't go through. Try another card.`,
+          booking.confirmationMessage(customer, pending, { opener: 'Card saved' }),
           customer.id
         );
         return;

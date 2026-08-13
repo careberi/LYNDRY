@@ -313,7 +313,9 @@ router.get('/ops/today', async (req, res, next) => {
 
     const { data, error } = await db
       .from('orders')
-      .select('*, customers(name, phone, address_line1, address_line2, city, state, postal_code, preferences)')
+      .select(
+        '*, customers(name, phone, address_line1, address_line2, city, state, postal_code, preferences, stripe_customer_id, default_payment_method_id)'
+      )
       .in('status', orders.IN_FLIGHT)
       // Within a day, earliest requested time first, so the run sheet is in the
       // order the van should drive it. Orders with no time asked for sort last
@@ -327,7 +329,9 @@ router.get('/ops/today', async (req, res, next) => {
     // usually DELIVERED — already off the in-flight list, still owed.
     const { data: unpaidRows, error: unpaidError } = await db
       .from('orders')
-      .select('*, customers(name, phone, address_line1, address_line2, city, state, postal_code, preferences)')
+      .select(
+        '*, customers(name, phone, address_line1, address_line2, city, state, postal_code, preferences, stripe_customer_id, default_payment_method_id)'
+      )
       .eq('payment_status', 'FAILED')
       .order('pickup_date', { ascending: true });
 
@@ -354,11 +358,15 @@ router.get('/ops/today', async (req, res, next) => {
         pickup_time: o.pickup_time ? booking.normaliseTime(o.pickup_time) : null,
         pickup_window: booking.arrivalWindow(o),
 
-        // A booking is only confirmed once the minimum has actually cleared.
-        // Orders that predate the minimum have no deposit and count as
-        // confirmed, because they were taken under the old rules.
-        confirmed: Boolean(o.deposit_paid_at) || o.deposit_cents == null,
-        deposit_paid: Boolean(o.deposit_paid_at),
+        // A booking is confirmed once there is a card we can bill when the bag
+        // is weighed. No money has moved at this point and none should have -
+        // what this answers is "is it safe to drive to this door", and the
+        // answer is no if we have no way to charge for the work.
+        //
+        // Orders taken while a minimum was collected up front count as
+        // confirmed on that basis instead: they were already paid for.
+        confirmed: billing.hasPaymentMethod(c) || Boolean(o.deposit_paid_at),
+        card_on_file: billing.hasPaymentMethod(c),
 
         pickup_method: o.pickup_method,
         bag_count: o.bag_count,

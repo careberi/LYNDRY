@@ -361,10 +361,10 @@ function workCard(order, { canAct, notice, problem }) {
           <button type="submit" class="btn btn-${mustWeighFirst ? 'primary' : 'ink'} btn-lg">Save</button>
         </div>
         <span class="field-hint" style="display:block;margin-top:8px;">
-          This sets the price. ${
+          This sets the price and charges the card. ${
             weighed
-              ? 'It has already been weighed once.'
-              : 'The balance is charged when you mark it delivered.'
+              ? 'It has already been weighed once, so saving again is a correction and the customer is told so.'
+              : 'It is the only moment money moves.'
           }
         </span>
       </form>`

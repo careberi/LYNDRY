@@ -352,16 +352,18 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   const existing = await orders.findAwaitingCollection(customer.id);
   if (existing) return { ok: false, reason: 'already_booked', order: existing };
 
-  // The card is NOT asked for here.
+  // The order is written BEFORE the card is considered.
   //
-  // It used to be: no card meant no order, so somebody arranging their first
-  // pickup got a payment link instead of a booking, and once they had paid
-  // there was nothing to resume. They ended up with a saved card and no
-  // pickup, which happened to a real customer.
+  // It used to be the other way round: no card meant no order, so somebody
+  // arranging their first pickup got a payment link instead of a booking, and
+  // once they had paid there was nothing to resume. They ended up with a saved
+  // card and no pickup, which happened to a real customer.
   //
-  // Now the order is written first and the minimum is charged against it
-  // straight afterwards. A booking with no minimum paid is simply not
-  // confirmed: deposit_paid_at stays null and it stays off the run sheet.
+  // So the pickup is recorded first and the card is a separate question asked
+  // straight after. A booking with no card on file is simply not confirmed: it
+  // exists, it can be resumed the moment a card is saved, and until then it
+  // stays off the driver's run sheet, because nobody should drive to a door
+  // for an order we have no way to bill.
   const prefs = customer.preferences || {};
 
   // The window is decided here and stored, never recomputed. If today is done
@@ -385,19 +387,19 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     notes,
   });
 
-  // Now take the minimum. The order exists either way; what this decides is
-  // whether it is confirmed.
-  const deposit = await billing.chargeDeposit(order, customer);
-
-  // Whether we had to move them off the day they asked for. Not a failure and
-  // not worth arguing about, but worth one clause in the confirmation: a
-  // customer who says "today" and silently gets tomorrow writes back to ask
-  // why, which is a conversation nobody needed to have.
+  // NO MONEY MOVES HERE. The card is charged once, at the scale, because that
+  // is the first moment an amount exists. All this asks is whether we have a
+  // card to charge when we get there.
+  //
+  // `rolled` is whether we had to move them off the day they asked for. Not a
+  // failure and not worth arguing about, but worth one clause in the
+  // confirmation: a customer who says "today" and silently gets tomorrow
+  // writes back to ask why, which is a conversation nobody needed to have.
   return {
     ok: true,
-    order: deposit.order || order,
+    order,
     rolled: window.date !== pickupDate,
-    deposit,
+    needsCard: billing.needsCardOnFile(customer),
   };
 }
 
@@ -456,16 +458,18 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
       `${prefs.fabric_softener ? 'softener on' : 'no softener'}.`
     : '';
 
-  // What was actually taken, and what happens to the rest. Stated as a charge
-  // that has already happened, because it has.
+  // The price, and WHEN it gets taken. Stated as something that has not
+  // happened yet, because it has not: no money moves until the bag is weighed.
+  //
+  // "once we weigh it" is the load-bearing half of this sentence. Without it a
+  // customer reasonably reads "charged to your Visa" as "already charged", and
+  // then reads the weigh text an hour later as a second bill.
   const card = billing.describeCard(customer);
   const minimum = billing.money(config.pricing.minimumCents);
 
-  const money = order.deposit_paid_at
-    ? ` We've taken the ${minimum} minimum on your ${card}; it's ${site.pricePerLb} a pound and anything over that comes off the same card on delivery.`
-    : card
-      ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum, charged to your ${card}.`
-      : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum.`;
+  const money = card
+    ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum, charged to your ${card} once we weigh it. Nothing until then.`
+    : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum, charged once we weigh it.`;
 
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 

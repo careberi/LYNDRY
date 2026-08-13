@@ -44,11 +44,11 @@ function consentText() {
     `You're authorising ${site.legalName}${
       site.legalName === site.name ? '' : ` (${site.name})`
     } to save this card and charge it for ` +
-    `each pickup you book. We take a ${money(config.pricing.minimumCents)} minimum when you book. ` +
-    `Wash and fold is ${site.pricePerLb} a pound, so once we weigh your bag we charge the ` +
-    `difference if it comes to more. If it comes to less, the ${money(config.pricing.minimumCents)} ` +
-    `minimum is the price and nothing is refunded. We text you the weight and the total every ` +
-    `time. Cancel before we collect and the minimum comes back. ` +
+    `each pickup you book. Nothing is taken today and nothing is taken when you book. ` +
+    `Wash and fold is ${site.pricePerLb} a pound with a ${money(config.pricing.minimumCents)} minimum, ` +
+    `and your card is charged once, after we weigh your bag - that is the first moment the ` +
+    `amount exists. We text you the weight and the total every time. Cancel before we ` +
+    `collect and there is nothing to cancel: no money has moved. ` +
     // A standing order takes the minimum on a repeating basis, so the old
     // "no recurring charge" was about to become false. It is not a
     // subscription - there is no fee for having one and every pickup is still
@@ -65,6 +65,18 @@ function consentText() {
 
 function hasPaymentMethod(customer) {
   return Boolean(customer.stripe_customer_id && customer.default_payment_method_id);
+}
+
+// Whether a booking should stop and ask for a card before it is confirmed.
+//
+// Separate from hasPaymentMethod because of the case where Stripe is switched
+// off entirely, which is how this ran for months before the keys existed. With
+// no payment provider there is no card to ask for and no charge to make, so a
+// booking is confirmed on the spot rather than waiting forever for a link that
+// would never work.
+function needsCardOnFile(customer) {
+  if (!payments.isConfigured) return false;
+  return !hasPaymentMethod(customer);
 }
 
 // How the saved card is described in a text message. "Visa ending 4242".
@@ -200,73 +212,26 @@ async function recordSavedCard(paymentLink) {
 // here rather than by the AI so the figure in it is always the real one from
 // the database.
 // ---------------------------------------------------------------------------
-// The minimum, taken at booking
+// The deposit that no longer exists
 // ---------------------------------------------------------------------------
 //
-// Until this cleared, nothing had been paid for anything. Now a pickup is not
-// confirmed until it has: deposit_paid_at is what keeps an unpaid booking off
-// the driver's run sheet.
+// There was briefly a $25 minimum taken at booking, with the balance collected
+// on delivery. Two charges per order, two things to reconcile, two things to
+// refund, and a customer who saw money leave before anybody had touched their
+// laundry.
 //
-// Returns { ok, order, message } where message is what the customer should be
-// told, or null when there is nothing to say.
+// It is gone. A card is saved at booking and charged exactly once, at the
+// scale, for the whole amount. The minimum survives as a FLOOR ON THE PRICE,
+// not as a payment: an 8 lb load still costs $25, it is simply billed in one
+// go with everything else.
+//
+// The deposit_* columns and refundDeposit stay because two real orders were
+// taken under the old rules and their money has to be refundable. Nothing
+// writes a new deposit; if you find yourself adding one back, the thing to
+// change is when chargeOrder runs, not how many times it runs.
 
-async function chargeDeposit(order, customer) {
-  if (order.deposit_paid_at) return { ok: true, order, message: null };
-
-  // Payments switched off entirely, which is how this runs before Stripe keys
-  // are set. The booking still stands; there is simply nothing to collect.
-  if (!payments.isConfigured) {
-    return { ok: true, order, message: null, skipped: 'payments off' };
-  }
-
-  if (!hasPaymentMethod(customer)) {
-    return { ok: false, needsCard: true, order, message: null };
-  }
-
-  const amount = config.pricing.minimumCents;
-
-  const result = await payments.chargeOffSession({
-    stripeCustomerId: customer.stripe_customer_id,
-    paymentMethodId: customer.default_payment_method_id,
-    amountCents: amount,
-    description: `${site.name} order #${order.order_number} minimum`,
-    // The attempt number is in here for the same reason it is on the final
-    // charge: the provider caches the result of a key, including a decline,
-    // so a fixed key would replay "declined" at somebody who has since fixed
-    // their card.
-    idempotencyKey: `deposit-${order.id}-${amount}-${order.deposit_intent_id ? 'retry' : 'first'}`,
-    metadata: { lyndry_order_id: order.id, lyndry_kind: 'deposit' },
-  });
-
-  if (!result.ok) {
-    return {
-      ok: false,
-      declined: true,
-      order,
-      message:
-        `That card was declined, so the pickup isn't booked yet. ` +
-        `Try another one here and it'll go straight through: ${(await createSetupLink(customer)).url}`,
-    };
-  }
-
-  const { data: updated, error } = await db
-    .from('orders')
-    .update({
-      deposit_cents: amount,
-      deposit_paid_at: new Date().toISOString(),
-      deposit_intent_id: result.paymentIntentId || null,
-    })
-    .eq('id', order.id)
-    .select('*')
-    .single();
-
-  if (error) throw error;
-
-  return { ok: true, order: updated, message: null };
-}
-
-// Give the minimum back. Cancelling is free until the driver collects, and
-// that promise is already on the website and in the AI's replies.
+// Give back a minimum taken under the old rules. Only ever fires on those
+// orders - a booking made today has nothing to refund, because nothing moved.
 async function refundDeposit(order) {
   if (!order.deposit_paid_at || order.deposit_refunded_at) return { ok: true, refunded: false };
   if (!payments.isConfigured || !order.deposit_intent_id) return { ok: true, refunded: false };
@@ -308,9 +273,9 @@ async function chargeOrder(order, customer) {
 
   // What is actually still owed.
   //
-  // The minimum was taken at booking, so only the difference is charged now.
-  // A light load whose real total is below the minimum owes nothing further:
-  // the minimum IS the price, and no money comes back.
+  // On any order booked today this is the whole price: nothing was taken at
+  // booking. The subtraction is here for the handful of orders taken while a
+  // minimum was collected up front, which would otherwise be billed twice.
   const alreadyPaid = order.deposit_refunded_at ? 0 : order.deposit_cents || 0;
   const owed = Math.max(0, order.price_cents - alreadyPaid);
 
@@ -459,9 +424,9 @@ async function retryOutstanding(customer) {
 }
 
 module.exports = {
-  chargeDeposit,
   refundDeposit,
   hasPaymentMethod,
+  needsCardOnFile,
   describeCard,
   consentText,
   createSetupLink,

@@ -74,22 +74,23 @@ async function createOrder(customer, input) {
   // The details are settled and the order exists. Only now does the card come
   // into it, which is the order Neil asked for: never ask for payment before
   // there is something to pay for.
-  const { deposit } = result;
-
-  if (deposit && deposit.needsCard) {
+  if (result.needsCard) {
     // Booked but unconfirmed. Saving a card finishes it off automatically,
     // from the payment webhook, so they never have to say it twice.
+    //
+    // Says plainly that nothing is being taken now. Somebody handed a payment
+    // link inside a booking conversation assumes they are being asked to pay,
+    // and the single most common reason to abandon it is not knowing how much.
     const { url } = await billing.createSetupLink(customer);
 
     return (
-      `${booking.whenLine(result.order)} it is. One thing first: we take a ` +
-      `${billing.money(config.pricing.minimumCents)} minimum when you book, and we don't have a ` +
-      `card for you yet. Add one here and you're set, it's handled by our ` +
-      `payment provider and we never see the number: ${url}`
+      `${booking.whenLine(result.order)} it is. One thing first: we need a card on ` +
+      `file before the driver comes out. Nothing gets taken now - it's ` +
+      `${site.pricePerLb} a pound with a ${billing.money(config.pricing.minimumCents)} minimum, ` +
+      `charged after we weigh your bag. Our payment provider handles it and we ` +
+      `never see the number: ${url}`
     );
   }
-
-  if (deposit && deposit.declined) return deposit.message;
 
   // The wording lives in src/core/booking.js so that booking by text and
   // booking on the website produce the identical confirmation.
