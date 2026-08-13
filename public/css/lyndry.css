@@ -664,6 +664,22 @@
 }
 .ops-bar .site-nav { gap: 18px; }
 
+/* The ops nav scrolls sideways instead of pushing the page.
+   With seven tabs it is wider than a phone, and because it never collapses to
+   the marketing hamburger it was dragging the whole document to 556px at a
+   375px viewport - every ops page scrolled horizontally, on the device the
+   driver actually holds. Scrolling the strip keeps every tab reachable and
+   the page still. */
+.ops-bar .site-nav {
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ops-bar .site-nav::-webkit-scrollbar { display: none; }
+.ops-bar .site-nav a { white-space: nowrap; }
+
 .site-footer { background: var(--ink-900); color: var(--paper-200); }
 .footer-head {
   font-family: var(--font-mono);

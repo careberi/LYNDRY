@@ -12,6 +12,7 @@ const { normalisePhone, formatPhone } = require('../core/phone');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
 const issues = require('../core/issues');
+const { runEconomicsBody } = require('../web/run-economics');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -170,6 +171,7 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0 }) {
         ${roles.can(user, 'customers.view') ? tab('/ops/customers', 'Customers') : ''}
         ${roles.can(user, 'messages.view') ? tab('/ops/messages', 'Messages') : ''}
         ${roles.can(user, 'issues.manage') ? tab('/ops/issues', 'Issues') : ''}
+        ${roles.can(user, 'money.view') ? tab('/ops/economics', 'Economics') : ''}
         ${roles.can(user, 'partners.view') ? tab('/ops/partners', 'Partners') : ''}
         ${roles.can(user, 'team.manage') ? tab('/ops/team', 'Team') : ''}
       </nav>
@@ -1233,6 +1235,26 @@ orderAction('ready', (order) => fulfilment.markReady(order));
 orderAction('weight', (order, req) => fulfilment.recordWeight(order, (req.body || {}).weight_lb));
 orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
 orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
+
+// ---------------------------------------------------------------------------
+// GET /ops/economics — what one route cycle actually earns
+//
+// A model, not a report: it reads nothing from the database and shows no real
+// order. Behind money.view because it is the whole cost structure of the
+// business, wholesale rate included, which is not a driver's to browse.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) => {
+  res.type('html').send(
+    adminPage({
+      title: 'Run economics',
+      active: '/ops/economics',
+      body: runEconomicsBody(),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+    })
+  );
+});
 
 // ---------------------------------------------------------------------------
 // GET /ops/issues — everything a person still has to deal with
