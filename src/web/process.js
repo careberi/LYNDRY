@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the driving toggle
+const REVIEWED = '13 August 2026';  // bumped with the AI's service-area rule
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -751,7 +751,7 @@ function processBody(user) {
       </table>
     </div>
     <div class="pr-note" style="margin-top:26px;">
-      <h3>Two things the AI can never do</h3>
+      <h3>Three things the AI can never do</h3>
       <p>
         <strong>It cannot name a locker, a building or a customer.</strong> The
         unlock tool takes no arguments at all - the backend works out the
@@ -763,6 +763,13 @@ function processBody(user) {
         <strong>It cannot move money.</strong> The AI works out that somebody
         wants a pickup. Code works out whether they have a card, whether to send
         a link, and when to charge.
+      </p>
+      <p>
+        <strong>It cannot decide whether an address is in the area.</strong>
+        Asked "do you come out to Princeton?" a model will cheerfully invent a
+        yes, so it is forbidden to reason from the name of a town, to list the
+        towns we cover, or to say yes before an address has been saved. It asks
+        for the address; the code checks it and that answer is final.
       </p>
     </div>`
   ) : ''}

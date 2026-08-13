@@ -170,7 +170,10 @@ function footer() {
 
   return `
     <footer class="site-footer">
-      <div class="container" style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap;padding-top:72px;padding-bottom:44px;">
+      <!-- The columns align at the TOP, not the bottom. Bottom-aligning made
+           each heading sit at a height decided by how many links happened to be
+           under it, so Service and Company never lined up. -->
+      <div class="container" style="display:flex;align-items:flex-start;justify-content:space-between;gap:40px;flex-wrap:wrap;padding-top:72px;padding-bottom:44px;">
 
         <div style="max-width:32ch;">
           <div style="margin-bottom:22px;">${logo('footer')}</div>
@@ -203,7 +206,10 @@ function footer() {
           </div>
         </div>
 
-        <a href="/#get-started" class="btn btn-primary btn-lg">
+        <!-- Centred rather than pulled to the top with the columns. It is one
+             control against three blocks of text, and sitting it on the same
+             line as the headings leaves it stranded above a lot of nothing. -->
+        <a href="/#get-started" class="btn btn-primary btn-lg" style="align-self:center;">
           Get started ${icon('arrow-right', '22')}
         </a>
 

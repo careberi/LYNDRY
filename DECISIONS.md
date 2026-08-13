@@ -85,10 +85,20 @@ What this changed, and what it deliberately didn't:
 - **Anything a customer can read must not mention a locker** until one exists.
 
 
-**Service area: Northern New Jersey, down to Jersey City.** This is a description,
-not a boundary. Before the signup form goes live it needs to become a concrete
-list of towns or ZIP codes, otherwise the form will accept customers who can't
-be served. Phase 5.
+**Service area: Northern New Jersey.** This is a description, not a boundary,
+and "down to Jersey City" was dropped from it — one van working out of Fair Lawn
+should not be promising the Hudson waterfront in the footer of every page.
+
+It still needs to become a concrete list of towns or ZIP codes; until it does,
+`booking.inServiceArea()` is the whole enforcement and is deliberately coarse
+(New Jersey, `07xxx`), erring towards accepting. The tightening is a one-line
+change in one place when Neil draws the line.
+
+**The AI is explicitly forbidden from deciding it.** Same rule as
+`open_locker()` taking no arguments: asked "do you come to Princeton?" a model
+will happily invent a yes, so it may not reason from the name of a town, may not
+list what we cover, and may not say yes before an address has been saved. It
+asks for the address; the code answers.
 
 **No legal entity until the concept is proven.** Neil's call, and a reasonable
 one. Consequences to keep in view:

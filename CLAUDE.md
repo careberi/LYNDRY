@@ -1060,15 +1060,21 @@ npm run seed:demo -- --write
 
 `seed:team` first — the demo orders are assigned to those drivers.
 
-Three drivers with vans, based in Fair Lawn, Hackensack and Jersey City so
-nearest-base assignment has something to distinguish. **Their numbers are in the
-555-0100 range reserved for fiction**, so nothing can text a real person and
-nobody can sign in as them — they exist for the boards, the routing picker and
-the assignment. `-- --clear` removes them and puts their orders back in the
-pool.
+One driver with one van, based in Fair Lawn — roughly the middle of Bergen
+County, so nowhere in the county is far from it. That is the business as it
+actually is, and seed data that pretends otherwise makes every screen read
+wrong: a round spread over three counties is not a round anybody drives. Adding
+a second entry to `TEAM` in the script is all it takes to test multi-driver
+assignment again; give them a base elsewhere in the county so nearest-base has
+something to distinguish.
 
-`npm run seed:partners -- --write` adds eight laundromats from Glen Rock down
-to Hoboken, with rates, capacities, turnarounds and cutoffs that genuinely
+**Their numbers are in the 555-0100 range reserved for fiction**, so nothing can
+text a real person and nobody can sign in as them — they exist for the boards,
+the routing picker and the assignment. `-- --clear` removes them and puts their
+orders back in the pool.
+
+`npm run seed:partners -- --write` adds six laundromats across Bergen County,
+from Glen Rock down to Carlstadt, with rates, capacities, turnarounds and cutoffs that genuinely
 differ, so cheapest, nearest and fastest are rarely the same place. **The names
 are invented and every row says so in its notes** — a plausible laundromat name
 with a wholesale rate beside it gets read as a signed deal within a week, and
@@ -1310,7 +1316,13 @@ rule is only about text messages.
   built. The `lockers` and `buildings` tables stay (dropping them would be
   destructive and they cost nothing), `open_locker()` stays and refuses
   politely, and nothing on the website promises a locker
-- **Service area:** Northern New Jersey, down to Jersey City
+- **Service area:** Northern New Jersey. Deliberately no more precise than
+  that — the boundary inside it has never been drawn. `booking.inServiceArea()`
+  is the ONLY thing that decides, coarsely: New Jersey with an `07xxx` zip.
+  **The AI is told in as many words that it may not decide this** — never
+  from the name of a town, never a list of towns we cover, never a yes
+  before an address has been saved. Asked "do you come to Princeton?" a
+  model will invent a yes, so it asks for the address and the code answers
 - **Cancellation:** free until the driver collects; not cancellable after
 - **Public contact:** neil@lyndry.com · (201) 554-1877 (the LYNDRY Telnyx
   number). **Neil's personal number is never published on the website** — it

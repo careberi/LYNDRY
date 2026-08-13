@@ -142,9 +142,14 @@ function hasPreferences(customer) {
 //
 // Deliberately coarse: New Jersey, in the 07xxx zip range, which is the
 // northern and central part of the state. The website promises "Northern New
-// Jersey, down to Jersey City" — the exact boundary inside 07 is a business
-// decision Neil has not drawn yet, so this errs towards accepting and the
-// fine line can be tightened to a zip list later in one place.
+// Jersey" and nothing more precise — the exact boundary inside 07 is a
+// business decision Neil has not drawn yet, so this errs towards accepting and
+// the fine line can be tightened to a zip list later in one place.
+//
+// THIS FUNCTION IS THE ONLY THING THAT DECIDES. The AI is told in as many
+// words that it may not work the answer out from the name of a town, because a
+// model asked "do you come to Princeton?" will happily invent a yes. It asks
+// for the address instead and this is what answers.
 //
 // What this is NOT: proof the address exists. Nothing here checks that
 // 16-50 Chandler Dr is a real door — that needs an address validation service
