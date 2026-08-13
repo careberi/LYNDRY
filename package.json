@@ -14,7 +14,8 @@
     "cron:recurring": "node --use-system-ca scripts/cron-recurring.js",
     "test:signature": "node scripts/test-signature.js",
     "prompt": "node scripts/show-prompt.js",
-    "assign": "node --use-system-ca scripts/assign-drivers.js"
+    "assign": "node --use-system-ca scripts/assign-drivers.js",
+    "seed:team": "node --use-system-ca scripts/seed-team.js"
   },
   "engines": {
     "node": ">=20"

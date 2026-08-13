@@ -995,6 +995,19 @@ unknown number gets the identical "check your phone" response. Otherwise
 **Rotating `ADMIN_API_KEY` signs everybody out instantly** — that is the
 emergency lever if a phone goes missing.
 
+**Dummy drivers and vans for trying things out:**
+
+```bash
+npm run seed:team -- --write
+```
+
+Three drivers with vans, based in Fair Lawn, Hackensack and Jersey City so
+nearest-base assignment has something to distinguish. **Their numbers are in the
+555-0100 range reserved for fiction**, so nothing can text a real person and
+nobody can sign in as them — they exist for the boards, the routing picker and
+the assignment. `-- --clear` removes them and puts their orders back in the
+pool.
+
 **Bootstrap the first person from the terminal** — signing in needs a row, and
 adding a row needs somebody signed in:
 
