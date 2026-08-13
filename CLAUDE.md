@@ -995,11 +995,14 @@ unknown number gets the identical "check your phone" response. Otherwise
 **Rotating `ADMIN_API_KEY` signs everybody out instantly** — that is the
 emergency lever if a phone goes missing.
 
-**Dummy drivers and vans for trying things out:**
+**Dummy drivers, vans and a whole day of orders, for trying things out:**
 
 ```bash
 npm run seed:team -- --write
+npm run seed:demo -- --write
 ```
+
+`seed:team` first — the demo orders are assigned to those drivers.
 
 Three drivers with vans, based in Fair Lawn, Hackensack and Jersey City so
 nearest-base assignment has something to distinguish. **Their numbers are in the
@@ -1007,6 +1010,14 @@ nearest-base assignment has something to distinguish. **Their numbers are in the
 nobody can sign in as them — they exist for the boards, the routing picker and
 the assignment. `-- --clear` removes them and puts their orders back in the
 pool.
+
+`seed:demo` builds a day with something at every stage: pickups waiting, a bag
+in the van, one at a laundromat, one finished and waiting for the load-out pass,
+one out for delivery with clips on, and two delivered — one paid, one not. Plus
+a message thread, an open issue and a standing order, so the conversation,
+issues and customer screens are not blank either. **States are written directly
+rather than through `fulfilment.js`**, deliberately: fulfilment sends texts and
+charges cards, and a seed script must do neither.
 
 **Bootstrap the first person from the terminal** — signing in needs a row, and
 adding a row needs somebody signed in:

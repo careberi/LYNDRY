@@ -15,7 +15,8 @@
     "test:signature": "node scripts/test-signature.js",
     "prompt": "node scripts/show-prompt.js",
     "assign": "node --use-system-ca scripts/assign-drivers.js",
-    "seed:team": "node --use-system-ca scripts/seed-team.js"
+    "seed:team": "node --use-system-ca scripts/seed-team.js",
+    "seed:demo": "node --use-system-ca scripts/seed-demo.js"
   },
   "engines": {
     "node": ">=20"
