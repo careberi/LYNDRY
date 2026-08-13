@@ -127,6 +127,13 @@ const config = Object.freeze({
     // "is today already full".
     workingDayMinutes: Number(process.env.ROUTING_DAY_MINUTES || 480),
 
+    // How many numbered clips are in a van. They are physical stock: the
+    // system hands out the free ones and takes them back when a bag is dropped
+    // at the laundromat, so this is how many exist, not how many to invent.
+    // Running out is a real thing that can happen on a heavy day and the run
+    // says so rather than making a number up.
+    vanClips: Number(process.env.ROUTING_VAN_CLIPS || 50),
+
     // THE ONE KNOB THAT DECIDES HOW MUCH THE SYSTEM DECIDES ON ITS OWN.
     //
     // A pickup that adds less than this to the run is worth taking without

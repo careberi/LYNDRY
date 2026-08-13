@@ -72,7 +72,7 @@ async function tasksForCollect(order) {
       label,
       title: label
         ? label.weight_lb != null
-          ? `Bag ${position} - ${label.weight_lb} lb`
+          ? `Bag ${position} - ${label.weight_lb} lb on clip ${label.clip_number}`
           : `Weigh bag ${position}, photograph the scale`
         : `Put a sticker on bag ${position}`,
       detail: label
@@ -238,6 +238,20 @@ async function forDriver(driverId) {
   const ahead = board.stops.map((stop) => ({ ...describe(stop), done: stopDone(stop) }));
 
   const stops = [...behind, ...ahead];
+
+  // WHICH BAGS AM I HANDING OVER. The laundromat stop knows which orders are
+  // going there; the driver needs the numbers clipped to them, because that is
+  // what he and the counter assistant can actually say out loud.
+  for (const stop of stops) {
+    if (stop.kind !== 'dropoff' && stop.kind !== 'pickup_partner') continue;
+
+    const numbers = [];
+    for (const order of stop.orders || []) {
+      const labels = await bags.forOrder(order.id);
+      numbers.push(...bags.clipsFor(labels));
+    }
+    stop.clips = numbers.sort((a, b) => a - b);
+  }
 
   // The one he is on: the first that is not finished. Not "the next one after
   // the last finished", because a stop can be completed out of order - somebody

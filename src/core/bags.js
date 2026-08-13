@@ -375,7 +375,102 @@ async function totalWeight(orderId) {
   };
 }
 
+// --- The numbered clip that rides with a bag --------------------------------
+//
+// A sticker code identifies a bag perfectly and is useless shouted across a
+// laundromat counter. The clip is the short handle: "four, six and ten."
+//
+// CLIPS ARE STOCK, NOT NUMBERS WE MAKE UP. There is a real bag of them in the
+// van, so the pool is finite and the lowest free one is handed out. Running out
+// on a heavy day is a real thing, and saying so is better than inventing clip
+// 51 that nobody owns.
+//
+// Scoped to the DRIVER, because each van has its own set - Dan's clip 4 and
+// somebody else's clip 4 are two different clips.
+
+// Which numbers are on a bag right now, for this driver.
+async function clipsInUse(driverId) {
+  const { data, error } = await db
+    .from('bag_labels')
+    .select('clip_number, orders!inner(driver_id)')
+    .not('clip_number', 'is', null)
+    .is('unclipped_at', null)
+    .eq('orders.driver_id', driverId);
+
+  if (error) throw error;
+  return new Set((data || []).map((l) => Number(l.clip_number)));
+}
+
+// Put the lowest free clip on this bag.
+//
+// Lowest rather than next-in-sequence so the numbers stay small and reusable -
+// a driver would rather clip 3 than clip 47 when both are in his hand.
+async function assignClip(label, driverId) {
+  if (label.clip_number != null && label.unclipped_at == null) {
+    return { ok: true, clip: Number(label.clip_number), already: true };
+  }
+
+  const taken = await clipsInUse(driverId);
+  const total = config.routing.vanClips;
+
+  let clip = null;
+  for (let n = 1; n <= total; n += 1) {
+    if (!taken.has(n)) {
+      clip = n;
+      break;
+    }
+  }
+
+  if (clip == null) {
+    return {
+      ok: false,
+      detail:
+        `Every one of your ${total} clips is on a bag. Drop a load at a laundromat ` +
+        `to free some up, or put more clips in the van.`,
+    };
+  }
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ clip_number: clip, clipped_at: new Date().toISOString(), unclipped_at: null })
+    .eq('id', label.id);
+
+  if (error) throw error;
+
+  return { ok: true, clip };
+}
+
+// The clips come off when the bags are handed over, which is what makes those
+// numbers free again. Never clears clip_number itself: the order page can then
+// still say which clip a bag travelled under, the same way a released sticker
+// keeps its order.
+async function unclipOrder(orderId) {
+  const { data, error } = await db
+    .from('bag_labels')
+    .update({ unclipped_at: new Date().toISOString() })
+    .eq('order_id', orderId)
+    .is('unclipped_at', null)
+    .not('clip_number', 'is', null)
+    .select('clip_number');
+
+  if (error) throw error;
+  return (data || []).map((l) => Number(l.clip_number)).sort((a, b) => a - b);
+}
+
+// What is on the van right now, as clip numbers, grouped by order. What the
+// laundromat stop reads off.
+function clipsFor(labels) {
+  return (labels || [])
+    .filter((l) => l.clip_number != null && l.unclipped_at == null)
+    .map((l) => Number(l.clip_number))
+    .sort((a, b) => a - b);
+}
+
 module.exports = {
+  clipsInUse,
+  assignClip,
+  unclipOrder,
+  clipsFor,
   recordBagWeight,
   totalWeight,
   ALPHABET,

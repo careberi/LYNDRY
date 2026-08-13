@@ -2432,6 +2432,15 @@ router.post(
         return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
       }
 
+      // THE CLIP GOES ON HERE, the moment the bag has a weight and is about to
+      // go in the van. From now until it is handed to the laundromat this
+      // number is what the bag is called.
+      const clipped = await bags.assignClip(result.label, order.driver_id);
+
+      if (!clipped.ok) {
+        return res.redirect(303, `${back}?problem=${encodeURIComponent(clipped.detail)}`);
+      }
+
       // THE ORDER'S WEIGHT IS THE SUM OF ITS BAGS, recomputed here rather than
       // typed. It stays the authoritative figure - it prices the order and it is
       // what a laundromat's number is checked against - it is simply added up.
@@ -2457,7 +2466,8 @@ router.post(
         return res.redirect(
           303,
           `${back}?note=${encodeURIComponent(
-            `All ${totals.bags} bags weighed - ${totals.pounds.toFixed(1)} lb altogether.`
+            `Clip ${clipped.clip} on that one. All ${totals.bags} bags weighed - ` +
+              `${totals.pounds.toFixed(1)} lb altogether.`
           )}`
         );
       }
@@ -2465,8 +2475,8 @@ router.post(
       return res.redirect(
         303,
         `${back}?note=${encodeURIComponent(
-          `Bag logged at ${Number(body.weight_lb).toFixed(1)} lb. ` +
-            `${totals ? totals.bags : 0} of ${totals ? totals.total : 0} done.`
+          `${Number(body.weight_lb).toFixed(1)} lb - put clip ${clipped.clip} on it. ` +
+            `${totals ? totals.bags : 0} of ${totals ? totals.total : 0} bags done.`
         )}`
       );
     } catch (err) {

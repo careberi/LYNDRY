@@ -402,6 +402,31 @@ worked or did not, rather than a spinner that lies. `?done=` and `?problem=` on
 the redirect carry the banner, so refreshing repeats the message and never the
 action. A double-tap is refused by the state machine and shown as a sentence.
 
+**A numbered clip goes on each bag while it is in the van, and it is physical
+stock.** A sticker code like `7MQ5Y2` identifies a bag perfectly and is useless
+shouted across a laundromat counter; "four, six and ten" is what a driver and a
+counter assistant can actually say. Neil owns a real bag of clips, so the pool
+is finite (`config.routing.vanClips`) and the system hands out the **lowest
+free** one rather than inventing clip 51 that nobody owns. Running out is a real
+thing on a heavy day and the run says so.
+
+**Clips are scoped to the driver** — each van has its own set, so Dan's clip 4
+and somebody else's clip 4 never collide. The owner comes from `orders.driver_id`
+rather than being stored twice.
+
+**The clip's life is the van leg**: on at the door once the bag is weighed, off
+when it is handed to the laundromat, which is what frees the number. **Do not
+confuse it with `orders.stop_number`** — a stop number says which door on the
+way back, a clip number says which bag on the way there. `unclipOrder()` never
+clears `clip_number`, only stamps `unclipped_at`, so the order page can still
+say which clip a bag travelled under — same reason a released sticker keeps its
+order.
+
+**An order goes to one laundromat, whole.** Neil's call: splitting a customer's
+bags across two would mean their wash finishes at different times, so they
+either wait for the slowest bag or get delivered twice. The routing decision is
+per order; the clip is per bag.
+
 **A pickup goes: how many bags, then one bag at a time.** The driver is at a
 door with his hands full, so the run asks for the count first and then walks
 each bag — sticker on it, on the scale, photograph the display — before "in the

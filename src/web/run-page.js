@@ -196,6 +196,8 @@ function taskControl(stop, task, order) {
 
       <p style="margin:0 0 14px;font-size:15px;">
         Sticker <code style="font-weight:700;">${escapeHtml(task.label.code)}</code> is on it.
+        A numbered clip goes on once you have weighed it - the screen will tell
+        you which one.
       </p>
 
       <label class="field-label" for="weight_lb">What does bag ${task.position} weigh?</label>
@@ -283,9 +285,40 @@ function partnerCard(run) {
       ${escapeHtml(stop.name || 'The laundromat')}
     </h2>
     <p style="font-size:16px;line-height:1.5;margin:0 0 4px;">${escapeHtml(stop.address || '')}</p>
-    <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 22px;">
+    <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 16px;">
       ${stop.bags} bag${stop.bags === 1 ? '' : 's'}${stop.pounds ? `, ${stop.pounds.toFixed(0)} lb` : ''}.
     </p>
+
+    ${
+      // THE NUMBERS, BIG. This is the one thing said out loud at a counter, so
+      // it is the one thing that has to be readable at arm's length.
+      (stop.clips || []).length
+        ? `<div style="margin:0 0 22px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
+                      background:var(--sunbeam-500);">
+             <p class="eyebrow" style="margin:0 0 10px;">${
+               dropping ? 'Hand over these' : 'Bringing back'
+             }</p>
+             <div style="display:flex;flex-wrap:wrap;gap:10px;">
+               ${(stop.clips || [])
+                 .map(
+                   (n) => `<span style="min-width:46px;padding:8px 12px;border:2px solid var(--ink-900);
+                                        border-radius:10px;background:var(--paper-000);text-align:center;
+                                        font-family:var(--font-mono);font-weight:700;font-size:20px;">
+                             ${n}
+                           </span>`
+                 )
+                 .join('')}
+             </div>
+             <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
+               ${
+                 dropping
+                   ? 'Take the clips off as you hand them over - those numbers go back in the van for the next bags.'
+                   : 'These are what you are collecting.'
+               }
+             </p>
+           </div>`
+        : ''
+    }
 
     ${
       dropping

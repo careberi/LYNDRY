@@ -169,6 +169,25 @@ async function dropAtPartner(order, { partnerId, by = {} } = {}) {
     });
   }
 
+  // THE CLIPS COME OFF HERE, which is what makes those numbers free for the
+  // next bags. Handing the bag over is the end of the van leg, and the clip's
+  // whole life is the van leg.
+  //
+  // The number itself is kept on the row, not cleared, so the order page can
+  // still say which clip a bag travelled under - the same reason a released
+  // sticker keeps its order.
+  const freed = await bags.unclipOrder(order.id);
+
+  if (freed.length) {
+    await events.record(order.id, {
+      kind: 'LABEL',
+      summary: `Clip${freed.length === 1 ? '' : 's'} ${freed.join(', ')} back in the van`,
+      by,
+    });
+  }
+
+  result.freedClips = freed;
+
   return result;
 }
 
