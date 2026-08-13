@@ -439,6 +439,9 @@ GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
 GET  /ops/loadout            scan bags into the van, build the run
+GET  /ops/run                the driver's round: one stop, one thing to do
+POST /ops/run/here           "I'm here"
+POST /ops/run/dropped        handed the load over at the laundromat
 GET  /ops/routing            the live day on a map; ?date= ?from= ?driver= pick it
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
@@ -718,6 +721,64 @@ proves you're allowed. **Adding a page means adding both.**
 **`money.view` is separate from `orders.view`** so a driver can work the round
 without seeing the books. Prices are left out of the markup entirely rather
 than hidden with CSS — a value that never reaches the page cannot leak from it.
+
+## The guided run
+
+**`/ops/run` is the only screen a driver needs.** Everything else in `/ops` is
+something you read; this is something you act on. It shows **one stop and one
+thing to do**: where to go, a button that opens the maps app, an "I'm here"
+button, then the single next task, then the next stop.
+
+**One stop, not a list with the current one highlighted.** A list invites
+reading ahead, and reading ahead on a doorstep is how the wrong bag reaches the
+wrong house. What is behind and ahead is a count, not a list.
+
+**Nothing here is a second way to change an order.** Every control posts to the
+same routes the order page posts to, which call `src/core/fulfilment.js`.
+`src/core/run.js` works out *what is next* and nothing else — the moment it did
+a step itself the two front doors would drift. `?from=run` on the form action is
+the only difference, and it decides where you land afterwards.
+
+**Where he is in the run is derived, never stored.** `stopDone()` reads the
+order. A driver who uses the order page, the JSON API or a second phone is still
+at the same point, because the run is a *reading* of the orders rather than a
+thing kept alongside them.
+
+**`orders.arrived_at` is the one exception, and it is a flag, not history.** It
+means "the driver is at this order's next stop right now". The same order is
+arrived at several times in its life — the door to collect, the laundromat to
+drop, the door again to deliver — so one column cannot hold three arrivals.
+**Anything that completes a stop clears it**: `AT_PARTNER`, `DELIVERED` and
+`CANCELED` in `orders.transition()`, and recording a weight in `fulfilment.js`.
+`IN_PROCESS` deliberately does not, because the scale comes after "in the van"
+at the same door. If lasting arrival times are ever wanted, that is
+`order_events`.
+
+**A collected bag that has not been weighed is still at the door.** Leaving
+`IN_PROCESS` orders out of the collect leg made the stop vanish the instant the
+driver tapped Collected, taking the weighing with it — he drove off with a bag
+nobody had weighed and no screen asking him to. It also cannot go to a
+laundromat yet: the weight has to be ours.
+
+**A stop at the same address as the finished one before it starts already
+arrived.** Every laundromat visit is two stops at one door — hand the dirty over,
+take the finished — and asking him to navigate to where he is standing is
+nonsense. It covers two customers in one building too.
+
+**The run needs today's finished stops as well as the outstanding ones.** The
+routing board is built from live queries, so a stop disappears the moment it is
+done — right for "what is left", useless for "where am I". `doneToday()` is what
+makes the progress bar move and what lets the page know the last visit was at
+this address.
+
+**The maps button is a plain `https://maps.google.com/?q=` link**, not a `geo:`
+or `maps://` scheme. Those open a native app directly and do nothing at all on a
+phone without that app, and a dead button on a doorstep is worse than one extra
+tap.
+
+**Collecting finished bags back off a laundromat is the load-out pass**, and the
+run links to `/ops/loadout` rather than reimplementing it. Two ways to do one job
+is how they drift.
 
 ## Drivers
 

@@ -169,6 +169,9 @@ const LEGS = Object.freeze({
 const BOARD_FIELDS =
   'id, order_number, status, stop_number, loaded_at, pickup_date, pickup_window_start, ' +
   'pickup_window_end, pickup_time, bag_count, weight_lb, partner_id, ' +
+  // The guided run reads its position from these, so they travel with the board
+  // rather than being fetched again per stop.
+  'collected_at, delivered_at, arrived_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed)';
 
 // WHICH LAUNDROMAT SHOULD THIS BAG GO TO?
@@ -358,8 +361,20 @@ async function board(dateIso, fromTime, driverId = null) {
   });
 
   // --- leg 1: doorstep pickups ---------------------------------------------
+  //
+  // A COLLECTED BAG THAT HAS NOT BEEN WEIGHED IS STILL AT THE DOOR.
+  //
+  // The scale comes after "in the van" and happens at the same stop, so an
+  // IN_PROCESS order with no weight on it has not finished its pickup. Leaving
+  // it out here made the stop vanish from the guided run the instant the driver
+  // tapped Collected, taking the weighing with it - he drove off with a bag
+  // nobody had weighed and no screen asking him to.
+  //
+  // It also cannot go to the laundromat yet: the weight has to be ours, taken
+  // before the bag left our hands.
+  const unweighed = (inHand || []).filter((o) => o.status === 'IN_PROCESS' && o.weight_lb == null);
 
-  const collectStops = (pickups || []).map((o) => ({ kind: 'collect', order: o }));
+  const collectStops = [...(pickups || []), ...unweighed].map((o) => ({ kind: 'collect', order: o }));
 
   // --- leg 3: doorstep deliveries ------------------------------------------
   //
@@ -380,8 +395,12 @@ async function board(dateIso, fromTime, driverId = null) {
   // lines on a run sheet, and merging them hides one of them.
 
   // Bags to drop: what we are already holding unwashed, plus everything leg 1
-  // is about to pick up.
-  const needsWash = (inHand || []).filter((o) => o.status === 'IN_PROCESS');
+  // is about to pick up. Weighed only - an unweighed bag is still standing at
+  // the customer's door as far as the run is concerned, and handing it over
+  // would leave us billing off the laundromat's scale instead of our own.
+  const needsWash = (inHand || []).filter(
+    (o) => o.status === 'IN_PROCESS' && o.weight_lb != null
+  );
   const dropWeight =
     needsWash.reduce((t, o) => t + Number(o.weight_lb || 0), 0) +
     (pickups || []).length * 0; // a pickup has no weight until it is weighed

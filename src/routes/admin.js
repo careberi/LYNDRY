@@ -21,7 +21,9 @@ const bags = require('../core/bags');
 const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
+const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
+const { runBody } = require('../web/run-page');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
@@ -169,6 +171,9 @@ const OPS_MENUS = Object.freeze([
   {
     label: 'Dashboard',
     items: [
+      // First in the menu because for a driver it is the only screen that
+      // matters - everything else is looking something up.
+      { href: '/ops/run', label: 'Your round', permission: 'orders.act' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       { href: '/ops/loadout', label: 'Load out', permission: 'orders.act' },
       { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
@@ -1962,6 +1967,122 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
   }
 });
 
+// ---------------------------------------------------------------------------
+// The guided run: /ops/run
+//
+// One stop, one thing to do, and a button that opens the maps app. The routing
+// board is the day for somebody at a desk; this is the same day for somebody in
+// a van, and a driver should never have to work out what is next.
+//
+// Behind orders.act, and it is always the SIGNED-IN person's round. There is no
+// ?driver= here on purpose - this is not a screen for looking at somebody
+// else's day, that is what the routing board is for.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/run', guard, withIssues, may('orders.act'), async (req, res, next) => {
+  try {
+    const state = await runCore.forDriver(req.opsUser.id);
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Your round',
+        active: '/ops/run',
+        body: runBody({
+          run: state,
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// "I'm here."
+//
+// The only thing on the run that is not already a step in fulfilment.js, and it
+// deliberately changes nothing about the order except a flag saying the driver
+// is standing at it. Everything that actually moves an order still goes through
+// the same routes the order page uses.
+router.post('/ops/run/here', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const orderId = String((req.body || {}).order_id || '');
+    if (!UUID.test(orderId)) return res.redirect(303, '/ops/run');
+
+    const order = await loadOrderForAction(orderId);
+    if (!order) return res.redirect(303, '/ops/run');
+
+    // A driver cannot mark himself present at somebody else's stop, for the
+    // same reason he cannot open their order.
+    if (!roles.can(req.opsUser, 'customers.view') && order.driver_id && order.driver_id !== req.opsUser.id) {
+      return notFoundPage(res, "That order is on somebody else's round.");
+    }
+
+    await runCore.arrive(orderId);
+    return res.redirect(303, '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Handing a load over at the laundromat. Several orders, one visit, so this
+// loops fulfilment.dropAtPartner rather than being a new way to do it.
+router.post('/ops/run/dropped', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const partnerId = UUID.test(String(body.partner_id || '')) ? String(body.partner_id) : null;
+
+    // A form with one hidden input gives a string, several give an array.
+    const ids = []
+      .concat(body.order_id || [])
+      .map(String)
+      .filter((id) => UUID.test(id));
+
+    if (!ids.length) return res.redirect(303, '/ops/run');
+
+    const failures = [];
+
+    for (const id of ids) {
+      const order = await loadOrderForAction(id);
+      if (!order) continue;
+
+      const result = await fulfilment.dropAtPartner(order, {
+        partnerId,
+        by: { opsUser: req.opsUser },
+      });
+
+      if (!result.ok) failures.push(`#${order.order_number}: ${result.detail}`);
+    }
+
+    if (failures.length) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(failures.join(' '))}`);
+    }
+
+    return res.redirect(
+      303,
+      `/ops/run?note=${encodeURIComponent(
+        `${ids.length} bag${ids.length === 1 ? '' : 's'} handed over. On to the next one.`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// WHERE A COMPLETED ACTION PUTS YOU BACK.
+//
+// The order page and the guided run post to the same routes - that is the whole
+// point, there is one implementation of "collected" and not two - so the only
+// difference is where you land afterwards. `?from=run` on the form action is
+// what carries that, and a driver stepping through his round never sees the
+// order page unless he asks for it.
+function backTo(req, order) {
+  return String(req.query.from) === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
+}
+
 // Every button route is this shape, so they are built rather than repeated.
 function orderAction(action, run, middleware = null) {
   const handler = async (req, res, next) => {
@@ -1980,7 +2101,7 @@ function orderAction(action, run, middleware = null) {
         return notFoundPage(res, "That order is on somebody else's round.");
       }
 
-      const back = `/ops/orders/${order.order_number}`;
+      const back = backTo(req, order);
 
       const result = await run(order, req);
 
@@ -2215,7 +2336,7 @@ router.post('/ops/orders/:id/door-scan', guard, may('orders.act'), async (req, r
     const order = await loadOrderForAction(req.params.id);
     if (!order) return notFoundPage(res, 'No order with that number.');
 
-    const back = `/ops/orders/${order.order_number}`;
+    const back = backTo(req, order);
     const result = await loadout.scanAtDoor((req.body || {}).code, order);
 
     if (!result.ok) {
@@ -2241,7 +2362,7 @@ router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, 
     const order = await loadOrderForAction(req.params.id);
     if (!order) return notFoundPage(res, 'No order with that number.');
 
-    const back = `/ops/orders/${order.order_number}`;
+    const back = backTo(req, order);
     const result = await bags.bind((req.body || {}).code, order, req.opsUser && req.opsUser.id);
 
     if (!result.ok) {

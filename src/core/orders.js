@@ -65,6 +65,15 @@ const TIMESTAMP_FOR = Object.freeze({
   DELIVERED: 'delivered_at',
 });
 
+// Reaching one of these means the driver has DRIVEN AWAY from the stop, so the
+// guided run's "I'm here" flag is cleared with the move.
+//
+// IN_PROCESS is deliberately not in the list. Collecting the bags is not the
+// end of that stop - the scale comes after it, at the same door - and clearing
+// arrival there would bounce the driver back to "go to this location" while he
+// is standing in the hall holding the bag he just picked up.
+const LEAVES_THE_STOP = Object.freeze(['AT_PARTNER', 'DELIVERED', 'CANCELED']);
+
 function canTransition(from, to) {
   return (ALLOWED_NEXT[from] || []).includes(to);
 }
@@ -229,6 +238,8 @@ async function transition(order, to) {
   const stamp = TIMESTAMP_FOR[to];
   if (stamp) changes[stamp] = new Date().toISOString();
 
+  if (LEAVES_THE_STOP.includes(to)) changes.arrived_at = null;
+
   const { data, error } = await db
     .from('orders')
     .update(changes)
@@ -282,6 +293,7 @@ async function reschedule(order, newDate, newTime, window) {
 }
 
 module.exports = {
+  LEAVES_THE_STOP,
   ALLOWED_NEXT,
   AWAITING_COLLECTION,
   IN_FLIGHT,

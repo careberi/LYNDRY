@@ -264,7 +264,17 @@ async function recordWeight(order, weightLb, photo, { by = {} } = {}) {
   // the other, so an order can never carry a charge no weight justifies.
   const { data: updated, error } = await db
     .from('orders')
-    .update({ weight_lb: weight, price_cents: priceCents, weight_photo_path: photoPath })
+    // arrived_at goes with it: weighing is the last thing that happens at the
+    // customer's door, so this is the moment the driver leaves. Left set, the
+    // guided run would tell him he is still standing at a stop he drove away
+    // from - and would think he had already arrived at the delivery, months
+    // later, when the same order comes round again.
+    .update({
+      weight_lb: weight,
+      price_cents: priceCents,
+      weight_photo_path: photoPath,
+      arrived_at: null,
+    })
     .eq('id', order.id)
     .select('*')
     .single();

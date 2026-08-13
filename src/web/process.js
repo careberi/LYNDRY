@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with drivers, home bases and the routing board
+const REVIEWED = '13 August 2026';  // bumped with the guided run
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -372,11 +372,20 @@ function processBody(user) {
     <ol class="pr-steps pr-driver">
       ${step(
         1,
-        'Open the orders board',
+        'Open Your round',
         `Sign in at <code>/ops</code> with a mobile number and a six-digit code
-         we text. No password, no app. The board shows what is on today, and
-         a booking with no card on file is flagged as unconfirmed - do not drive
-         to it, we have no way to bill it.`
+         we text. No password, no app - save it to your home screen and it opens
+         like one.
+         <br><br>
+         <strong>Your round is the only screen you need.</strong> It shows one
+         stop and one thing to do: where to go, a button that opens your maps
+         app, and an <em>I'm here</em> button. Tap that when you pull up and it
+         tells you what to do at this door. Finish it and it gives you the next
+         stop. You never have to work out what is next or what you have missed.
+         <br><br>
+         The orders board is still there if you want to look something up, and a
+         booking with no card on file is flagged as unconfirmed - do not drive to
+         it, we have no way to bill it.`
       )}
       ${step(
         2,
@@ -401,11 +410,11 @@ function processBody(user) {
       ${step(
         3,
         'Sticker every bag, and enter its code',
-        `A label off the roll in the van goes on each bag, and the six
-         characters printed under the QR go into the order page. That is what
-         binds a sticker to a bag. Print more from the order page when the roll
-         runs low. A sticker means nothing until it is entered - blank stock is
-         just paper.`
+        `Your round asks for this first at every pickup. A label off the roll in
+         the van goes on each bag, and the six characters printed under the QR go
+         into the box. That is what binds a sticker to a bag. Print more from the
+         labels screen when the roll runs low. A sticker means nothing until it
+         is entered - blank stock is just paper.`
       )}
       ${step(
         4,
