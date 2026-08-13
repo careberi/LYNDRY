@@ -197,16 +197,22 @@ async function recordWeight(order, weightLb) {
   // $25.00 at $2.00 a pound" is arithmetic the customer can see is wrong.
   const minimumApplied = priceCents > byWeight;
 
-  let howPriced;
-  if (minimumApplied) {
-    howPriced =
-      `Your laundry weighed ${weight} lb, which is under our ${money(floor)} minimum, ` +
-      `so the total is ${money(priceCents)}.`;
-  } else {
-    howPriced =
-      `Your laundry weighed ${weight} lb, so the total is ${money(priceCents)} at ` +
-      `${site.pricePerLb} a pound.`;
-  }
+  // A SECOND WEIGHING IS A CORRECTION, and has to read like one.
+  //
+  // A customer told "10 lb, $25" and then "15 lb, $30" with no explanation
+  // has been quoted two different prices for the same bag and told why
+  // neither time. Naming the old figure alongside the new one is the whole
+  // difference between a correction and an inconsistency.
+  const previous = order.weight_lb != null ? Number(order.weight_lb) : null;
+  const isCorrection = previous != null && previous !== weight;
+
+  const opening = isCorrection
+    ? `Correction: your laundry weighed ${weight} lb, not ${previous} lb`
+    : `Your laundry weighed ${weight} lb`;
+
+  const howPriced = minimumApplied
+    ? `${opening}, which is under our ${money(floor)} minimum, so the total is ${money(priceCents)}.`
+    : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
 
   let message;
   if (owed === 0 && alreadyPaid > 0) {
@@ -219,7 +225,11 @@ async function recordWeight(order, weightLb) {
     message = `${howPriced} Charged on delivery.`;
   }
 
-  await sendAndLog(customer.phone, message, customer.id);
+  // Re-saving the same weight is not news. A driver correcting a typo back to
+  // what it already was, or tapping Save twice, should not text the customer
+  // the same figure again.
+  const unchanged = previous != null && previous === weight;
+  if (!unchanged) await sendAndLog(customer.phone, message, customer.id);
 
   return {
     ok: true,
