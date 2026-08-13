@@ -67,7 +67,7 @@ function loadoutBody({ run, built, notice, problem }) {
 
   return `
 <div style="max-width:720px;">
-  <p class="eyebrow" style="margin:0 0 8px;">Load out</p>
+  <p class="eyebrow" style="margin:0 0 8px;">Load the van</p>
   <h1 style="margin:0 0 14px;font-size:40px;line-height:1.05;">Scan every bag into the van</h1>
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 26px;">
     One pass, in whatever order they come to hand - you are touching each bag

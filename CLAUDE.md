@@ -781,6 +781,24 @@ the service works means correcting the affected section and bumping that date,
 in the same commit. A process document that is wrong is worse than none,
 because people act on it.
 
+**The menus group by the question a screen answers, not by what kind of thing
+it is.** "Dashboard" was a grab bag — a board, a scanning task, a message list
+and a problem queue — and Routing, which is the live day, sat under Tools beside
+two what-if calculators.
+
+| Menu | The question |
+|---|---|
+| **Today** | What is happening right now: Your round, Orders, Routing, Load the van |
+| **People** | Every human in the system: Customers, Conversations, Needs a person, Team |
+| **Business** | What you set up and what it earns: Partners, Bag stickers, Unit economics, Route planner |
+| **Help** | How it all works |
+
+**Names say what a screen is, and the page title matches the menu entry** — a
+nav that calls something one thing and a heading that calls it another is a nav
+you cannot trust. "Load out" was jargon; "Routing" and "Planner" were
+indistinguishable until one of them said *route*; "Messages" undersold a screen
+whose point is the people who never became customers.
+
 **The ops nav is four `<details>` menus, not a row of tabs** — Dashboard,
 People, Tools, Resources, defined once in `OPS_MENUS` in `src/routes/admin.js`.
 Ten flat tabs needed 556px on a 375px phone; four menus need 335px. Built on

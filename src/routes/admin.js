@@ -168,45 +168,61 @@ function addressOf(c) {
 // Each entry carries the permission that already guards its route, so the menu
 // cannot offer somebody a screen they would be refused at. A group with nothing
 // left in it disappears entirely rather than opening onto nothing.
+// THE MENUS ARE GROUPED BY THE QUESTION EACH SCREEN ANSWERS, not by what kind
+// of thing it is. "Dashboard" was a grab bag - a board, a scanning task, a
+// message list and a problem queue - and Routing, which is the live day, sat
+// under Tools next to two what-if calculators.
+//
+//   TODAY     what is happening right now, and the screens you act on
+//   PEOPLE    every human in the system, customer or staff
+//   BUSINESS  what you set up, and what it earns
+//   HELP      how the whole thing works
+//
+// Names say what the screen is rather than what it is called internally.
+// "Load out" was jargon; "Planner" and "Routing" were indistinguishable until
+// one of them said route.
 const OPS_MENUS = Object.freeze([
   {
-    label: 'Dashboard',
+    label: 'Today',
     items: [
-      // First in the menu because for somebody on the round it is the only
-      // screen that matters - everything else is looking something up. Behind
-      // orders.drive, so an admin who has not put themselves on the round is
-      // not offered one.
+      // First, because for somebody on the round it is the only screen that
+      // matters - everything else is looking something up. Behind orders.drive,
+      // so an admin who has not put themselves on the round is not offered one.
       { href: '/ops/run', label: 'Your round', permission: 'orders.drive' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
-      { href: '/ops/loadout', label: 'Load out', permission: 'orders.act' },
-      { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
-      { href: '/ops/issues', label: 'Issues', permission: 'issues.manage' },
+      // The live day. It belongs beside the orders it sequences, not beside the
+      // calculators - it reads the real queue and nothing on it is invented.
+      { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
+      { href: '/ops/loadout', label: 'Load the van', permission: 'orders.act' },
     ],
   },
   {
     label: 'People',
     items: [
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
-      { href: '/ops/partners', label: 'Partners', permission: 'partners.view' },
+      // "Conversations" rather than "Messages": the screen is one row per phone
+      // number and holds people who never became customers, which is the whole
+      // reason it is worth reading.
+      { href: '/ops/messages', label: 'Conversations', permission: 'messages.view' },
+      { href: '/ops/issues', label: 'Needs a person', permission: 'issues.manage' },
       { href: '/ops/team', label: 'Team', permission: 'team.manage' },
     ],
   },
   {
-    label: 'Tools',
+    label: 'Business',
     items: [
+      { href: '/ops/partners', label: 'Partners', permission: 'partners.view' },
+      { href: '/ops/labels', label: 'Bag stickers', permission: 'orders.act' },
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
-      { href: '/ops/planner', label: 'Planner', permission: 'money.view' },
-      // Dispatch sits beside the planner because they are the same picture of
-      // the same thing: the planner is a day you invent, this is the day that
-      // actually exists.
-      { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
-      { href: '/ops/labels', label: 'Bag labels', permission: 'orders.act' },
+      // "Route planner" says which of the two it is. This one is a day you
+      // invent; Routing above is the day that exists.
+      { href: '/ops/planner', label: 'Route planner', permission: 'money.view' },
     ],
   },
   {
-    label: 'Resources',
+    label: 'Help',
     // No permission: the process page is the one you hand a new driver.
-    items: [{ href: '/ops/process', label: 'How it works', permission: null }],
+    items: [{ href: '/ops/process', label: 'How it all works', permission: null }],
   },
 ]);
 
@@ -2286,7 +2302,7 @@ async function renderLoadout(req, res, { built = false } = {}) {
 
   return res.type('html').send(
     adminPage({
-      title: 'Load out',
+      title: 'Load the van',
       active: '/ops/loadout',
       body: loadoutBody({
         run,
@@ -2679,7 +2695,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
     const body = `
       <div style="max-width:640px;">
         <p class="eyebrow" style="margin:0 0 8px;">Stickers</p>
-        <h1 style="margin:0 0 16px;font-size:40px;line-height:1.05;">Bag labels</h1>
+        <h1 style="margin:0 0 16px;font-size:40px;line-height:1.05;">Bag stickers</h1>
         <p style="font-size:16px;line-height:1.65;color:var(--ink-700);">
           A label is a blank sticker until a driver puts it on a bag and enters
           its code. Print a roll, keep them in the van. They are what lets a bag
@@ -2761,7 +2777,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>`;
 
     return res.type('html').send(
-      adminPage({ title: 'Bag labels', active: '', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues })
     );
   } catch (err) {
     return next(err);
@@ -2866,7 +2882,7 @@ router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
 router.get('/ops/process', guard, withIssues, (req, res) => {
   res.type('html').send(
     adminPage({
-      title: 'How it works',
+      title: 'How it all works',
       active: '/ops/process',
       // The page is built for the person reading it - a driver is never sent
       // the sections that are not his.
@@ -2960,7 +2976,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     `;
 
     res.type('html').send(
-      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: 'Needs a person', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues })
     );
   } catch (err) {
     next(err);
