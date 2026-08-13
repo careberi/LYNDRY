@@ -184,6 +184,15 @@ exactly the border width**, so the outline opens where the tail joins and no
 hairline shows through. It was tried as a rotated square and as a big ink
 triangle stacked behind — both left visible artifacts. Don't rebuild it.
 
+**`.ly-logo` reserves the tail's height as bottom padding, and the tail sits in
+it at `bottom: 0`.** The tail is absolutely positioned, so before this the logo
+measured as if it were only the bubble and anything placed underneath set its
+margin against the wrong edge — the sign-in page asked for 32px and rendered
+11px, with "Operations" tucked under the point. Reserving it once here means a
+margin under the logo is the margin you get, in every variant. **Never give the
+tail a negative offset again**: it would leave the box, and `bottom` is measured
+from the padding box, so padding alone does not fix it.
+
 **Both wrappers carry `line-height: 0; font-size: 0`.** Without that a stray
 line box drops the tail a few pixels and the bubble's border shows as a line
 above it.

@@ -46,6 +46,18 @@
   line-height: 0;
   font-size: 0;
   text-decoration: none;
+
+  /* THE BOX HAS TO INCLUDE THE TAIL.
+     The tail is absolutely positioned, so it hangs outside the element and the
+     logo measures as if it were just the bubble. Anything placed underneath
+     then sets its margin against the bubble and the tail eats it - on the
+     sign-in page a 32px gap rendered as 11px, with "Operations" tucked under
+     the point.
+     Reserving the overhang here rather than padding every call site means a
+     margin under the logo is the margin you actually get, on every page and
+     in every variant. The exact overhang is the tail's height less the border
+     width it overlaps the bubble by. */
+  padding-bottom: calc(var(--ly-tail-h, 26px) - var(--ly-bw, 5px));
 }
 
 .ly-logo__bubble {
@@ -100,7 +112,11 @@
 .ly-logo__tail {
   position: absolute;
   left: var(--ly-tail-x, 44px);
-  bottom: calc(var(--ly-tail-h, 26px) * -1 + var(--ly-bw, 5px));
+  /* Sits in the padding .ly-logo reserves for it, so the tail is inside the
+     box rather than hanging under it. It used to be pulled below with a
+     negative offset, which is why anything placed underneath measured its gap
+     against the bubble and got crowded by the point. */
+  bottom: 0;
   width: var(--ly-tail-w, 44px);
   height: var(--ly-tail-h, 26px);
 }
@@ -139,8 +155,10 @@
 .ly-logo--compact .ly-logo__tail {
   background: var(--paper-050);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
+  /* 2px taller, and that extra 2px reaches UP into the bubble - which is the
+     antialiasing fix described above, not a change to where the point lands. */
   height: calc(var(--ly-tail-h, 26px) + 2px);
-  bottom: calc(var(--ly-tail-h, 26px) * -1 + var(--ly-bw, 5px));
+  bottom: 0;
 }
 .ly-logo--nav .ly-logo__tail svg,
 .ly-logo--footer .ly-logo__tail svg,
