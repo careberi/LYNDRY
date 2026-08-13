@@ -99,47 +99,96 @@ function washLines(preferences) {
 // pricing code, and if it ever is, the control Neil asked for two sessions ago
 // has been removed: a partner scale reading 400 instead of 40 would be a
 // $1,000 charge on a customer's card with nobody of ours in between.
-function weightCard(order, code, token, justSaved) {
-  const ours = order.weight_lb == null ? null : Number(order.weight_lb);
-  const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
+function weightCard(label, order, siblings, code, token, justSaved) {
+  // ONE BAG AT A TIME. A laundromat weighs what is in front of them, and that
+  // is a bag - so the figure belongs on the bag. It used to be written to the
+  // order, so typing a weight against bag 1 set it for the whole order and bag
+  // 2's page showed the same number back as though it had been weighed too.
+  const theirs = label.partner_weight_lb == null ? null : Number(label.partner_weight_lb);
+
+  const total = siblings.length;
+  const done = siblings.filter((b) => b.partner_weight_lb != null).length;
 
   if (theirs != null) {
-    // Asks the same function the issue-raising does, rather than carrying its
-    // own idea of "too far apart". This said "more than a pound" while the
-    // real tolerance was 2 lb or 5% of the bag, so a laundromat could be told
-    // it had been flagged when it had not.
-    const check = partnersCore.compareWeights(order);
-    const disagrees = Boolean(check && check.overThreshold);
+    const allIn = done === total;
+
+    // The comparison that means anything is TOTAL against TOTAL: everything
+    // they weighed against the one number our driver wrote down. Comparing a
+    // half-weighed order against a full one flags every laundromat as light.
+    const theirTotal = siblings.reduce((t, b) => t + Number(b.partner_weight_lb || 0), 0);
+    const check = allIn
+      ? partnersCore.compareWeights({
+          weight_lb: order.weight_lb,
+          partner_weight_lb: theirTotal,
+        })
+      : null;
 
     return `
     <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 10px;">Your weight</p>
+      <p class="eyebrow" style="margin:0 0 10px;">This bag</p>
       <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
         ${escapeHtml(theirs.toFixed(1))} lb
       </div>
       <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:12px 0 0;">
         ${
-          disagrees
-            ? 'Thanks. That is further from our figure than we allow for two scales, so it has been flagged for someone to check. Nothing for you to do.'
-            : 'Thanks, that matches ours.'
+          allIn
+            ? check && check.overThreshold
+              ? `Thanks. All ${total} bags come to ${escapeHtml(theirTotal.toFixed(1))} lb on your scale. ` +
+                'That is further from our figure than we allow for two scales, so it has been ' +
+                'flagged for someone to check. Nothing for you to do.'
+              : `Thanks. All ${total} bags come to ${escapeHtml(theirTotal.toFixed(1))} lb, which matches ours.`
+            : `Thanks. ${done} of ${total} bags weighed - scan the ${
+                total - done === 1 ? 'other one' : `other ${total - done}`
+              } and we will compare the totals.`
         }
+      </p>
+    </div>`;
+  }
+
+  // NOT UNTIL IT IS ACTUALLY WITH THEM.
+  //
+  // Before the driver hands it over the bag is in our van, and a weight typed
+  // against it is somebody scanning a sticker they are holding rather than a
+  // laundromat weighing work they have taken in. The form was rendered
+  // regardless of status, so a bag could be "weighed by the laundromat" while
+  // it was still on the road.
+  if (order.status !== 'AT_PARTNER') {
+    return `
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 10px;">Not with you yet</p>
+      <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:0;">
+        We will ask you to weigh this once our driver has handed it over.
       </p>
     </div>`;
   }
 
   return `
     <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 10px;">What did it weigh?</p>
+      <p class="eyebrow" style="margin:0 0 10px;">What did THIS bag weigh?</p>
       <p style="font-size:15px;color:var(--ink-700);line-height:1.6;margin:0 0 18px;">
-        Your own figure, off your scale. We have already weighed it too - this
-        is a cross-check so a bad scale gets spotted, and it does not change
-        what anybody is charged.
+        Your own figure, off your scale, for this bag only.
+        ${
+          total > 1
+            ? `There ${total === 2 ? 'is 1 other bag' : `are ${total - 1} other bags`} on this order -
+               scan each sticker and weigh them one at a time. We compare the totals.`
+            : ''
+        }
+        We have already weighed it too; this is a cross-check so a bad scale gets
+        spotted, and it does not change what anybody is charged.
       </p>
       ${
         justSaved === 'bad'
           ? `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
                        background:var(--stain-500);color:var(--paper-050);font-weight:600;">
                That did not look like a weight in pounds.
+             </p>`
+          : ''
+      }
+      ${
+        justSaved === 'early'
+          ? `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--stain-500);color:var(--paper-050);font-weight:600;">
+               That bag is not with you yet.
              </p>`
           : ''
       }
@@ -152,6 +201,7 @@ function weightCard(order, code, token, justSaved) {
       </form>
     </div>`;
 }
+
 
 // The other thing a laundromat needs to be able to say: it is done.
 //
@@ -299,6 +349,7 @@ router.get('/o/:code', async (req, res, next) => {
       return res.status(404).type('html').send(nothingHere());
     }
 
+
     // BELT AND BRACES. Delivering an order releases its labels, so a finished
     // bag's sticker should already point at nothing - but that is a write that
     // can fail, and an order delivered before this check existed never had it
@@ -358,7 +409,7 @@ router.get('/o/:code', async (req, res, next) => {
       </div>
     </div>
 
-    ${weightCard(order, code, req.query.t, req.query.weighed)}
+    ${weightCard(label, order, siblings, code, req.query.t, req.query.weighed)}
 
     ${readyCard(order, code, req.query.t)}
 
@@ -430,30 +481,69 @@ router.post('/o/:code/weight', async (req, res, next) => {
       return res.redirect(303, `${back}&weighed=bad`);
     }
 
-    // First answer wins. Somebody re-scanning a sticker should not be able to
-    // quietly revise a figure that has already been compared against ours.
-    if (order.partner_weight_lb != null) return res.redirect(303, back);
+    // NOT UNTIL THE BAG IS ACTUALLY WITH THEM.
+    //
+    // The form is hidden before hand-over, but a hidden form whose route still
+    // fires is not a guard - and this one is on a page with no login at all, so
+    // it is the only guard there is.
+    if (order.status !== 'AT_PARTNER') {
+      return res.redirect(303, `${back}&weighed=early`);
+    }
+
+    // First answer wins, PER BAG. Somebody re-scanning a sticker should not be
+    // able to quietly revise a figure that has already been counted.
+    if (label.partner_weight_lb != null) return res.redirect(303, back);
+
+    await db
+      .from('bag_labels')
+      .update({ partner_weight_lb: weight, partner_weight_at: new Date().toISOString() })
+      .eq('id', label.id);
+
+    // THE COMPARISON IS TOTAL AGAINST TOTAL, and only once every bag is in.
+    //
+    // orders.partner_weight_lb keeps its meaning - it is what our figure is
+    // checked against and what the partner-drift history reads - but it is now
+    // the sum of the bags rather than whatever the first person typed. A
+    // half-weighed order compared against a full one would flag every
+    // laundromat as light.
+    const allBags = await bags.forOrder(order.id);
+    const weighedBags = allBags.filter((b) => b.partner_weight_lb != null);
+
+    if (weighedBags.length < allBags.length) {
+      await orderEvents.record(order.id, {
+        kind: 'PARTNER_WEIGHT',
+        summary:
+          `Laundromat weighed bag ${label.position} at ${weight} lb ` +
+          `(${weighedBags.length} of ${allBags.length})`,
+        became: `${weight} lb`,
+        by: { actor: 'partner' },
+      });
+      return res.redirect(303, `${back}&weighed=1`);
+    }
+
+    const theirTotal = weighedBags.reduce((t, b) => t + Number(b.partner_weight_lb), 0);
 
     await db
       .from('orders')
-      .update({ partner_weight_lb: weight, partner_weight_at: new Date().toISOString() })
+      .update({ partner_weight_lb: theirTotal, partner_weight_at: new Date().toISOString() })
       .eq('id', order.id);
+
+    const weight_ = theirTotal;
 
     // Two scales are never going to agree exactly. More than a pound apart is
     // worth a person looking at, and it goes on the Issues screen rather than
     // into a log nobody reads - a bad scale in either direction is money.
     const ours = order.weight_lb == null ? null : Number(order.weight_lb);
-    const check = partnersCore.compareWeights({ weight_lb: ours, partner_weight_lb: weight });
+    const check = partnersCore.compareWeights({ weight_lb: ours, partner_weight_lb: weight_ });
 
     await orderEvents.record(order.id, {
       kind: 'PARTNER_WEIGHT',
       summary: check
-        ? `Laundromat weighed it ${weight} lb, ${check.absolute.toFixed(1)} lb ${
-            check.heavier ? 'heavier' : 'lighter'
-          } than ours`
-        : `Laundromat weighed it ${weight} lb`,
+        ? `Laundromat weighed all ${allBags.length} bags at ${weight_.toFixed(1)} lb, ` +
+          `${check.absolute.toFixed(1)} lb ${check.heavier ? 'heavier' : 'lighter'} than ours`
+        : `Laundromat weighed all ${allBags.length} bags at ${weight_.toFixed(1)} lb`,
       was: ours == null ? null : `${ours} lb`,
-      became: `${weight} lb`,
+      became: `${weight_.toFixed(1)} lb`,
       by: { actor: 'partner' },
       reason: check && check.overThreshold ? 'Outside the tolerance, so an issue was raised' : null,
     });
@@ -464,7 +554,8 @@ router.post('/o/:code/weight', async (req, res, next) => {
           customer: order.customers,
           order,
           reason:
-            `Scales disagree: we weighed it ${ours} lb, the laundromat says ${weight} lb - ` +
+            `Scales disagree: we weighed it ${ours} lb, the laundromat's ${allBags.length} bags ` +
+            `come to ${weight_.toFixed(1)} lb - ` +
             `${check.absolute.toFixed(1)} lb apart, and we allow ${check.tolerance.toFixed(1)}. ` +
             `Ours is what was charged. Check which scale is wrong before it happens again.`,
         })

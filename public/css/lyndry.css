@@ -151,8 +151,7 @@
    2px and made 2px taller to keep its point in the same place. Antialiasing at
    the top edge then blends cream into cream and there is nothing to see. */
 .ly-logo--nav .ly-logo__tail,
-.ly-logo--footer .ly-logo__tail,
-.ly-logo--compact .ly-logo__tail {
+.ly-logo--footer .ly-logo__tail {
   background: var(--paper-050);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   /* 2px taller, and that extra 2px reaches UP into the bubble - which is the
@@ -161,8 +160,26 @@
   bottom: 0;
 }
 .ly-logo--nav .ly-logo__tail svg,
-.ly-logo--footer .ly-logo__tail svg,
-.ly-logo--compact .ly-logo__tail svg { display: none; }
+.ly-logo--footer .ly-logo__tail svg { display: none; }
+
+/* COMPACT KEEPS THE OUTLINED TAIL, because it is the one variant that sits on
+   PAPER rather than on ink.
+ *
+ * The cream clip-path trick above only works against a dark ground: the
+ * triangle is the bubble's fill, and the ink header draws the outline for it by
+ * contrast. On the cream bag page there is no contrast to borrow, so the tail
+ * vanished and the bubble looked like it had a stray line under it - which is
+ * exactly what a laundromat pointing a camera at a sticker saw.
+ *
+ * So compact falls back to the stroked SVG the full logo uses, and only needs
+ * its stroke scaled down to match its 3px border. */
+.ly-logo--compact .ly-logo__tail {
+  background: none;
+  clip-path: none;
+  height: var(--ly-tail-h, 11px);
+}
+.ly-logo--compact .ly-logo__tail svg { display: block; }
+.ly-logo--compact .ly-logo__tail path { stroke-width: var(--ly-bw, 3px); }
 
 /* Nav — the 68px ink header. */
 .ly-logo--nav {

@@ -647,6 +647,19 @@ Express takes the first route that matches, not the most specific, so
 `/ops/partners/enquiries` was being read as a partner called "enquiries". Guard
 the param rather than relying on the order the routes happen to be written in.
 
+**The laundromat weighs each BAG, and the comparison is total against total.**
+`orders.partner_weight_lb` was a single column, so a three-bag order had one
+place to put a partner's figure — typing a weight against bag 1 set it for the
+whole order and bag 2's page showed the same number back as though it had been
+weighed too. It lives on `bag_labels` now; the order column is the **sum**, and
+is only written once every bag has been weighed. **A half-weighed order must
+never be compared against a full one** — that flags every laundromat as light.
+
+**A bag cannot be weighed before it is handed over.** The form is absent unless
+the order is `AT_PARTNER`, and the route refuses it too. That second check is
+the only real one: this is the page with no login at all, so a hidden form whose
+route still fires is not a guard.
+
 **The scale photo is required, and the partner's weight is a cross-check.**
 `/ops/weight` will not save a first weighing without a photo of the display —
 the number charges a card. A laundromat may enter its own figure on the QR page;
