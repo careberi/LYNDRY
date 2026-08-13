@@ -2,6 +2,7 @@
 
 const orders = require('./orders');
 const billing = require('./billing');
+const events = require('./order-events');
 const payments = require('../providers/payments');
 const { site } = require('../web/site');
 const { config } = require('../config');
@@ -387,9 +388,18 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     notes,
   });
 
-  // NO MONEY MOVES HERE. The card is charged once, at the scale, because that
-  // is the first moment an amount exists. All this asks is whether we have a
-  // card to charge when we get there.
+  await events.record(order.id, {
+    kind: 'CREATED',
+    summary: fromSchedule
+      ? `Booked automatically from a standing order for ${window.date}`
+      : `Booked for ${window.date}`,
+    became: window.date,
+    by: { actor: fromSchedule ? 'system' : 'customer' },
+    reason: window.date !== pickupDate ? `Asked for ${pickupDate}, rolled to the next slot` : null,
+  });
+
+  // NO MONEY MOVES HERE. The card is charged once, at the door. All this asks
+  // is whether we have a card to charge when we get there.
   //
   // `rolled` is whether we had to move them off the day they asked for. Not a
   // failure and not worth arguing about, but worth one clause in the

@@ -5,6 +5,7 @@ const orders = require('./orders');
 const billing = require('./billing');
 const bags = require('./bags');
 const loadout = require('./loadout');
+const events = require('./order-events');
 const recurring = require('./recurring');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
@@ -54,13 +55,25 @@ function refusal(err) {
 
 // Moves the order and texts the customer, in that order. If the transition is
 // refused, nothing is sent — which is the whole reason the text comes second.
-async function step(order, to, buildMessage) {
+async function step(order, to, buildMessage, by = {}) {
   let updated;
+  const from = order.status;
+
   try {
     updated = await orders.transition(order, to);
   } catch (err) {
     return refusal(err);
   }
+
+  // Logged here rather than in each step, so a step added later cannot forget.
+  const words = (s) => String(s).replace(/_/g, ' ').toLowerCase();
+  await events.record(order.id, {
+    kind: 'STATUS',
+    summary: `Moved to ${words(to)}`,
+    was: from,
+    became: to,
+    by,
+  });
 
   const customer = order.customers;
   const message = buildMessage ? buildMessage(updated, customer) : null;
@@ -75,13 +88,14 @@ async function step(order, to, buildMessage) {
 // The moment the laundry becomes our responsibility, and the moment the
 // customer loses the ability to cancel. Both follow from this one call.
 
-async function collect(order, { bagCount } = {}) {
+async function collect(order, { bagCount, by = {} } = {}) {
   // The one new fact: we have the bag. The turnaround was promised in the
   // confirmation; repeating it in every text is what Neil flagged.
   const result = await step(
     order,
     'IN_PROCESS',
-    () => `We've got your laundry! We'll text you the weight and the total once it's on the scale.`
+    () => `We've got your laundry! We'll text you the weight and the total once it's on the scale.`,
+    by
   );
 
   if (!result.ok) return result;
@@ -128,11 +142,11 @@ function needsWeightFirst(order) {
   };
 }
 
-async function dropAtPartner(order, { partnerId } = {}) {
+async function dropAtPartner(order, { partnerId, by = {} } = {}) {
   const unweighed = needsWeightFirst(order);
   if (unweighed) return unweighed;
 
-  const result = await step(order, 'AT_PARTNER', null);
+  const result = await step(order, 'AT_PARTNER', null, by);
   if (!result.ok) return result;
 
   // WHICH laundromat, recorded at the moment the bag changes hands.
@@ -144,13 +158,21 @@ async function dropAtPartner(order, { partnerId } = {}) {
   if (partnerId) {
     await db.from('orders').update({ partner_id: partnerId }).eq('id', order.id);
     result.order.partner_id = partnerId;
+
+    const { data: partner } = await db.from('partners').select('name').eq('id', partnerId).maybeSingle();
+    await events.record(order.id, {
+      kind: 'PARTNER',
+      summary: `Dropped at ${partner ? partner.name : 'a laundromat'}`,
+      became: partner ? partner.name : partnerId,
+      by,
+    });
   }
 
   return result;
 }
 
-async function markReady(order) {
-  return step(order, 'READY', null);
+async function markReady(order, { by = {} } = {}) {
+  return step(order, 'READY', null, by);
 }
 
 // --- Weight, which is where the money happens -------------------------------
@@ -159,7 +181,7 @@ async function markReady(order) {
 // we have the bag, the same way unlocking a locker is an event rather than a
 // state. What it does change is the price, from an estimate to a real number.
 
-async function recordWeight(order, weightLb, photo) {
+async function recordWeight(order, weightLb, photo, { by = {} } = {}) {
   const weight = Number(weightLb);
 
   if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
@@ -312,6 +334,31 @@ async function recordWeight(order, weightLb, photo) {
   const unchanged = previous != null && previous === weight;
   if (!unchanged) await sendAndLog(customer.phone, message, customer.id);
 
+  // A correction is the single most useful thing in this log: it is the answer
+  // to "why was I charged that", and without it a re-weigh is invisible.
+  if (!unchanged) {
+    await events.record(order.id, {
+      kind: 'WEIGHT',
+      summary: isCorrection
+        ? `Weight corrected to ${weight} lb, was ${previous} lb`
+        : `Weighed ${weight} lb`,
+      was: previous == null ? null : `${previous} lb`,
+      became: `${weight} lb`,
+      by,
+      reason: isCorrection ? 'Re-weighed after the first figure was saved' : null,
+    });
+
+    await events.record(order.id, {
+      kind: 'PRICE',
+      summary: minimumApplied
+        ? `Priced ${money(priceCents)}, the minimum`
+        : `Priced ${money(priceCents)} at ${money(rate)} a pound`,
+      was: order.price_cents == null ? null : money(order.price_cents),
+      became: money(priceCents),
+      by,
+    });
+  }
+
   return {
     ok: true,
     order: updated,
@@ -327,7 +374,7 @@ async function recordWeight(order, weightLb, photo) {
 
 // --- Out for delivery -------------------------------------------------------
 
-async function outForDelivery(order) {
+async function outForDelivery(order, { by = {} } = {}) {
   // Same rule as the partner drop: a bag must never get on the van without a
   // weight on record, because the doorstep is the last place it could be
   // weighed and by then it is too late.
@@ -336,7 +383,7 @@ async function outForDelivery(order) {
 
   // The one new fact: it is on the van. They already know the price from the
   // weigh text; repeating it here is what made the thread read like a bill.
-  return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`);
+  return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`, by);
 }
 
 // --- Delivered, with the photo ----------------------------------------------
@@ -346,7 +393,7 @@ async function outForDelivery(order) {
 // somebody's front door should not be publicly readable forever, and a signed
 // storage URL would eventually expire and break the photo.
 
-async function deliver(order, file) {
+async function deliver(order, file, { by = {} } = {}) {
   // NO PHOTO, NO DELIVERY.
   //
   // The photo is the proof. It is the answer to "you never delivered it" and
@@ -418,6 +465,20 @@ async function deliver(order, file) {
 
   const settled = Boolean(charge.ok);
 
+  await events.record(order.id, {
+    kind: 'PAYMENT',
+    summary: charge.nothingDue
+      ? 'Nothing left to charge'
+      : charge.ok
+        ? `Charged ${money(order.price_cents)}`
+        : charge.needsCard
+          ? `Could not charge ${money(order.price_cents)} - no card on file`
+          : `Card declined for ${money(order.price_cents)}`,
+    became: charge.ok ? 'PAID' : 'unpaid',
+    by,
+    reason: charge.ok || charge.nothingDue ? null : 'Delivered anyway and chased by text',
+  });
+
   const result = await step(order, 'DELIVERED', () => {
     const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
 
@@ -446,7 +507,7 @@ async function deliver(order, file) {
         : '';
 
     return `Delivered! Your laundry is at your door.${price}${photo}${offer}`;
-  });
+  }, by);
 
   if (!result.ok) return result;
 

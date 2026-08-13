@@ -355,6 +355,21 @@ logins would be building for somebody who does not exist.
 **Every status change texts the customer**, through `src/core/notify.js`, which
 sends and logs in one step. Nothing may send a text without recording it.
 
+**Every change to an order is written to `order_events`, and the order page
+shows it.** What changed, when, who did it and why — status moves, weights and
+corrections, prices, charges, labels going on and off, which laundromat had it,
+and the laundromat's own weight. **Append only**: nothing updates or deletes a
+row, because a log that can be tidied up afterwards is not evidence of anything.
+
+Status moves are logged inside `step()` in `fulfilment.js`, so a step added
+later cannot forget. Everything else is written deliberately at the moment it
+happens — a generic audit over every column would be mostly "notes changed from
+null to null", and a log that is mostly noise is one nobody reads.
+
+**Recording never breaks the thing being recorded.** `orderEvents.record()`
+swallows its own errors and logs loudly; a driver at a door must never be
+stopped by the audit trail failing.
+
 **Only `src/core/orders.js` may change an order's status.** The endpoints ask it
 to and turn its refusal into a 409, so a driver double-tapping cannot deliver
 an order twice or charge for it twice.

@@ -7,6 +7,7 @@ const bags = require('../core/bags');
 const fulfilment = require('../core/fulfilment');
 const throttle = require('../core/throttle');
 const issues = require('../core/issues');
+const orderEvents = require('../core/order-events');
 const partnersCore = require('../core/partners');
 const { config } = require('../config');
 const { sendAndLog } = require('../core/notify');
@@ -441,6 +442,19 @@ router.post('/o/:code/weight', async (req, res, next) => {
     const ours = order.weight_lb == null ? null : Number(order.weight_lb);
     const check = partnersCore.compareWeights({ weight_lb: ours, partner_weight_lb: weight });
 
+    await orderEvents.record(order.id, {
+      kind: 'PARTNER_WEIGHT',
+      summary: check
+        ? `Laundromat weighed it ${weight} lb, ${check.absolute.toFixed(1)} lb ${
+            check.heavier ? 'heavier' : 'lighter'
+          } than ours`
+        : `Laundromat weighed it ${weight} lb`,
+      was: ours == null ? null : `${ours} lb`,
+      became: `${weight} lb`,
+      by: { actor: 'partner' },
+      reason: check && check.overThreshold ? 'Outside the tolerance, so an issue was raised' : null,
+    });
+
     if (check && check.overThreshold && order.customers) {
       await issues
         .raise({
@@ -516,7 +530,7 @@ router.post('/o/:code/ready', async (req, res, next) => {
     // Already done. Tapping twice is somebody making sure, not an error.
     if (order.status === 'READY') return res.redirect(303, back);
 
-    const result = await fulfilment.markReady(order);
+    const result = await fulfilment.markReady(order, { by: { actor: 'partner' } });
     if (!result.ok) return res.redirect(303, back);
 
     await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });

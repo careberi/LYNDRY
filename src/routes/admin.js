@@ -17,6 +17,7 @@ const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
 const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
+const orderEvents = require('../core/order-events');
 const loadout = require('../core/loadout');
 const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
@@ -971,6 +972,82 @@ function statCard(label, value, bg = 'var(--paper-050)', fg = 'var(--ink-900)') 
 }
 
 // ---------------------------------------------------------------------------
+// What happened to this order
+//
+// The order row says where it IS. This says how it got there - weighed twice
+// and 4 lb lighter the second time, a laundromat 3 lb heavier, which driver
+// tapped delivered, why a charge was waived.
+//
+// Newest first, because the question is almost always "what just happened",
+// not "what happened first".
+// ---------------------------------------------------------------------------
+
+const EVENT_TONE = Object.freeze({
+  CREATED: 'var(--lilac-500)',
+  STATUS: 'var(--suds-500)',
+  WEIGHT: 'var(--sunbeam-500)',
+  PRICE: 'var(--sunbeam-500)',
+  PAYMENT: 'var(--sunbeam-500)',
+  REFUND: 'var(--stain-500)',
+  LABEL: 'var(--paper-300)',
+  PARTNER: 'var(--paper-300)',
+  PARTNER_WEIGHT: 'var(--sunbeam-500)',
+  CANCELLED: 'var(--stain-500)',
+});
+
+function historyCard(events) {
+  if (!events.length) {
+    return `
+  <div class="card card-xl" style="padding:26px;">
+    ${sectionHeading('History', 'Nothing recorded')}
+    <p style="margin:10px 0 0;font-size:15px;color:var(--ink-500);line-height:1.6;">
+      This order predates the log. Anything that happens from now on appears here.
+    </p>
+  </div>`;
+  }
+
+  const rows = events
+    .map((e) => {
+      const change =
+        e.was && e.became
+          ? `<span style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);">
+               ${escapeHtml(e.was)} &rarr; ${escapeHtml(e.became)}
+             </span>`
+          : '';
+
+      return `
+      <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        <span style="flex:none;width:10px;height:10px;margin-top:6px;border:2px solid var(--ink-900);
+                     border-radius:50%;background:${EVENT_TONE[e.kind] || 'var(--paper-300)'};"></span>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:15px;font-weight:600;line-height:1.4;">${escapeHtml(e.summary)}</div>
+          ${change ? `<div style="margin-top:3px;">${change}</div>` : ''}
+          ${
+            e.reason
+              ? `<div style="font-size:14px;color:var(--ink-700);line-height:1.5;margin-top:4px;">
+                   ${escapeHtml(e.reason)}
+                 </div>`
+              : ''
+          }
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-500);margin-top:5px;">
+            ${escapeHtml(dateTime(e.created_at))} &middot; ${escapeHtml(e.actor)}
+          </div>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  return `
+  <div class="card card-xl" style="padding:26px;">
+    ${sectionHeading('History', `${events.length} ${events.length === 1 ? 'entry' : 'entries'}`)}
+    <div style="margin-top:6px;">${rows}</div>
+    <p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:16px 0 0;">
+      Append only. Nothing here can be edited or removed.
+    </p>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // The bags on an order, and the stickers on the bags.
 //
 // A sticker means nothing until it is on a bag. Binding is a driver typing or
@@ -1104,6 +1181,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     // at the door. Both drive the work card.
     const labels = await bags.forOrder(order.id);
     const doorScan = await loadout.allBagsScanned(order.id);
+    const history = await orderEvents.forOrder(order.id);
 
     // Only fetched when the bag could actually be dropped somewhere, so every
     // other order page does not pay for a query it will not use.
@@ -1154,6 +1232,8 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
       ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'))}
       ${scannerScript()}
+
+      <div style="margin-top:28px;">${historyCard(history)}</div>
 
       <div class="grid-2" style="align-items:start;">
 
@@ -1546,19 +1626,29 @@ function orderAction(action, run, middleware = null) {
 
 // req.body is undefined when a form posts nothing at all, which is exactly
 // what a bare button does.
-orderAction('collected', (order, req) => fulfilment.collect(order, { bagCount: (req.body || {}).bag_count }));
-orderAction('at-partner', (order, req) =>
-  fulfilment.dropAtPartner(order, { partnerId: (req.body || {}).partner_id || null })
+orderAction('collected', (order, req) =>
+  fulfilment.collect(order, { bagCount: (req.body || {}).bag_count, by: { opsUser: req.opsUser } })
 );
-orderAction('ready', (order) => fulfilment.markReady(order));
+orderAction('at-partner', (order, req) =>
+  fulfilment.dropAtPartner(order, {
+    partnerId: (req.body || {}).partner_id || null,
+    by: { opsUser: req.opsUser },
+  })
+);
+orderAction('ready', (order, req) => fulfilment.markReady(order, { by: { opsUser: req.opsUser } }));
 // Multipart now: the scale photo rides along with the number it evidences.
 orderAction(
   'weight',
-  (order, req) => fulfilment.recordWeight(order, (req.body || {}).weight_lb, req.file),
+  (order, req) =>
+    fulfilment.recordWeight(order, (req.body || {}).weight_lb, req.file, { by: { opsUser: req.opsUser } }),
   upload.single('photo')
 );
-orderAction('out-for-delivery', (order) => fulfilment.outForDelivery(order));
-orderAction('delivered', (order, req) => fulfilment.deliver(order, req.file), upload.single('photo'));
+orderAction('out-for-delivery', (order, req) =>
+  fulfilment.outForDelivery(order, { by: { opsUser: req.opsUser } })
+);
+orderAction('delivered', (order, req) =>
+  fulfilment.deliver(order, req.file, { by: { opsUser: req.opsUser } }), upload.single('photo')
+);
 
 // ---------------------------------------------------------------------------
 // The load-out pass: /ops/loadout
@@ -1699,6 +1789,15 @@ router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, 
       ? 'That label was already on this order.'
       : `Bag ${result.position} labelled.`;
 
+    if (!result.already) {
+      await orderEvents.record(order.id, {
+        kind: 'LABEL',
+        summary: `Label ${result.label.code} put on bag ${result.position}`,
+        became: result.label.code,
+        by: { opsUser: req.opsUser },
+      });
+    }
+
     return res.redirect(303, `${back}?done=label&note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
@@ -1718,6 +1817,13 @@ router.post('/ops/orders/:id/label/:labelId/release', guard, may('orders.act'), 
     // The remaining bags close the gap, so they never read "1 of 2" and
     // "3 of 2" at the same time.
     await bags.renumber(order.id);
+
+    await orderEvents.record(order.id, {
+      kind: 'LABEL',
+      summary: `Label ${label.code} taken off`,
+      was: label.code,
+      by: { opsUser: req.opsUser },
+    });
 
     return res.redirect(303, `${back}?done=label&note=${encodeURIComponent(`Label ${label.code} taken off.`)}`);
   } catch (err) {

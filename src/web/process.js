@@ -634,6 +634,14 @@ function processBody() {
       those two states at all.
     </p>
     <p>
+      <strong>Every one of these moves is written down.</strong> The order page
+      carries its own history - what changed, when, who tapped it and why -
+      including the things that are not status changes at all: a weight
+      corrected, a laundromat disagreeing, a card declined, a label going on or
+      coming off. It is append only. Nothing in it can be edited or removed,
+      because a log that can be tidied up afterwards is not evidence of anything.
+    </p>
+    <p>
       An order can only be cancelled from
       ${cancellableFrom.map((s) => `<code>${esc(s)}</code>`).join(', ')} -
       in plain terms, right up until the bag is in the van, and never after.
