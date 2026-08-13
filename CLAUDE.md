@@ -1183,6 +1183,21 @@ containing test is end-exclusive.** Somebody who says "noon" means the start of
 the midday run, not the last minute of the morning one. The one exception is the
 very last minute of the day, which has no window after it.
 
+**The AI is handed which windows are still open today; it must never work one
+out.** `booking.windowsToday()` computes it and the prompt states it plainly —
+what is still bookable, what has gone, and which window an already-passed time
+lands in instead. This is not decoration: at 11:43 one morning a customer asked
+for 7am today and the recap read it straight back to them, *"today, 13 Aug at
+7am"*, four hours after it had gone. **The booking code was right all along** and
+would have put them in the midday window; it was the sentence that lied. Asking
+the model to do clock arithmetic against a list of windows is asking it to be
+wrong occasionally, and occasionally is too often for a promise about when a van
+turns up.
+
+**The weekday is given to the AI, never inferred from the date.** The same
+recap called Thursday 13 August a Wednesday. Today's and tomorrow's day names
+are stated in the prompt and it may only count forward from those.
+
 **Somebody who names no time does not get the first window of the day.**
 `DEFAULT_FROM` is 9am: the early window exists for people who ask for it, and
 defaulting to it would quietly promise every silent customer a 6am knock.

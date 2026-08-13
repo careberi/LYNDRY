@@ -381,6 +381,44 @@ function windowFor(date, requestedTime) {
   };
 }
 
+// WHICH WINDOWS ARE STILL BOOKABLE TODAY, and which have gone.
+//
+// The AI used to be handed the clock and the full list of windows and asked to
+// work out which one a requested time would land in. That is arithmetic, and it
+// got it wrong on a real customer: at 11:43 in the morning somebody asked for
+// 7am today and the recap read the time straight back to them - "today, 13 Aug
+// at 7am" - four hours after it had gone.
+//
+// So it is computed here and handed over as an answer instead. Same rule as
+// everywhere else: the code decides, the AI puts it in a sentence.
+function windowsToday(now = nowInService()) {
+  const nowMin = toMinutes(now.time);
+
+  const open = [];
+  const gone = [];
+
+  for (const w of PICKUP_WINDOWS) {
+    // Same cutoff chooseWindow() uses, so the two can never disagree about
+    // whether a window is still worth offering.
+    if (toMinutes(w.end) - WINDOW_CUTOFF_MIN >= nowMin) open.push(w);
+    else gone.push(w);
+  }
+
+  const say = (list) =>
+    list.map((w) => describeWindow(w.start, w.end).replace('between ', '')).join(', ');
+
+  return {
+    open,
+    gone,
+    openText: say(open),
+    goneText: say(gone),
+    // What somebody gets if they ask for a time today that has already passed.
+    // Null when the day is done and anything they ask for rolls to tomorrow.
+    nextText: open.length ? say([open[0]]) : null,
+    dayIsDone: open.length === 0,
+  };
+}
+
 // Every window, as a sentence, for the website and the AI's context.
 function listWindows() {
   return PICKUP_WINDOWS.map((w) => describeWindow(w.start, w.end).replace('between ', '')).join(', ');
@@ -600,6 +638,7 @@ module.exports = {
   windowFor,
   describeWindow,
   listWindows,
+  windowsToday,
   bookPickup,
   whenLine,
   confirmationMessage,
