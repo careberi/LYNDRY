@@ -302,7 +302,7 @@ router.get('/p/:orderId', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// /bergen — the paid-advert landing page and the waitlist behind it.
+// /bergen — the paid-advert landing page.
 //
 // KEPT OUT OF `PAGES` DELIBERATELY. Everything in that list is part of the
 // website: it goes in the sitemap, it is linked from the navigation, and it is
@@ -335,14 +335,22 @@ router.get('/bergen', (req, res) => {
   );
 });
 
-// POST /bergen/join — one row in `waitlist`, and nothing else.
+// POST /bergen/join — a customer, exactly like any other.
 //
-// NO TEXT IS SENT. The 10DLC campaign for this is not live, and texting
-// somebody the instant they fill in an advert form is the exact traffic
-// pattern that gets a number blocked. Storing is the whole job.
+// THERE IS NO WAITLIST TABLE. There was one for an afternoon and Neil was
+// right to take it out: somebody who gave us their number, ticked the consent
+// box and is about to be texted is a customer, and this codebase already has
+// one shape for that. A parallel table would have meant every count, every
+// board and every "who have we got" answer quietly disagreed with itself
+// depending on which one it read.
+//
+// So this does what the home page's hero form does: starts a conversation.
+// That creates the row with its consent record, grants whatever promotion is
+// on auto-grant, and sends the welcome - which knows the service is closed and
+// says so. The only thing added here is where they came from.
 //
 // Answers JSON because the page submits with fetch and swaps the confirmation
-// in without navigating - which is what keeps the Meta event on the same page
+// in without navigating, which is what keeps the Meta event on the same page
 // view as the submit.
 const JOIN_LIMIT = 8;
 const JOIN_WINDOW_MS = 10 * 60 * 1000;
@@ -351,12 +359,14 @@ router.post('/bergen/join', async (req, res) => {
   const body = req.body || {};
   const ip = clientIp(req);
 
-  // A success shape, used for the honeypot and for a duplicate as well as for
-  // a genuine save. Anything that is not our problem to explain gets this.
+  // The shape a visitor gets whatever happened, short of us breaking. The
+  // honeypot, an opted-out number and somebody we already know all land here:
+  // none of them is the visitor's problem to be told about, and an opted-out
+  // number being told anything different would turn this page into a way of
+  // finding out who is a customer.
   const ok = () => res.json({ ok: true });
 
   try {
-    // The honeypot. Told it worked, so whatever filled it has no signal.
     if (String(body.website || '').trim()) {
       console.warn('Dropped a /bergen signup that filled the honeypot field.');
       return ok();
@@ -368,10 +378,6 @@ router.post('/bergen/join', async (req, res) => {
 
     const phone = normalisePhone(body.phone);
 
-    // ONE FIELD NOW. The page asked for a street and a ZIP and does not any
-    // more: this is cold paid traffic on a phone, and every extra field is a
-    // reason to leave. The columns stay nullable so the two rows taken while
-    // the longer form was up keep what they had.
     if (!phone) {
       return res.status(400).json({ ok: false, error: 'That does not look like a US mobile number.' });
     }
@@ -379,32 +385,53 @@ router.post('/bergen/join', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Please tick the box so we are allowed to text you.' });
     }
 
-    const clean = (v) => {
-      const s = String(v == null ? '' : v).trim().slice(0, 120);
-      return s || null;
-    };
-
-    const { error } = await db.from('waitlist').insert({
-      phone_e164: phone,
-      consent_at: new Date().toISOString(),
-      source: 'bergen',
-      utm_source: clean(body.utm_source),
-      utm_medium: clean(body.utm_medium),
-      utm_campaign: clean(body.utm_campaign),
-      utm_content: clean(body.utm_content),
-      ip,
-      user_agent: String(req.headers['user-agent'] || '').slice(0, 400) || null,
+    const started = await onboarding.startConversation({
+      phone,
+      consentSource: 'WEB_BERGEN',
+      consentIp: ip,
     });
 
-    // 23505 is the unique index on the number. Somebody pressing the button
-    // twice, or coming back through a second advert, is not an error and must
-    // not be shown one: a stranger who sees a failure assumes we lost them and
-    // does not try again.
-    if (error && error.code !== '23505') throw error;
+    if (!started.ok) {
+      // Almost always an opted-out number. Logged, not surfaced.
+      console.log(`/bergen refused ${phone}: ${started.reason}`);
+      return ok();
+    }
 
-    if (error) console.log(`/bergen: ${phone} was already on the waitlist.`);
-    else console.log(`/bergen: ${phone} joined the waitlist.`);
+    // WHERE THEY CAME FROM, and only on the way in.
+    //
+    // Stamped once, when the row is created, and never on somebody we already
+    // knew. First touch is the honest answer to "which advert found this
+    // person"; overwriting it would mean the last campaign they happened to
+    // click always took the credit, including from campaigns that were only
+    // ever shown to people we already had.
+    if (started.created) {
+      const clean = (v) => {
+        const s = String(v == null ? '' : v).trim().slice(0, 120);
+        return s || null;
+      };
 
+      const utm = {
+        utm_source: clean(body.utm_source),
+        utm_medium: clean(body.utm_medium),
+        utm_campaign: clean(body.utm_campaign),
+        utm_content: clean(body.utm_content),
+      };
+
+      if (Object.values(utm).some(Boolean)) {
+        await db
+          .from('customers')
+          .update(utm)
+          .eq('id', started.customer.id)
+          .then(({ error }) => {
+            // Attribution failing must never fail a signup. The customer, the
+            // consent and the text are the parts that matter and have already
+            // happened by here.
+            if (error) console.error(`/bergen: could not record UTMs: ${error.message}`);
+          });
+      }
+    }
+
+    console.log(`/bergen: ${phone} ${started.created ? 'signed up' : 'was already with us'}.`);
     return ok();
   } catch (err) {
     console.error('/bergen/join failed:', err.message);

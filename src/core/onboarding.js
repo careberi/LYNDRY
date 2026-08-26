@@ -26,7 +26,11 @@ const { site } = require('../web/site');
 // tree this product exists to avoid.
 // ---------------------------------------------------------------------------
 
-const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'INBOUND_TEXT'];
+// WEB_BERGEN is the advert landing page. It is its own source rather than
+// being folded into WEB_HERO because an audit asks WHICH page somebody ticked
+// the box on, and "the one we were paying to send them to" is a different
+// answer from "the home page".
+const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'WEB_BERGEN', 'INBOUND_TEXT'];
 
 // What we say to somebody we have never spoken to.
 //
@@ -51,27 +55,30 @@ function welcomeMessage({ open = true, promoBlurb = null } = {}) {
 
   if (open) return `${what}Want to schedule a pickup?`;
 
-  // DELIBERATELY SHORTER THAN THE OPEN VERSION. This one has to carry the
-  // promotion's own sentence as well, and 160 characters is a segment - so the
-  // half describing the service is cut back to make room rather than letting
-  // the whole thing quietly cost double to every signup.
-  // WITH A PROMOTION, THE SALES PITCH GOES. They typed their number into our
-  // home page thirty seconds ago, so what we do and what it costs is the page
-  // they are still looking at - and the promotion is the part they do not know
-  // yet. Keeping both put it over a segment and doubled the cost of every
-  // signup during exactly the period we are trying to collect numbers.
-  if (promoBlurb) {
-    return (
-      `It's ${site.name}, and you're on the list. We're not booking pickups yet, ` +
-      `but ${promoBlurb}. We'll text you the moment we open.`
-    );
-  }
+  // CLOSED. Neil's words, and longer than the open version on purpose: this is
+  // the only message somebody gets after handing over their number to an
+  // advert, and it has three jobs at once - say what we do, say we cannot book
+  // them yet without sounding like a dead end, and hand them the reason it was
+  // worth signing up anyway.
+  //
+  // It runs to three segments. That is a real cost per signup and it is the
+  // right trade here: the alternative is a terse message to somebody who just
+  // cost money to acquire.
+  //
+  // The discount sentence comes from the promotion's own blurb rather than
+  // being written in, so it stays true if the offer changes and disappears
+  // entirely if there is no offer at all.
+  const cannot =
+    `I should mention we're not booking pickups at the moment, so I can't get ` +
+    `one on the calendar just yet, but we'll let you know the second that changes.`;
 
-  return (
-    `It's ${site.name}. Laundry collected from your door and back the ${site.turnaround}, ` +
-    `${site.pricePerLb} a pound. We're not booking yet but you're on the list. ` +
-    `We'll text you when we open.`
-  );
+  const good = promoBlurb ? ` Good news is ${promoBlurb} waiting for you.` : '';
+
+  // trimmed: `what` ends with the space that separates it from the open
+  // version's question, and left in it shows as a trailing space on the line.
+  return `${what.trim()}
+
+${cannot}${good} Happy to answer anything about how it all works in the meantime.`;
 }
 
 // Somebody we already know, who typed their number in again.
