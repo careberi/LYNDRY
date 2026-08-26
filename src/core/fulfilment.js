@@ -9,6 +9,7 @@ const loadout = require('./loadout');
 const events = require('./order-events');
 const recurring = require('./recurring');
 const partners = require('./partners');
+const promotions = require('./promotions');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -866,13 +867,31 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
   const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
   const byWeight = Math.round(billable * rate);
-  const priceCents = Math.max(byWeight, floor);
+  const beforeDiscount = Math.max(byWeight, floor);
+
+  // THE DISCOUNT COMES OFF AFTER THE MINIMUM, not before it.
+  //
+  // Taking 20% off an 8 lb load's $16 and then flooring at $25 would charge
+  // the full minimum and hand the customer nothing, while the order still
+  // claimed a promotion had been used. The minimum is what the work is worth;
+  // the promotion is what we chose to give away against it.
+  const deal = await promotions
+    .discountFor(order.customers, order, beforeDiscount)
+    .catch((err) => {
+      console.error(`Could not work out a discount for ${order.id}: ${err.message}`);
+      return null;
+    });
+
+  const discountCents = deal ? deal.cents : 0;
+  const priceCents = Math.max(0, beforeDiscount - discountCents);
 
   const { data: settled, error } = await db
     .from('orders')
     .update({
       billable_weight_lb: billable,
       price_cents: priceCents,
+      discount_cents: discountCents,
+      promotion_id: deal ? deal.promotion.id : null,
       weight_settled_at: new Date().toISOString(),
       weight_held_at: null,
     })
@@ -890,9 +909,20 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
   if (error) throw error;
   if (!settled) return { ok: true, already: true, priceCents: order.price_cents };
 
+  // Spent at the moment the price is settled, and only once - settleWeight is
+  // idempotent, so a second call finds the order already settled and never
+  // reaches here.
+  if (deal) {
+    await promotions.redeem(deal.grantId, order.id).catch((err) =>
+      console.error(`Could not redeem a promotion on ${order.id}: ${err.message}`)
+    );
+  }
+
   await events.record(order.id, {
     kind: 'PRICE',
-    summary: `Priced at ${money(priceCents)} on ${billable} lb - ${basis}`,
+    summary:
+      `Priced at ${money(priceCents)} on ${billable} lb - ${basis}` +
+      (deal ? `, less ${money(discountCents)} for ${deal.promotion.name}` : ''),
     was: ours == null ? null : `${ours} lb ours` + (theirs == null ? '' : `, ${theirs} lb theirs`),
     became: `${billable} lb billed`,
     by,
@@ -911,12 +941,19 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
   });
 
   if (customer) {
-    const minimumApplied = priceCents > byWeight;
+    const minimumApplied = beforeDiscount > byWeight;
 
     const opening = `Your laundry weighed ${billable} lb`;
-    const howPriced = minimumApplied
-      ? `${opening}, which is under our ${money(floor)} minimum, so the total is ${money(priceCents)}.`
-      : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
+    const base = minimumApplied
+      ? `${opening}, which is under our ${money(floor)} minimum, so that is ${money(beforeDiscount)}.`
+      : `${opening}, so that is ${money(beforeDiscount)} at ${site.pricePerLb} a pound.`;
+
+    // SAY WHAT CAME OFF. A total that is lower than the arithmetic the
+    // customer can do themselves reads as a mistake unless the reason is in
+    // the same message.
+    const howPriced = deal
+      ? `${base} ${money(discountCents)} off for ${deal.promotion.name}, so the total is ${money(priceCents)}.`
+      : `${base.replace(/that is /, 'the total is ')}`;
 
     const card = billing.describeCard(customer);
     const paid =

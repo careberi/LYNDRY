@@ -6,6 +6,7 @@ const events = require('./order-events');
 const payments = require('../providers/payments');
 const { site } = require('../web/site');
 const { config } = require('../config');
+const settings = require('./settings');
 
 // ---------------------------------------------------------------------------
 // The rules for booking a pickup, in one place.
@@ -453,6 +454,7 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 //
 // Returns one of:
 //   { ok: true, order }
+//   { ok: false, reason: 'not_taking_orders', detail }   detail is Neil's reason, or null
 //   { ok: false, reason: 'no_address' }
 //   { ok: false, reason: 'bad_date', detail }      detail is a full sentence
 //   { ok: false, reason: 'already_booked', order }
@@ -460,6 +462,17 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 // ---------------------------------------------------------------------------
 
 async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes, fromSchedule } = {}) {
+  // NOT TAKING ORDERS. Checked first, before anything else, because when the
+  // service is shut every other reason a booking might fail is beside the
+  // point - and because this is the guard that has to hold when the AI is
+  // talked round. The prompt asks it not to book; this is what makes sure.
+  //
+  // A STANDING ORDER IS NOT EXEMPT. The nightly job books tomorrow's recurring
+  // pickups, and a van that is not running cannot collect them either.
+  if (!(await settings.takingOrders())) {
+    return { ok: false, reason: 'not_taking_orders', detail: await settings.pausedReason() };
+  }
+
   if (!hasAddress(customer)) return { ok: false, reason: 'no_address' };
 
   // Checked at booking rather than only at signup, because an address can be

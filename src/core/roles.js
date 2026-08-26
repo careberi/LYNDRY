@@ -34,6 +34,11 @@ const PERMISSIONS = Object.freeze({
   // they live, why they were out. Fewer people should be able to read that
   // than can look up an order.
   'messages.view': 'Read the text conversations',
+  // Pausing the business, running promotions, texting everybody. Admin only,
+  // and separate from team.manage because it is a different kind of authority:
+  // one decides who works here, this one decides whether we are open and what
+  // we give away.
+  'service.manage': 'Open or close the service, run promotions, send a text blast',
   'partners.view': 'See partner enquiries',
   'partners.manage': 'Mark enquiries contacted or closed',
   'team.manage': 'Add people, change roles, switch people off',

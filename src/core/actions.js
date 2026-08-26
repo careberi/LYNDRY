@@ -46,6 +46,13 @@ async function createOrder(customer, input) {
 
   if (!result.ok) {
     switch (result.reason) {
+      // Shut. The reason is Neil's own words, worked into the sentence rather
+      // than pasted after it, so the customer reads one message from a person
+      // instead of an apology with a notice stapled to the end.
+      case 'not_taking_orders':
+        return result.detail
+          ? `We're not booking pickups just yet - ${result.detail} I'll let you know the moment we are.`
+          : `We're not booking pickups just yet, sorry. I'll let you know the moment we are.`;
       case 'no_address':
         return `I don't have an address on file for you. Send your street address and I'll get it saved.`;
       case 'out_of_area':

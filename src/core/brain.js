@@ -4,6 +4,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const { site } = require('../web/site');
 const booking = require('./booking');
+const settings = require('./settings');
+const promotions = require('./promotions');
 const recurring = require('./recurring');
 
 // ---------------------------------------------------------------------------
@@ -366,7 +368,7 @@ const TOOLS = [
 // The system prompt
 // ---------------------------------------------------------------------------
 
-function systemPrompt(today, now) {
+function systemPrompt(today, now, { paused = null, promo = null } = {}) {
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
 
 Right now it is ${now.time} on ${today}, which is a ${booking.readableDate(today)}, in New Jersey.
@@ -374,7 +376,25 @@ Tomorrow is ${booking.addDays(today, 1)}, a ${booking.readableDate(booking.addDa
 THOSE TWO LINES ARE THE ONLY DAY NAMES YOU MAY USE WITHOUT WORKING ONE OUT, and you must never guess a weekday from a date - it said "Wednesday August 13" to a real customer on a Thursday. If you name a day, it has to be one of the two above or one you counted forward from them. Work out any date the customer mentions from that, and always give dates as YYYY-MM-DD.
 You know what time it is, so never ask the customer. "Is 3pm still ahead of us?" is never a question you may ask; you can see the clock above.
 
-WHERE WE GO
+${
+  paused
+    ? `WE ARE NOT TAKING ORDERS RIGHT NOW. THIS OVERRIDES EVERYTHING BELOW.
+${paused.reason ? `The reason, in Neil's words: ${paused.reason}` : 'No reason has been given to pass on.'}
+You may NOT call create_order, reschedule_order, or promise a pickup, a date or a time. The booking code refuses anyway, so trying only produces an error the customer never sees the point of.
+Say we are not booking yet, work the reason above into your own sentence rather than reciting it, and say we will let them know the moment we are. Then STOP. Do not ask for an address, a date, or wash preferences to "get them ready" - collecting details for a booking that cannot happen is a worse experience than a straight answer.
+You may still answer questions about the service, save a name and address if they volunteer one, and hand off to a human.
+${promo ? `
+THEY HAVE THIS, AND YOU MAY MENTION IT ONCE: ${promo.blurb}
+Say it as good news alongside the bad. Do not restate the terms, do not work out what anything would cost, and never invent a discount that is not on this line.` : ''}
+
+`
+    : promo
+      ? `THEY HAVE A PROMOTION ON THEIR ACCOUNT, AND YOU MAY MENTION IT: ${promo.blurb}
+Mention it once, when it is relevant. Do NOT work out what it makes anything cost, do not restate the terms, and never invent one that is not on this line. Code applies it when the order is priced.
+
+`
+      : ''
+}WHERE WE GO
 ${site.serviceArea}, and nowhere else.
 YOU DO NOT DECIDE WHETHER AN ADDRESS IS IN THE AREA. The code does, when the address is saved, and it refuses one that is not. So never work it out from the name of a town, never list the towns or counties we cover, never say "we don't come that far" and never say "yes we cover you" before an address has been saved. Somebody asking whether we reach them gets asked for the address, and saving it is what answers. If saving it comes back refused, that reply is the whole answer - do not explain where the line is or guess when we might get there, because nobody has drawn it.
 Same rule as everything else you cannot see: you are reading a text message, not looking at a map.
@@ -668,6 +688,16 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
   const now = booking.nowInService();
   const today = now.date;
 
+  // Read once per message and handed to the prompt as FACTS rather than left
+  // for the model to work out. Whether we are open, and what somebody is owed,
+  // are both money-adjacent - and the rule is the same as everywhere else in
+  // this file: the AI is told, it does not decide.
+  const open = await settings.takingOrders();
+  const paused = open ? null : { reason: await settings.pausedReason() };
+
+  const held = customer && customer.id ? await promotions.heldBy(customer.id).catch(() => []) : [];
+  const promo = held.length ? held[0] : null;
+
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 2000,
@@ -677,7 +707,7 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
     output_config: { effort: 'low' },
 
     system:
-      `${systemPrompt(today, now)}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
+      `${systemPrompt(today, now, { paused, promo })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
       (followUp
         ? `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
           `The reply queued to send them is: "${followUp.reply}"\n` +

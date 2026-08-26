@@ -539,6 +539,14 @@ POST /ops/run/dropped        handed the load over at the laundromat
 GET  /ops/routing            the live day on a map; ?date= ?from= ?driver= pick it
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
+GET  /ops/settings           are we taking orders, and why not
+POST /ops/settings/close     stop taking orders, with a reason
+POST /ops/settings/open      start again
+GET  /ops/promotions         what we are giving away
+POST /ops/promotions         create one
+POST /ops/promotions/:id/end stop new grants; holders keep it
+GET  /ops/broadcast          send one text to everybody
+POST /ops/broadcast          actually send it
 GET  /ops/partners           the businesses we work with, added by hand
 GET  /ops/partners/:id       one partner, and their scale against ours
 GET  /ops/partners/enquiries leads from the website form
@@ -860,8 +868,63 @@ two what-if calculators.
 |---|---|
 | **Today** | What is happening right now: Your round, Orders, Routing, Load the van, Issues |
 | **People** | Everyone you deal with: Customers, Conversations, Team, Partners |
-| **Business** | What you set up and what it earns: Bag stickers, Unit economics, Route planner |
+| **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag stickers, Unit economics, Route planner |
 | **Help** | How it all works, What happens to a bag |
+
+**Pre-launch lives under Business**: Taking orders?, Promotions, Text blast,
+all behind `service.manage` (Admin only). Closing the business, giving money
+away and texting everybody at once are three things a driver or a salesperson
+should never be able to do.
+
+**The switch is not a feature flag.** `app_settings.taking_orders` changes what
+the AI says AND what `bookPickup()` will do, and the second half is the one
+that matters: the prompt asks, the code refuses. Same split as the service
+area, because a model asked nicely not to book will eventually book. It shuts
+the text thread, the website form and the standing-order job together.
+
+**Turning it OFF takes a reason; turning it ON takes nothing.** Neil's call, and
+the reason is cleared on reopening so a stale one cannot surface the next time
+somebody pauses without typing one. The AI works the reason into its own
+sentence rather than reciting it.
+
+**A closed service shows a banner on every ops page**, like the issues one. The
+switch lives on a screen nobody visits daily, and an owner who forgets it is off
+reads an empty board as a quiet week rather than a shut shop.
+
+**The AI never invents money, and promotions do not change that.** It is handed
+the promotion's `blurb` - a sentence a person wrote - and may repeat it once. It
+cannot create one, decide who qualifies, or work out what anything costs. Code
+grants, code redeems, code discounts. Same rule as `open_locker()` taking no
+arguments.
+
+**A grant is a promise to a person**, so `customer_promotions` is separate from
+`promotions`. Ending a promotion stops new grants and never withdraws it from
+somebody already told they had it.
+
+**The discount comes off AFTER the minimum.** Taking 20% off an 8 lb load's $16
+and then flooring at $25 would charge the full minimum and hand the customer
+nothing while the order claimed a promotion had been used. And the price text
+names what came off - a total lower than the arithmetic the customer can do
+themselves reads as a mistake unless the reason is in the same message.
+
+**Only one promotion is auto-granted at a time**, enforced by a partial unique
+index, and creating a second stands the first down rather than failing. Two
+would both attach to a new number and the order of application would silently
+decide what somebody got.
+
+**A text blast never includes an unsubscribed number.** They are excluded in the
+query rather than filtered afterwards, so a number that replied STOP never
+reaches the sending loop. Sends are one at a time: a burst reads as spam to a
+carrier, and `notify.js` logs each one as it goes, so a failure halfway through
+leaves an accurate record of who actually got it.
+
+**The canned welcome knows whether we are open.** It goes out before the AI ever
+sees the conversation, so it is the one reply that cannot work out for itself
+that we are shut - and inviting somebody to book something that will then be
+refused is a worse first impression than saying so. With a promotion attached it
+drops the sales pitch entirely: they typed their number into the home page
+thirty seconds ago, so the price is the page they are still looking at, and
+keeping both put it over one segment.
 
 **Issues sits under Today**, not with the people it happens to be about. An open
 issue is something happening now that is stopping an order moving, so it belongs

@@ -32,6 +32,9 @@ const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
 const partners = require('../core/partners');
 const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
+const { settingsBody, promotionsBody, broadcastBody, AUDIENCES } = require('../web/prelaunch-page');
+const settings = require('../core/settings');
+const promotions = require('../core/promotions');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -219,6 +222,11 @@ const OPS_MENUS = Object.freeze([
   {
     label: 'Business',
     items: [
+      // First in the group: whether we are open decides whether anything else
+      // in here matters.
+      { href: '/ops/settings', label: 'Taking orders?', permission: 'service.manage' },
+      { href: '/ops/promotions', label: 'Promotions', permission: 'service.manage' },
+      { href: '/ops/broadcast', label: 'Text blast', permission: 'service.manage' },
       { href: '/ops/labels', label: 'Bag stickers', permission: 'orders.act' },
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
       // "Route planner" says which of the two it is. This one is a day you
@@ -268,7 +276,7 @@ function opsNav(user, active) {
 // route planner's map library, and so far nothing else. Kept as a parameter
 // rather than letting pages write their own <head> so that every ops screen
 // still gets the same stylesheets, the same noindex and the same furniture.
-function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '' }) {
+function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '', serviceClosed = false }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -309,6 +317,27 @@ ${head}
   </header>
 
   <main class="container" style="padding-top:36px;padding-bottom:96px;">
+${
+    // SHUT. Sunbeam rather than Stain, because this is a state Neil chose
+    // rather than a problem to fix - but it is on every page for the same
+    // reason the issues banner is: a switch on a screen nobody visits daily is
+    // a switch that gets left on by accident.
+    serviceClosed
+      ? `<a href="/ops/settings" style="display:block;text-decoration:none;margin-bottom:20px;">
+           <div class="card" style="padding:16px 24px;background:var(--sunbeam-500);">
+             <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+               <div>
+                 <div class="eyebrow" style="margin:0 0 4px;">Pre-launch</div>
+                 <div style="font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.1;">
+                   Not taking orders
+                 </div>
+               </div>
+               <span style="font-weight:700;text-decoration:underline;">Change it</span>
+             </div>
+           </div>
+         </a>`
+      : ''
+}
 ${
     // THE FLAG THAT WILL NOT GO AWAY.
     //
@@ -878,6 +907,15 @@ const guard = auth.requireAdminPage;
 // zero rather than taking the dashboard down.
 async function withIssues(req, res, next) {
   req.openIssues = await issues.openCount().catch(() => 0);
+
+  // A CLOSED SERVICE HAS TO BE IMPOSSIBLE TO FORGET. The switch lives on one
+  // screen nobody visits daily, and an owner who forgets it is off watches the
+  // board stay empty and concludes the business is quiet rather than shut.
+  req.serviceClosed = await settings
+    .takingOrders()
+    .then((open) => !open)
+    .catch(() => false);
+
   next();
 }
 
@@ -1150,7 +1188,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       }
     `;
 
-    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -1707,7 +1745,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       </div>`;
       })()}`;
 
-    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -1762,7 +1800,7 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
       ${sectionHeading('Everyone', 'Customers', (people || []).length)}
       ${table(headings, rows)}`;
 
-    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -1919,7 +1957,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         ])
       )}`;
 
-    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -2043,7 +2081,7 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),
         user: req.opsUser,
-        openIssues: req.openIssues,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
   } catch (err) {
@@ -2294,7 +2332,7 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
           showMoney: roles.can(req.opsUser, 'money.view'),
         }),
         user: req.opsUser,
-        openIssues: req.openIssues,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
   } catch (err) {
@@ -2324,7 +2362,7 @@ async function renderLoadout(req, res, { built = false } = {}) {
         problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
       }),
       user: req.opsUser,
-      openIssues: req.openIssues,
+      openIssues: req.openIssues, serviceClosed: req.serviceClosed,
     })
   );
 }
@@ -2840,7 +2878,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>`;
 
     return res.type('html').send(
-      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     return next(err);
@@ -2902,7 +2940,7 @@ router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) =>
       active: '/ops/economics',
       body: runEconomicsBody(),
       user: req.opsUser,
-      openIssues: req.openIssues,
+      openIssues: req.openIssues, serviceClosed: req.serviceClosed,
     })
   );
 });
@@ -2924,7 +2962,7 @@ router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
       head: routePlannerHead(),
       body: routePlannerBody(),
       user: req.opsUser,
-      openIssues: req.openIssues,
+      openIssues: req.openIssues, serviceClosed: req.serviceClosed,
     })
   );
 });
@@ -2954,7 +2992,7 @@ router.get('/ops/journey', guard, withIssues, (req, res) => {
       active: '/ops/journey',
       body: journeyBody(),
       user: req.opsUser,
-      openIssues: req.openIssues,
+      openIssues: req.openIssues, serviceClosed: req.serviceClosed,
     })
   );
 });
@@ -2968,7 +3006,7 @@ router.get('/ops/process', guard, withIssues, (req, res) => {
       // the sections that are not his.
       body: processBody(req.opsUser),
       user: req.opsUser,
-      openIssues: req.openIssues,
+      openIssues: req.openIssues, serviceClosed: req.serviceClosed,
     })
   );
 });
@@ -3056,7 +3094,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     `;
 
     res.type('html').send(
-      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -3208,7 +3246,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
       }`;
 
     res.type('html').send(
-      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -3283,7 +3321,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           active: '/ops/messages',
           body: `<a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
                  <p style="font-size:17px;margin-top:20px;">That is not a phone number we could read.</p>`,
-          user: req.opsUser, openIssues: req.openIssues,
+          user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed,
         })
       );
     }
@@ -3337,7 +3375,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       </div>`;
 
     res.type('html').send(
-      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues })
+      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -3413,6 +3451,297 @@ router.post('/ops/partners/send-overview', guard, may('partners.manage'), async 
   }
 });
 
+// ===========================================================================
+// Pre-launch: the switch, promotions, and the text blast.
+//
+// All three behind service.manage, which is Admin only. Closing the business,
+// giving money away and texting everybody at once are the three things a
+// salesperson or a driver should never be able to do.
+// ===========================================================================
+
+router.get('/ops/settings', guard, withIssues, may('service.manage'), async (req, res, next) => {
+  try {
+    return res.type('html').send(
+      adminPage({
+        title: 'Are we taking orders?',
+        active: '/ops/settings',
+        body: settingsBody({
+          settings: await settings.read({ fresh: true }),
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/settings/close', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const reason = String((req.body || {}).reason || '').trim();
+    await settings.setTakingOrders(false, reason, req.opsUser && req.opsUser.id);
+    return res.redirect(
+      303,
+      `/ops/settings?note=${encodeURIComponent('Closed. The AI will not book anything.')}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/settings/open', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    await settings.setTakingOrders(true, null, req.opsUser && req.opsUser.id);
+    return res.redirect(
+      303,
+      `/ops/settings?note=${encodeURIComponent('Open. Bookings are live again.')}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// --- Promotions ------------------------------------------------------------
+
+async function promoCounts() {
+  const { data } = await db.from('customer_promotions').select('promotion_id, redeemed_at');
+  const counts = {};
+  for (const row of data || []) {
+    const c = (counts[row.promotion_id] = counts[row.promotion_id] || { granted: 0, redeemed: 0 });
+    c.granted += 1;
+    if (row.redeemed_at) c.redeemed += 1;
+  }
+  return counts;
+}
+
+router.get('/ops/promotions', guard, withIssues, may('service.manage'), async (req, res, next) => {
+  try {
+    return res.type('html').send(
+      adminPage({
+        title: 'Promotions',
+        active: '/ops/promotions',
+        body: promotionsBody({
+          list: await promotions.list({ includeEnded: true }),
+          counts: await promoCounts(),
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/promotions', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const name = String(body.name || '').trim().slice(0, 60);
+    const blurb = String(body.blurb || '').trim().slice(0, 200);
+    const kind = body.kind === 'AMOUNT_OFF' ? 'AMOUNT_OFF' : 'PERCENT_OFF';
+    const raw = Number(body.value);
+
+    if (!name || !blurb || !Number.isFinite(raw) || raw <= 0) {
+      return res.redirect(
+        303,
+        `/ops/promotions?problem=${encodeURIComponent('Needs a name, a sentence and an amount.')}`
+      );
+    }
+
+    // Percent stays a whole number; dollars become whole cents. Money is never
+    // stored as a decimal here, exactly as everywhere else.
+    const value = kind === 'PERCENT_OFF' ? Math.round(raw) : Math.round(raw * 100);
+
+    if (kind === 'PERCENT_OFF' && value > 100) {
+      return res.redirect(
+        303,
+        `/ops/promotions?problem=${encodeURIComponent('Over 100% would pay them to send us laundry.')}`
+      );
+    }
+
+    const autoGrant = body.auto_grant === 'yes';
+
+    // ONLY ONE AUTO-GRANT AT A TIME. The unique index refuses a second, so the
+    // old one is stood down first rather than the save failing with a database
+    // error nobody can act on.
+    if (autoGrant) {
+      await db
+        .from('promotions')
+        .update({ auto_grant: false })
+        .eq('auto_grant', true)
+        .eq('status', 'ACTIVE');
+    }
+
+    const { error } = await db.from('promotions').insert({
+      name,
+      blurb,
+      kind,
+      value,
+      applies_to: body.applies_to === 'EVERY_ORDER' ? 'EVERY_ORDER' : 'FIRST_ORDER',
+      auto_grant: autoGrant,
+      created_by: req.opsUser && req.opsUser.id,
+    });
+
+    if (error) throw error;
+
+    return res.redirect(
+      303,
+      `/ops/promotions?note=${encodeURIComponent(
+        `${name} is live${autoGrant ? ' and every new number gets it' : ''}.`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/promotions/:id/end', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    // Ending stops NEW grants. Anyone already holding it keeps it, which is
+    // why customer_promotions is a separate table: a promise already made to a
+    // person is not ours to withdraw quietly.
+    const { error } = await db
+      .from('promotions')
+      .update({ status: 'ENDED', auto_grant: false })
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
+    return res.redirect(
+      303,
+      `/ops/promotions?note=${encodeURIComponent('Ended. Anyone already holding it keeps it.')}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// --- The text blast --------------------------------------------------------
+
+// Who is in each group.
+//
+// UNSUBSCRIBED IS EXCLUDED IN THE QUERY, not filtered out afterwards, so a
+// number that replied STOP never reaches the sending loop at all. That is the
+// one rule here that is legally load-bearing.
+async function audienceOf(key) {
+  const { data: people, error } = await db
+    .from('customers')
+    .select('id, phone, status')
+    .neq('status', 'UNSUBSCRIBED');
+
+  if (error) throw error;
+
+  const list = (people || []).filter((c) => c.phone);
+  if (key === 'ALL') return list;
+
+  const { data: orders } = await db.from('orders').select('customer_id');
+  const ordered = new Set((orders || []).map((o) => o.customer_id));
+
+  return key === 'CUSTOMERS'
+    ? list.filter((c) => ordered.has(c.id))
+    : list.filter((c) => !ordered.has(c.id));
+}
+
+router.get('/ops/broadcast', guard, withIssues, may('service.manage'), async (req, res, next) => {
+  try {
+    const counts = {};
+    for (const a of AUDIENCES) counts[a.key] = (await audienceOf(a.key)).length;
+
+    const { data: recent } = await db
+      .from('broadcasts')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(15);
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Send a text blast',
+        active: '/ops/broadcast',
+        body: broadcastBody({
+          counts,
+          recent: recent || [],
+          notice: req.query.note ? String(req.query.note).slice(0, 300) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/broadcast', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const text = String(body.body || '').trim().slice(0, 480);
+    const key = AUDIENCES.some((a) => a.key === body.audience) ? body.audience : 'ALL';
+
+    if (!text) {
+      return res.redirect(303, `/ops/broadcast?problem=${encodeURIComponent('Nothing to send.')}`);
+    }
+
+    if (body.confirm !== 'yes') {
+      return res.redirect(
+        303,
+        `/ops/broadcast?problem=${encodeURIComponent('Tick the box to confirm before sending.')}`
+      );
+    }
+
+    const people = await audienceOf(key);
+
+    if (!people.length) {
+      return res.redirect(
+        303,
+        `/ops/broadcast?problem=${encodeURIComponent('Nobody is in that group.')}`
+      );
+    }
+
+    let sent = 0;
+    let skipped = 0;
+
+    // ONE AT A TIME, on purpose. A hundred texts fired at once is a burst a
+    // carrier reads as spam, and notify.js logs each one as it goes - so a
+    // failure halfway through leaves an accurate record of who actually got it
+    // rather than a count claiming everybody did.
+    for (const person of people) {
+      try {
+        await notify.sendAndLog(person.phone, text, person.id);
+        sent += 1;
+      } catch (err) {
+        skipped += 1;
+        console.error(`Blast to ${person.phone} failed: ${err.message}`);
+      }
+    }
+
+    await db.from('broadcasts').insert({
+      body: text,
+      audience: key,
+      sent_count: sent,
+      skipped_count: skipped,
+      created_by: req.opsUser && req.opsUser.id,
+    });
+
+    return res.redirect(
+      303,
+      `/ops/broadcast?note=${encodeURIComponent(
+        `Sent to ${sent} ${sent === 1 ? 'number' : 'numbers'}` +
+          (skipped ? `, ${skipped} failed and are in the log.` : '.')
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req, res, next) => {
   try {
     const list = await partners.list({ includeEnded: req.query.all === '1' });
@@ -3428,7 +3757,7 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
           baseUrl: config.baseUrl,
         }),
         user: req.opsUser,
-        openIssues: req.openIssues,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
   } catch (err) {
@@ -3443,7 +3772,7 @@ router.get('/ops/partners/new', guard, withIssues, may('partners.manage'), (req,
       active: '/ops/partners',
       body: partnerFormBody({ problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null }),
       user: req.opsUser,
-      openIssues: req.openIssues,
+      openIssues: req.openIssues, serviceClosed: req.serviceClosed,
     })
   );
 });
@@ -3492,7 +3821,7 @@ router.get('/ops/partners/:id/edit', guard, withIssues, may('partners.manage'), 
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),
         user: req.opsUser,
-        openIssues: req.openIssues,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
   } catch (err) {
@@ -3561,7 +3890,7 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
         }),
         user: req.opsUser,
-        openIssues: req.openIssues,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
   } catch (err) {
@@ -3677,7 +4006,7 @@ router.get('/ops/partners/enquiries', guard, withIssues, may('partners.view'), a
              </div>`
       }`;
 
-    res.type('html').send(adminPage({ title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -3853,7 +4182,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
       `;
 
-    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues }));
+    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -3932,7 +4261,7 @@ router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, r
           problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
         }),
         user: req.opsUser,
-        openIssues: req.openIssues,
+        openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
   } catch (err) {

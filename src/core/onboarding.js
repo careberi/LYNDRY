@@ -1,6 +1,8 @@
 'use strict';
 
 const db = require('../db');
+const promotions = require('./promotions');
+const settings = require('./settings');
 const booking = require('./booking');
 const { sendAndLog } = require('./notify');
 const { site } = require('../web/site');
@@ -30,20 +32,52 @@ const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'INBOUND_TEXT'];
 //
 // One message, and it asks for both things we need at once. Two questions in
 // two texts would be a form with extra steps.
-function welcomeMessage() {
-  // Offers the thing rather than demanding details for it. Asking a stranger
-  // for their name and home address in the first sentence is too forward;
-  // "want to schedule a pickup?" makes the next step obvious and is still a
-  // question they can ignore in favour of asking what we cost.
-  return (
+// The canned welcome. Takes what the service is currently doing, because the
+// two situations need different last sentences.
+//
+// OPEN: offers the thing rather than demanding details for it. Asking a
+// stranger for their name and home address in the first sentence is too
+// forward; "want to schedule a pickup?" makes the next step obvious and is
+// still a question they can ignore in favour of asking what we cost.
+//
+// CLOSED: it must NOT offer a pickup. This message goes out before the AI ever
+// sees the conversation, so it is the one reply that cannot work out for itself
+// that we are shut - and inviting somebody to book something that will then be
+// refused is a worse first impression than saying so plainly.
+function welcomeMessage({ open = true, promoBlurb = null } = {}) {
+  const what =
     `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
-    `it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. ` +
-    `Want to schedule a pickup?`
+    `it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. `;
+
+  if (open) return `${what}Want to schedule a pickup?`;
+
+  // DELIBERATELY SHORTER THAN THE OPEN VERSION. This one has to carry the
+  // promotion's own sentence as well, and 160 characters is a segment - so the
+  // half describing the service is cut back to make room rather than letting
+  // the whole thing quietly cost double to every signup.
+  // WITH A PROMOTION, THE SALES PITCH GOES. They typed their number into our
+  // home page thirty seconds ago, so what we do and what it costs is the page
+  // they are still looking at - and the promotion is the part they do not know
+  // yet. Keeping both put it over a segment and doubled the cost of every
+  // signup during exactly the period we are trying to collect numbers.
+  if (promoBlurb) {
+    return (
+      `It's ${site.name}, and you're on the list. We're not booking pickups yet, ` +
+      `but ${promoBlurb}. We'll text you the moment we open.`
+    );
+  }
+
+  return (
+    `It's ${site.name}. Laundry collected from your door and back the ${site.turnaround}, ` +
+    `${site.pricePerLb} a pound. We're not booking yet but you're on the list. ` +
+    `We'll text you when we open.`
   );
 }
 
 // Somebody we already know, who typed their number in again.
-function welcomeBackMessage(customer) {
+function welcomeBackMessage(customer, { open = true } = {}) {
+  if (!open) return `Welcome back. We're not booking pickups yet, but we'll text you the moment we are.`;
+
   return booking.hasAddress(customer)
     ? `Welcome back. Say when you'd like a pickup and I'll book it.`
     : `Welcome back. I still need your name and address before I can book a pickup.`;
@@ -88,7 +122,10 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
     // Their consent record is NOT overwritten. The first time they agreed is
     // the one that matters legally, and rewriting the timestamp every time
     // somebody retypes their number would destroy the evidence.
-    if (sendWelcome) await sendAndLog(phone, welcomeBackMessage(existing), existing.id);
+    if (sendWelcome) {
+      const open = await settings.takingOrders();
+      await sendAndLog(phone, welcomeBackMessage(existing, { open }), existing.id);
+    }
     return { ok: true, customer: existing, created: false };
   }
 
@@ -112,6 +149,27 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
 
   console.log(`New conversation with ${phone} (consent: ${consentSource})`);
 
+  // A NEW NUMBER GETS WHATEVER IS ON AUTO-GRANT, and gets it here rather than
+  // when they book - which is the whole point of it during pre-launch. Somebody
+  // who texts us before we open should already hold the thing they were
+  // promised for texting, even though there is nothing to spend it on yet.
+  //
+  // Best effort on purpose. A promotion failing to attach must never stop a
+  // customer being created; they would then be unable to text us at all, which
+  // is a far worse outcome than a discount somebody has to be given by hand.
+  let grantedBlurb = null;
+
+  try {
+    const promo = await promotions.autoGrant();
+    if (promo) {
+      await promotions.grant(customer.id, promo.id);
+      grantedBlurb = promo.blurb;
+      console.log(`  granted "${promo.name}" to ${phone}`);
+    }
+  } catch (err) {
+    console.error(`Could not grant a promotion to ${phone}: ${err.message}`);
+  }
+
   // Only the web hero sends the canned welcome, because there the person
   // typed a number into a box and there is nothing to reply TO.
   //
@@ -119,7 +177,14 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   // it. "Can you grab my laundry tomorrow?" answered with a script that asks
   // no question about laundry reads as a robot. Their message goes to the AI
   // instead, which knows they are brand new and answers what they said.
-  if (sendWelcome) await sendAndLog(phone, welcomeMessage(), customer.id);
+  if (sendWelcome) {
+    const open = await settings.takingOrders();
+    await sendAndLog(
+      phone,
+      welcomeMessage({ open, promoBlurb: open ? null : grantedBlurb }),
+      customer.id
+    );
+  }
 
   return { ok: true, customer, created: true };
 }

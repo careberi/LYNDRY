@@ -550,6 +550,12 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
 
     if (!result.ok) {
       const message = {
+        // The web form is the other front door, and it has to be shut too -
+        // bookPickup() refuses either way, but a customer deserves the reason
+        // rather than "that did not work".
+        not_taking_orders: result.detail
+          ? `We’re not booking pickups just yet — ${result.detail}`
+          : 'We’re not booking pickups just yet. We’ll be in touch the moment we are.',
         no_address: 'We need your address before we can collect. Email us and we’ll add it.',
         out_of_area: `We don’t reach your address just yet — we cover ${site.serviceArea} right now.`,
         no_preferences: 'Tell us how you like it washed first — text us and we’ll get you set up in a minute.',
