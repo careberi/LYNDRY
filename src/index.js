@@ -66,6 +66,20 @@ app.use(
   })
 );
 
+// Open Graph images. A separate mount from the stylesheets because these are
+// fetched by Facebook's and Twitter's crawlers rather than by a browser
+// following a fingerprinted link - the URL has to stay stable, or a share
+// scraped last week shows a broken image today.
+//
+// Cached hard but NOT immutable, so a replaced image is picked up within the
+// day rather than never.
+app.use(
+  '/og',
+  express.static(path.join(__dirname, '..', 'public', 'og'), {
+    maxAge: config.env === 'production' ? '1d' : 0,
+  })
+);
+
 // The unfingerprinted path stays mounted so that a link from an older cached
 // page, or a bookmark, still resolves. Deliberately NOT cached: this is the
 // path that can go stale.

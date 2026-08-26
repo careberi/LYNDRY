@@ -11,6 +11,7 @@ const throttle = require('../core/throttle');
 const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
 const { renderPage } = require('../web/layout');
+const bergen = require('../web/bergen');
 
 const router = express.Router();
 
@@ -145,6 +146,12 @@ function escapeHtml(value) {
 // Everything else — brackets, dashes, spaces, a leading 1 — is normalised away
 // so that the number a customer typed on the website matches the number their
 // text message arrives from. Returns null if it isn't a usable US mobile.
+// The visitor's address, taking the proxy header first because the app runs
+// behind one in production and req.ip is then the proxy.
+function clientIp(req) {
+  return String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+}
+
 function normalisePhone(raw) {
   const digits = String(raw || '').replace(/\D/g, '');
 
@@ -294,6 +301,123 @@ router.get('/p/:orderId', async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// /bergen — the paid-advert landing page and the waitlist behind it.
+//
+// KEPT OUT OF `PAGES` DELIBERATELY. Everything in that list is part of the
+// website: it goes in the sitemap, it is linked from the navigation, and it is
+// meant to be found. This page is none of those things. It exists at the end
+// of an advert and nowhere else, it is noindex, it is disallowed in robots,
+// and nothing on lyndry.com links to it.
+//
+// It also renders `bare`, which strips the navigation and the footer, because
+// on traffic we are paying for every link is a way to leave without filling
+// the form in.
+// ---------------------------------------------------------------------------
+
+const BERGEN_DESCRIPTION =
+  'Get on the founding list. 20% off your first order. Leave the bag at your ' +
+  'door and it comes back the next day washed, dried and folded.';
+
+router.get('/bergen', (req, res) => {
+  res.type('html').send(
+    renderPage({
+      title: 'Laundry pickup in Bergen County',
+      description: BERGEN_DESCRIPTION,
+      path: '/bergen',
+      body: readPageBody('bergen.html'),
+      bare: true,
+      noindex: true,
+      ogImage: '/og/bergen.png',
+      head: bergen.pixel(),
+      extra: { BERGEN_SCRIPT: bergen.script },
+    })
+  );
+});
+
+// POST /bergen/join — one row in `waitlist`, and nothing else.
+//
+// NO TEXT IS SENT. The 10DLC campaign for this is not live, and texting
+// somebody the instant they fill in an advert form is the exact traffic
+// pattern that gets a number blocked. Storing is the whole job.
+//
+// Answers JSON because the page submits with fetch and swaps the confirmation
+// in without navigating - which is what keeps the Meta event on the same page
+// view as the submit.
+const JOIN_LIMIT = 8;
+const JOIN_WINDOW_MS = 10 * 60 * 1000;
+
+router.post('/bergen/join', async (req, res) => {
+  const body = req.body || {};
+  const ip = clientIp(req);
+
+  // A success shape, used for the honeypot and for a duplicate as well as for
+  // a genuine save. Anything that is not our problem to explain gets this.
+  const ok = () => res.json({ ok: true });
+
+  try {
+    // The honeypot. Told it worked, so whatever filled it has no signal.
+    if (String(body.website || '').trim()) {
+      console.warn('Dropped a /bergen signup that filled the honeypot field.');
+      return ok();
+    }
+
+    if (throttle.hit(`bergenjoin:${ip}`, JOIN_LIMIT, JOIN_WINDOW_MS)) {
+      return res.status(429).json({ ok: false, error: 'Too many tries. Give it a minute.' });
+    }
+
+    const phone = normalisePhone(body.phone);
+    const address = String(body.address || '').trim().slice(0, 200);
+    const zip = String(body.zip || '').trim();
+
+    if (!phone) {
+      return res.status(400).json({ ok: false, error: 'That does not look like a US mobile number.' });
+    }
+    if (!address) {
+      return res.status(400).json({ ok: false, error: 'We need the street we would collect from.' });
+    }
+    if (!/^\d{5}$/.test(zip)) {
+      return res.status(400).json({ ok: false, error: 'Five digits, like 07410.' });
+    }
+    if (body.sms_consent !== 'yes') {
+      return res.status(400).json({ ok: false, error: 'Please tick the box so we are allowed to text you.' });
+    }
+
+    const clean = (v) => {
+      const s = String(v == null ? '' : v).trim().slice(0, 120);
+      return s || null;
+    };
+
+    const { error } = await db.from('waitlist').insert({
+      phone_e164: phone,
+      street_address: address,
+      zip,
+      consent_at: new Date().toISOString(),
+      source: 'bergen',
+      utm_source: clean(body.utm_source),
+      utm_medium: clean(body.utm_medium),
+      utm_campaign: clean(body.utm_campaign),
+      utm_content: clean(body.utm_content),
+      ip,
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 400) || null,
+    });
+
+    // 23505 is the unique index on the number. Somebody pressing the button
+    // twice, or coming back through a second advert, is not an error and must
+    // not be shown one: a stranger who sees a failure assumes we lost them and
+    // does not try again.
+    if (error && error.code !== '23505') throw error;
+
+    if (error) console.log(`/bergen: ${phone} was already on the waitlist.`);
+    else console.log(`/bergen: ${phone} joined the waitlist.`);
+
+    return ok();
+  } catch (err) {
+    console.error('/bergen/join failed:', err.message);
+    return res.status(500).json({ ok: false, error: 'That did not save. Try again in a moment.' });
+  }
+});
+
 router.get('/robots.txt', (req, res) => {
   // /ops is the internal tool. It is behind a sign-in anyway, but there is no
   // reason for a crawler to be knocking on it.
@@ -303,7 +427,7 @@ router.get('/robots.txt', (req, res) => {
   res
     .type('text/plain')
     .send(
-      `User-agent: *\nAllow: /\nDisallow: /ops\nDisallow: /account\nSitemap: ${config.baseUrl}/sitemap.xml\n`
+      `User-agent: *\nAllow: /\nDisallow: /ops\nDisallow: /account\nDisallow: /bergen\nSitemap: ${config.baseUrl}/sitemap.xml\n`
     );
 });
 

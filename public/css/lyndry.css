@@ -1199,3 +1199,44 @@
 @media (max-width: 520px) {
   .flow { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==========================================================================
+   /bergen — the paid-advert landing page.
+   Two classes it needs that nothing else did. Everything else on that page is
+   the existing system.
+   ========================================================================== */
+
+/* An inline validation message. Sits under the field it belongs to and is
+   hidden with the `hidden` attribute rather than a class, so a form that never
+   runs JavaScript simply never shows one. */
+.form-error {
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--stain-500);
+  margin: 6px 0 0;
+}
+.form-error[hidden] { display: none; }
+
+/* The "text JOIN instead" line. HIDDEN ON DESKTOP ON PURPOSE: an sms: link on
+   a desktop browser either does nothing at all or hands the visitor to some
+   app they did not want, and a dead link under the button on the one page we
+   are paying for traffic to is worse than no link. */
+.sms-fallback {
+  display: none;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-600);
+  margin: 16px 0 0;
+}
+.sms-fallback a {
+  color: var(--ink-900);
+  font-weight: 700;
+  text-decoration: underline;
+  /* A phone number is a tap target on the device where this shows. */
+  padding: 2px 0;
+}
+
+@media (max-width: 900px) {
+  .sms-fallback { display: block; }
+}

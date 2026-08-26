@@ -2,6 +2,7 @@
 
 const { site, tokens } = require('./site');
 const { CSS_BASE } = require('./assets');
+const { config } = require('../config');
 
 // ---------------------------------------------------------------------------
 // The page layout.
@@ -238,7 +239,34 @@ function footer() {
 
 // ---------------------------------------------------------------------------
 
-function renderPage({ title, description, path, body, extra = {}, noindex = false }) {
+// `bare` strips the navigation and the footer and puts a single unclickable
+// logo at the top left. It exists for paid-advert landing pages, where every
+// link is a way to leave without filling the form in - including the logo,
+// which on every other page goes home.
+//
+// `head` is raw markup injected into <head>, for the one thing an advert page
+// needs that no other page does: a tracking pixel.
+// The whole header on an advert page: the mark, and nowhere to click.
+function bareHeader() {
+  return `
+    <header class="site-nav">
+      <div class="container" style="display:flex;align-items:center;height:68px;">
+        ${logo('nav', { href: null, label: site.name })}
+      </div>
+    </header>`;
+}
+
+function renderPage({
+  title,
+  description,
+  path,
+  body,
+  extra = {},
+  noindex = false,
+  bare = false,
+  head = '',
+  ogImage = null,
+}) {
   const fullTitle = path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`;
 
   const html = `<!doctype html>
@@ -252,6 +280,15 @@ function renderPage({ title, description, path, body, extra = {}, noindex = fals
   <meta property="og:title" content="${fullTitle}">
   <meta property="og:description" content="${description}">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="${config.baseUrl}${path}">
+  ${
+    ogImage
+      ? `<meta property="og:image" content="${config.baseUrl}${ogImage}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">`
+      : ''
+  }
   <!-- Signed-in pages carry someone's address and order history. They are
        behind a sign-in, but there is no reason for a crawler to try. -->
   ${noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
@@ -288,13 +325,14 @@ function renderPage({ title, description, path, body, extra = {}, noindex = fals
   <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
   <link rel="stylesheet" href="${CSS_BASE}/icons.css">
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
+${head}
 </head>
 <body>
-${navBar(path)}
+${bare ? bareHeader() : navBar(path)}
 <main>
 ${body}
 </main>
-${footer()}
+${bare ? '' : footer()}
 
 <script>
   // ---------------------------------------------------------------------

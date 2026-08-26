@@ -1,0 +1,170 @@
+<!-- /bergen — the paid-advert landing page.
+
+     NOT THE HOME PAGE, and the difference is the point. The home page sells a
+     live service to whoever wandered in. This sells a waitlist to cold traffic
+     that cost money to get here, on a phone, and it has exactly one thing to
+     do: the form.
+
+     SO IT HAS NO EXITS. No navigation, no footer, no "Get started", and the
+     logo is not a link. Every one of those is a way to leave without filling
+     it in, and on paid traffic a way out is money out.
+
+     Everything visual is the existing system: same tokens, same dot field,
+     same phone mock, same form and consent styling. Nothing new was invented
+     for it, which is also why it does not need reviewing against the design
+     system every time it changes.
+
+     COPY IS NEIL'S, VERBATIM. Do not tidy it, and do not put dashes in it. -->
+
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="padding-top:34px;padding-bottom:44px;">
+    <div class="hero-row">
+
+      <div class="hero-copy">
+        <p class="eyebrow eyebrow-brand">Opening in Bergen County &middot; mid September</p>
+
+        <h1 class="display-1" style="margin:14px 0 0;">Get on the founding list.</h1>
+
+        <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:42ch;margin:20px 0 26px;">
+          20% off your first order. Leave the bag at your door and it comes back
+          the next day washed, dried and folded. {{PRICE_PER_LB}} a pound,
+          {{MINIMUM}} minimum.
+        </p>
+
+        <!-- The form is replaced in place on success, so both states live here
+             and JavaScript swaps which one is hidden. A page navigation would
+             lose the Meta pixel event and cost a round trip on a phone. -->
+        <form id="join" method="post" action="/bergen/join" novalidate>
+
+          <!-- The honeypot, named `website` exactly as the partners form names
+               it. A person never sees it; something filling every input does.
+               Hidden with CSS rather than the hidden attribute so a bot reading
+               the markup still finds it. Anything that fills it is dropped and
+               still told it worked. -->
+          <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+            <label for="website">Website</label>
+            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+          </div>
+
+          <div class="stack">
+            <div class="field">
+              <label class="field-label" for="phone">Mobile number</label>
+              <input class="input input-lg" id="phone" name="phone" type="tel" inputmode="tel"
+                     autocomplete="tel" autocapitalize="off" spellcheck="false"
+                     placeholder="(201) 555-0142" required>
+              <p class="form-error" id="err-phone" hidden></p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="address">Street address</label>
+              <input class="input input-lg" id="address" name="address" type="text"
+                     autocomplete="street-address" placeholder="12 Berdan Ave" required>
+              <p class="form-error" id="err-address" hidden></p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="zip">ZIP</label>
+              <input class="input input-lg" id="zip" name="zip" type="text" inputmode="numeric"
+                     autocomplete="postal-code" maxlength="5" pattern="^\d{5}$"
+                     placeholder="07410" required>
+              <p class="form-error" id="err-zip" hidden></p>
+            </div>
+          </div>
+
+          <!-- WORD FOR WORD THE HOME PAGE'S BOX. It appears on the home page,
+               /signup and quoted on /sms-terms, and a carrier comparing them
+               expects one sentence. They drifted once already. Never reword
+               it here alone. -->
+          <label class="check" style="margin-top:18px;max-width:540px;">
+            <input type="checkbox" name="sms_consent" value="yes" required>
+            <span class="check-box">{{ICON_CHECK}}</span>
+            <span class="check-text" style="color:var(--ink-800);">
+              By checking this box you agree to receive text messages from
+              lyndry at the number provided, including messages sent by
+              autodialer. Consent is not a condition of purchase. Message and
+              data rates may apply. Message frequency varies. Reply HELP for
+              help, STOP to cancel. See our <a href="/privacy">Privacy Policy</a>
+              and <a href="/sms-terms">SMS Terms</a>.
+            </span>
+          </label>
+          <p class="form-error" id="err-consent" hidden></p>
+
+          <button class="btn btn-primary btn-lg" type="submit" id="join-btn"
+                  style="margin-top:20px;width:100%;max-width:320px;">
+            Save my spot {{ICON_ARROW}}
+          </button>
+
+          <p class="form-error" id="err-form" hidden style="margin-top:14px;"></p>
+
+          <!-- Mobile only. An sms: link on a desktop browser either does
+               nothing or opens something nobody wants, so it is not rendered
+               there rather than being shown and disappointing somebody. -->
+          <p class="sms-fallback">
+            Rather just text? Text JOIN to
+            <a href="sms:+12015541877?&amp;body=JOIN">{{PHONE}}</a>
+          </p>
+        </form>
+
+        <!-- Swapped in on success. Starts hidden and holds the same vertical
+             space the form did, so the page does not jump. -->
+        <div id="done" hidden>
+          <div class="card card-xl" style="padding:32px;max-width:460px;background:var(--suds-300);">
+            <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;
+                       line-height:1.1;margin:0 0 12px;">
+              You're on the list.
+            </h2>
+            <p style="font-size:17px;line-height:1.55;margin:0;">
+              We'll text you the day we start. Your 20% off is locked in.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- The same phone mock as the home page, and the same reason for it:
+           the product IS a text thread, so showing one says more than a
+           paragraph about how easy it is. -->
+      <div class="phone-wrap" aria-hidden="true">
+        <div class="phone-bezel">
+          <div class="phone-screen">
+            <div class="phone-island"></div>
+
+            <div class="phone-status">
+              <span>9:41</span>
+              <span></span>
+            </div>
+
+            <div class="phone-header">
+              {{AVATAR}}
+              <div class="phone-name">LYNDRY</div>
+            </div>
+
+            <div class="phone-thread">
+              <div class="phone-day">Today 7:42 PM</div>
+              <div class="bubble bubble-out">laundry tomorrow</div>
+              <div class="bubble bubble-in">Booked for tomorrow. Leave the bag outside your door, you don't need to be in.</div>
+              <div class="bubble bubble-out">make it monday</div>
+              <div class="bubble bubble-in">Moved to Monday.</div>
+              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so that is $37.00. 20% off your first order, so the total is $29.60.</div>
+              <div class="bubble bubble-out">where is it</div>
+              <div class="bubble bubble-in">Folded and on the van, back this evening. We'll text a photo.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="fact-rail">
+      <span>Next day turnaround</span>
+      <span>No app, no account</span>
+      <span>Houses and apartments</span>
+      <span>Cancel any time by text</span>
+    </div>
+
+  </div>
+</section>
+
+<!-- The form script. Kept in src/web/bergen.js and injected here, because this
+     file is a token template and a script full of braces is a poor neighbour
+     for a token substitution. -->
+{{BERGEN_SCRIPT}}
