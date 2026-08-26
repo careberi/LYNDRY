@@ -247,10 +247,16 @@ function footer() {
 // `head` is raw markup injected into <head>, for the one thing an advert page
 // needs that no other page does: a tracking pixel.
 // The whole header on an advert page: the mark, and nowhere to click.
+//
+// Uses the SAME two classes as the real navigation - .site-header for the ink
+// bar and .site-header-bar for the row inside it - so it is the same 68px band
+// of ink the rest of the site has. The first version put .site-nav on the
+// header, which is the class for the row of LINKS inside the bar and carries
+// no background at all, so the header rendered transparent over the page.
 function bareHeader() {
   return `
-    <header class="site-nav">
-      <div class="container" style="display:flex;align-items:center;height:68px;">
+    <header class="site-header">
+      <div class="container site-header-bar">
         ${logo('nav', { href: null, label: site.name })}
       </div>
     </header>`;

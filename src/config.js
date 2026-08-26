@@ -91,11 +91,13 @@ const config = Object.freeze({
 
   // Meta's advertising pixel, used only on the /bergen advert page.
   //
-  // BLANK MEANS NO PIXEL AT ALL, and that is the safe default rather than an
-  // oversight: a tracking script with no id loads a third-party request from
-  // every visitor and reports nothing. Left empty the page carries no Meta
-  // code whatever, which is also what we want on a local machine.
-  metaPixelId: (process.env.META_PIXEL_ID || '').trim(),
+  // THE ID IS IN THE CODE ON PURPOSE. A pixel id is not a secret - it is in the
+  // page source of every site that uses one, and anybody can read ours by
+  // viewing /bergen. Putting it here rather than in Railway means the advert
+  // page works the moment it deploys, with nothing for Neil to go and set.
+  //
+  // META_PIXEL_ID still overrides it, for a second pixel or a test one.
+  metaPixelId: (process.env.META_PIXEL_ID || '1014591328609412').trim(),
 
   // What it costs to run the van for a mile, and how long a stop takes.
   //

@@ -12,22 +12,28 @@
 
 const { config } = require('../config');
 
-// Meta's standard base snippet, with two departures from the copy-paste
-// version they hand you, both deliberate:
+// Meta's base snippet, verbatim apart from where it runs.
 //
-//   NO PageView ON LOAD. Neil asked for `Lead` on a successful submit and
-//   nothing else. Meta's default snippet fires PageView the moment it loads;
-//   left in, every bounce would be an event and the campaign's numbers would
-//   be about traffic rather than signups. `fbq('init')` is still called, since
-//   without it the later Lead event has nowhere to go.
+// PageView IS INCLUDED, and an earlier version left it out. "Fire Lead on a
+// successful submit, not on page load" is about the LEAD event; dropping
+// PageView as well costs the two things the base code is for - a retargeting
+// audience of everybody who saw the page, and Meta reporting the pixel as
+// receiving traffic at all rather than showing it inactive.
 //
-//   NOTHING AT ALL WHEN THE ID IS BLANK. An empty id still loads Meta's script
-//   and still reports to them, from every visitor, while recording nothing
-//   useful for us. Off is off.
+// PRODUCTION ONLY. The id is in the code, so without this guard every local
+// page load and every one of my own test submits would land in Neil's real
+// pixel and quietly corrupt the campaign's numbers before it had run.
 function pixel() {
   if (!config.metaPixelId) return '';
 
+  if (config.env !== 'production') {
+    return `
+  <!-- Meta pixel suppressed outside production so local traffic
+       does not land in the real campaign's numbers. -->`;
+  }
+
   return `
+  <!-- Meta Pixel Code -->
   <script>
     !function(f,b,e,v,n,t,s)
     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -35,12 +41,15 @@ function pixel() {
     if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
     n.queue=[];t=b.createElement(e);t.async=!0;
     t.src=v;s=b.getElementsByTagName(e)[0];
-    s.parentNode.insertBefore(t,s)}(window,document,'script',
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
     fbq('init', '${config.metaPixelId}');
+    fbq('track', 'PageView');
   </script>
   <noscript><img height="1" width="1" style="display:none"
-    src="https://www.facebook.com/tr?id=${config.metaPixelId}&ev=PageView&noscript=1"></noscript>`;
+    src="https://www.facebook.com/tr?id=${config.metaPixelId}&ev=PageView&noscript=1"
+  /></noscript>
+  <!-- End Meta Pixel Code -->`;
 }
 
 // The form.
