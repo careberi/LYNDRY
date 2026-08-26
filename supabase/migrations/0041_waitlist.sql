@@ -27,8 +27,11 @@ create table if not exists waitlist (
   -- same person and must not be two rows.
   phone_e164 text not null,
 
-  street_address text not null,
-  zip            text not null,
+  -- Nullable: the advert form asks for a number and nothing else. One field
+  -- converts better on cold mobile traffic, and an address is something we can
+  -- ask for in the thread. Kept as columns for whenever we do.
+  street_address text,
+  zip            text,
 
   -- WHEN THEY TICKED THE BOX, kept as its own column rather than leaning on
   -- created_at. They are the same instant today, and the day somebody imports

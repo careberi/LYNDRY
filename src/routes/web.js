@@ -367,17 +367,13 @@ router.post('/bergen/join', async (req, res) => {
     }
 
     const phone = normalisePhone(body.phone);
-    const address = String(body.address || '').trim().slice(0, 200);
-    const zip = String(body.zip || '').trim();
 
+    // ONE FIELD NOW. The page asked for a street and a ZIP and does not any
+    // more: this is cold paid traffic on a phone, and every extra field is a
+    // reason to leave. The columns stay nullable so the two rows taken while
+    // the longer form was up keep what they had.
     if (!phone) {
       return res.status(400).json({ ok: false, error: 'That does not look like a US mobile number.' });
-    }
-    if (!address) {
-      return res.status(400).json({ ok: false, error: 'We need the street we would collect from.' });
-    }
-    if (!/^\d{5}$/.test(zip)) {
-      return res.status(400).json({ ok: false, error: 'Five digits, like 07410.' });
     }
     if (body.sms_consent !== 'yes') {
       return res.status(400).json({ ok: false, error: 'Please tick the box so we are allowed to text you.' });
@@ -390,8 +386,6 @@ router.post('/bergen/join', async (req, res) => {
 
     const { error } = await db.from('waitlist').insert({
       phone_e164: phone,
-      street_address: address,
-      zip,
       consent_at: new Date().toISOString(),
       source: 'bergen',
       utm_source: clean(body.utm_source),

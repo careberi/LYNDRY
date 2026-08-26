@@ -67,12 +67,8 @@ const script = `
   }
 
   function clearAll() {
-    ['err-phone', 'err-address', 'err-zip', 'err-consent', 'err-form'].forEach(function (id) {
-      show(id, '');
-    });
-    ['phone', 'address', 'zip'].forEach(function (id) {
-      document.getElementById(id).classList.remove('input-error');
-    });
+    ['err-phone', 'err-consent', 'err-form'].forEach(function (id) { show(id, ''); });
+    document.getElementById('phone').classList.remove('input-error');
   }
 
   // E.164, the same rule the server uses: ten digits, or eleven starting with
@@ -104,27 +100,13 @@ const script = `
     event.preventDefault();
     clearAll();
 
-    var phoneRaw = document.getElementById('phone').value;
-    var address = document.getElementById('address').value.trim();
-    var zip = document.getElementById('zip').value.trim();
     var consent = form.querySelector('input[name="sms_consent"]').checked;
-
-    var phone = toE164(phoneRaw);
+    var phone = toE164(document.getElementById('phone').value);
     var bad = false;
 
     if (!phone) {
       show('err-phone', 'That does not look like a US mobile number.');
       document.getElementById('phone').classList.add('input-error');
-      bad = true;
-    }
-    if (!address) {
-      show('err-address', 'We need the street we would collect from.');
-      document.getElementById('address').classList.add('input-error');
-      bad = true;
-    }
-    if (!/^\\d{5}$/.test(zip)) {
-      show('err-zip', 'Five digits, like 07410.');
-      document.getElementById('zip').classList.add('input-error');
       bad = true;
     }
     if (!consent) {
@@ -139,8 +121,6 @@ const script = `
 
     var payload = {
       phone: phone,
-      address: address,
-      zip: zip,
       sms_consent: 'yes',
       website: form.querySelector('input[name="website"]').value,
       utm_source: utm.utm_source || null,

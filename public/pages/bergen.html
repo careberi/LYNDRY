@@ -1,80 +1,172 @@
 <!-- /bergen — the paid-advert landing page.
 
-     NOT THE HOME PAGE, and the difference is the point. The home page sells a
-     live service to whoever wandered in. This sells a waitlist to cold traffic
-     that cost money to get here, on a phone, and it has exactly one thing to
-     do: the form.
+     THIS IS THE HOME PAGE'S HERO, COPIED. Same bubbles, same layout, same
+     phone mock, same form styling, same consent block. Neil asked for exactly
+     that screen and nothing else, so the differences are only these:
 
-     SO IT HAS NO EXITS. No navigation, no footer, no "Get started", and the
-     logo is not a link. Every one of those is a way to leave without filling
-     it in, and on paid traffic a way out is money out.
+       the eyebrow and headline say what this page is for
+       the subhead carries the 20%
+       the form takes a number and posts to /bergen/join instead of /start
+       the fact rail and everything below the hero are gone
+       there is no navigation and no footer, so the only way off the page is
+       the form
 
-     Everything visual is the existing system: same tokens, same dot field,
-     same phone mock, same form and consent styling. Nothing new was invented
-     for it, which is also why it does not need reviewing against the design
-     system every time it changes.
+     ONE FIELD. Address and ZIP were on it and are not any more: this is cold
+     paid traffic on a phone, and every field is a reason to leave.
 
-     COPY IS NEIL'S, VERBATIM. Do not tidy it, and do not put dashes in it. -->
+     If the home page hero changes and this should follow, copy it again
+     rather than hand-editing both. -->
 
-<section class="hero" style="border-bottom:3px solid var(--ink-900);">
-  <div class="container" style="padding-top:34px;padding-bottom:44px;">
+<section class="hero">
+
+  <!-- 72 rising soap bubbles, tinted from five palette colours so the field
+       reads as multicoloured without competing with the headline. Purely
+       decorative, so the layer is hidden from screen readers and cannot be
+       clicked through.
+
+       Every bubble carries a NEGATIVE animation delay, which is what makes the
+       field already full at page load rather than filling up over the first
+       minute. Rises are deliberately slow (16-52s) — a faster pass was tried
+       and read as fizzing.
+
+       Generated rather than hand-written. Regenerate with the snippet in
+       DECISIONS.md if the count or the palette changes. -->
+  <div class="bubbles" aria-hidden="true">
+    <span style="left:1.0%;bottom:-34px;width:14px;height:14px;background:rgba(255,253,247,0.55);animation-duration:37s;animation-delay:-0.0s"></span>
+    <span style="left:3.5%;bottom:-47px;width:27px;height:27px;background:rgba(255,210,63,0.62);animation-duration:22s;animation-delay:-2.4s"></span>
+    <span style="left:2.6%;bottom:-30px;width:10px;height:10px;background:rgba(201,167,245,0.62);animation-duration:35s;animation-delay:-4.8s"></span>
+    <span style="left:5.3%;bottom:-32px;width:12px;height:12px;background:rgba(169,235,212,0.70);animation-duration:29s;animation-delay:-7.2s"></span>
+    <span style="left:6.2%;bottom:-38px;width:18px;height:18px;background:rgba(255,246,214,0.58);animation-duration:47s;animation-delay:-9.6s"></span>
+    <span style="left:7.8%;bottom:-46px;width:26px;height:26px;background:rgba(255,253,247,0.55);animation-duration:39s;animation-delay:-12.0s"></span>
+    <span style="left:9.6%;bottom:-36px;width:16px;height:16px;background:rgba(255,210,63,0.62);animation-duration:26s;animation-delay:-14.4s"></span>
+    <span style="left:9.8%;bottom:-40px;width:20px;height:20px;background:rgba(201,167,245,0.62);animation-duration:48s;animation-delay:-16.8s"></span>
+    <span style="left:11.6%;bottom:-43px;width:23px;height:23px;background:rgba(169,235,212,0.70);animation-duration:51s;animation-delay:-19.2s"></span>
+    <span style="left:13.5%;bottom:-47px;width:27px;height:27px;background:rgba(255,246,214,0.58);animation-duration:31s;animation-delay:-21.6s"></span>
+    <span style="left:16.0%;bottom:-33px;width:13px;height:13px;background:rgba(255,253,247,0.55);animation-duration:26s;animation-delay:-24.0s"></span>
+    <span style="left:17.0%;bottom:-41px;width:21px;height:21px;background:rgba(255,210,63,0.62);animation-duration:24s;animation-delay:-26.4s"></span>
+    <span style="left:16.7%;bottom:-30px;width:10px;height:10px;background:rgba(201,167,245,0.62);animation-duration:45s;animation-delay:-28.8s"></span>
+    <span style="left:20.2%;bottom:-30px;width:10px;height:10px;background:rgba(169,235,212,0.70);animation-duration:45s;animation-delay:-31.2s"></span>
+    <span style="left:21.1%;bottom:-38px;width:18px;height:18px;background:rgba(255,246,214,0.58);animation-duration:37s;animation-delay:-33.6s"></span>
+    <span style="left:21.6%;bottom:-38px;width:18px;height:18px;background:rgba(255,253,247,0.55);animation-duration:24s;animation-delay:-36.0s"></span>
+    <span style="left:24.2%;bottom:-38px;width:18px;height:18px;background:rgba(255,210,63,0.62);animation-duration:52s;animation-delay:-38.4s"></span>
+    <span style="left:24.3%;bottom:-46px;width:26px;height:26px;background:rgba(201,167,245,0.62);animation-duration:20s;animation-delay:-40.8s"></span>
+    <span style="left:26.2%;bottom:-37px;width:17px;height:17px;background:rgba(169,235,212,0.70);animation-duration:47s;animation-delay:-43.2s"></span>
+    <span style="left:26.8%;bottom:-48px;width:28px;height:28px;background:rgba(255,246,214,0.58);animation-duration:29s;animation-delay:-45.6s"></span>
+    <span style="left:29.3%;bottom:-34px;width:14px;height:14px;background:rgba(255,253,247,0.55);animation-duration:39s;animation-delay:-48.0s"></span>
+    <span style="left:30.1%;bottom:-43px;width:23px;height:23px;background:rgba(255,210,63,0.62);animation-duration:34s;animation-delay:-50.4s"></span>
+    <span style="left:31.8%;bottom:-48px;width:28px;height:28px;background:rgba(201,167,245,0.62);animation-duration:26s;animation-delay:-52.8s"></span>
+    <span style="left:32.5%;bottom:-31px;width:11px;height:11px;background:rgba(169,235,212,0.70);animation-duration:43s;animation-delay:-55.2s"></span>
+    <span style="left:33.2%;bottom:-29px;width:9px;height:9px;background:rgba(255,246,214,0.58);animation-duration:33s;animation-delay:-57.6s"></span>
+    <span style="left:35.1%;bottom:-43px;width:23px;height:23px;background:rgba(255,253,247,0.55);animation-duration:34s;animation-delay:-60.0s"></span>
+    <span style="left:36.9%;bottom:-35px;width:15px;height:15px;background:rgba(255,210,63,0.62);animation-duration:19s;animation-delay:-62.4s"></span>
+    <span style="left:37.0%;bottom:-33px;width:13px;height:13px;background:rgba(201,167,245,0.62);animation-duration:34s;animation-delay:-64.8s"></span>
+    <span style="left:38.8%;bottom:-47px;width:27px;height:27px;background:rgba(169,235,212,0.70);animation-duration:46s;animation-delay:-67.2s"></span>
+    <span style="left:40.8%;bottom:-34px;width:14px;height:14px;background:rgba(255,246,214,0.58);animation-duration:30s;animation-delay:-69.6s"></span>
+    <span style="left:43.7%;bottom:-37px;width:17px;height:17px;background:rgba(255,253,247,0.55);animation-duration:47s;animation-delay:-72.0s"></span>
+    <span style="left:44.4%;bottom:-44px;width:24px;height:24px;background:rgba(255,210,63,0.62);animation-duration:36s;animation-delay:-74.4s"></span>
+    <span style="left:44.6%;bottom:-44px;width:24px;height:24px;background:rgba(201,167,245,0.62);animation-duration:42s;animation-delay:-76.8s"></span>
+    <span style="left:46.3%;bottom:-29px;width:9px;height:9px;background:rgba(169,235,212,0.70);animation-duration:30s;animation-delay:-79.2s"></span>
+    <span style="left:47.2%;bottom:-40px;width:20px;height:20px;background:rgba(255,246,214,0.58);animation-duration:28s;animation-delay:-81.6s"></span>
+    <span style="left:49.5%;bottom:-44px;width:24px;height:24px;background:rgba(255,253,247,0.55);animation-duration:38s;animation-delay:-84.0s"></span>
+    <span style="left:51.9%;bottom:-32px;width:12px;height:12px;background:rgba(255,210,63,0.62);animation-duration:24s;animation-delay:-86.4s"></span>
+    <span style="left:53.2%;bottom:-44px;width:24px;height:24px;background:rgba(201,167,245,0.62);animation-duration:31s;animation-delay:-88.8s"></span>
+    <span style="left:53.4%;bottom:-45px;width:25px;height:25px;background:rgba(169,235,212,0.70);animation-duration:39s;animation-delay:-91.2s"></span>
+    <span style="left:55.5%;bottom:-33px;width:13px;height:13px;background:rgba(255,246,214,0.58);animation-duration:30s;animation-delay:-93.6s"></span>
+    <span style="left:56.5%;bottom:-37px;width:17px;height:17px;background:rgba(255,253,247,0.55);animation-duration:40s;animation-delay:-96.0s"></span>
+    <span style="left:58.7%;bottom:-44px;width:24px;height:24px;background:rgba(255,210,63,0.62);animation-duration:41s;animation-delay:-98.4s"></span>
+    <span style="left:58.8%;bottom:-44px;width:24px;height:24px;background:rgba(201,167,245,0.62);animation-duration:34s;animation-delay:-100.8s"></span>
+    <span style="left:59.6%;bottom:-45px;width:25px;height:25px;background:rgba(169,235,212,0.70);animation-duration:20s;animation-delay:-103.2s"></span>
+    <span style="left:62.2%;bottom:-31px;width:11px;height:11px;background:rgba(255,246,214,0.58);animation-duration:29s;animation-delay:-105.6s"></span>
+    <span style="left:63.9%;bottom:-43px;width:23px;height:23px;background:rgba(255,253,247,0.55);animation-duration:28s;animation-delay:-108.0s"></span>
+    <span style="left:63.9%;bottom:-45px;width:25px;height:25px;background:rgba(255,210,63,0.62);animation-duration:43s;animation-delay:-110.4s"></span>
+    <span style="left:65.9%;bottom:-47px;width:27px;height:27px;background:rgba(201,167,245,0.62);animation-duration:50s;animation-delay:-112.8s"></span>
+    <span style="left:66.3%;bottom:-40px;width:20px;height:20px;background:rgba(169,235,212,0.70);animation-duration:36s;animation-delay:-115.2s"></span>
+    <span style="left:67.6%;bottom:-38px;width:18px;height:18px;background:rgba(255,246,214,0.58);animation-duration:37s;animation-delay:-117.6s"></span>
+    <span style="left:69.5%;bottom:-46px;width:26px;height:26px;background:rgba(255,253,247,0.55);animation-duration:44s;animation-delay:-120.0s"></span>
+    <span style="left:70.4%;bottom:-29px;width:9px;height:9px;background:rgba(255,210,63,0.62);animation-duration:28s;animation-delay:-122.4s"></span>
+    <span style="left:73.6%;bottom:-31px;width:11px;height:11px;background:rgba(201,167,245,0.62);animation-duration:39s;animation-delay:-124.8s"></span>
+    <span style="left:74.3%;bottom:-42px;width:22px;height:22px;background:rgba(169,235,212,0.70);animation-duration:18s;animation-delay:-127.2s"></span>
+    <span style="left:75.3%;bottom:-39px;width:19px;height:19px;background:rgba(255,246,214,0.58);animation-duration:52s;animation-delay:-129.6s"></span>
+    <span style="left:77.9%;bottom:-46px;width:26px;height:26px;background:rgba(255,253,247,0.55);animation-duration:51s;animation-delay:-132.0s"></span>
+    <span style="left:78.2%;bottom:-47px;width:27px;height:27px;background:rgba(255,210,63,0.62);animation-duration:47s;animation-delay:-134.4s"></span>
+    <span style="left:79.0%;bottom:-39px;width:19px;height:19px;background:rgba(201,167,245,0.62);animation-duration:29s;animation-delay:-136.8s"></span>
+    <span style="left:80.6%;bottom:-34px;width:14px;height:14px;background:rgba(169,235,212,0.70);animation-duration:23s;animation-delay:-139.2s"></span>
+    <span style="left:81.6%;bottom:-35px;width:15px;height:15px;background:rgba(255,246,214,0.58);animation-duration:28s;animation-delay:-141.6s"></span>
+    <span style="left:83.0%;bottom:-46px;width:26px;height:26px;background:rgba(255,253,247,0.55);animation-duration:38s;animation-delay:-144.0s"></span>
+    <span style="left:84.1%;bottom:-39px;width:19px;height:19px;background:rgba(255,210,63,0.62);animation-duration:17s;animation-delay:-146.4s"></span>
+    <span style="left:87.4%;bottom:-30px;width:10px;height:10px;background:rgba(201,167,245,0.62);animation-duration:38s;animation-delay:-148.8s"></span>
+    <span style="left:86.7%;bottom:-39px;width:19px;height:19px;background:rgba(169,235,212,0.70);animation-duration:51s;animation-delay:-151.2s"></span>
+    <span style="left:88.3%;bottom:-32px;width:12px;height:12px;background:rgba(255,246,214,0.58);animation-duration:49s;animation-delay:-153.6s"></span>
+    <span style="left:89.6%;bottom:-38px;width:18px;height:18px;background:rgba(255,253,247,0.55);animation-duration:34s;animation-delay:-156.0s"></span>
+    <span style="left:92.4%;bottom:-43px;width:23px;height:23px;background:rgba(255,210,63,0.62);animation-duration:17s;animation-delay:-158.4s"></span>
+    <span style="left:92.8%;bottom:-43px;width:23px;height:23px;background:rgba(201,167,245,0.62);animation-duration:25s;animation-delay:-160.8s"></span>
+    <span style="left:94.6%;bottom:-39px;width:19px;height:19px;background:rgba(169,235,212,0.70);animation-duration:38s;animation-delay:-163.2s"></span>
+    <span style="left:95.8%;bottom:-42px;width:22px;height:22px;background:rgba(255,246,214,0.58);animation-duration:39s;animation-delay:-165.6s"></span>
+    <span style="left:97.3%;bottom:-29px;width:9px;height:9px;background:rgba(255,253,247,0.55);animation-duration:30s;animation-delay:-168.0s"></span>
+    <span style="left:99.0%;bottom:-43px;width:23px;height:23px;background:rgba(255,210,63,0.62);animation-duration:25s;animation-delay:-170.4s"></span>
+  </div>
+
+  <div class="container hero-inner">
+
     <div class="hero-row">
 
-      <div class="hero-copy">
+      <div class="hero-copy" data-parallax="0.14">
+        <!-- Written in sentence case; the .eyebrow class uppercases it. That
+             is the design system's rule — uppercase lives in the Space Mono
+             label treatment, never in the copy itself. -->
         <p class="eyebrow eyebrow-brand">Opening in Bergen County &middot; mid September</p>
 
-        <h1 class="display-1" style="margin:14px 0 0;">Get on the founding list.</h1>
+        <!-- Break at the full stop, not wherever the line happens to run out.
+             text-wrap:balance on its own put "We" alone at the end of the
+             first line, which reads as a stumble. -->
+        <h1 class="display-1">Get on the<br>founding list.</h1>
 
-        <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:42ch;margin:20px 0 26px;">
-          20% off your first order. Leave the bag at your door and it comes back
-          the next day washed, dried and folded. {{PRICE_PER_LB}} a pound,
-          {{MINIMUM}} minimum.
+        <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:40ch;margin:0 0 30px;">
+          <strong>20% off your first order.</strong> Leave it at your door and it
+          comes back the {{TURNAROUND}} washed, dried and folded.
+          {{PRICE_PER_LB}} a pound, {{MINIMUM}} minimum.
         </p>
 
-        <!-- The form is replaced in place on success, so both states live here
-             and JavaScript swaps which one is hidden. A page navigation would
-             lose the Meta pixel event and cost a round trip on a phone. -->
-        <form id="join" method="post" action="/bergen/join" novalidate>
-
-          <!-- The honeypot, named `website` exactly as the partners form names
-               it. A person never sees it; something filling every input does.
-               Hidden with CSS rather than the hidden attribute so a bot reading
-               the markup still finds it. Anything that fills it is dropped and
-               still told it worked. -->
-          <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
-            <label for="website">Website</label>
-            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        <!-- POST, not GET. A GET would put the visitor's mobile number in the
+             URL, which then sits in their browser history, in our server logs
+             and in the referrer header of every link they click next. A phone
+             number does not belong in any of those. -->
+        <!-- Every "Get started" on the site points at #get-started, which is
+             this field. There is nowhere else to send them: signing up now
+             happens in the text thread, and /signup is kept only as a fallback
+             that nothing links to. -->
+        <form id="join" action="/bergen/join" method="post" novalidate>
+          <!-- The honeypot. A person never sees this; something filling every
+               field in the form does. Handled in POST /start. -->
+          <div aria-hidden="true" style="position:absolute;left:-9999px;">
+            <label for="bergenWebsite">Website</label>
+            <input id="bergenWebsite" name="website" type="text" tabindex="-1" autocomplete="off">
           </div>
 
-          <div class="stack">
-            <div class="field">
-              <label class="field-label" for="phone">Mobile number</label>
-              <input class="input input-lg" id="phone" name="phone" type="tel" inputmode="tel"
-                     autocomplete="tel" autocapitalize="off" spellcheck="false"
-                     placeholder="(201) 555-0142" required>
-              <p class="form-error" id="err-phone" hidden></p>
+          <div class="hero-form" style="display:flex;gap:12px;max-width:540px;">
+            <div style="flex:1;">
+              <label for="phone" class="sr-only">Your mobile number</label>
+              <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required
+                     autocapitalize="off" spellcheck="false"
+                     class="input input-lg" placeholder="Your mobile number">
             </div>
-
-            <div class="field">
-              <label class="field-label" for="address">Street address</label>
-              <input class="input input-lg" id="address" name="address" type="text"
-                     autocomplete="street-address" placeholder="12 Berdan Ave" required>
-              <p class="form-error" id="err-address" hidden></p>
-            </div>
-
-            <div class="field">
-              <label class="field-label" for="zip">ZIP</label>
-              <input class="input input-lg" id="zip" name="zip" type="text" inputmode="numeric"
-                     autocomplete="postal-code" maxlength="5" pattern="^\d{5}$"
-                     placeholder="07410" required>
-              <p class="form-error" id="err-zip" hidden></p>
+            <div style="flex:0 0 auto;white-space:nowrap;">
+              <button type="submit" id="join-btn" class="btn btn-ink btn-lg">
+                Save my spot {{ICON_ARROW}}
+              </button>
             </div>
           </div>
 
-          <!-- WORD FOR WORD THE HOME PAGE'S BOX. It appears on the home page,
-               /signup and quoted on /sms-terms, and a carrier comparing them
-               expects one sentence. They drifted once already. Never reword
-               it here alone. -->
+          <!-- Consent, under the field, on every form that takes a number.
+               The wording is the design handoff's, verbatim — it is what
+               carriers read during registration, so it does not get reworded.
+
+               This box IS the consent record now. Ticking it is what makes the
+               text that follows legal, so it is submitted and stored against
+               the customer with a timestamp, the visitor's IP and a source of
+               WEB_HERO. It starts unticked and must stay that way — a
+               pre-ticked consent box is the single fastest way to fail carrier
+               review. -->
           <label class="check" style="margin-top:18px;max-width:540px;">
             <input type="checkbox" name="sms_consent" value="yes" required>
             <span class="check-box">{{ICON_CHECK}}</span>
@@ -87,66 +179,76 @@
               and <a href="/sms-terms">SMS Terms</a>.
             </span>
           </label>
+
+          <p class="form-error" id="err-phone" hidden></p>
           <p class="form-error" id="err-consent" hidden></p>
+          <p class="form-error" id="err-form" hidden></p>
 
-          <button class="btn btn-primary btn-lg" type="submit" id="join-btn"
-                  style="margin-top:20px;width:100%;max-width:320px;">
-            Save my spot {{ICON_ARROW}}
-          </button>
+          <p class="helper helper-brand">One text back &middot; no spam &middot; reply STOP any time</p>
 
-          <p class="form-error" id="err-form" hidden style="margin-top:14px;"></p>
-
-          <!-- Mobile only. An sms: link on a desktop browser either does
-               nothing or opens something nobody wants, so it is not rendered
-               there rather than being shown and disappointing somebody. -->
+          <!-- Mobile only. An sms: link does nothing useful on a desktop
+               browser, so it is not rendered there rather than shown and
+               disappointing somebody. -->
           <p class="sms-fallback">
             Rather just text? Text JOIN to
             <a href="sms:+12015541877?&amp;body=JOIN">{{PHONE}}</a>
           </p>
         </form>
 
-        <!-- Swapped in on success. Starts hidden and holds the same vertical
-             space the form did, so the page does not jump. -->
+        <!-- Swapped in on success, in place, so the Meta event lands on the
+             same page view as the submit. -->
         <div id="done" hidden>
-          <div class="card card-xl" style="padding:32px;max-width:460px;background:var(--suds-300);">
+          <div class="card card-xl" style="padding:30px;max-width:540px;">
             <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;
                        line-height:1.1;margin:0 0 12px;">
               You're on the list.
             </h2>
-            <p style="font-size:17px;line-height:1.55;margin:0;">
+            <p style="font-size:17px;line-height:1.55;margin:0;color:var(--ink-800);">
               We'll text you the day we start. Your 20% off is locked in.
             </p>
           </div>
         </div>
       </div>
 
-      <!-- The same phone mock as the home page, and the same reason for it:
-           the product IS a text thread, so showing one says more than a
-           paragraph about how easy it is. -->
-      <div class="phone-wrap" aria-hidden="true">
+      <!-- The phone mock. Static on purpose — an animated version was built,
+           reviewed and removed during the design. Every line in the thread is
+           wording our system really sends; a mock that promises something the
+           product doesn't do is a mock that creates complaints. -->
+      <div class="phone-wrap" data-parallax="-0.09" aria-hidden="true">
         <div class="phone-bezel">
           <div class="phone-screen">
             <div class="phone-island"></div>
 
             <div class="phone-status">
               <span>9:41</span>
-              <span></span>
+              <span style="letter-spacing:2px;">&#9679;&#9679;&#9679;</span>
             </div>
 
             <div class="phone-header">
-              {{AVATAR}}
+              <!-- The logo's avatar variant. The tail hangs below the box, so
+                   the wrapper needs bottom margin to keep it off the label. -->
+              <div style="margin-bottom:8px;">{{AVATAR}}</div>
               <div class="phone-name">LYNDRY</div>
             </div>
 
             <div class="phone-thread">
               <div class="phone-day">Today 7:42 PM</div>
+
               <div class="bubble bubble-out">laundry tomorrow</div>
-              <div class="bubble bubble-in">Booked for tomorrow. Leave the bag outside your door, you don't need to be in.</div>
+              <div class="bubble bubble-in">Booked for tomorrow. Leave the bag outside your door — you don't need to be in.</div>
               <div class="bubble bubble-out">make it monday</div>
               <div class="bubble bubble-in">Moved to Monday.</div>
-              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so that is $37.00. 20% off your first order, so the total is $29.60.</div>
+              <!-- 18.5 lb at the real rate. If the price changes, this figure
+                   has to change with it — it is the one number on the site
+                   that a token can't fill in. -->
+              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so the total is $37.00 at {{PRICE_PER_LB}} a pound. You've paid $25.00, and the remaining $12.00 comes off your Visa ending 4242 on delivery.</div>
+              <div class="bubble bubble-out">can you skip the softener</div>
+              <div class="bubble bubble-in">Done, and saved — we'll leave it out every time from now on.</div>
               <div class="bubble bubble-out">where is it</div>
-              <div class="bubble bubble-in">Folded and on the van, back this evening. We'll text a photo.</div>
+              <div class="bubble bubble-in">Folded and on the van — back this evening. We'll text a photo when it's down.</div>
+
+              <div class="phone-receipt">Delivered</div>
+              <div class="phone-home"></div>
             </div>
           </div>
         </div>
@@ -154,17 +256,7 @@
 
     </div>
 
-    <div class="fact-rail">
-      <span>Next day turnaround</span>
-      <span>No app, no account</span>
-      <span>Houses and apartments</span>
-      <span>Cancel any time by text</span>
-    </div>
-
   </div>
 </section>
 
-<!-- The form script. Kept in src/web/bergen.js and injected here, because this
-     file is a token template and a script full of braces is a poor neighbour
-     for a token substitution. -->
 {{BERGEN_SCRIPT}}
