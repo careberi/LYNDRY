@@ -256,7 +256,7 @@ function footer() {
 function bareHeader() {
   return `
     <header class="site-header">
-      <div class="container site-header-bar">
+      <div class="container site-header-bar site-header-bar-center">
         ${logo('nav', { href: null, label: site.name })}
       </div>
     </header>`;

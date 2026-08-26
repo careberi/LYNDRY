@@ -535,6 +535,12 @@
   gap: 36px;
   height: 68px;
 }
+/* The advert page's header: one mark, centred, and nothing else in the bar.
+   A modifier rather than an inline style on the element, because that is where
+   layout lives here - and because the bar itself is shared with the real
+   navigation, which must stay left aligned. */
+.site-header-bar-center { justify-content: center; }
+
 .site-nav { display: flex; align-items: center; gap: 26px; margin-right: auto; }
 .site-nav a {
   font-family: var(--font-body);
