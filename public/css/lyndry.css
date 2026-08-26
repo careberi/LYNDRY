@@ -27,186 +27,71 @@
 /* ---------------------------------------------------------------------------
    The logo
    --------------------------------------------------------------------------- */
-/* A speech bubble, because the whole service is a text thread. Ported from the
-   handoff's logo/lyndry-logo-1d.html — don't re-derive it.
+/* THE LOGO IS ARTWORK NOW, not a bubble built out of CSS.
+   
+   It used to be a wordmark inside a border-radius box with a hand-built tail,
+   and there was a long note here about how fiddly that tail was. All of it is
+   gone: the mark Neil supplied draws a laundry bag and a speech bubble as ONE
+   shape, with the wordmark inside it and a drawstring tied at the top. That is
+   not something to re-derive in CSS, and trying would only produce a worse
+   copy of a file we already have.
 
-   THE TAIL IS THE FIDDLY PART. It is one shape whose top overlaps the bubble's
-   bottom border by exactly the border width, so the bubble's outline opens
-   where the tail joins and no hairline shows through. It was tried as a
-   rotated square and as a large ink triangle stacked behind; both left visible
-   artifacts. Leave it alone.
+   The source was a 1254px PNG on a green ground with no alpha channel, so it
+   could not be dropped on a page as-is - it would have been a green square.
+   public/css/logo.png is that artwork cut out, un-greened at the edges and
+   quantised to 64 colours: 600px wide and 25 KB, against 1 MB for the original.
 
-   Scale any lockup with --ly-size; everything else is proportional. */
+   IT LIVES IN public/css SO IT IS FINGERPRINTED. Referenced relatively from
+   this file, it resolves under /css/<hash>/ and inherits the same immutable
+   year-long cache as the stylesheets. assets.js hashes every file in this
+   directory, not just the .css ones, precisely so that changing the logo
+   changes the URL - without that a new logo would never reach anybody who had
+   visited before, which is the exact bug the fingerprint exists to prevent.
+
+   Scale any lockup with --ly-h. Nothing else needs setting. */
 
 .ly-logo {
-  position: relative;
   display: inline-block;
-  /* Without these a stray line box drops the tail a few pixels and the
-     bubble's border shows as a line above it. */
   line-height: 0;
   font-size: 0;
   text-decoration: none;
-
-  /* THE BOX HAS TO INCLUDE THE TAIL.
-     The tail is absolutely positioned, so it hangs outside the element and the
-     logo measures as if it were just the bubble. Anything placed underneath
-     then sets its margin against the bubble and the tail eats it - on the
-     sign-in page a 32px gap rendered as 11px, with "Operations" tucked under
-     the point.
-     Reserving the overhang here rather than padding every call site means a
-     margin under the logo is the margin you actually get, on every page and
-     in every variant. The exact overhang is the tail's height less the border
-     width it overlaps the bubble by. */
-  padding-bottom: calc(var(--ly-tail-h, 26px) - var(--ly-bw, 5px));
 }
 
-.ly-logo__bubble {
+.ly-logo__mark {
   display: block;
-  background: var(--paper-050);
-  border: var(--ly-bw, 5px) solid var(--ink-900);
-  border-radius: var(--ly-radius, 40px);
-  padding: var(--ly-pad, 24px 34px);
-  text-align: center;
+  height: var(--ly-h, 44px);
+  /* Width comes from the artwork's own proportions, so a variant only ever has
+     to say how tall it is and can never squash the mark. */
+  aspect-ratio: 600 / 546;
+  background: url(logo.png) center / contain no-repeat;
 }
 
-.ly-logo__word {
-  display: block;
-  font-family: 'Grandstander', var(--font-display), system-ui, sans-serif;
-  font-weight: 900;
-  font-size: var(--ly-size, 58px);
-  line-height: 0.95;
-  letter-spacing: -0.045em;
-  color: var(--ink-900);
-
-  /* Optically centre the caps in the bubble.
-
-     LYNDRY is all capitals, so it never uses the descender space the font
-     reserves below the baseline. With symmetric padding the letters therefore
-     sit visibly high — measured at 5.5px above and 8.5px below in the nav.
-     Grandstander's metrics put that imbalance at 0.19em, so the ink needs
-     nudging down by half of it.
-
-     `position/top` rather than padding or margin, deliberately: padding would
-     make the element taller and push the bubble's bottom edge down by the
-     same amount, which moves the text and the box together and centres
-     nothing. This moves the ink without touching layout.
-
-     In em, so it holds at every --ly-size. */
-  position: relative;
-  top: 0.095em;
+/* The hard ink offset, for marketing placements. A drop-shadow filter rather
+   than box-shadow, because the mark is an irregular silhouette and box-shadow
+   would trace its rectangle instead. */
+.ly-logo--offset .ly-logo__mark {
+  filter: drop-shadow(9px 9px 0 var(--ink-900));
 }
 
-/* The "wash & fold" kicker. Neil asked for it off the mark, so layout.js no
-   longer emits it — this is kept so putting it back is one line there. */
-.ly-logo__kicker {
-  display: block;
-  margin-top: 0.08em;
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: calc(var(--ly-size, 58px) * 0.207);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--suds-700);
-}
-
-.ly-logo__tail {
-  position: absolute;
-  left: var(--ly-tail-x, 44px);
-  /* Sits in the padding .ly-logo reserves for it, so the tail is inside the
-     box rather than hanging under it. It used to be pulled below with a
-     negative offset, which is why anything placed underneath measured its gap
-     against the bubble and got crowded by the point. */
-  bottom: 0;
-  width: var(--ly-tail-w, 44px);
-  height: var(--ly-tail-h, 26px);
-}
-.ly-logo__tail svg { display: block; width: 100%; height: 100%; overflow: visible; }
-/* An OPEN path: the two diagonals are stroked, the top edge is not, so no
-   square corners poke out either side. */
-.ly-logo__tail path {
-  fill: var(--paper-050);
-  stroke: var(--ink-900);
-  stroke-width: var(--ly-bw, 5px);
-  stroke-linejoin: miter;
-}
-
-/* The hard ink offset, for hero and marketing placements. Dropped in chrome. */
-.ly-logo--offset .ly-logo__bubble { box-shadow: 11px 11px 0 var(--ink-900); }
-.ly-logo--offset .ly-logo__tail { filter: drop-shadow(11px 11px 0 var(--ink-900)); }
-
-/* ---- The tail on ink chrome ------------------------------------------------
-   On the ink header and footer the tail is a plain unstroked triangle, which
-   is what the handoff prescribes for these two placements: the ink outline is
-   invisible against ink anyway, so drawing it buys nothing.
-
-   It also fixes a real artifact. The stroked version overlaps the bubble's
-   bottom border by exactly the border width, and the join lands on a half
-   pixel — the logo is 36.3px tall centred in a 68px bar. On a 2x or 3x screen
-   that edge antialiases against the ink border underneath and shows as a thin
-   dark line between the bubble and the tail. It was clearly visible on an
-   iPhone and invisible on a 1x desktop display.
-
-   With no stroke, overlapping further costs nothing visually — the extra sits
-   inside the bubble, cream on cream — so the tail is pulled up an additional
-   2px and made 2px taller to keep its point in the same place. Antialiasing at
-   the top edge then blends cream into cream and there is nothing to see. */
-.ly-logo--nav .ly-logo__tail,
-.ly-logo--footer .ly-logo__tail {
-  background: var(--paper-050);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
-  /* 2px taller, and that extra 2px reaches UP into the bubble - which is the
-     antialiasing fix described above, not a change to where the point lands. */
-  height: calc(var(--ly-tail-h, 26px) + 2px);
-  bottom: 0;
-}
-.ly-logo--nav .ly-logo__tail svg,
-.ly-logo--footer .ly-logo__tail svg { display: none; }
-
-/* COMPACT KEEPS THE OUTLINED TAIL, because it is the one variant that sits on
-   PAPER rather than on ink.
- *
- * The cream clip-path trick above only works against a dark ground: the
- * triangle is the bubble's fill, and the ink header draws the outline for it by
- * contrast. On the cream bag page there is no contrast to borrow, so the tail
- * vanished and the bubble looked like it had a stray line under it - which is
- * exactly what a laundromat pointing a camera at a sticker saw.
- *
- * So compact falls back to the stroked SVG the full logo uses, and only needs
- * its stroke scaled down to match its 3px border. */
-.ly-logo--compact .ly-logo__tail {
-  background: none;
-  clip-path: none;
-  height: var(--ly-tail-h, 11px);
-}
-.ly-logo--compact .ly-logo__tail svg { display: block; }
-.ly-logo--compact .ly-logo__tail path { stroke-width: var(--ly-bw, 3px); }
-
-/* Nav — the 68px ink header. */
-.ly-logo--nav {
-  --ly-size: 20px;
-  --ly-bw: 3px;
-  --ly-radius: 14px;
-  --ly-pad: 5px 13px;
-  --ly-tail-x: 19px;
-  --ly-tail-w: 22px;
-  --ly-tail-h: 13px;
-}
+/* Nav - the 68px ink header. 44px leaves proper breathing room in the bar and
+   the wordmark still reads; it was checked at size rather than calculated. */
+.ly-logo--nav    { --ly-h: 44px; }
 
 /* Footer and secondary placements. */
-.ly-logo--footer {
-  --ly-size: 32px;
-  --ly-bw: 3px;
-  --ly-radius: 20px;
-  --ly-pad: 8px 18px;
-  --ly-tail-x: 25px;
-  --ly-tail-w: 34px;
-  --ly-tail-h: 19px;
-}
+.ly-logo--footer { --ly-h: 62px; }
 
-/* The smallest lockup. Also hides the kicker, which stops being legible below
-   about 18px — relevant only if the kicker is ever switched back on. */
-.ly-logo--compact { --ly-size: 18px; --ly-bw: 3px; --ly-radius: 12px; --ly-pad: 4px 10px; --ly-tail-x: 14px; --ly-tail-w: 18px; --ly-tail-h: 11px; }
-.ly-logo--compact .ly-logo__kicker { display: none; }
+/* The smallest lockup we use. Below about 34px the wordmark inside the bag
+   stops being readable, so this is the floor rather than a preference. */
+.ly-logo--compact { --ly-h: 38px; }
+
+/* Marketing placements: the sign-in page, and anywhere the mark is the subject
+   rather than the furniture. */
+.ly-logo--offset { --ly-h: 132px; }
+
+@media (max-width: 600px) {
+  .ly-logo--nav    { --ly-h: 38px; }
+  .ly-logo--offset { --ly-h: 104px; }
+}
 
 /* The avatar — the L in a Suds bubble. Used in the phone mock. */
 .ly-avatar { position: relative; display: inline-block; line-height: 0; font-size: 0; }

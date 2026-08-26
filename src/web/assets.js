@@ -30,16 +30,22 @@ const path = require('path');
 
 const CSS_DIR = path.join(__dirname, '..', '..', 'public', 'css');
 
-// Every file under public/css, sorted, so the hash is stable across machines
+// EVERY file under public/css, sorted, so the hash is stable across machines
 // and across restarts rather than depending on the order the disk hands them
 // back.
-function cssFiles(dir) {
+//
+// Every file, not only the .css ones, and that matters now the logo lives here
+// as an image. This directory is served with a year-long immutable cache, so a
+// file whose contents are not in the fingerprint can never reach anybody who
+// has visited before - which is precisely the bug the fingerprint was built to
+// stop, and it would have come back the first time the logo changed.
+function assetFiles(dir) {
   const found = [];
 
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...cssFiles(full));
-    else if (entry.name.endsWith('.css')) found.push(full);
+    if (entry.isDirectory()) found.push(...assetFiles(full));
+    else found.push(full);
   }
 
   return found.sort();
@@ -49,7 +55,7 @@ function fingerprint() {
   const hash = crypto.createHash('sha1');
 
   try {
-    for (const file of cssFiles(CSS_DIR)) {
+    for (const file of assetFiles(CSS_DIR)) {
       // The path goes in as well as the contents, so renaming a file changes
       // the fingerprint even if nothing inside it did.
       hash.update(path.relative(CSS_DIR, file));

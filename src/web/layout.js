@@ -77,34 +77,41 @@ function icon(name, size) {
 // square corners poke out either side of the join. `vector-effect` keeps the
 // stroke a constant width even though preserveAspectRatio="none" is squashing
 // the viewBox to whatever the variant asked for.
-const TAIL_SVG =
-  '<svg viewBox="0 0 44 26" preserveAspectRatio="none" aria-hidden="true">' +
-  '<path d="M0 0 L22 26 L44 0" vector-effect="non-scaling-stroke"></path></svg>';
-
-// The logo: the wordmark inside a chunky message bubble, because the whole
-// service is a text thread. Variant is 'nav', 'footer', 'compact' or 'offset'.
+// The logo: a laundry bag that is also a speech bubble, with the wordmark
+// inside it. Variant is 'nav', 'footer', 'compact' or 'offset'.
 //
-// The handoff's version carries a "wash & fold" kicker under the wordmark in
-// Space Mono. Neil asked for it out. The styling for it is still in
-// lyndry.css, so putting it back is one line here.
+// It is a single piece of artwork now rather than a bubble assembled from CSS.
+// The old version built a rounded box, set the wordmark in it and hand-made a
+// tail out of an inline SVG; the mark it was standing in for draws the bag,
+// the bubble and the type as one shape, so there is nothing left to assemble.
+//
+// The image is a background rather than an <img> so that its URL comes from
+// the fingerprinted stylesheet directory - see the note in lyndry.css. That
+// leaves the mark with no text of its own, so the accessible name is put on
+// whichever element wraps it: the link's aria-label when it is a link, and
+// role="img" on the mark itself when it is not.
 function logo(variant, { href = '/', label = 'LYNDRY — home' } = {}) {
   const tag = href ? 'a' : 'span';
   const attrs = href ? ` href="${href}" aria-label="${label}"` : '';
+  const markAttrs = href ? ' aria-hidden="true"' : ` role="img" aria-label="${site.name}"`;
 
   return `<${tag}${attrs} class="ly-logo ly-logo--${variant}">
-          <span class="ly-logo__bubble">
-            <span class="ly-logo__word">${site.name}</span>
-          </span>
-          <span class="ly-logo__tail">${TAIL_SVG}</span>
+          <span class="ly-logo__mark"${markAttrs}></span>
         </${tag}>`;
 }
+
+// The avatar's own tail. It used to share one constant with the logo; the logo
+// is artwork now, so this is the only thing left that needs the shape.
+const AVATAR_TAIL =
+  '<svg viewBox="0 0 44 26" preserveAspectRatio="none" aria-hidden="true">' +
+  '<path d="M0 0 L22 26 L44 0" vector-effect="non-scaling-stroke"></path></svg>';
 
 // The avatar variant — the L in a Suds bubble. Used in the phone mock.
 function avatar(size) {
   const style = size ? ` style="--ly-av:${size}px"` : '';
   return `<span class="ly-avatar"${style} aria-hidden="true">
             <span class="ly-avatar__box">L</span>
-            <span class="ly-avatar__tail">${TAIL_SVG}</span>
+            <span class="ly-avatar__tail">${AVATAR_TAIL}</span>
           </span>`;
 }
 
@@ -249,12 +256,15 @@ function renderPage({ title, description, path, body, extra = {}, noindex = fals
        behind a sign-in, but there is no reason for a crawler to try. -->
   ${noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
 
-  <!-- Favicon: the logo's avatar variant, drawn inline so there is no image
-       file to manage. The tail is drawn first and the box painted over it, so
-       the box's outline closes across the top of the tail exactly as it does
-       in CSS. The L is a stroked path rather than text, because a webfont
-       never loads inside a data-URI favicon. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 20 L14 28 L19 20' fill='%230EA47A' stroke='%23101210' stroke-width='2.5' stroke-linejoin='miter'/%3E%3Crect x='2.25' y='2.25' width='27.5' height='19.5' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.5'/%3E%3Cpath d='M12 7.5 V16.5 H21' fill='none' stroke='%23101210' stroke-width='3.2'/%3E%3C/svg%3E">
+  <!-- Favicon: the bag-and-bubble silhouette, drawn inline so there is no
+       image file to manage.
+       IT IS NOT THE FULL LOGO, and that is deliberate. The wordmark inside the
+       bag is about a fifth of the mark's height, so at 32px it renders as an
+       illegible smear and at 16px as a grey band. What survives at that size
+       is the SHAPE, so the favicon is the shape with no type in it.
+       The tail is drawn first and the body painted over it, so the body's
+       outline closes across the top of the tail rather than showing through. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 22 L9.6 30.6 L16 24' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='round'/%3E%3Crect x='2.3' y='10' width='27.4' height='16' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.3'/%3E%3Cpath d='M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='round'/%3E%3Cpath d='M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6' fill='none' stroke='%23101210' stroke-width='2.1' stroke-linecap='round'/%3E%3C/svg%3E">
   <meta name="theme-color" content="#101210">
 
   <!-- The design system's font file @imports Google Fonts, and an @import
@@ -263,10 +273,12 @@ function renderPage({ title, description, path, body, extra = {}, noindex = fals
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-  <!-- Grandstander is the logo face, and only the logo uses it. It is loaded
-       here rather than added to css/ds/tokens/fonts.css because that folder is
-       the design system vendored unmodified — editing it would be lost the
-       next time the system is replaced. -->
+  <!-- Grandstander. It used to set the logo's wordmark; the logo is artwork
+       now and the only thing left using it is the avatar's "L" in the phone
+       mock, which is why the loader stays. It is loaded here rather than added
+       to css/ds/tokens/fonts.css because that folder is the design system
+       vendored unmodified — editing it would be lost the next time the system
+       is replaced. -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grandstander:wght@900&display=swap">
 
   <!-- The /css/<hash>/ path is a fingerprint of the stylesheets. It changes

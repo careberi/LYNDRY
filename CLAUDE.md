@@ -173,34 +173,52 @@ the token list, and nothing else.
 
 ### The logo
 
-A speech bubble, because the whole service is a text thread. `logo(variant)`
-in `layout.js` builds it; the CSS is at the top of `lyndry.css`. Variants:
-`nav` (header), `footer`, `compact` (below ~18px, drops the kicker), `offset`
-(the hard ink shadow, for marketing placements). `avatar()` is the "L" in a
-Suds bubble, used in the phone mock and as the favicon.
+**A laundry bag that is also a speech bubble, with the wordmark inside it.**
+Supplied by Neil as artwork, not built in CSS. `logo(variant)` in `layout.js`
+renders it; the CSS is at the top of `lyndry.css`. Variants: `nav` (header, 44px),
+`footer` (62px), `compact` (38px, the smallest the wordmark stays readable at),
+`offset` (132px with a hard ink drop-shadow, for marketing placements).
+`avatar()` is a separate mark — the "L" in a Suds bubble, used in the phone mock.
 
-**The tail is one shape whose top overlaps the bubble's bottom border by
-exactly the border width**, so the outline opens where the tail joins and no
-hairline shows through. It was tried as a rotated square and as a big ink
-triangle stacked behind — both left visible artifacts. Don't rebuild it.
+It replaced a bubble assembled out of CSS: a border-radius box, the wordmark set
+inside it, and a hand-built tail. All of that is gone, along with a long note
+about how fiddly the tail was. **Don't re-derive the mark in CSS** — it draws the
+bag, the bubble and the type as one shape, and a hand copy would only be a worse
+version of a file we already have.
 
-**`.ly-logo` reserves the tail's height as bottom padding, and the tail sits in
-it at `bottom: 0`.** The tail is absolutely positioned, so before this the logo
-measured as if it were only the bubble and anything placed underneath set its
-margin against the wrong edge — the sign-in page asked for 32px and rendered
-11px, with "Operations" tucked under the point. Reserving it once here means a
-margin under the logo is the margin you get, in every variant. **Never give the
-tail a negative offset again**: it would leave the box, and `bottom` is measured
-from the padding box, so padding alone does not fix it.
+**`public/css/logo.png` is the artwork cut out of what Neil sent.** The original
+was a 1254px PNG on a green ground **with no alpha channel**, so it could not go
+on a page as-is — it would have been a green square. What ships is that artwork
+flood-filled away from its background, un-greened along the anti-aliased edge,
+and quantised to 64 colours: 600px wide and 25 KB against 1 MB.
 
-**Both wrappers carry `line-height: 0; font-size: 0`.** Without that a stray
-line box drops the tail a few pixels and the bubble's border shows as a line
-above it.
+**Two things about the cut-out that would come back if it is ever redone.** The
+outer boundary of the mark is the ink stroke, so every partially transparent
+pixel is painted ink rather than having a colour guessed from a mostly-green
+one — guessing left a green halo that was invisible on cream and obvious on the
+ink footer. And the opaque mask has to be **eroded** before it is used: the
+flood fill reaches a few pixels into the anti-aliased band, and forcing those to
+full opacity left dark-green speckle along every edge.
 
-**The wordmark is Grandstander 900**, loaded by a `<link>` in `layout.js`
-rather than added to `css/ds/tokens/fonts.css` — that folder is the design
-system vendored unmodified, and an edit there is lost the next time it's
-replaced.
+**It lives in `public/css` so it is fingerprinted.** Referenced relatively from
+`lyndry.css`, it resolves under `/css/<hash>/` and inherits the same immutable
+year-long cache as the stylesheets. **`assets.js` therefore hashes every file in
+that directory, not just the `.css` ones** — without that, changing the logo
+would leave the URL identical and a new mark would never reach anybody who had
+visited before, which is exactly the bug the fingerprint exists to prevent.
+
+**The mark is a background image, not an `<img>`**, so its URL comes from the
+fingerprinted stylesheet directory. That leaves it with no text of its own, so
+the accessible name goes on whatever wraps it: the link's `aria-label` when it
+is a link, `role="img"` on the mark itself when it is not.
+
+**Variants set only `--ly-h`.** The width comes from `aspect-ratio`, so a
+variant can never squash the mark.
+
+**The favicon is the silhouette, not the logo.** The wordmark is about a fifth
+of the mark's height, so at 32px it is an illegible smear and at 16px a grey
+band. The favicon is the bag-and-bubble shape with no type in it, drawn inline
+in `layout.js` as it always was.
 
 ### Motion
 
