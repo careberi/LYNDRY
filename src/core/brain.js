@@ -7,6 +7,7 @@ const booking = require('./booking');
 const settings = require('./settings');
 const promotions = require('./promotions');
 const recurring = require('./recurring');
+const orders = require('./orders');
 
 // ---------------------------------------------------------------------------
 // The brain.
@@ -381,7 +382,12 @@ ${
     ? `WE ARE NOT TAKING ORDERS RIGHT NOW. THIS OVERRIDES EVERYTHING BELOW.
 ${paused.reason ? `The reason, in Neil's words: ${paused.reason}` : 'No reason has been given to pass on.'}
 You may NOT call create_order, reschedule_order, or promise a pickup, a date or a time. The booking code refuses anyway, so trying only produces an error the customer never sees the point of.
-Say we are not booking yet, work the reason above into your own sentence rather than reciting it, and say we will let them know the moment we are. Then STOP. Do not ask for an address, a date, or wash preferences to "get them ready" - collecting details for a booking that cannot happen is a worse experience than a straight answer.
+Say we are not booking yet, work the reason above into your own sentence rather than reciting it, and say we will let them know the moment we are. Then STOP.
+${paused.launched
+  ? 'We HAVE run before and have stopped for now, so "again" and "back" are fair words to use.'
+  : `WE HAVE NEVER OPENED. THIS SERVICE HAS NEVER TAKEN A SINGLE ORDER, so nothing is coming BACK and nothing is starting AGAIN.
+NEVER say "again", "back", "resume", "reopen", "return", "as soon as we are taking pickups again", or anything else implying we were running and paused. Every one of those is a plain untruth to somebody who found us before we launched, and one went to a real customer.
+The true words are: we are opening soon, we have not started yet, we will let you know when we launch, you are early. Being early is the good news here - say it like that.`} Do not ask for an address, a date, or wash preferences to "get them ready" - collecting details for a booking that cannot happen is a worse experience than a straight answer.
 You may still answer questions about the service, save a name and address if they volunteer one, and hand off to a human.
 ${promo ? `
 THEY HAVE THIS, AND YOU MAY MENTION IT ONCE: ${promo.blurb}
@@ -693,7 +699,14 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
   // are both money-adjacent - and the rule is the same as everywhere else in
   // this file: the AI is told, it does not decide.
   const open = await settings.takingOrders();
-  const paused = open ? null : { reason: await settings.pausedReason() };
+  const paused = open
+    ? null
+    : {
+        reason: await settings.pausedReason(),
+        // Have we ever actually run? Decides whether we are opening for the
+        // first time or reopening, and they are not the same sentence.
+        launched: await orders.hasEverDelivered(),
+      };
 
   const held = customer && customer.id ? await promotions.heldBy(customer.id).catch(() => []) : [];
   const promo = held.length ? held[0] : null;

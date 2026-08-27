@@ -6,6 +6,7 @@ const billing = require('./billing');
 const booking = require('./booking');
 const issues = require('./issues');
 const recurring = require('./recurring');
+const settings = require('./settings');
 const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -474,6 +475,32 @@ async function saveDetails(customer, input) {
     if (!updated.address_line1) return `Thanks ${first}! And what's the street address?`;
     if (!updated.city) return `Thanks ${first}! Which town is that in?`;
     return `Thanks ${first}! And the zip code?`;
+  }
+
+  // NOT WHILE THE SERVICE IS SHUT.
+  //
+  // Everything below this walks somebody towards a booking - when do you want
+  // it, how do you like it washed - and none of it can end in one while we are
+  // not taking orders. The prompt already tells the AI not to ask; it could
+  // never have stopped this, because THESE SENTENCES ARE WRITTEN HERE, in
+  // code, and shipped as the tool's own reply.
+  //
+  // Neil caught it on a real conversation: a woman gave her street, her name
+  // and her zip, was asked "when would you like it picked up?", and only when
+  // she asked back did she find out we are not booking. Three questions to
+  // arrive at no.
+  //
+  // Same split as everywhere else, just pointing the other way: the prompt
+  // asks, the code enforces - so the code has to know too.
+  if (!(await settings.takingOrders())) {
+    const reason = await settings.pausedReason();
+
+    return (
+      `Thanks ${first}, that's all saved. ` +
+      `We're not booking pickups just yet${reason ? `, ${reason.replace(/\.$/, '')}` : ''}, ` +
+      `so there's nothing to put on the calendar today. ` +
+      `We'll text you the moment that changes.`
+    );
   }
 
   // Address done. If they have not said WHEN yet, that comes before anything

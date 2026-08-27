@@ -325,7 +325,37 @@ async function reschedule(order, newDate, newTime, window) {
   return data;
 }
 
+// Has this business ever actually delivered an order?
+//
+// Which decides whether being shut is "we have not opened yet" or "we have
+// stopped for a bit", and those are two different sentences to a customer.
+// Saying we will let them know when we are taking pickups AGAIN, to somebody
+// who found us the week before we launched, is a plain untruth - Neil caught
+// exactly that going to a real number.
+//
+// DERIVED, NEVER STORED. A "have we launched" flag would be a second copy of
+// something the orders table already knows, and it would be wrong the first
+// time somebody forgot to set it. This answers itself and flips on its own the
+// day the first order lands.
+async function hasEverDelivered() {
+  const { count, error } = await db
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .not('delivered_at', 'is', null);
+
+  if (error) {
+    // Cannot tell? Assume we HAVE launched, which is the conservative side:
+    // "we will let you know when we are taking pickups" is true either way,
+    // whereas claiming to be brand new to a long-standing customer is not.
+    console.error('Could not tell whether we have ever delivered:', error.message);
+    return true;
+  }
+
+  return (count || 0) > 0;
+}
+
 module.exports = {
+  hasEverDelivered,
   LEAVES_THE_STOP,
   ALLOWED_NEXT,
   AWAITING_COLLECTION,
