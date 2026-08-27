@@ -18,7 +18,9 @@
     "seed:team": "node --use-system-ca scripts/seed-team.js",
     "seed:demo": "node --use-system-ca scripts/seed-demo.js",
     "seed:week": "node --use-system-ca scripts/seed-week.js",
-    "seed:partners": "node --use-system-ca scripts/seed-partners.js"
+    "seed:partners": "node --use-system-ca scripts/seed-partners.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "engines": {
     "node": ">=20"
