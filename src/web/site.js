@@ -45,7 +45,7 @@ const site = Object.freeze({
   publicPhoneLink: PUBLIC_PHONE_LINK,
   hasPublicPhone: Boolean(PUBLIC_PHONE_DISPLAY && PUBLIC_PHONE_LINK),
 
-  serviceArea: 'Northern New Jersey',
+  serviceArea: 'Bergen County',
 
   // Pricing comes from config so the website, the database and the AI all
   // quote the same numbers.

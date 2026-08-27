@@ -1445,9 +1445,13 @@ rule is only about text messages.
   built. The `lockers` and `buildings` tables stay (dropping them would be
   destructive and they cost nothing), `open_locker()` stays and refuses
   politely, and nothing on the website promises a locker
-- **Service area:** Northern New Jersey. Deliberately no more precise than
-  that — the boundary inside it has never been drawn. `booking.inServiceArea()`
-  is the ONLY thing that decides, coarsely: New Jersey with an `07xxx` zip.
+- **Service area:** **Bergen County.** The boundary CLAUDE.md used to say was
+  undrawn is now drawn: `booking.inServiceArea()` checks a literal list of the
+  67 Bergen ZIP codes in `BERGEN_ZIPS`. It was "New Jersey with an `07xxx` zip",
+  which is most of the north of the state and far too wide for one van out of
+  Fair Lawn. **A list rather than a clever test, because a county has no
+  arithmetic** — it is long, boring, and checkable by a person, which matters
+  because being wrong here turns away somebody we could serve.
   **The AI is told in as many words that it may not decide this** — never
   from the name of a town, never a list of towns we cover, never a yes
   before an address has been saved. Asked "do you come to Princeton?" a

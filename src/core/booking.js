@@ -141,27 +141,41 @@ function hasPreferences(customer) {
 
 // Is this address somewhere the van actually goes?
 //
-// Deliberately coarse: New Jersey, in the 07xxx zip range, which is the
-// northern and central part of the state. The website promises "Northern New
-// Jersey" and nothing more precise — the exact boundary inside 07 is a
-// business decision Neil has not drawn yet, so this errs towards accepting and
-// the fine line can be tightened to a zip list later in one place.
+// BERGEN COUNTY, and Neil has now drawn the line that CLAUDE.md said was
+// undrawn. It used to be "New Jersey with an 07xxx zip", which is most of the
+// north of the state - fine while the promise was "Northern New Jersey" and
+// far too wide for one van working out of Fair Lawn.
 //
-// THIS FUNCTION IS THE ONLY THING THAT DECIDES. The AI is told in as many
-// words that it may not work the answer out from the name of a town, because a
-// model asked "do you come to Princeton?" will happily invent a yes. It asks
-// for the address instead and this is what answers.
+// A ZIP LIST RATHER THAN A CLEVER TEST, because a county has no arithmetic. It
+// is long, it is boring, and it is checkable by a person - which matters,
+// since being wrong here turns away somebody we could serve.
 //
 // What this is NOT: proof the address exists. Nothing here checks that
-// 16-50 Chandler Dr is a real door — that needs an address validation service
-// and is a separate, deliberate decision. This only stops us booking a pickup
-// in Florida.
+// 16-50 Chandler Dr is a real door; that needs an address validation service
+// and is a separate, deliberate decision.
+const BERGEN_ZIPS = new Set([
+  // South and the Meadowlands edge
+  '07010', '07020', '07022', '07024', '07026', '07031',
+  '07070', '07071', '07072', '07073', '07074', '07075',
+  // North west, up the Ramapo side
+  '07401', '07407', '07410', '07417', '07423', '07430', '07432', '07436',
+  '07446', '07450', '07452', '07458', '07463', '07481', '07495',
+  // Hackensack and the central belt
+  '07601', '07603', '07604', '07605', '07606', '07607', '07608',
+  // The Northern Valley and the Palisades
+  '07620', '07621', '07624', '07626', '07627', '07628', '07630', '07631',
+  '07632', '07640', '07641', '07642', '07643', '07644', '07645', '07646',
+  '07647', '07648', '07649', '07650', '07652', '07653', '07656', '07657',
+  '07660', '07661', '07662', '07663', '07666', '07670', '07675', '07676',
+  '07677',
+]);
+
 function inServiceArea(customer) {
   const state = String(customer.state || '').trim().toUpperCase();
   if (state && state !== 'NJ') return false;
 
-  const zip = String(customer.postal_code || '').trim();
-  return /^07\d{3}/.test(zip);
+  const zip = String(customer.postal_code || '').trim().slice(0, 5);
+  return BERGEN_ZIPS.has(zip);
 }
 
 // Returns a human sentence if the date is unusable, or null if it is fine.
@@ -654,6 +668,7 @@ function rescheduledMessage(order) {
 }
 
 module.exports = {
+  BERGEN_ZIPS,
   SERVICE_TZ,
   addDays,
   instantAt,
