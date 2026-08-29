@@ -61,9 +61,22 @@ function classify(text, customer = null) {
 
   // Only somebody who has opted out can opt back in, so only they can mean
   // "yes" that way. An active customer saying "yes" is answering a question.
+  //
+  // A STRANGER IS NOT UNSUBSCRIBED, and this line used to say they were. It
+  // read `!customer || customer.status === 'UNSUBSCRIBED'`, so a number we had
+  // never heard from - which has no customer row at all - counted as somebody
+  // opting back in.
+  //
+  // What that did to a real person: they saw an advert, texted "Yes!", and got
+  // back "You are subscribed to LYNDRY order updates AGAIN" - a sentence about
+  // a relationship they had never had. No customer row was created, no welcome
+  // was sent, no promotion was granted, and they were left mid-conversation
+  // with a service that had no idea who they were.
+  //
+  // "Yes" from somebody unknown is an answer to something, almost certainly an
+  // advert. It is an ordinary first message and belongs to onboarding.
   if (OPT_IN_IF_UNSUBSCRIBED.includes(word)) {
-    const unsubscribed = !customer || customer.status === 'UNSUBSCRIBED';
-    if (unsubscribed) return 'OPT_IN';
+    if (customer && customer.status === 'UNSUBSCRIBED') return 'OPT_IN';
   }
 
   if (HELP.includes(word)) return 'HELP';
