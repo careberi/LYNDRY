@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '13 August 2026';  // bumped with the AI's service-area rule
+const REVIEWED = '31 August 2026';  // two-scale settlement, the order tag, pre-launch
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -649,13 +649,25 @@ function processBody(user) {
       )}
       ${step(
         2,
-        `The scale sets the price, the door takes the money`,
-`The weight sets the price and the customer is texted it straight away,
-         but the money moves at the door. That gap is deliberate: between the
-         scale and the doorstep a laundromat may enter a different weight and a
-         person may have to look at it, and charging at the scale would close
-         that window before it opened. The driver cannot save a weight without
-         photographing the scale that produced it.`
+        `Two scales settle the price, and that is when the card is charged`,
+`Our driver weighs it at the door and the laundromat weighs the same load
+         when they take it in. <strong>Nothing is texted and nothing is charged
+         until both are in.</strong>
+         <br><br>
+         Within tolerance the customer is billed on the <strong>higher</strong> of
+         the two, the card is charged and they are texted the total - one message,
+         once, saying what was actually taken. Past the tolerance everything stops:
+         no charge, no text, and it waits for a person. A customer told a figure we
+         are still arguing about internally has been told the wrong thing.
+         <br><br>
+         The driver's number alone is provisional, which is why it is not texted:
+         quoting ours and then billing theirs would be quoting a price we do not
+         honour. <strong>If the laundromat never enters a weight, ours settles it
+         at delivery</strong> - entering it is voluntary, and an order that waited
+         for ever would be delivered and never billed.
+         <br><br>
+         The driver still cannot save a weight without photographing the scale
+         that produced it.`
       )}
       ${step(
         3,

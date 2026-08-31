@@ -30,7 +30,7 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '13 August 2026';  // bag legs, the dead zone, and two-scale pricing
+const REVIEWED = '31 August 2026';  // the order tag, and weigh-check-clip on the way back
 
 // A step in one of the three legs. `who` is who physically does it, which is
 // the thing a reader most often wants and the thing prose is worst at keeping
@@ -214,11 +214,17 @@ function journeyBody() {
          many bags there are is a question out of order.`)}
 
       ${step('One bag at a time: sticker, scale, photo', 'Driver',
-        `For each bag in turn he peels a pre-printed sticker off the roll, sticks it
-         on, and types its six characters. Then that bag goes on the scale and he
-         photographs the display with the bag on it. Then the next bag. He is never
-         asked for one total at the end - that makes him add up in his head and
-         loses which bag was the heavy one.`)}
+        `For each bag in turn he sticks on a label carrying <strong>the order's
+         tag</strong>, puts the bag on the scale, and photographs the display with
+         the bag on it. Then the next bag. He is never asked for one total at the
+         end - that makes him add up in his head and loses which bag was the heavy
+         one.
+         <br><br>
+         <strong>Every bag of the order carries the SAME tag</strong>, because the
+         tag is the order. A code per bag would tell the laundromat nothing extra -
+         the wash instructions are per order - and would make the return leg
+         impossible, since a bag they packed has no code and somebody would have to
+         bind one to it at a counter.`)}
 
       ${step('A numbered clip goes on', 'Automatic',
         `Each weighed bag gets the lowest free clip number in his van, from a real
@@ -387,14 +393,38 @@ function journeyBody() {
     'The only leg where money moves.',
     `
     <ol class="jn-steps">
+      ${step('Weigh what he is taking, before anything moves', 'Driver',
+        `He says how many finished bags there are and puts the lot on their scale.
+         That weight is checked against what he collected from the customer.
+         <strong>A different number of bags is normal</strong> - they repack into
+         their own - so nothing is said about the count; it is the weight that is
+         checked.
+         <br><br>
+         Short means a bag is probably still on their shelf, and the place to find
+         that out is the counter he is standing at, not a doorstep two hours later.
+         A refusal creates nothing at all, so he can weigh again and retry without
+         undoing anything.`)}
+
+      ${step('Then the clips go on', 'Automatic',
+        `<strong>Only once the weight passes.</strong> Each bag gets the lowest free
+         clip in his van, so a clipped bag is a <em>verified</em> bag and the clips
+         are the record that this load was weighed and matched before it moved.
+         <br><br>
+         Nothing is stuck to the finished bags. The clip attaches to the bag itself
+         rather than to a code, which is what lets the laundromat pack however many
+         bags it likes without being asked to label any of them.`)}
+
       ${step('Load the van in reverse', 'Driver',
-        `He scans every finished bag out of the laundromat, which is what builds the
-         afternoon's running order. Bags load <strong>highest stop deepest</strong>,
-         so stop 1 ends up by the doors. At each house the scan is then a
-         confirmation rather than a search through the van.`)}
+        `Bags load <strong>highest stop deepest</strong>, so stop 1 ends up by the
+         doors. At each house the bags for that order are the ones on its clips,
+         rather than a search through the van.`)}
 
       ${step('Out for delivery', 'Driver',
-        'The customer is texted.')}
+        `The customer is texted. <strong>This is refused until the return leg has
+         been recorded</strong> - an order once went out, and its customer was told
+         it was coming, while nobody had yet recorded what came off the laundromat's
+         shelf. The first moment anybody would have found a missing bag was a
+         doorstep, after the promise had already been sent.`)}
 
       ${step('Scan every bag at the door', 'Driver',
         `A checklist ticks the codes off one at a time. While anything on the order
@@ -508,10 +538,17 @@ function journeyBody() {
         object).
       </p>
       <p style="border-top:2px solid var(--ink-900);padding-top:14px;">
-        <strong>Not built yet.</strong> The legs, the independent counts and the
-        weight reconciliation above are all live. The load sticker is the agreed
-        answer and is still a decision rather than a feature - until it exists, the
-        driver identifies the finished work at the counter and labels it there.
+        <strong>What is actually built is simpler than that.</strong> The finished
+        bags carry nothing. The driver weighs them at the counter, and if the weight
+        matches what he collected, each bag gets a numbered clip from his van. The
+        clips are the identity for the whole van leg and come off at the customer's
+        door, so nothing of ours is ever left in somebody else's building and the
+        laundromat is never asked to label anything.
+      </p>
+      <p>
+        <strong>What the clip does not do is outlive the van.</strong> It carries
+        nothing once it comes off at the door, so a bag returned or queried a week
+        later has nothing on it to read. Whether that matters is still open.
       </p>
     </div>
 

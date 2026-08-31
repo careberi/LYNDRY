@@ -358,7 +358,14 @@ Rules:
 - Missing a required field? Ask for **that one field only**, then act.
 - A returning customer texting "laundry tomorrow" gets an order with zero
   follow-up questions.
-- **There are no default wash preferences, anywhere.** A new customer is asked
+- **DRYING IS NOT A CHOICE AND MUST NOT BECOME ONE.** We tumble dry everything.
+There is no `hang_dry` field, it is not in `update_profile`'s enum, and it is
+not on the laundromat's page. The prompt says in as many words that the AI must
+not offer an exception and must not say it will make a note — taking the field
+away stops it SAVING one, not PROMISING one, and a promise made in a text thread
+is one the people doing the washing never see.
+
+**There are no default wash preferences, anywhere.** A new customer is asked
   once, in the thread, during setup — water temperature, detergent, softener,
   and where the driver finds the bag — and `bookPickup()` refuses a first
   booking until they exist. Never invent a setting and never tell somebody
@@ -460,13 +467,34 @@ thing on a heavy day and the run says so.
 and somebody else's clip 4 never collide. The owner comes from `orders.driver_id`
 rather than being stored twice.
 
-**The clip's life is the van leg**: on at the door once the bag is weighed, off
-when it is handed to the laundromat, which is what frees the number. **Do not
-confuse it with `orders.stop_number`** — a stop number says which door on the
-way back, a clip number says which bag on the way there. `unclipOrder()` never
-clears `clip_number`, only stamps `unclipped_at`, so the order page can still
-say which clip a bag travelled under — same reason a released sticker keeps its
-order.
+**The clip's life is the van leg, and there are TWO of them.** On at the
+customer's door once the bag is weighed, off when it is handed to the
+laundromat, which frees the number. Then on again when the finished work is
+collected, and off at the customer's door. **Do not confuse it with
+`orders.stop_number`** — a stop number says which door on the way back, a clip
+number says which bag is in the van. `unclipOrder()` never clears
+`clip_number`, only stamps `unclipped_at`, so the order page can still say
+which clip a bag travelled under.
+
+**WEIGH, CHECK, THEN CLIP — and the order of those three is the point.**
+Neil's sequence. Collecting finished work off a laundromat goes through
+`tags.collectFromPartner()`: the driver says how many bags and what they weigh,
+the weight is checked against what he collected from the customer, and **only
+if it passes do the clips go on**. So a clipped bag is a *verified* bag, and
+the clips in the van are the record that the load was weighed and matched
+before it moved.
+
+**A failed check creates nothing** — no bag rows, no clips out of the pool.
+A refusal that had already taken four clips would be a refusal the driver has
+to undo before he can weigh again.
+
+**THE CLIP IS WHAT MAKES THE RETURN LEG WORK WITHOUT A STICKER.** A clip
+attaches to a bag ROW, not to a code — `assignClip()` has never looked at a
+code, and `bag_labels.code` is nullable. So the driver says "four bags", each
+gets a row and a number, and nothing is stuck to anything. The laundromat is
+never asked to label what it packed. Do not reintroduce a scan as the way a
+clip gets assigned on this leg; that was the mistake that made the return leg
+look impossible.
 
 **An order goes to one laundromat, whole.** Neil's call: splitting a customer's
 bags across two would mean their wash finishes at different times, so they
@@ -479,6 +507,46 @@ each bag — sticker on it, on the scale, photograph the display — before "in 
 van". Asking for stickers before anybody has said how many bags there are is a
 question out of order, and asking for one total at the end makes him add up in
 his head and loses which bag was the heavy one.
+
+**BAGS IN IS NOT BAGS OUT, and the count is never assumed across the two.**
+The laundromat empties what we bring and packs the clean laundry into its own
+bags, so two in can be one out or four. `bag_labels.leg` is `PICKUP` or
+`DELIVERY`, the counts live in `orders.bag_count` and `orders.return_bag_count`,
+and the weights in `orders.weight_lb` and `orders.return_weight_lb`. Anything
+asking "are all the bags here" must name a leg.
+
+**What proves nothing was lost is the WEIGHT, not the count.** Neil's framing
+and the right one: 25 lb collected and 25 lb returned means it is all there,
+whatever carried it.
+
+**`tags.checkHandover()` is deliberately NOT symmetric**, and this is the one
+weight comparison in the system that is not. Every other one is two scales on
+the same load, where a gap either way just means a scale is off. This is dirty
+in against clean out:
+
+| | |
+|---|---|
+| up to `DRY_LOSS_PCT` lighter | normal, water and grit came out, every order |
+| more than that | **a bag has been left behind** |
+| over `GAIN_LB` heavier | **somebody else's clothes are in the pile** |
+
+`Math.abs` would treat 2 lb lighter and 2 lb heavier as the same event when they
+mean opposite things. **The 8% is a guess and is flagged as one in the code** —
+damp towels hold real water and dry shirts hold none, so record the drift and
+tighten it once the spread is visible rather than inventing a number that flags
+everything or nothing.
+
+**Nothing goes out for delivery, and the customer is told nothing, until the
+return leg is recorded.** `outForDelivery()` refuses for any order that went to
+a laundromat until `return_bag_count` and `return_weight_lb` exist. A real order
+went out, and its customer was texted, while nobody had yet recorded what came
+off the shelf — the first moment anybody would have found a missing bag was a
+doorstep, after the promise had been sent.
+
+**`bagsInVan()` must not fall back to the pickup stickers once `partner_id` is
+set.** That fallback is right for a bag that never left the van and wrong the
+moment a laundromat has had it: those stickers are in their bin. It asked a
+driver to scan three codes that no longer physically exist.
 
 **`orders.weight_lb` is the SUM of `bag_labels.weight_lb`, recomputed whenever a
 bag is weighed.** It is still the authoritative figure — it prices the order and
@@ -648,6 +716,24 @@ that decides which** — OUTSTANDING (printed, never used), IN USE (on a bag, QR
 opens), EXPIRED (order delivered, link dead). `/ops/labels` counts, colours and
 filters by it, and warns when blank stock drops below ten, because a driver with
 no sticker cannot label a bag and an unlabelled bag cannot be scanned at a door.
+
+**ONE TAG PER ORDER, CARRIED BY EVERY BAG OF IT.** `orders.tag_code` is the
+identifier: three bags in and four bags out all read the same code, because the
+tag is the ORDER and the order did not change when the laundromat repacked it.
+
+It replaced a unique code per bag, which was solving a problem nobody had — the
+wash instructions are per order, so a per-bag code told a laundromat nothing
+extra — while making the return leg genuinely hard, because a bag THEY packed
+had no code and somebody had to bind one to it at a counter.
+
+**The tag is RANDOM, never `order_number`.** A sequential value in a public URL
+lets anybody holding one read the next order's wash instructions by adding one
+to it. Same 32^6 space and the same signature as a bag sticker, so one scanner
+handles both. `tags.claim()` is idempotent — an order quietly acquiring a second
+tag would stop every sticker already on its bags resolving.
+
+**`/o/<code>` resolves an order tag FIRST and a bag sticker second**, so nothing
+already stuck to a bag stopped working the day the model changed.
 
 **Bag labels are pre-printed and bound later.** A sticker has to exist at a
 customer's door and there is no printer in the van, so blank labels are printed
