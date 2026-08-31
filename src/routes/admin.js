@@ -2748,12 +2748,19 @@ router.post(
   }
 );
 
-// --- What came back from the laundromat -------------------------------------
+// --- Collecting the finished work off a laundromat --------------------------
 //
-// Two numbers, taken at the counter while their scale is still out, and BEFORE
-// the customer is told anything. Bags out is not bags in - they repack into
-// their own - so the count is recorded rather than assumed, and the weight is
-// what actually proves nothing was left on a shelf.
+// WEIGH FIRST, THEN CLIP, and the order of the two is the point. The driver is
+// at a counter with some number of finished bags that carry nothing at all. He
+// says how many and what they weigh; the weight is checked against what he
+// collected from the customer; and ONLY if that passes do the clips go on.
+//
+// So a clipped bag is a verified bag. The clips in the van are not just a way
+// of telling orders apart, they are the record that this load was weighed and
+// matched before it moved.
+//
+// It also needs nothing stuck to anything. A clip attaches to a bag row, not to
+// a code, so the laundromat is not asked to label what it packed.
 router.post('/ops/orders/:id/return', guard, may('orders.act'), async (req, res, next) => {
   try {
     const order = await loadOrderForAction(req.params.id);
@@ -2762,55 +2769,52 @@ router.post('/ops/orders/:id/return', guard, may('orders.act'), async (req, res,
     const back = backTo(req, order);
     const body = req.body || {};
 
-    const count = Number(body.bag_count);
-    const weight = Number(body.weight_lb);
+    const result = await tags.collectFromPartner(order, {
+      bagCount: body.bag_count,
+      weightLb: body.weight_lb,
+      driverId: order.driver_id,
+    });
 
-    if (!Number.isInteger(count) || count < 1 || count > 40) {
-      return res.redirect(303, `${back}?problem=${encodeURIComponent('How many bags came back? A whole number.')}`);
+    if (!result.ok) {
+      // A mismatch is worth a person looking at, and the place to look is the
+      // counter he is standing at. Nothing was created and no clip was taken,
+      // so he can weigh again and retry without undoing anything.
+      if (result.reason === 'mismatch') {
+        await orderEvents.record(order.id, {
+          kind: 'WEIGHT',
+          summary: `Refused at collection: ${result.check.direction.toLowerCase()} than expected`,
+          was: order.weight_lb == null ? null : `${order.weight_lb} lb collected`,
+          became: `${Number(body.weight_lb).toFixed(1)} lb offered back`,
+          by: { opsUser: req.opsUser },
+          reason: result.detail,
+        });
+
+        await issues
+          .raise({ customer: order.customers || null, order, reason: result.detail })
+          .catch((err) => console.error(`Could not raise a handover mismatch: ${err.message}`));
+      }
+
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
     }
-    if (!Number.isFinite(weight) || weight <= 0 || weight > 400) {
-      return res.redirect(303, `${back}?problem=${encodeURIComponent('What do they weigh? Pounds, as a number.')}`);
-    }
-
-    const { error } = await db
-      .from('orders')
-      .update({ return_bag_count: count, return_weight_lb: weight.toFixed(2) })
-      .eq('id', order.id);
-
-    if (error) throw error;
-
-    // Dirty in against clean out, and deliberately not a symmetric comparison.
-    const check = tags.checkHandover({ wentIn: order.weight_lb, cameBack: weight });
 
     await orderEvents.record(order.id, {
       kind: 'WEIGHT',
       summary:
-        `${count} bag${count === 1 ? '' : 's'} back from the laundromat, ${weight.toFixed(1)} lb` +
-        (check && !check.ok ? ` - ${check.direction.toLowerCase()} than expected` : ''),
+        `${result.count} bag${result.count === 1 ? '' : 's'} collected from the laundromat, ` +
+        `${result.weight.toFixed(1)} lb` +
+        (result.clips.length ? ` on clip${result.clips.length === 1 ? '' : 's'} ${result.clips.join(', ')}` : ''),
       was: order.weight_lb == null ? null : `${order.weight_lb} lb collected`,
-      became: `${weight.toFixed(1)} lb back`,
+      became: `${result.weight.toFixed(1)} lb back`,
       by: { opsUser: req.opsUser },
-      reason: check && !check.ok ? 'Outside what drying accounts for' : null,
     });
 
-    if (check && !check.ok) {
-      await issues
-        .raise({
-          customer: order.customers || null,
-          order,
-          reason: check.detail,
-        })
-        .catch((err) => console.error(`Could not raise a handover mismatch: ${err.message}`));
+    const note = result.ranOut
+      ? `${result.count} bags, ${result.weight.toFixed(1)} lb. ${result.ranOut}`
+      : `${result.count} bag${result.count === 1 ? '' : 's'}, ${result.weight.toFixed(1)} lb. ` +
+        `That matches what we collected. Clip${result.clips.length === 1 ? '' : 's'} ` +
+        `${result.clips.join(', ')}.`;
 
-      return res.redirect(303, `${back}?problem=${encodeURIComponent(check.detail)}`);
-    }
-
-    return res.redirect(
-      303,
-      `${back}?note=${encodeURIComponent(
-        `${count} bag${count === 1 ? '' : 's'} back, ${weight.toFixed(1)} lb. That matches what we collected.`
-      )}`
-    );
+    return res.redirect(303, `${back}?note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
   }

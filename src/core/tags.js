@@ -212,8 +212,100 @@ function checkHandover({ wentIn, cameBack }) {
   return { ok: true, direction: 'OK', difference };
 }
 
+// --- Collecting the finished work off a laundromat --------------------------
+
+// Weigh first, then clip. NEIL'S SEQUENCE, and the order of the two is the
+// whole point.
+//
+// The driver is at a counter with some number of finished bags that carry
+// nothing. Before any of them goes in the van he weighs the lot and it is
+// checked against what he collected from the customer. Only if that passes do
+// the clips go on.
+//
+// SO A CLIPPED BAG IS A VERIFIED BAG. That is the invariant this buys: the
+// clips in the van are not just a way of telling orders apart, they are the
+// record that this load was weighed and matched before it moved. Clipping
+// first and checking later would leave a van full of bags whose status nobody
+// knows.
+//
+// The clips are also what makes the return leg possible at all without putting
+// a sticker on anything. A clip attaches to a bag ROW, not to a code - so the
+// driver says how many bags there are, and each gets a row and a number,
+// with nothing stuck to it. The laundromat is not asked to do anything.
+//
+// Nothing is created when the weight fails. A refusal that had already written
+// four bag rows and taken four clips out of the pool would be a refusal that
+// changed things, and the driver would have to undo it before he could retry.
+async function collectFromPartner(order, { bagCount, weightLb, driverId = null } = {}) {
+  const count = Number(bagCount);
+  const weight = Number(weightLb);
+
+  if (!Number.isInteger(count) || count < 1 || count > 40) {
+    return { ok: false, reason: 'count', detail: 'How many bags are you taking? A whole number.' };
+  }
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 400) {
+    return { ok: false, reason: 'weight', detail: 'What do they weigh altogether? Pounds, as a number.' };
+  }
+
+  const check = checkHandover({ wentIn: order.weight_lb, cameBack: weight });
+
+  // THE GATE. Short means a bag is probably still on their shelf, and the one
+  // place to find out is standing at the counter - not at somebody's door two
+  // hours later.
+  if (check && !check.ok) {
+    return { ok: false, reason: 'mismatch', check, detail: check.detail };
+  }
+
+  // Bag rows with no code on them. The bags are physical objects to carry and
+  // clip; the ORDER is what they belong to, and the order already has its tag.
+  const existing = await bags.forOrder(order.id, 'DELIVERY');
+  const now = new Date().toISOString();
+
+  const rows = [];
+  for (let position = 1; position <= count; position += 1) {
+    const already = existing.find((b) => b.position === position);
+    if (already) { rows.push(already); continue; }
+
+    const { data, error } = await db
+      .from('bag_labels')
+      .insert({ order_id: order.id, leg: 'DELIVERY', position, bound_at: now })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    rows.push(data);
+  }
+
+  // A clip per bag, lowest free first, scoped to whoever is driving.
+  const clips = [];
+  let ranOut = null;
+
+  for (const row of rows) {
+    const clipped = await bags.assignClip(row, driverId || order.driver_id);
+    if (clipped.ok) clips.push(clipped.clip);
+    else ranOut = clipped.detail;
+  }
+
+  const { error } = await db
+    .from('orders')
+    .update({ return_bag_count: count, return_weight_lb: weight.toFixed(2) })
+    .eq('id', order.id);
+
+  if (error) throw error;
+
+  return {
+    ok: true,
+    check,
+    count,
+    weight,
+    clips: clips.sort((a, b) => a - b),
+    ranOut,
+  };
+}
+
 module.exports = {
   claim,
+  collectFromPartner,
   findByTag,
   tagUrl,
   bagsFor,
