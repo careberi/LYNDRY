@@ -5,6 +5,7 @@ const express = require('express');
 const db = require('../db');
 const bags = require('../core/bags');
 const fulfilment = require('../core/fulfilment');
+const tags = require('../core/tags');
 const throttle = require('../core/throttle');
 const issues = require('../core/issues');
 const orderEvents = require('../core/order-events');
@@ -251,6 +252,129 @@ function readyCard(order, code, token) {
     </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// What a laundromat sees when they scan an ORDER TAG.
+//
+// Every bag of the order carries this same code, so this is the whole job on
+// one screen rather than one screen per bag: how many bags there are, how they
+// are washed, how long there is, and the two things we need back from them.
+//
+// STILL A BLIND DROP-OFF. The code, the order number, how many bags, five
+// structured wash fields and a countdown. No name, no address, no phone, no
+// price, and no free text of any kind - a real saved preference reads "deliver
+// to 16-51 Chandler Dr", so the page lists the fields it allows rather than
+// trying to redact the ones it does not.
+// ---------------------------------------------------------------------------
+function orderTagPage(order, code, token, query = {}) {
+  const wash = washLines((order.customers || {}).preferences);
+  const clock = fulfilment.turnaround(order);
+  const bagsIn = order.bag_count == null ? null : Number(order.bag_count);
+
+  const t = encodeURIComponent(String(token || ''));
+  const back = `/o/${encodeURIComponent(code)}?t=${t}`;
+
+  const saidWeight = order.partner_weight_lb != null;
+  const atPartner = order.status === 'AT_PARTNER';
+
+  return page({
+    title: `Order ${order.order_number}`,
+    body: `
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 8px;">Order tag</p>
+      <div style="font-family:var(--font-mono);font-size:38px;font-weight:700;letter-spacing:0.06em;line-height:1;">
+        ${escapeHtml(code)}
+      </div>
+      <div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-500);margin-top:10px;">
+        Order #${escapeHtml(String(order.order_number))}${
+          bagsIn ? ` &middot; ${bagsIn} bag${bagsIn === 1 ? '' : 's'} came in` : ''
+        }
+      </div>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:14px 0 0;">
+        Every bag of this order has this same tag on it.
+      </p>
+    </div>
+
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 14px;">How to wash it</p>
+      <dl style="display:grid;grid-template-columns:auto 1fr;gap:10px 22px;margin:0;font-size:16px;">
+        ${wash
+          .map(
+            ([k, v]) =>
+              `<dt style="color:var(--ink-500);">${escapeHtml(k)}</dt>` +
+              `<dd style="margin:0;font-weight:700;">${escapeHtml(v)}</dd>`
+          )
+          .join('')}
+      </dl>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-500);margin:18px 0 0;">
+        The same for every bag of this order.
+      </p>
+    </div>
+
+    <div class="card" style="padding:28px;margin-bottom:20px;background:${
+      clock && clock.urgent ? 'var(--stain-500)' : 'var(--sunbeam-500)'
+    };${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
+      <p class="eyebrow" style="margin:0 0 8px;${
+        clock && clock.urgent ? 'color:var(--paper-050);' : ''
+      }">Time to turn it around</p>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
+        ${escapeHtml(clock ? clock.text : 'Not picked up yet')}
+      </div>
+    </div>
+
+    ${
+      // ONE WEIGHT FOR THE WHOLE LOAD, and only while it is actually with them.
+      // A laundromat weighs what goes in the machine, which is the load, not
+      // each bag we happened to carry it in.
+      !atPartner
+        ? `<div class="card" style="padding:28px;margin-bottom:20px;">
+             <p class="eyebrow" style="margin:0 0 8px;">Not with you yet</p>
+             <p style="font-size:15px;line-height:1.6;margin:0;">
+               Our driver has not handed this over yet. Nothing to do.
+             </p>
+           </div>`
+        : saidWeight
+          ? `<div class="card" style="padding:28px;margin-bottom:20px;">
+               <p class="eyebrow" style="margin:0 0 8px;">Weight recorded</p>
+               <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
+                 ${escapeHtml(Number(order.partner_weight_lb).toFixed(1))} lb
+               </div>
+               <p style="font-size:15px;line-height:1.6;margin:12px 0 0;">
+                 Thanks, that is logged. Nothing else until it is ready.
+               </p>
+             </div>`
+          : `<div class="card" style="padding:28px;margin-bottom:20px;">
+               <p class="eyebrow" style="margin:0 0 8px;">What does it weigh?</p>
+               <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">
+                 The whole load, in pounds. We weigh it too, so this is a
+                 cross-check that catches a bad scale on either side.
+               </p>
+               <form method="post" action="/o/${encodeURIComponent(code)}/weight?t=${t}"
+                     style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                 <div style="flex:1 1 160px;">
+                   <label class="field-label" for="lw">Pounds</label>
+                   <input class="field" id="lw" name="weight_lb" type="number" step="0.1"
+                          min="0" max="400" inputmode="decimal" required>
+                 </div>
+                 <button class="btn btn-ink btn-lg" type="submit">Save</button>
+               </form>
+               ${
+                 query.weighed === 'bad'
+                   ? `<p style="font-size:15px;color:var(--stain-500);margin:14px 0 0;">
+                        That did not look like a weight. Pounds, as a number.
+                      </p>`
+                   : ''
+               }
+             </div>`
+    }
+
+    ${readyCard(order, code, token)}
+
+    <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
+      Questions about this order: ${escapeHtml(site.publicPhoneDisplay)}.
+    </p>`,
+  });
+}
+
 function page({ title, body }) {
   return `<!doctype html>
 <html lang="en">
@@ -319,6 +443,19 @@ router.get('/o/:code', async (req, res, next) => {
     if (!code || !bags.verifyCode(code, req.query.t)) {
       await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
       return res.status(404).type('html').send(nothingHere());
+    }
+
+    // AN ORDER TAG FIRST, A BAG STICKER SECOND.
+    //
+    // Under the order tag every bag of an order carries the same code, so a
+    // scan resolves to the ORDER. Bag stickers from the per-bag model still
+    // resolve after it, because stickers already stuck to bags must not stop
+    // working the day the model changed.
+    const tagged = await tags.findByTag(code);
+
+    if (tagged) {
+      await bags.recordScan({ code, orderId: tagged.id, outcome: 'SHOWN', ip, userAgent });
+      return res.type('html').send(orderTagPage(tagged, code, req.query.t, req.query));
     }
 
     const label = await bags.findByCode(code);
@@ -460,6 +597,65 @@ router.post('/o/:code/weight', async (req, res, next) => {
     if (!code || !bags.verifyCode(code, req.query.t)) {
       await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
       return res.status(404).type('html').send(nothingHere());
+    }
+
+    // AN ORDER TAG WEIGHS THE WHOLE LOAD IN ONE NUMBER.
+    //
+    // Which is what a laundromat actually has: they weigh what goes in the
+    // machine, not each bag we carried it in. It goes straight onto the order
+    // and settles the price through the same path a per-bag total does, so
+    // there is no second implementation of "what does this order cost".
+    const tagged = await tags.findByTag(code);
+
+    if (tagged) {
+      const weight = Number((req.body || {}).weight_lb);
+      const backTo = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
+
+      if (!Number.isFinite(weight) || weight <= 0 || weight > 400) {
+        return res.redirect(303, `${backTo}&weighed=bad`);
+      }
+
+      // Same guard as the markup, because the markup guards nothing on a page
+      // with no sign-in.
+      if (tagged.status !== 'AT_PARTNER') {
+        return res.redirect(303, `${backTo}&weighed=early`);
+      }
+
+      await db
+        .from('orders')
+        .update({ partner_weight_lb: weight, partner_weight_at: new Date().toISOString() })
+        .eq('id', tagged.id);
+
+      await orderEvents.record(tagged.id, {
+        kind: 'PARTNER_WEIGHT',
+        summary: `Laundromat weighed the whole load at ${weight.toFixed(1)} lb`,
+        was: tagged.weight_lb == null ? null : `${tagged.weight_lb} lb ours`,
+        became: `${weight.toFixed(1)} lb theirs`,
+        by: { actor: 'partner' },
+      });
+
+      const settled = await fulfilment
+        .settleWeight({ ...tagged, partner_weight_lb: weight }, { by: { actor: 'partner' } })
+        .catch((err) => {
+          console.error(`Could not settle order ${tagged.id}: ${err.message}`);
+          return { ok: false };
+        });
+
+      if (settled && settled.held && tagged.customers) {
+        await issues
+          .raise({
+            customer: tagged.customers,
+            order: tagged,
+            reason:
+              `Scales disagree: we weighed it ${tagged.weight_lb} lb, the laundromat ` +
+              `${weight.toFixed(1)} lb. NOTHING HAS BEEN CHARGED and the customer has ` +
+              `not been told a price. Settle it on the order page and both happen then.`,
+          })
+          .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
+      }
+
+      await bags.recordScan({ code, orderId: tagged.id, outcome: 'SHOWN', ip, userAgent });
+      return res.redirect(303, `${backTo}&weighed=1`);
     }
 
     const label = await bags.findByCode(code);
@@ -635,17 +831,26 @@ router.post('/o/:code/ready', async (req, res, next) => {
       return res.status(404).type('html').send(nothingHere());
     }
 
-    const label = await bags.findByCode(code);
-    if (!label || !label.order_id || label.released_at) {
-      await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
-    }
+    // An order tag marks the whole order ready, which is the only thing "ready"
+    // ever meant - it was never a property of one bag.
+    const tagged = await tags.findByTag(code);
 
-    const { data: order, error } = await db
-      .from('orders')
-      .select('*, customers(id, name, phone, address_line1, city)')
-      .eq('id', label.order_id)
-      .maybeSingle();
+    let order = tagged;
+    let error = null;
+
+    if (!tagged) {
+      const label = await bags.findByCode(code);
+      if (!label || !label.order_id || label.released_at) {
+        await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
+        return res.status(404).type('html').send(nothingHere());
+      }
+
+      ({ data: order, error } = await db
+        .from('orders')
+        .select('*, customers(id, name, phone, address_line1, city)')
+        .eq('id', label.order_id)
+        .maybeSingle());
+    }
 
     if (error) throw error;
 
