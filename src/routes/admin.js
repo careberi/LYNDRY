@@ -1144,16 +1144,50 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
           }
         </div>
         ${
+          // AN ORDER NOBODY OWNS IS THE ONE THAT DOES NOT GET COLLECTED, so the
+          // banner now fixes it rather than only reporting it. Saying "nobody
+          // is going to collect this" and then making somebody go to another
+          // page to do something about it is a warning that costs more than it
+          // saves.
+          //
+          // The picker only appears for somebody who may actually reassign -
+          // customers.view, the same permission the route checks. A driver sees
+          // the warning and no control, which is right: handing work to
+          // somebody else is a scheduling decision, not a step in the round.
           crew.orphans.length
-            ? `<p style="margin:16px 0 0;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                          background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
-                 <strong>${crew.orphans.length} order${crew.orphans.length === 1 ? '' : 's'} with no driver:</strong>
-                 ${crew.orphans
-                   .map((o) => `<a href="/ops/orders/${o.order_number}" style="color:var(--paper-050);">#${o.order_number}</a>`)
-                   .join(', ')}.
+            ? `<div style="margin:16px 0 0;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                           background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+                 <strong>${crew.orphans.length} order${crew.orphans.length === 1 ? '' : 's'} with no driver.</strong>
                  Nobody is going to collect ${crew.orphans.length === 1 ? 'it' : 'them'} until somebody owns
                  ${crew.orphans.length === 1 ? 'it' : 'them'}.
-               </p>`
+
+                 ${
+                   roles.can(req.opsUser, 'customers.view') && crew.rows.length
+                     ? crew.orphans
+                         .map(
+                           (o) => `
+                 <form method="post" action="/ops/orders/${o.order_number}/driver"
+                       style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px;">
+                   <input type="hidden" name="from" value="board">
+                   <a href="/ops/orders/${o.order_number}"
+                      style="color:var(--paper-050);font-weight:700;">#${o.order_number}</a>
+                   <label class="sr-only" for="assign-${o.order_number}">Driver for #${o.order_number}</label>
+                   <select class="field" id="assign-${o.order_number}" name="driver_id"
+                           style="height:38px;padding:0 10px;font-size:15px;width:auto;min-width:150px;">
+                     ${crew.rows
+                       .map((r) => `<option value="${r.driver.id}">${escapeHtml(r.driver.name)}</option>`)
+                       .join('')}
+                   </select>
+                   <button class="btn btn-sm" type="submit"
+                           style="background:var(--paper-050);color:var(--ink-900);">Assign</button>
+                 </form>`
+                         )
+                         .join('')
+                     : `<div style="margin-top:8px;">${crew.orphans
+                         .map((o) => `<a href="/ops/orders/${o.order_number}" style="color:var(--paper-050);">#${o.order_number}</a>`)
+                         .join(', ')}</div>`
+                 }
+               </div>`
             : ''
         }
       </section>`
@@ -2044,11 +2078,18 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
       by: { opsUser: req.opsUser },
     });
 
+    // Back where it was done from. Assigning from the board's red banner and
+    // then landing on the order page loses the list of everything else that
+    // still needs a driver, which is the whole reason for being there.
+    const note = encodeURIComponent(
+      to ? `#${order.order_number} assigned to ${to.name}.` : `#${order.order_number} unassigned.`
+    );
+
     return res.redirect(
       303,
-      `/ops/orders/${order.order_number}?note=${encodeURIComponent(
-        to ? `Moved to ${to.name}.` : 'Unassigned.'
-      )}`
+      (req.body || {}).from === 'board'
+        ? `/ops?note=${note}`
+        : `/ops/orders/${order.order_number}?note=${note}`
     );
   } catch (err) {
     return next(err);
