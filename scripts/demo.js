@@ -139,7 +139,6 @@ async function clear() {
         water_temp: 'COLD',
         detergent: 'HYPOALLERGENIC',
         fabric_softener: false,
-        hang_dry: true,
         separate_darks: true,
         dropoff_spot: 'Side door under the awning',
       },

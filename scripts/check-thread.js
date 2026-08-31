@@ -16,6 +16,8 @@
 // Nothing is texted: decide() returns the reply, the SMS route is what sends.
 // ---------------------------------------------------------------------------
 
+const ROOT = require('path').join(__dirname, '..', 'src') + require('path').sep;
+
 const db = require(ROOT + 'db');
 const brain = require(ROOT + 'core/brain');
 const actions = require(ROOT + 'core/actions');

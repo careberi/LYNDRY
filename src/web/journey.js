@@ -329,7 +329,6 @@ function journeyBody() {
         <dt>Water</dt><dd>Cold</dd>
         <dt>Detergent</dt><dd>Hypoallergenic</dd>
         <dt>Softener</dt><dd>No</dd>
-        <dt>Drying</dt><dd>Hang dry, do not tumble</dd>
         <dt>Sorting</dt><dd>Wash darks separately</dd>
         <dt>Due back</dt><dd>13h 40m left</dd>
       </dl>

@@ -81,7 +81,9 @@ function washLines(preferences) {
   if (p.water_temp) out.push(['Water', String(p.water_temp).toLowerCase()]);
   out.push(['Detergent', p.detergent === 'HYPOALLERGENIC' ? 'Hypoallergenic' : 'Standard']);
   out.push(['Softener', p.fabric_softener ? 'Yes' : 'No']);
-  if (p.hang_dry) out.push(['Drying', 'Hang dry, do not tumble']);
+  // NO DRYING OPTION. Neil's call: we tumble dry everything, so it is not a
+  // choice a customer gets to make and not a line a laundromat should be
+  // reading off a screen. A field offering it would eventually be answered.
   if (p.separate_darks) out.push(['Sorting', 'Wash darks separately']);
 
   return out;

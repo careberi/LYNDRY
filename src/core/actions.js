@@ -329,11 +329,14 @@ const PREFERENCE_KEYS = [
   'water_temp',
   'detergent',
   'fabric_softener',
-  // Structured on purpose. These are the two things beyond temperature,
-  // detergent and softener that change what somebody does at a machine, and
-  // having them as fields is what stops them being typed into free text - the
-  // one place a customer will also type an address or a company name.
-  'hang_dry',
+  // Structured on purpose: having this as a field is what stops it being typed
+  // into free text, which is the one place a customer will also type an address
+  // or a company name.
+  //
+  // DRYING IS NOT ON THIS LIST AND MUST NOT GO BACK ON IT. We tumble dry
+  // everything, so it is not a choice on offer. A writable field for it is a
+  // promise the operation does not keep, and the AI would eventually accept one
+  // because somebody asked nicely.
   'separate_darks',
   'special_instructions',
   'default_pickup_method',
