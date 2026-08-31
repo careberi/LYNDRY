@@ -493,6 +493,29 @@ async function outForDelivery(order, { by = {} } = {}) {
   const unweighed = needsWeightFirst(order);
   if (unweighed) return unweighed;
 
+  // WHAT CAME BACK IS CONFIRMED BEFORE THE CUSTOMER IS TOLD ANYTHING.
+  //
+  // Neil's call, and it fixes a real sequence fault: an order went out for
+  // delivery, and the customer was texted, while nobody had yet recorded how
+  // many bags came off the laundromat's shelf or what they weighed. The first
+  // moment anybody would have noticed a missing bag was a doorstep, after the
+  // promise had already been sent.
+  //
+  // Bags out is NOT bags in - they repack into their own - so the count cannot
+  // be assumed, and the weight is what actually proves nothing was left behind.
+  // Only asked of an order that went to a laundromat; one we washed ourselves
+  // never left the van and has nothing to reconcile.
+  if (order.partner_id && (order.return_bag_count == null || order.return_weight_lb == null)) {
+    return {
+      ok: false,
+      reason: 'unconfirmed',
+      detail:
+        'Record what came back from the laundromat first - how many bags, and ' +
+        'what they weigh. The customer is told it is on the way as soon as you ' +
+        'do, so it needs to be right before that goes out.',
+    };
+  }
+
   // The one new fact: it is on the van. They already know the price from the
   // weigh text; repeating it here is what made the thread read like a bill.
   return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`, by);
@@ -530,7 +553,7 @@ async function deliver(orderIn, file, { by = {} } = {}) {
   //
   // An order with no labels passes. Labelling is new, and refusing to deliver a
   // bag picked up before stickers existed would strand it on the van forever.
-  const scanned = await loadout.allBagsScanned(order.id);
+  const scanned = await loadout.allBagsScanned(order);
 
   if (!scanned.ok) {
     return {

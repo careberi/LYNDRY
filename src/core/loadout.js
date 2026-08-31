@@ -128,9 +128,30 @@ async function scanOut(labelId) {
 // count. Before one, or when we washed it ourselves, it is the pickup labels,
 // because those bags never left the van. One helper so the fallback is written
 // once and the three callers cannot disagree about it.
-async function bagsInVan(orderId) {
+async function bagsInVan(order) {
+  const orderId = typeof order === 'string' ? order : order.id;
+
   const delivery = await bags.forOrder(orderId, 'DELIVERY');
-  return delivery.length ? delivery : bags.forOrder(orderId, 'PICKUP');
+  if (delivery.length) return delivery;
+
+  // THE FALLBACK MUST NOT SURVIVE A LAUNDROMAT VISIT.
+  //
+  // Falling back to the pickup labels is right for a bag that never left the
+  // van - we washed it ourselves, so the bags at the door ARE the bags
+  // collected. It is wrong the moment a laundromat has had it: they empty the
+  // bags we brought and pack the clean laundry into their own, so those
+  // stickers are in their bin.
+  //
+  // Left in, the delivery screen asked a driver to scan three stickers that no
+  // longer physically exist, and he could not finish the stop. Neil found it on
+  // a real order.
+  //
+  // partner_id is the signal, because it is set the moment the bags are handed
+  // over. When it is set and no delivery labels exist, there is nothing to
+  // scan and the count-and-weight check is what stands in its place.
+  if (typeof order === 'object' && order && order.partner_id) return [];
+
+  return bags.forOrder(orderId, 'PICKUP');
 }
 
 // --- The run itself ---------------------------------------------------------
@@ -150,7 +171,7 @@ async function currentRun() {
 
   // The bags on each, so the screen can say "3 bags" and the door can count.
   for (const order of orders) {
-    order.bags = await bagsInVan(order.id);
+    order.bags = await bagsInVan(order);
   }
 
   return orders;
@@ -244,8 +265,8 @@ async function scanAtDoor(rawCode, order) {
 // ourselves and it never goes to a laundromat - in both cases the bags at the
 // door ARE the bags collected. An order with no labels at all still passes,
 // because labelling is newer than the oldest orders.
-async function allBagsScanned(orderId) {
-  const labels = await bagsInVan(orderId);
+async function allBagsScanned(orderIdOrOrder) {
+  const labels = await bagsInVan(orderIdOrOrder);
 
   if (!labels.length) return { ok: true, total: 0, scanned: 0 };
 

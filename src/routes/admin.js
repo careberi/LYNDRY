@@ -20,6 +20,7 @@ const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const { labelSheetBody } = require('../web/labels');
 const bags = require('../core/bags');
+const tags = require('../core/tags');
 const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
@@ -951,6 +952,10 @@ const may = (permission) => roles.requirePermission(permission, refuse);
 
 const ORDER_FIELDS =
   'id, order_number, status, pickup_date, pickup_time, pickup_window_start, pickup_window_end, pickup_method, bag_count, weight_lb, price_cents, payment_status, ' +
+  // The return leg. Without these the order page renders its outgoing
+  // section from undefined and quietly shows nothing, which is exactly what
+  // it did the first time somebody recorded what came back.
+  'return_bag_count, return_weight_lb, partner_id, tag_code, ' +
   'delivery_photo_url, notes, created_at, from_schedule, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
@@ -1325,84 +1330,162 @@ function historyCard(events) {
 // separate worse mode.
 // ---------------------------------------------------------------------------
 
-function bagsCard(order, labels, canAct) {
-  const total = labels.length;
-  const done = ['DELIVERED', 'CANCELED'].includes(order.status);
+function bagRow(order, l, total, canAct, done) {
+  const retired = Boolean(l.released_at);
+  const url = l.code ? bags.labelUrl(l.code) : null;
 
-  const rows = labels
-    .map((l) => {
-      const url = bags.labelUrl(l.code);
-      const retired = Boolean(l.released_at);
-
-      return `
+  return `
     <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;">
       <div style="min-width:0;">
         <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;">
           <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;${
             retired ? 'color:var(--ink-500);' : ''
           }">
-            ${escapeHtml(l.code)}
+            ${escapeHtml(l.code || 'Bag ' + l.position)}
           </span>
           <span class="eyebrow" style="margin:0;">Bag ${l.position} of ${total}</span>
+          ${
+            l.weight_lb != null
+              ? `<span class="badge" style="background:var(--sunbeam-300);">${escapeHtml(
+                  Number(l.weight_lb).toFixed(1)
+                )} lb</span>`
+              : '<span class="badge" style="background:var(--paper-300);">not weighed</span>'
+          }
           ${retired ? '<span class="badge" style="background:var(--paper-300);">Retired</span>' : ''}
         </div>
-        <!-- What the QR on that sticker opens. Here so it can be read, checked
-             or sent to a laundromat by hand when a camera will not cooperate -
-             the printed code alone does not tell anybody where to go.
-
-             A retired one is printed as plain text rather than a link. It is
-             kept because "which sticker was on that bag" is a real question
-             after the fact, but the address deliberately stops working the
-             moment the order is delivered, and a live-looking link that 404s
-             is worse than one that says so. -->
         ${
-          retired
-            ? `<div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-400);
-                           margin-top:6px;word-break:break-all;line-height:1.4;">
-                 ${escapeHtml(url)}
-               </div>
-               <div style="font-size:12px;color:var(--ink-500);margin-top:3px;">
-                 Stopped working when the order was delivered.
-               </div>`
-            : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"
-                  style="display:inline-block;font-family:var(--font-mono);font-size:12px;
-                         color:var(--ink-500);margin-top:6px;word-break:break-all;line-height:1.4;">
-                 ${escapeHtml(url)}
-               </a>`
+          !url
+            ? ''
+            : retired
+              ? `<div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-400);
+                             margin-top:6px;word-break:break-all;line-height:1.4;">
+                   ${escapeHtml(url)}
+                 </div>
+                 <div style="font-size:12px;color:var(--ink-500);margin-top:3px;">
+                   Stopped working when the order was delivered.
+                 </div>`
+              : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"
+                    style="display:inline-block;font-family:var(--font-mono);font-size:12px;
+                           color:var(--ink-500);margin-top:6px;word-break:break-all;line-height:1.4;">
+                   ${escapeHtml(url)}
+                 </a>`
         }
       </div>
       <span style="flex:1;"></span>
       ${
-        canAct && !done && !retired
+        canAct && !done && !retired && l.code
           ? `<form method="post" action="/ops/orders/${order.order_number}/label/${l.id}/release" style="margin:0;">
                <button type="submit" class="btn btn-outline btn-sm">Take off</button>
              </form>`
           : ''
       }
     </div>`;
-    })
-    .join('');
+}
+
+// The bags on an order, in TWO SECTIONS, because there are two of them.
+//
+// NEIL'S CALL, and the data has said so since bag legs were added - the page
+// simply never showed it. What the driver collects from a CUSTOMER and what he
+// collects from the LAUNDROMAT are different objects in different numbers: the
+// laundromat empties the bags it is given and packs the clean laundry into its
+// own, so three in can be four out.
+//
+// Each leg carries its own COUNT and its own WEIGHT, both logged by the driver
+// at the moment he is holding them. The count is what he looks for; the WEIGHT
+// is what proves he has it, because he can only count what he can see and the
+// bag that gets left behind is the one behind the counter.
+function bagsCard(order, labels, canAct) {
+  const done = ['DELIVERED', 'CANCELED'].includes(order.status);
+
+  const incoming = labels.filter((l) => (l.leg || 'PICKUP') === 'PICKUP');
+  const outgoing = labels.filter((l) => l.leg === 'DELIVERY');
+
+  const sum = (rows) => {
+    const weighed = rows.filter((l) => l.weight_lb != null);
+    return weighed.length ? weighed.reduce((t, l) => t + Number(l.weight_lb), 0) : null;
+  };
+
+  // The order's own totals win where they exist: they are what priced the order
+  // and what the handover was checked against. The per-bag sum is the fallback.
+  const inWeight = order.weight_lb != null ? Number(order.weight_lb) : sum(incoming);
+  const outWeight = order.return_weight_lb != null ? Number(order.return_weight_lb) : sum(outgoing);
+
+  const inCount = order.bag_count != null ? Number(order.bag_count) : incoming.length;
+  const outCount = order.return_bag_count != null ? Number(order.return_bag_count) : outgoing.length;
+
+  const leg = (title, hint, count, weight, rows, tone) => `
+    <div style="border:2px solid var(--ink-900);border-radius:16px;background:${tone};
+                padding:22px 24px;margin-bottom:16px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px;">
+        <div>
+          <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(title)}</p>
+          <div style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.1;">
+            ${count ? count + ' bag' + (count === 1 ? '' : 's') : 'Not counted yet'}${
+              weight != null ? ' &middot; ' + weight.toFixed(1) + ' lb' : ''
+            }
+          </div>
+        </div>
+        ${
+          weight == null && count
+            ? '<span class="badge" style="background:var(--stain-100);">not weighed</span>'
+            : ''
+        }
+      </div>
+      <p style="font-size:14px;line-height:1.55;color:var(--ink-500);margin:10px 0 0;">
+        ${hint}
+      </p>
+      ${rows || ''}
+    </div>`;
+
+  // Dirty in against clean out. Deliberately NOT a symmetric comparison - see
+  // the note in src/core/tags.js.
+  const check = tags.checkHandover({ wentIn: inWeight, cameBack: outWeight });
 
   return `
   <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
-    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:6px;">
-      ${sectionHeading(
-        'The bags',
-        total ? `${total} labelled` : done ? 'None were labelled' : 'No labels yet'
-      )}
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:18px;">
+      ${sectionHeading('The bags', 'In and out')}
       <a href="/ops/labels" style="font-size:14px;font-weight:600;">Print more stickers</a>
     </div>
 
+    ${leg(
+      'Collected from the customer',
+      'Picked up off the doorstep and weighed bag by bag, each with a photo of the scale. This is what priced the order.',
+      inCount,
+      inWeight,
+      incoming.length
+        ? incoming.map((l) => bagRow(order, l, incoming.length, canAct, done)).join('')
+        : '<p style="color:var(--ink-500);font-size:15px;margin:14px 0 0;">Nothing labelled yet.</p>',
+      'var(--suds-100)'
+    )}
+
+    ${leg(
+      'Collected from the laundromat',
+      'What came back off their shelf. A different number of bags is normal, because they repack into their own, so this count is recorded separately and never assumed from the one above.',
+      outCount,
+      outWeight,
+      outgoing.length
+        ? outgoing.map((l) => bagRow(order, l, outgoing.length, canAct, done)).join('')
+        : '',
+      'var(--sunbeam-100)'
+    )}
+
     ${
-      total
-        ? rows
-        : `<p style="color:var(--ink-500);font-size:15px;line-height:1.6;margin:4px 0 0;">
-             ${
-               done
-                 ? 'This order went through without stickers. Anything labelled from now on stays listed here after delivery.'
-                 : 'Nothing labelled yet. Stick a label on each bag as you pick it up and enter its code here, so the bag can be identified without opening it.'
-             }
-           </p>`
+      check
+        ? `<div style="border:2px solid ${check.ok ? 'var(--ink-900)' : 'var(--stain-500)'};
+                       border-radius:14px;padding:16px 20px;
+                       background:${check.ok ? 'var(--paper-050)' : 'var(--stain-100)'};">
+             <p class="eyebrow" style="margin:0 0 6px;">Did it all come back</p>
+             <p style="font-size:16px;line-height:1.55;margin:0;font-weight:600;">
+               ${
+                 check.ok
+                   ? outWeight.toFixed(1) + ' lb back against ' + inWeight.toFixed(1) +
+                     ' lb collected. Within what drying accounts for.'
+                   : escapeHtml(check.detail)
+               }
+             </p>
+           </div>`
+        : ''
     }
 
     ${
@@ -1414,6 +1497,24 @@ function bagsCard(order, labels, canAct) {
                buttonLabel: 'Add',
                hint: describeCodeFormat(),
              })}
+
+             <!-- The return leg, recorded at the counter while the scale is
+                  still out rather than at a doorstep in the dark. -->
+             <form method="post" action="/ops/orders/${order.order_number}/return"
+                   style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:22px;
+                          padding-top:22px;border-top:2px solid var(--ink-100);">
+               <div style="flex:1 1 150px;min-width:0;">
+                 <label class="field-label" for="rc">Bags back from the laundromat</label>
+                 <input class="field" id="rc" name="bag_count" type="number" min="1" max="40"
+                        inputmode="numeric" value="${order.return_bag_count == null ? '' : order.return_bag_count}">
+               </div>
+               <div style="flex:1 1 150px;min-width:0;">
+                 <label class="field-label" for="rw">What they weigh</label>
+                 <input class="field" id="rw" name="weight_lb" type="number" step="0.1" min="0" max="400"
+                        inputmode="decimal" value="${order.return_weight_lb == null ? '' : order.return_weight_lb}">
+               </div>
+               <button class="btn btn-ink" type="submit">Save</button>
+             </form>
            </div>`
         : ''
     }
@@ -1494,7 +1595,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     // Which stickers are on this order's bags, and how many have been scanned
     // at the door. Both drive the work card.
     const labels = await bags.forOrder(order.id);
-    const doorScan = await loadout.allBagsScanned(order.id);
+    const doorScan = await loadout.allBagsScanned(order);
     const history = await orderEvents.forOrder(order.id);
 
     // Only fetched when the bag could actually be dropped somewhere, so every
@@ -2489,7 +2590,7 @@ router.post('/ops/orders/:id/door-scan', guard, may('orders.act'), async (req, r
       return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
     }
 
-    const after = await loadout.allBagsScanned(order.id);
+    const after = await loadout.allBagsScanned(order);
     const note = result.already
       ? `${result.label.code} was already scanned. ${after.scanned} of ${after.total} done.`
       : `${result.label.code} checked. ${after.scanned} of ${after.total} done.` +
@@ -2646,6 +2747,74 @@ router.post(
     }
   }
 );
+
+// --- What came back from the laundromat -------------------------------------
+//
+// Two numbers, taken at the counter while their scale is still out, and BEFORE
+// the customer is told anything. Bags out is not bags in - they repack into
+// their own - so the count is recorded rather than assumed, and the weight is
+// what actually proves nothing was left on a shelf.
+router.post('/ops/orders/:id/return', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = backTo(req, order);
+    const body = req.body || {};
+
+    const count = Number(body.bag_count);
+    const weight = Number(body.weight_lb);
+
+    if (!Number.isInteger(count) || count < 1 || count > 40) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent('How many bags came back? A whole number.')}`);
+    }
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 400) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent('What do they weigh? Pounds, as a number.')}`);
+    }
+
+    const { error } = await db
+      .from('orders')
+      .update({ return_bag_count: count, return_weight_lb: weight.toFixed(2) })
+      .eq('id', order.id);
+
+    if (error) throw error;
+
+    // Dirty in against clean out, and deliberately not a symmetric comparison.
+    const check = tags.checkHandover({ wentIn: order.weight_lb, cameBack: weight });
+
+    await orderEvents.record(order.id, {
+      kind: 'WEIGHT',
+      summary:
+        `${count} bag${count === 1 ? '' : 's'} back from the laundromat, ${weight.toFixed(1)} lb` +
+        (check && !check.ok ? ` - ${check.direction.toLowerCase()} than expected` : ''),
+      was: order.weight_lb == null ? null : `${order.weight_lb} lb collected`,
+      became: `${weight.toFixed(1)} lb back`,
+      by: { opsUser: req.opsUser },
+      reason: check && !check.ok ? 'Outside what drying accounts for' : null,
+    });
+
+    if (check && !check.ok) {
+      await issues
+        .raise({
+          customer: order.customers || null,
+          order,
+          reason: check.detail,
+        })
+        .catch((err) => console.error(`Could not raise a handover mismatch: ${err.message}`));
+
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(check.detail)}`);
+    }
+
+    return res.redirect(
+      303,
+      `${back}?note=${encodeURIComponent(
+        `${count} bag${count === 1 ? '' : 's'} back, ${weight.toFixed(1)} lb. That matches what we collected.`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // --- Sticking a label on a bag, and taking it off again ---------------------
 

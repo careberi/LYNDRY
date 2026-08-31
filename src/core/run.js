@@ -100,7 +100,7 @@ async function tasksForCollect(order) {
 }
 
 async function tasksForDeliver(order) {
-  const scan = await loadout.allBagsScanned(order.id);
+  const scan = await loadout.allBagsScanned(order);
 
   return [
     {
