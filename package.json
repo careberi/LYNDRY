@@ -21,7 +21,8 @@
     "seed:partners": "node --use-system-ca scripts/seed-partners.js",
     "backup": "node scripts/backup.js",
     "restore": "node scripts/restore.js",
-    "check:thread": "node scripts/check-thread.js"
+    "check:thread": "node scripts/check-thread.js",
+    "demo": "node scripts/demo.js"
   },
   "engines": {
     "node": ">=20"

@@ -1224,6 +1224,25 @@ issues and customer screens are not blank either. **States are written directly
 rather than through `fulfilment.js`**, deliberately: fulfilment sends texts and
 charges cards, and a seed script must do neither.
 
+**The laundromat demo is `npm run demo`, and `npm run demo -- --clear` after.**
+It builds one three-bag order sitting at a partner and prints three links, so
+an owner can point their own phone at a sticker and see the page they would
+actually use. It is the real page from real rows - a mock-up cannot prove "this
+is all you ever have to do".
+
+**It lives in production deliberately**, because CLAUDE.md rules out a second
+deployment target and a demo server drifts the first time somebody forgets to
+deploy it. What makes that safe is the fictional number: **`notify.js` now
+refuses to hand any number in the 555-0100 to 555-0199 range to the carrier**,
+so nothing seeded can text a real person however far it is driven. That guard
+did not exist before and every seed script was relying on luck.
+
+**The three codes are fixed** — `DEM001`, `DEM002`, `DEM003` — so a sticker
+printed once keeps working. `--clear` blanks them rather than deleting them.
+The script prints **lyndry.com** links even when run locally, because the
+person scanning is on their own phone and a localhost QR is the demo failing at
+the first step.
+
 **Bootstrap the first person from the terminal** — signing in needs a row, and
 adding a row needs somebody signed in:
 

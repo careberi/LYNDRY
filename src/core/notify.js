@@ -97,6 +97,21 @@ function warnIfExpensive(text) {
   console.warn('');
 }
 
+// The 555-0100 to 555-0199 range, reserved for fiction.
+//
+// Nothing real lives there, which is exactly why seed data and the demo use
+// it. This is the guard that makes that safe: a number in that range is never
+// handed to the carrier, whatever asks.
+//
+// It matters because there was no guard at all, and seeded orders go through
+// the same fulfilment code as real ones - one demo run of "collected, weighed,
+// delivered" would have queued four texts at whatever those numbers happen to
+// route to. The message is still LOGGED, so the thread reads exactly as it
+// would in front of a laundromat owner; it simply never leaves the building.
+function isFictional(phone) {
+  return /^\+1\d{3}555 ?01\d\d$/.test(String(phone || '').replace(/[()\-.]/g, ''));
+}
+
 async function sendAndLog(to, body, customerId) {
   let providerMessageId = null;
 
@@ -106,7 +121,11 @@ async function sendAndLog(to, body, customerId) {
   const text = toPlainText(body);
   warnIfExpensive(text);
 
-  try {
+  // FICTIONAL NUMBERS NEVER REACH THE CARRIER. Logged, so the conversation
+  // looks right on the screen, but not sent.
+  if (isFictional(to)) {
+    console.log(`[fictional] would have texted ${to}: ${text}`);
+  } else try {
     const result = await sms.sendMessage({ to, text });
     providerMessageId = result && result.providerMessageId;
   } catch (err) {
@@ -128,4 +147,5 @@ async function sendAndLog(to, body, customerId) {
   if (error) console.error('Failed to log outbound message:', error.message);
 }
 
-module.exports = { sendAndLog, describeCost, toPlainText };
+module.exports = {
+  isFictional, sendAndLog, describeCost, toPlainText };
