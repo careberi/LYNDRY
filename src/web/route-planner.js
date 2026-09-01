@@ -21,7 +21,7 @@ const { config } = require('../config');
 //
 //   Leaflet    the map library itself, pinned and checked with an integrity
 //              hash so the file can never silently change under us
-//   CARTO/OSM  the map tiles
+//   OpenStreetMap  the map tiles
 //   OSRM       real driving distances between the stops
 //
 // OSRM is the load-bearing one and it is worth being straight about: it is a
@@ -505,26 +505,29 @@ function routePlannerBody() {
       return;
     }
     map = L.map('rp-map', { zoomControl: true, scrollWheelZoom: true });
-    // Voyager rather than CARTO's plainer light basemap: the plain one is so
-    // pale under our warming filter that the streets stop being readable, and
-    // an unreadable map is the thing this page was meant to fix.
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    // OPENSTREETMAP'S OWN TILES, NOT CARTO'S.
+    //
+    // CARTO used to serve these without a key. They now stamp API KEY REQUIRED
+    // across every tile for unkeyed use, which is what put that watermark over
+    // the whole map. OSM's own tiles are genuinely keyless and their usage
+    // policy is comfortable at the volume of one person planning a round.
+    //
+    // No {s} subdomain: OSM asked people to stop using a.b.c prefixes, and a
+    // single host is what they document now.
+    //
+    // No detectRetina either - it doubles the tile requests for a map that is
+    // already legible, and being a light user is the whole basis on which we
+    // are allowed to use these.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      detectRetina: true,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
     layerRoute = L.layerGroup().addTo(map);
 
     map.on('click', function (e) {
       if (!addMode) return;
-      var ll = { lat: e.latlng.lat, lng: e.latlng.lng };
-      if (addMode === 'order') {
-        ORDERS.push({ id: 'o' + Date.now(), name: 'New stop', lat: ll.lat, lng: ll.lng, lbs: 25, mode: 'both' });
-      } else {
-        PARTNERS.push({ id: 'p' + Date.now(), name: 'New laundromat', lat: ll.lat, lng: ll.lng, perLb: 0.9, fee: 0 });
-      }
+      place(addMode, e.latlng.lat, e.latlng.lng, null);
       setAddMode(null);
-      changed(true);
     });
 
     // Leaflet works out the zoom from the size of its container, and on first
@@ -624,8 +627,17 @@ function routePlannerBody() {
   // The line itself. Ink underneath, Suds on top - an outlined line, the same
   // way everything else on the site is an outlined shape.
   function drawLine(geom) {
-    if (!map || !RUN || !layerRoute) return;
+    if (!map || !layerRoute) return;
+
+    // CLEAR FIRST, AND CLEAR EVEN WHEN THERE IS NOTHING TO DRAW.
+    //
+    // This returned early when RUN was null, which left the PREVIOUS run's line
+    // painted on the map. Delete the last stop and the panel correctly said
+    // "add at least one" while the map still showed a route through stops that
+    // no longer existed - the two halves of the page disagreeing about what was
+    // on it, which is exactly the confusion Neil reported.
     layerRoute.clearLayers();
+    if (!RUN) return;
     var pts = geom && geom.length ? geom : orderedPoints().map(function (p) { return [p.lat, p.lng]; });
     if (pts.length < 2) return;
     L.polyline(pts, { color: '#101210', weight: 7, opacity: 1, lineJoin: 'round' }).addTo(layerRoute);
@@ -778,7 +790,16 @@ function routePlannerBody() {
   function renderPanel() {
     var h = '';
     if (!RUN) {
-      el('rp-panel').innerHTML = '<p class="rp-note">Add at least one stop and one laundromat.</p>';
+      // SAY WHICH ONE IS MISSING. "Add at least one stop and one laundromat"
+      // was printed even when there were three laundromats on the map, which
+      // reads as the page not knowing what is on it.
+      var need = [];
+      if (!ORDERS.length) need.push('a stop');
+      if (!PARTNERS.length) need.push('a laundromat');
+
+      el('rp-panel').innerHTML =
+        '<p class="rp-note">Add ' + (need.length ? need.join(' and ') : 'a stop') +
+        ' to see what the run earns.</p>';
       return;
     }
 
@@ -949,6 +970,33 @@ function routePlannerBody() {
     scheduleRoads();
   }
 
+  // Put a stop or a laundromat at a point. ONE definition, shared by both
+  // ways of adding: clicking the map, and typing an address. They used to be
+  // separate pieces of code, which is how the address box ended up only
+  // moving the map instead of placing anything.
+  function place(kind, lat, lng, label) {
+    if (kind === 'order') {
+      ORDERS.push({
+        id: 'o' + Date.now(), name: label || 'New stop',
+        lat: lat, lng: lng, lbs: 25, mode: 'both',
+      });
+    } else {
+      PARTNERS.push({
+        id: 'p' + Date.now(), name: label || 'New laundromat',
+        lat: lat, lng: lng, perLb: 0.9, fee: 0,
+      });
+    }
+    changed(true);
+  }
+
+  // The first line of a Nominatim result, so a placed pin is named after the
+  // street rather than "New stop". display_name is the entire postal address
+  // and far too long for a rail that has to stay readable.
+  function shortLabel(display) {
+    var first = String(display || '').split(',')[0].trim();
+    return first.slice(0, 28) || null;
+  }
+
   // -- input --------------------------------------------------------------
   var addMode = null;
   function setAddMode(m) {
@@ -956,7 +1004,7 @@ function routePlannerBody() {
     el('rp-add-stop').classList.toggle('btn-outline', m !== 'order');
     el('rp-add-partner').classList.toggle('btn-outline', m !== 'partner');
     el('rp-hint').textContent = m
-      ? 'Click the map to place it.'
+      ? 'Click the map to place it, or type an address and press Find.'
       : 'Drag any pin to move it.';
     if (map) map.getContainer().style.cursor = m ? 'crosshair' : '';
   }
@@ -1027,16 +1075,42 @@ function routePlannerBody() {
   // Address lookup, on submit only. Nominatim asks that nobody fires a request
   // per keystroke, and a search box that waits for Enter is well inside that.
   el('rp-search').addEventListener('submit', function (e) {
+    // AN ADDRESS PLACES A PIN. This used to only pan the map and then tell
+    // you to click "Add a stop" and click the map yourself - four steps and
+    // a precise click for a place you had already typed exactly.
+    //
+    // Which of the two it places is whichever button is armed. With neither
+    // armed it only moves the map, which is still useful for looking around.
     e.preventDefault();
     var q = el('rp-q').value.trim();
     if (!q || !map) return;
+
+    var kind = addMode;
     el('rp-hint').textContent = 'Looking for that address...';
+
     ask('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' +
       encodeURIComponent(q))
       .then(function (j) {
-        if (!j || !j.length) { el('rp-hint').textContent = 'No address matched that.'; return; }
-        map.setView([Number(j[0].lat), Number(j[0].lon)], 16);
-        el('rp-hint').textContent = 'Found it. Add a stop and click the map to place it.';
+        if (!j || !j.length) {
+          el('rp-hint').textContent = 'No address matched that. Try adding the town.';
+          return;
+        }
+
+        var lat = Number(j[0].lat);
+        var lng = Number(j[0].lon);
+        map.setView([lat, lng], 15);
+
+        if (!kind) {
+          el('rp-hint').textContent =
+            'Found it. Pick Add a stop or Add a laundromat, then search again to put one here.';
+          return;
+        }
+
+        place(kind, lat, lng, shortLabel(j[0].display_name));
+        setAddMode(null);
+        el('rp-q').value = '';
+        el('rp-hint').textContent =
+          (kind === 'order' ? 'Stop' : 'Laundromat') + ' added. Drag the pin to nudge it.';
       })
       .catch(function () { el('rp-hint').textContent = 'The address lookup did not answer.'; });
   });

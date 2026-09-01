@@ -698,10 +698,22 @@ function routingBoardBody({
     }
 
     map = L.map('db-map', { zoomControl: true, scrollWheelZoom: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    // OPENSTREETMAP'S OWN TILES, NOT CARTO'S.
+    //
+    // CARTO used to serve these without a key. They now stamp API KEY REQUIRED
+    // across every tile for unkeyed use, which is what put that watermark over
+    // the whole map. OSM's own tiles are genuinely keyless and their usage
+    // policy is comfortable at the volume of one person planning a round.
+    //
+    // No {s} subdomain: OSM asked people to stop using a.b.c prefixes, and a
+    // single host is what they document now.
+    //
+    // No detectRetina either - it doubles the tile requests for a map that is
+    // already legible, and being a light user is the whole basis on which we
+    // are allowed to use these.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      detectRetina: true,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
     var pts = [];

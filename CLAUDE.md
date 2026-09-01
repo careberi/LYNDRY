@@ -649,10 +649,18 @@ sequence must never move because the map loaded.**
 
 **The planner and routing are the only pages that depend on an outside
 service at runtime.** Three of them, none needing an account or a key: Leaflet
-for the map, CARTO/OpenStreetMap for the tiles, and OSRM for real driving
+for the map, OpenStreetMap for the tiles, and OSRM for real driving
 distances between the stops. Leaflet is pinned to an exact version with an
 integrity hash, so a CDN that changed the bytes underneath us would be refused
 by the browser rather than run.
+
+**The tiles were CARTO's and are now OpenStreetMap's own.** CARTO served them
+keyless for a long time and then began stamping API KEY REQUIRED across every
+tile, which put a watermark over the whole map. OSM's tiles are genuinely
+keyless; their usage policy is comfortable for one person planning a round, and
+staying a light user is the basis on which we may use them at all - which is
+why there is no `detectRetina` doubling the requests and no `{s}` subdomain
+prefix, which OSM asked people to stop using.
 
 OSRM is the one to be careful about: it is a free public demo server with
 nothing promised behind it. The page is written so that losing it is a
