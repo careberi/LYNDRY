@@ -712,7 +712,8 @@ function runBody({ run, notice = null, problem = null }) {
     ${progressBar(run.done, run.total)}
     ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run)) : travelCard(run)}
   </div>
-  ${scannerScript()}`;
+  ${scannerScript()}
+  ${returnFromMapsScript()}`;
 }
 
 
@@ -789,5 +790,72 @@ function roundCards(run) {
       <div class="run-rounds">${rounds.map(card).join('')}</div>
     </div>`;
 }
+
+
+// ---------------------------------------------------------------------------
+// COMING BACK FROM THE MAPS APP.
+//
+// Neil tapped "Take me there", Apple Maps opened, and when he switched back the
+// page still said "Take me there" with the button drawn half-dead. The server
+// had done its job - navigating_at was recorded the moment the link was
+// followed - but he was looking at a page rendered BEFORE that happened.
+//
+// TWO WAYS IOS GIVES YOU A STALE PAGE, and it takes both to cover them:
+//
+//   - the tab is restored from the back-forward cache, which fires pageshow
+//     with persisted set. no-store does not reliably keep Safari out of it.
+//   - the tab never unloaded at all. The maps: link was handed straight to the
+//     Maps app, so switching back is a visibility change and nothing else -
+//     no pageshow, no load, the same live DOM from ten minutes ago.
+//
+// So it watches for both, and only after the driver has actually tapped the
+// directions. sessionStorage rather than a variable because a bfcache restore
+// may or may not keep the variable, and a flag that survives either way is one
+// less thing to reason about on a doorstep.
+//
+// IT IS AN ENHANCEMENT AND FAILS SAFE. With no JavaScript the page behaves
+// exactly as it does today - the driver pulls to refresh - which is why this is
+// a reload rather than anything that draws the screen itself. Nothing here
+// decides what a stop is or what is next; it asks the server again.
+// ---------------------------------------------------------------------------
+function returnFromMapsScript() {
+  return `
+<script>
+(function () {
+  var KEY = 'lyndry:wentToMaps';
+
+  // Tapping the directions link is what arms it.
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest && e.target.closest('a[href*="/ops/run/going/"]');
+    if (a) { try { sessionStorage.setItem(KEY, '1'); } catch (err) {} }
+  });
+
+  function armed() {
+    try { return sessionStorage.getItem(KEY) === '1'; } catch (err) { return false; }
+  }
+
+  function refresh() {
+    try { sessionStorage.removeItem(KEY); } catch (err) {}
+    // replace(), not reload(), so the maps hop does not pile up in history and
+    // a back gesture does not re-fire the redirect to the Maps app.
+    window.location.replace(window.location.pathname + window.location.search);
+  }
+
+  window.addEventListener('pageshow', function (e) {
+    var backForward = false;
+    try {
+      var nav = performance.getEntriesByType('navigation')[0];
+      backForward = nav && nav.type === 'back_forward';
+    } catch (err) {}
+    if ((e.persisted || backForward) && armed()) refresh();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && armed()) refresh();
+  });
+})();
+</script>`;
+}
+
 
 module.exports = { runBody };
