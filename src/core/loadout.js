@@ -157,6 +157,144 @@ async function bagsInVan(order) {
 // --- The run itself ---------------------------------------------------------
 
 // Everything currently in the van: loaded, not yet delivered.
+// ---------------------------------------------------------------------------
+// LOADING THE VAN, ONE BAG AT A TIME.
+//
+// NEIL'S SEQUENCE, and it is the mirror of the pickup at a customer's door:
+//
+//   scan it   ->   weigh it   ->   take the clip it gives you   ->   on the van
+//
+// and again for the next bag, until everything picked up off the laundromat's
+// counter is aboard.
+//
+// WHY THE WEIGHING IS HERE AND NOT AT THE COUNTER. It used to be per ORDER,
+// asked while he was still being handed bags - the wrong unit at the wrong
+// moment, because he does not sort them into orders as they come across.
+// Weighing at the van is per BAG, which is the thing he is actually holding,
+// and it happens once rather than being interleaved with collecting.
+//
+// The clip comes from weighing, exactly as it does on the pickup leg: weigh,
+// then clip. A clipped bag is a weighed bag, on both legs, for the same reason.
+// ---------------------------------------------------------------------------
+
+// Every bag off the laundromat that is not yet on the van, oldest first so the
+// list does not shuffle under somebody working down it.
+async function toLoad() {
+  const { data, error } = await db
+    .from('bag_labels')
+    .select('*, orders(id, order_number, driver_id, status)')
+    .eq('leg', 'DELIVERY')
+    .not('collected_at', 'is', null)
+    .is('loaded_at', null)
+    .order('code', { ascending: true })
+    .order('sticker_seq', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// WHAT THE DRIVER IS DOING RIGHT NOW, derived from the bag rather than stored.
+//
+//   no weight            weigh it
+//   weight, no clip      the clip could not be issued - say so
+//   weight and a clip    put the clip on and confirm it is aboard
+//
+// Same rule as the guided run: the state is read off the row, so a driver who
+// refreshes, switches phones or comes back an hour later is in the same place.
+function loadStateOf(label, picked = true) {
+  // NOT PICKED YET. The scan is how he says which bag is in his hand - it is a
+  // confirmation, not a search, because the screen already knows which bags are
+  // outstanding. Doing it this way means no "has he scanned it" flag to store:
+  // the answer is whether a bag has been chosen on this screen, and a refresh
+  // simply asks again, which is the safe direction.
+  if (!picked) return 'SCAN';
+
+  if (label.weight_lb == null) return 'WEIGH';
+  if (label.clip_number == null) return 'NO_CLIP';
+  return 'ON_VAN';
+}
+
+// Record a bag's weight at the van and issue its clip in one step.
+//
+// One step because they are one action: the clip is what the weighing earns,
+// and a screen that asked him to weigh and then separately fetch a number would
+// be two taps for one thing he does with one hand.
+async function weighAndClip(labelId, weightLb) {
+  const weight = Number(weightLb);
+
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
+    return { ok: false, detail: 'That weight does not look right. Pounds, as a number.' };
+  }
+
+  const { data: label, error: findError } = await db
+    .from('bag_labels')
+    .select('*, orders(driver_id)')
+    .eq('id', labelId)
+    .maybeSingle();
+
+  if (findError) throw findError;
+  if (!label) return { ok: false, detail: 'No bag with that id.' };
+  if (!label.collected_at) {
+    return { ok: false, detail: 'That bag has not been collected from the laundromat yet.' };
+  }
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ weight_lb: weight, weighed_at: new Date().toISOString() })
+    .eq('id', labelId);
+
+  if (error) throw error;
+
+  // A FRESH CLIP, not the one it went out under. That number was freed the
+  // moment the bag was handed to the laundromat and something else is probably
+  // wearing it by now.
+  const clipped = await bags.assignClip(
+    { ...label, clip_number: null },
+    (label.orders || {}).driver_id
+  );
+
+  return {
+    ok: true,
+    weight,
+    clip: clipped.ok ? clipped.clip : null,
+    ranOut: clipped.ok ? null : clipped.detail,
+  };
+}
+
+// "It is on the van." The last step for one bag.
+async function markLoaded(labelId) {
+  const { data: label, error: findError } = await db
+    .from('bag_labels')
+    .select('id, order_id, weight_lb, collected_at, loaded_at')
+    .eq('id', labelId)
+    .maybeSingle();
+
+  if (findError) throw findError;
+  if (!label) return { ok: false, detail: 'No bag with that id.' };
+
+  // NOTHING GOES ABOARD UNWEIGHED, which is the same rule the pickup leg has at
+  // the customer's door: the van is the last place it could be weighed and by
+  // then it is too late.
+  if (label.weight_lb == null) {
+    return { ok: false, detail: 'Weigh it before it goes in the van.' };
+  }
+
+  const now = new Date().toISOString();
+
+  const { error } = await db.from('bag_labels').update({ loaded_at: now }).eq('id', labelId);
+  if (error) throw error;
+
+  // The ORDER's loaded_at is set by the first of its bags: it answers "did any
+  // of this leave the laundromat", which is true as soon as one did.
+  await db
+    .from('orders')
+    .update({ loaded_at: now })
+    .eq('id', label.order_id)
+    .is('loaded_at', null);
+
+  return { ok: true };
+}
+
 async function currentRun() {
   const { data, error } = await db
     .from('orders')
@@ -276,6 +414,10 @@ async function allBagsScanned(orderIdOrOrder) {
 }
 
 module.exports = {
+  toLoad,
+  loadStateOf,
+  weighAndClip,
+  markLoaded,
   LOADABLE,
   bagsInVan,
   scanIn,

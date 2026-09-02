@@ -57,6 +57,154 @@ function orderRow(order, { reverse }) {
   </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// LOADING THE VAN, ONE BAG AT A TIME.
+//
+// Neil's sequence, and the mirror of the pickup at a customer's door: scan it,
+// weigh it, take the clip it gives you, confirm it is aboard. Then the next.
+//
+// ONE BAG ON THE SCREEN, like every other driver page here. A list invites
+// working ahead, and working ahead at a tailgate is how a bag gets a weight
+// that belongs to a different bag.
+//
+// The scan is a CONFIRMATION, not a search - he already has a bag in his hand
+// and the screen already knows which ones are outstanding. It only agrees or
+// shouts.
+// ---------------------------------------------------------------------------
+
+function loadWalkBody({ bags: outstanding, current, state, notice, problem, run }) {
+  const done = run.length;
+
+  const banner = (text, bg, fg = 'var(--ink-900)') => `
+    <p style="margin:0 0 18px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
+              background:${bg};color:${fg};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+
+  const name = current ? `${current.code}${current.sticker_seq ? `-${current.sticker_seq}` : ''}` : '';
+
+  const step = () => {
+    if (!current) return '';
+
+    if (state === 'SCAN') {
+      return `
+      ${scanField({
+        action: '/ops/loadout/pick',
+        label: 'Scan the bag in your hand',
+        buttonLabel: 'That one',
+        autofocus: true,
+        hint: describeCodeFormat(),
+      })}
+
+      <div style="margin-top:20px;padding-top:18px;border-top:2px solid var(--ink-100);">
+        <p class="eyebrow" style="margin:0 0 10px;">Still to load</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${outstanding
+            .map(
+              (b) => `<span style="padding:7px 11px;border:2px solid var(--ink-900);border-radius:10px;
+                                   background:var(--paper-000);font-family:var(--font-mono);
+                                   font-weight:700;font-size:15px;">
+                        ${escapeHtml(b.code)}${b.sticker_seq ? `-${b.sticker_seq}` : ''}
+                      </span>`
+            )
+            .join('')}
+        </div>
+      </div>`;
+    }
+
+    if (state === 'WEIGH') {
+      return `
+      <form method="post" action="/ops/loadout/weigh" enctype="multipart/form-data" style="margin:0;">
+        <input type="hidden" name="label_id" value="${escapeHtml(current.id)}">
+        <label class="field-label" for="w">What does it weigh?</label>
+        <input class="input input-lg" type="number" id="w" name="weight_lb" step="0.1" min="0.1" max="200"
+               inputmode="decimal" required autofocus placeholder="Pounds" style="width:100%;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:16px;">
+          Save and give me a clip
+        </button>
+      </form>`;
+    }
+
+    if (state === 'NO_CLIP') {
+      return `
+      ${banner('Every clip in the van is in use. Take one off a bag you have already dropped, then reload this page.', 'var(--stain-500)', 'var(--paper-050)')}
+      <form method="post" action="/ops/loadout/loaded" style="margin:0;">
+        <input type="hidden" name="label_id" value="${escapeHtml(current.id)}">
+        <button type="submit" class="btn btn-lg btn-full">Put it in anyway</button>
+      </form>`;
+    }
+
+    return `
+      <div style="margin:0 0 20px;padding:18px 20px;border:2px solid var(--ink-900);border-radius:14px;
+                  background:var(--sunbeam-500);text-align:center;">
+        <p class="eyebrow" style="margin:0 0 8px;">Put this clip on it</p>
+        <div style="font-family:var(--font-mono);font-weight:700;font-size:52px;line-height:1;">
+          ${current.clip_number}
+        </div>
+      </div>
+      <form method="post" action="/ops/loadout/loaded" style="margin:0;">
+        <input type="hidden" name="label_id" value="${escapeHtml(current.id)}">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">It is in the van</button>
+      </form>`;
+  };
+
+  return `
+<div style="max-width:640px;">
+  <a href="/ops/run" style="font-size:15px;font-weight:600;">&larr; Your round</a>
+  <p class="eyebrow" style="margin:18px 0 6px;">Part of your round</p>
+  <h1 style="margin:0 0 20px;font-size:36px;line-height:1.08;">Load the van</h1>
+
+  ${problem ? banner(problem, 'var(--stain-500)', 'var(--paper-050)') : ''}
+  ${notice ? banner(notice, 'var(--suds-300)') : ''}
+
+  ${
+    current
+      ? `
+  <div class="card card-xl" style="padding:28px;">
+    <p class="eyebrow" style="margin:0 0 6px;">
+      Bag ${done + 1} of ${done + outstanding.length}
+    </p>
+    <div style="font-family:var(--font-mono);font-size:34px;font-weight:700;letter-spacing:0.05em;
+                line-height:1;margin-bottom:6px;">
+      ${state === 'SCAN' ? 'Which bag?' : escapeHtml(name)}
+    </div>
+    <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 22px;">
+      ${
+        state === 'SCAN'
+          ? 'Scan it before it goes in. The screen already knows which are outstanding, so this only agrees or shouts.'
+          : state === 'WEIGH'
+            ? 'On the scale, then type what it says.'
+            : state === 'NO_CLIP'
+              ? 'Weighed. There is no free clip for it.'
+              : `Weighed at ${Number(current.weight_lb).toFixed(1)} lb.`
+      }
+    </p>
+
+    ${step()}
+
+    <div style="height:12px;border:2px solid var(--ink-900);border-radius:999px;overflow:hidden;
+                background:var(--paper-000);margin:24px 0 0;">
+      <div style="height:100%;width:${Math.round((done / (done + outstanding.length)) * 100)}%;
+                  background:var(--suds-500);"></div>
+    </div>
+  </div>`
+      : `
+  <div class="card card-xl" style="padding:28px;">
+    <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 10px;">
+      Everything is aboard.
+    </h2>
+    <p style="font-size:16px;line-height:1.6;margin:0 0 20px;">
+      ${done} bag${done === 1 ? '' : 's'} in the van. Build the run and it will
+      put the stops in order - load in reverse, highest stop deepest, so stop 1
+      is by the doors.
+    </p>
+    <form method="post" action="/ops/loadout/build" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">Build the run</button>
+    </form>
+  </div>`
+  }
+</div>
+${scannerScript()}`;
+}
+
 function loadoutBody({ run, built, notice, problem }) {
   // Largest stop number first. This IS the loading order.
   const loadOrder = run
@@ -158,4 +306,4 @@ function loadoutBody({ run, built, notice, problem }) {
 ${scannerScript()}`;
 }
 
-module.exports = { loadoutBody };
+module.exports = { loadoutBody, loadWalkBody };

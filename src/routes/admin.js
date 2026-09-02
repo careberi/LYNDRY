@@ -29,7 +29,7 @@ const { routingBoardBody } = require('../web/routing-board');
 const { runBody } = require('../web/run-page');
 const { teamMemberBody, ROLE_TONE } = require('../web/team-page');
 const loadout = require('../core/loadout');
-const { loadoutBody } = require('../web/loadout-page');
+const { loadoutBody, loadWalkBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
 const partners = require('../core/partners');
 const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
@@ -3388,6 +3388,45 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
 async function renderLoadout(req, res, { built = false } = {}) {
   const run = await loadout.currentRun();
 
+  // ONE BAG AT A TIME WHILE THERE IS ANYTHING TO LOAD. Neil's sequence: scan,
+  // weigh, take the clip, confirm it is aboard, next bag. Once everything
+  // collected off the laundromat is in the van the walk is finished and the
+  // page becomes the build-the-run screen it always was.
+  const outstanding = await loadout.toLoad();
+
+  if (outstanding.length) {
+    // WHICH BAG HE IS HOLDING, chosen by scanning it. ?bag= carries it between
+    // steps rather than a column, because "the bag currently in his hand" is
+    // not a fact about the bag - it lasts one minute and belongs to one screen.
+    // A refresh drops back to the scan, which is the safe direction: it asks
+    // again rather than assuming.
+    const asked = String(req.query.bag || '');
+    const picked = UUID.test(asked) ? outstanding.find((b) => b.id === asked) : null;
+
+    // Once a bag is weighed it stays on screen through the clip step without
+    // needing to be rescanned - it is the same bag, still in his hands.
+    const current = picked || outstanding.find((b) => b.weight_lb != null) || outstanding[0];
+    const isPicked = Boolean(picked) || current.weight_lb != null;
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Load the van',
+        active: '/ops/run',
+        body: loadWalkBody({
+          bags: outstanding,
+          current,
+          state: loadout.loadStateOf(current, isPicked),
+          run,
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  }
+
   return res.type('html').send(
     adminPage({
       title: 'Load the van',
@@ -3428,6 +3467,84 @@ router.post('/ops/loadout/scan', guard, may('orders.act'), async (req, res, next
       : `${result.label.code} loaded, order #${result.order.order_number}.`;
 
     return res.redirect(303, `/ops/loadout?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Scanning a bag at the tailgate to say "this is the one in my hand".
+//
+// A confirmation rather than a search: the screen already knows which bags are
+// outstanding, so this only agrees or shouts. It refuses a code that is not on
+// the list, which is the whole value of it - a bag from another laundromat, or
+// one already aboard, gets caught here rather than at somebody's door.
+router.post('/ops/loadout/pick', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const code = String((req.body || {}).code || '').trim();
+    if (!code) return res.redirect(303, '/ops/loadout');
+
+    const outstanding = await loadout.toLoad();
+    const wanted = code.toUpperCase().replace(/\s+/g, '');
+
+    const match = outstanding.find((b) => {
+      const full = `${b.code}${b.sticker_seq ? `-${b.sticker_seq}` : ''}`.toUpperCase();
+      // Either form: the whole sticker id, or just the tag when the order has
+      // one bag and no ambiguity about which.
+      return full === wanted || b.code.toUpperCase() === wanted;
+    });
+
+    if (!match) {
+      return res.redirect(
+        303,
+        `/ops/loadout?problem=${encodeURIComponent(
+          `${code} is not one of the bags waiting to go in. Check the sticker.`
+        )}`
+      );
+    }
+
+    return res.redirect(303, `/ops/loadout?bag=${encodeURIComponent(match.id)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Weigh one bag at the van and issue its clip. One step, because they are one
+// action: the clip is what the weighing earns.
+router.post('/ops/loadout/weigh', guard, may('orders.act'), upload.none(), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const labelId = String(body.label_id || '');
+    if (!UUID.test(labelId)) return res.redirect(303, '/ops/loadout');
+
+    const result = await loadout.weighAndClip(labelId, body.weight_lb);
+
+    if (!result.ok) {
+      return res.redirect(303, `/ops/loadout?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    const note = result.clip
+      ? `${result.weight.toFixed(1)} lb. Put clip ${result.clip} on it.`
+      : `${result.weight.toFixed(1)} lb. ${result.ranOut || 'No free clip.'}`;
+
+    return res.redirect(303, `/ops/loadout?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// "It is in the van." The last step for one bag.
+router.post('/ops/loadout/loaded', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const labelId = String((req.body || {}).label_id || '');
+    if (!UUID.test(labelId)) return res.redirect(303, '/ops/loadout');
+
+    const result = await loadout.markLoaded(labelId);
+
+    if (!result.ok) {
+      return res.redirect(303, `/ops/loadout?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    return res.redirect(303, '/ops/loadout');
   } catch (err) {
     return next(err);
   }
