@@ -179,6 +179,23 @@ const BERGEN_ZIPS = new Set([
   '07677',
 ]);
 
+// NEIL'S OWN NUMBER, WHICH CAN ALWAYS BOOK.
+//
+// He has to be able to put an order through while the service is shut and from
+// an address outside the county - that is how the thing gets tested end to end
+// and how he takes a favour for somebody he knows.
+//
+// It waives exactly two rules, both of which are decisions about who we choose
+// to serve rather than facts a booking needs: the closed sign, and the county
+// boundary. An address, wash preferences, a card and a real date are still
+// required of him like anybody else, because those are what make an order
+// possible to actually do.
+function alwaysAllowed(customer) {
+  const digits = String((customer || {}).phone || '').replace(/\D/g, '');
+  const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  return ten.length === 10 && config.alwaysBookNumbers.includes(ten);
+}
+
 function inServiceArea(customer) {
   const state = String(customer.state || '').trim().toUpperCase();
   if (state && state !== 'NJ') return false;
@@ -492,7 +509,9 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   //
   // A STANDING ORDER IS NOT EXEMPT. The nightly job books tomorrow's recurring
   // pickups, and a van that is not running cannot collect them either.
-  if (!(await settings.takingOrders())) {
+  const owner = alwaysAllowed(customer);
+
+  if (!owner && !(await settings.takingOrders())) {
     return { ok: false, reason: 'not_taking_orders', detail: await settings.pausedReason() };
   }
 
@@ -500,7 +519,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
 
   // Checked at booking rather than only at signup, because an address can be
   // edited later and the van's range is the van's range.
-  if (!inServiceArea(customer)) return { ok: false, reason: 'out_of_area' };
+  if (!owner && !inServiceArea(customer)) return { ok: false, reason: 'out_of_area' };
 
   // No preferences, no booking. The AI is told to ask; this is what makes
   // sure, because a model is not a guarantee and a wash nobody specified is
@@ -696,6 +715,7 @@ module.exports = {
   hasAddress,
   hasPreferences,
   inServiceArea,
+  alwaysAllowed,
   readableDate,
   readableTime,
   arrivalWindow,

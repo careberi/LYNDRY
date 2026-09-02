@@ -172,6 +172,11 @@ const BOARD_FIELDS =
   // The guided run reads its position from these, so they travel with the board
   // rather than being fetched again per stop.
   'collected_at, delivered_at, arrived_at, ' +
+  // WHAT CAME BACK OFF THE LAUNDROMAT, which is how the collect stop knows
+  // whether this order has been weighed back in yet. Without them the run has
+  // no way to tell a bag still sitting on a shelf from one already in the van,
+  // and the driver is offered "scan them in" for work nobody has checked.
+  'return_bag_count, return_weight_lb, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb)';
 
 // WHAT ONE BAG WEIGHS WHEN NOBODY HAS WEIGHED IT YET.

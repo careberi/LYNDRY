@@ -71,6 +71,32 @@ const config = Object.freeze({
   // Where handoff_to_human reaches Neil. His personal number, never published.
   supportPhone: process.env.SUPPORT_PHONE || '',
 
+  // NUMBERS THAT CAN ALWAYS BOOK, whatever the service is doing.
+  //
+  // Neil's own. He has to be able to put an order through while the service is
+  // shut and from an address outside Bergen County, because that is how he
+  // tests the thing end to end and how he takes a favour for somebody he
+  // knows. Nobody else gets this, and it is a list rather than a flag so a
+  // second person can be added without a code change.
+  //
+  // IT DOES NOT SKIP ANY CHECK THAT PROTECTS THE CUSTOMER. An address, wash
+  // preferences, a card and a real date are still required - the two things it
+  // waives are the closed sign and the county boundary, which are business
+  // rules about who we choose to serve rather than facts a booking needs.
+  //
+  // Comma separated, and blank falls back to SUPPORT_PHONE, so setting the
+  // support number is usually all there is to do.
+  alwaysBookNumbers: Object.freeze(
+    String(process.env.ALWAYS_BOOK_NUMBERS || process.env.SUPPORT_PHONE || '')
+      .split(',')
+      .map((n) => n.replace(/\D/g, ''))
+      .filter(Boolean)
+      // Stored as ten digits so a number typed with or without the country
+      // code, with dashes or without, all compare the same.
+      .map((n) => (n.length === 11 && n.startsWith('1') ? n.slice(1) : n))
+      .filter((n) => n.length === 10)
+  ),
+
   // Stripe holds the cards. Nothing outside src/providers/payments/ should
   // read these — same rule as Telnyx, for the same reason.
   //
@@ -208,6 +234,21 @@ const UPCOMING_ENV_VARS = [
   ['STRIPE_WEBHOOK_SECRET', 'phase 8 - payments'],
 ];
 
+// NOBODY CAN ALWAYS BOOK. Said out loud at startup, because this is a setting
+// whose absence is completely silent: everything keeps working, and the one
+// person who is supposed to be exempt from the closed sign is quietly not.
+// He would only find out by trying to book on a day the service is shut, which
+// is exactly the day it matters.
+function warnIfNobodyCanAlwaysBook() {
+  if (config.alwaysBookNumbers.length) return;
+
+  console.warn('');
+  console.warn('  No number is exempt from the closed sign.');
+  console.warn('    Set ALWAYS_BOOK_NUMBERS (or SUPPORT_PHONE) so the owner can');
+  console.warn('    still put an order through while the service is paused.');
+  console.warn('');
+}
+
 // Catch credentials that were copied from a masked field.
 //
 // Dashboards hide secrets behind dots. Copying one of those gives you a value
@@ -256,4 +297,9 @@ function warnAboutMissingEnvVars() {
   }
 }
 
-module.exports = { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials };
+module.exports = {
+  config,
+  warnAboutMissingEnvVars,
+  warnAboutUnusableCredentials,
+  warnIfNobodyCanAlwaysBook,
+};

@@ -5,7 +5,12 @@ const express = require('express');
 const pkg = require('../package.json');
 
 // All environment settings are read and frozen in one place. See src/config.js.
-const { config, warnAboutMissingEnvVars, warnAboutUnusableCredentials } = require('./config');
+const {
+  config,
+  warnAboutMissingEnvVars,
+  warnAboutUnusableCredentials,
+  warnIfNobodyCanAlwaysBook,
+} = require('./config');
 
 const assets = require('./web/assets');
 const web = require('./routes/web');
@@ -188,6 +193,7 @@ const server = app.listen(config.port, () => {
   console.log(`  payments    : ${require('./providers/payments').mode}`);
   warnAboutMissingEnvVars();
   warnAboutUnusableCredentials();
+  warnIfNobodyCanAlwaysBook();
   checkDatabase();
 });
 

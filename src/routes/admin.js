@@ -18,7 +18,7 @@ const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
-const { labelSheetBody } = require('../web/labels');
+const { labelSheetBody, SHEET: LABEL_SHEET } = require('../web/labels');
 const bags = require('../core/bags');
 const tags = require('../core/tags');
 const orderEvents = require('../core/order-events');
@@ -228,7 +228,7 @@ const OPS_MENUS = Object.freeze([
       { href: '/ops/settings', label: 'Taking orders?', permission: 'service.manage' },
       { href: '/ops/promotions', label: 'Promotions', permission: 'service.manage' },
       { href: '/ops/broadcast', label: 'Text blast', permission: 'service.manage' },
-      { href: '/ops/labels', label: 'Bag stickers', permission: 'orders.act' },
+      { href: '/ops/labels', label: 'Bag tags', permission: 'orders.act' },
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
       // "Route planner" says which of the two it is. This one is a day you
       // invent; Routing above is the day that exists.
@@ -236,14 +236,27 @@ const OPS_MENUS = Object.freeze([
     ],
   },
   {
-    label: 'Help',
-    // No permission: the process page is the one you hand a new driver.
+    // "Resources" rather than "Help": these are not answers to a problem you
+    // are having, they are the documents you read before you start and hand to
+    // somebody else - the process, the physical walkthrough, and the page we
+    // send a laundromat owner.
+    label: 'Resources',
     items: [
       { href: '/ops/process', label: 'How it all works', permission: null },
       // The physical walkthrough. Same group and same no-permission rule as the
       // page above: it holds no customer detail and no wholesale figure, and it
       // is the other thing you hand somebody before their first round.
       { href: '/ops/journey', label: 'What happens to a bag', permission: null },
+      // THE ACTUAL PAGE WE SEND A LAUNDROMAT OWNER, not a copy of it. It is
+      // public, so this is only a shortcut - but a shortcut worth having,
+      // because the thing most likely to go stale is the page nobody who works
+      // here ever opens. Behind partners.view: it is a sales document, and it
+      // is the same permission that guards everything else about partners.
+      {
+        href: '/for-laundromats',
+        label: 'What we send a laundromat',
+        permission: 'partners.view',
+      },
     ],
   },
 ]);
@@ -776,6 +789,21 @@ function codeStep({ error = '', next = '/ops', phone = '' } = {}) {
 // sitting in a browser history or a server log line.
 const PENDING_COOKIE = 'ly_ops_pending';
 
+// THE SIGN-IN PAGES MUST NEVER BE CACHED, and this is not housekeeping.
+//
+// Neil reported typing his number and landing straight in /ops without ever
+// being asked for the code. The cause is a stale sign-in form: the browser had
+// kept a copy of GET /ops/login from a time when he was signed out, served it
+// again later while his session was in fact still alive, and the moment he
+// submitted it the next page saw a valid session and waved him through. It
+// looked exactly like the code step had been skipped.
+//
+// No-store means the form is fetched fresh every time, so a page that offers
+// to sign you in is only ever shown to somebody who is actually signed out.
+function noStore(res) {
+  res.set('Cache-Control', 'no-store, private');
+}
+
 function setPending(res, phone) {
   res.cookie(PENDING_COOKIE, phone, {
     httpOnly: true,
@@ -798,6 +826,8 @@ function readPending(req) {
 }
 
 router.get('/ops/login', (req, res) => {
+  noStore(res);
+
   // Already signed in? Don't make them do it again.
   if (auth.isAuthed(req)) return res.redirect(302, safeNext(req.query.next));
 
@@ -808,6 +838,13 @@ router.get('/ops/login', (req, res) => {
 router.post('/ops/login', async (req, res, next) => {
   const wanted = safeNext((req.body || {}).next);
   const phone = (req.body || {}).phone;
+
+  noStore(res);
+
+  // ALREADY SIGNED IN. Send them on rather than texting a code that the next
+  // page would then swallow - which is what made this look like the code step
+  // could be skipped. A credential is not minted for somebody already inside.
+  if (auth.isAuthed(req)) return res.redirect(303, wanted);
 
   try {
     if (!auth.hasKey()) {
@@ -850,6 +887,7 @@ router.post('/ops/login', async (req, res, next) => {
 });
 
 router.get('/ops/login/code', (req, res) => {
+  noStore(res);
   if (auth.isAuthed(req)) return res.redirect(302, safeNext(req.query.next));
 
   const phone = readPending(req);
@@ -862,6 +900,8 @@ router.get('/ops/login/code', (req, res) => {
 router.post('/ops/login/code', async (req, res, next) => {
   const wanted = safeNext((req.body || {}).next);
   const phone = readPending(req);
+
+  noStore(res);
 
   try {
     if (!phone) return res.redirect(303, '/ops/login');
@@ -2922,15 +2962,24 @@ const LABEL_STATES = Object.freeze({
   OUTSTANDING: { label: 'Outstanding', colour: 'var(--lilac-500)', blurb: 'Printed, not yet on a bag' },
   IN_USE: { label: 'In use', colour: 'var(--suds-500)', blurb: 'On a bag right now, QR opens' },
   EXPIRED: { label: 'Expired', colour: 'var(--paper-300)', blurb: 'Order delivered, link dead' },
+  // Kept in step with the sheet: a tag is one printed thing however many
+  // stickers are on it, so nothing here counts in fours.
 });
 
 router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res, next) => {
   try {
     // Every label, so the counts and the list are the same data rather than
     // three separate queries that could each be right about a different moment.
+    // INTAKE ROWS ONLY. Since bag tags arrived, bag_labels also holds a row per
+    // peelable sticker a laundromat has used - up to four more per tag, all
+    // carrying the same code. Those are bags that came back, not tags that came
+    // out of a printer, and counting them here would inflate the stock figures
+    // by a factor of five and list the same code five times over. A row with no
+    // sticker_seq is the tag itself, which is the thing this page is about.
     const { data: all, error: labelError } = await db
       .from('bag_labels')
       .select('*, orders(order_number)')
+      .is('sticker_seq', null)
       .order('printed_at', { ascending: false })
       .limit(600);
 
@@ -2988,7 +3037,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
                  ${
                    state === 'OUTSTANDING'
                      ? `<div style="font-size:12px;color:var(--ink-500);margin-top:3px;">
-                          Opens, but says the sticker is not on a bag yet.
+                          Opens, but says the tag is not on a bag yet.
                         </div>`
                      : ''
                  }`
@@ -3009,12 +3058,19 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 
     const body = `
       <div style="max-width:640px;">
-        <p class="eyebrow" style="margin:0 0 8px;">Stickers</p>
-        <h1 style="margin:0 0 16px;font-size:40px;line-height:1.05;">Bag stickers</h1>
+        <p class="eyebrow" style="margin:0 0 8px;">Bag tags</p>
+        <h1 style="margin:0 0 16px;font-size:40px;line-height:1.05;">Bag tags</h1>
         <p style="font-size:16px;line-height:1.65;color:var(--ink-700);">
-          A label is a blank sticker until a driver puts it on a bag and enters
-          its code. Print a roll, keep them in the van. They are what lets a bag
-          be identified without opening it, and what a laundromat scans.
+          A bag tag is blank until a driver puts it on a bag at the door and
+          enters its id. Print a batch, keep them in the van. The tag is what
+          lets a bag be identified without opening it, and what a laundromat
+          scans to see how the wash is meant to be done.
+        </p>
+        <p style="font-size:16px;line-height:1.65;color:var(--ink-700);">
+          Each tag carries <strong>four numbered stickers</strong>. They come
+          off it one at a time and go on whatever bags the laundromat packs the
+          clean laundry into, so one bag in can be four bags out and still be
+          one order. The stickers are not counted here - this is printed stock.
         </p>
       </div>
 
@@ -3028,10 +3084,10 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
         blank < 10
           ? `<div class="card card-xl" style="padding:22px;margin-bottom:28px;background:var(--sunbeam-500);max-width:560px;">
                <p style="margin:0;font-size:16px;line-height:1.6;font-weight:600;">
-                 ${blank === 0 ? 'No blank stickers left.' : `Only ${blank} blank sticker${blank === 1 ? '' : 's'} left.`}
-                 Print a sheet before the next round - a driver with no sticker
-                 cannot label a bag, and an unlabelled bag cannot be scanned at
-                 the door.
+                 ${blank === 0 ? 'No blank bag tags left.' : `Only ${blank} blank bag tag${blank === 1 ? '' : 's'} left.`}
+                 Print a sheet before the next round - a driver with no tag
+                 cannot label a bag, an unlabelled bag cannot be scanned at the
+                 door, and the laundromat has nothing to peel a sticker off.
                </p>
              </div>`
           : ''
@@ -3043,19 +3099,20 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
           <label class="eyebrow" for="count" style="display:block;margin-bottom:8px;">How many</label>
           <div style="display:flex;gap:12px;align-items:flex-start;">
             <input class="input input-lg" type="number" id="count" name="count"
-                   min="1" max="300" step="30" value="30" required style="flex:1;">
+                   min="1" max="300" step="6" value="30" required style="flex:1;">
             <button type="submit" class="btn btn-lg">Make them</button>
           </div>
           <span class="field-hint" style="display:block;margin-top:10px;">
-            30 to a sheet on Avery 5160 address labels, which is the standard
-            30-per-sheet size sold everywhere. Print at 100% scale.
+            Six to a sheet on ${escapeHtml(LABEL_SHEET.stock)} shipping labels,
+            which is ordinary stock sold everywhere. Print at 100% scale, not
+            "fit to page".
           </span>
         </form>
       </div>
 
       <div class="card card-xl" style="padding:28px;margin-top:28px;">
         <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
-          ${sectionHeading('Every sticker', filter ? LABEL_STATES[filter].label : 'All', showing.length)}
+          ${sectionHeading('Every tag', filter ? LABEL_STATES[filter].label : 'All', showing.length)}
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a class="btn btn-sm ${filter ? 'btn-outline' : ''}" href="/ops/labels">All</a>
             ${['OUTSTANDING', 'IN_USE', 'EXPIRED']

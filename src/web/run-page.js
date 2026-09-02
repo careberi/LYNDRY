@@ -346,13 +346,58 @@ function partnerCard(run) {
                Handed over ${stop.bags === 1 ? 'the bag' : `all ${stop.bags} bags`}
              </button>
            </form>`
-        : `<a class="btn btn-primary btn-lg btn-full" href="/ops/loadout">
+        : (() => {
+            // WEIGH, CHECK, THEN CLIP - and this is the screen where the first
+            // two happen. An order whose return leg has not been recorded has
+            // not been weighed against what we collected, so there is nothing
+            // to scan into the van yet and no clip has been earned.
+            //
+            // The form itself lives on the order page, which is the one place
+            // that records a return. Sending him there rather than repeating it
+            // here is the same rule the load-out link follows: two ways to do
+            // one job is how they drift.
+            const waiting = (stop.orders || []).filter((o) => o.return_bag_count == null);
+
+            if (waiting.length) {
+              return `
+           <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);
+                       border-radius:14px;background:var(--paper-200);">
+             <p class="eyebrow" style="margin:0 0 8px;">Weigh before anything moves</p>
+             <p style="font-size:15px;line-height:1.55;margin:0;">
+               Ask how many bags and what they weigh, for each order. It gets
+               checked against what you collected from the customer, and only
+               then do the clips go on.
+             </p>
+           </div>
+
+           ${waiting
+             .map(
+               (o) => `
+           <a class="btn btn-primary btn-lg btn-full" style="margin-bottom:10px;"
+              href="/ops/orders/${escapeHtml(String(o.order_number))}?from=run">
+             Order ${escapeHtml(String(o.order_number))}${
+                 o.weight_lb ? ` - went in at ${Number(o.weight_lb).toFixed(0)} lb` : ''
+               } ${icon('arrow-right', '22')}
+           </a>`
+             )
+             .join('')}
+
+           <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
+             ${waiting.length === 1 ? 'One order' : `${waiting.length} orders`} still to
+             weigh back in. The van scan comes after.
+           </p>`;
+            }
+
+            return `
+           <a class="btn btn-primary btn-lg btn-full" href="/ops/loadout">
              Scan them into the van ${icon('arrow-right', '22')}
            </a>
            <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
-             Every bag gets scanned out and the van is loaded in reverse, so stop 1
-             is by the door. Come back here when that is done.
-           </p>`
+             All weighed and clipped. Every bag gets scanned out and the van is
+             loaded in reverse, so stop 1 is by the door. Come back here when
+             that is done.
+           </p>`;
+          })()
     }
   </div>`;
 }

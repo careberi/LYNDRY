@@ -737,7 +737,12 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
   // for the model to work out. Whether we are open, and what somebody is owed,
   // are both money-adjacent - and the rule is the same as everywhere else in
   // this file: the AI is told, it does not decide.
-  const open = await settings.takingOrders();
+  // NEIL'S OWN NUMBER IS NEVER TOLD WE ARE SHUT, because for him we are not -
+  // bookPickup() lets his bookings through while the service is closed. Telling
+  // the model otherwise would have it refuse in the thread something the code
+  // behind it would happily do, which is the same sentence-versus-code gap that
+  // once read a passed pickup window straight back to a customer.
+  const open = booking.alwaysAllowed(customer || {}) || (await settings.takingOrders());
   const paused = open
     ? null
     : {

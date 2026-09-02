@@ -99,8 +99,15 @@ function verifyCode(code, signature) {
 }
 
 // The full URL that goes in the QR on the sticker.
-function labelUrl(code) {
-  return `${config.baseUrl}/o/${code}?t=${signCode(code)}`;
+//
+// `seq` is which of the four peelable stickers on the tag this one is. It is
+// NOT part of the signature and does not need to be: the signature proves you
+// are holding a tag we printed, and the sequence only chooses which sticker on
+// that same tag the page is talking about. Somebody who can change the 1 to a
+// 2 was already holding a tag with both numbers on it.
+function labelUrl(code, seq) {
+  const base = `${config.baseUrl}/o/${code}?t=${signCode(code)}`;
+  return seq ? `${base}&s=${seq}` : base;
 }
 
 // --- Printing a batch -------------------------------------------------------

@@ -10,6 +10,7 @@
 
 const { escapeHtml, icon } = require('./layout');
 const promotionsCore = require('../core/promotions');
+const { config } = require('../config');
 
 function banner(text, tone) {
   if (!text) return '';
@@ -52,6 +53,28 @@ ${banner(problem, 'bad')}
         ? `<p style="font-size:16px;line-height:1.6;margin:12px 0 0;">
              <strong>Customers are told:</strong> ${escapeHtml(settings.paused_reason)}
            </p>`
+        : ''
+    }
+
+    ${
+      // WHO IS EXEMPT, SAID ON THE SCREEN THAT CLOSES THE SERVICE.
+      //
+      // The exemption is configured in the environment, which means its absence
+      // is completely silent - everything keeps working and the one person who
+      // is meant to be able to book anyway quietly cannot. He would find that
+      // out by trying, on the one day it matters. So it is stated here, both
+      // ways round, on the screen where the closing actually happens.
+      !open
+        ? config.alwaysBookNumbers.length
+          ? `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;">
+               ${config.alwaysBookNumbers.length === 1 ? 'One number is' : `${config.alwaysBookNumbers.length} numbers are`}
+               exempt and can still book: ending
+               ${config.alwaysBookNumbers.map((n) => escapeHtml(n.slice(-4))).join(', ')}.
+             </p>`
+          : `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;font-weight:700;color:var(--stain-500);">
+               Nobody is exempt - your own number cannot book either. Set
+               ALWAYS_BOOK_NUMBERS or SUPPORT_PHONE to change that.
+             </p>`
         : ''
     }
   </div>

@@ -6,47 +6,73 @@ const bags = require('../core/bags');
 const { site } = require('./site');
 
 // ---------------------------------------------------------------------------
-// The sticker sheet.
+// THE BAG TAG SHEET.
 //
-// Laid out for AVERY 5160 - the 1 inch by 2 5/8 inch address label, 30 to a
-// sheet, three across and ten down. It is the cheapest and most widely stocked
-// label in America, which is the entire reason for choosing it: nothing has to
-// be ordered specially and a box costs about ten dollars in any office shop.
-// The same geometry is sold as Avery 8160, 5960, 8460 and a dozen own-brand
-// equivalents, so almost any "30 per sheet address label" will line up.
+// What gets printed is no longer a sticker. It is a BAG TAG: one tag id, and
+// four numbered peelable stickers carrying that same id. The tag goes on the
+// bag we collect; the stickers come off it one at a time and go on whatever
+// bags the laundromat packs the clean laundry into.
 //
-// Every measurement below is in inches on purpose. A sticker sheet is a
-// physical object and the numbers come off the packet; converting them to
-// pixels would only introduce a rounding error between the screen and the
-// paper.
+// THE SEQUENCE IS WHY THERE ARE FOUR RATHER THAN ONE REPEATED FOUR TIMES.
+// All four say 7MQ5Y2, which is what a person says out loud, and each also
+// says -1 through -4, which is what makes them individually addressable. Four
+// identical stickers cannot tell a repeat scan from a second bag.
+//
+// --- The paper ------------------------------------------------------------
+//
+// Laid out for AVERY 5164 - the 3 1/3 inch by 4 inch shipping label, six to a
+// sheet, two across and three down. It replaced the 5160 address label that
+// carried the old one-code-per-bag sticker, for the obvious reason: five QR
+// codes and five printed ids do not go on a label the size of a business card.
+//
+// 5164 is still ordinary stock. The same geometry is sold as 8164, 5264 and
+// most own-brand "6 per sheet shipping labels", so it does not have to be
+// ordered specially.
+//
+// THE STICKERS ARE CUT, NOT DIE-CUT, and that is a deliberate compromise
+// rather than an oversight. Nothing off a shelf comes with four peelable
+// squares inside one label, so the four are printed with dashed lines between
+// them and somebody at the counter runs a pair of scissors down them - each
+// piece keeps its own adhesive and peels off its own backing exactly as if it
+// had been die-cut. If tags are ever ordered properly printed, the artwork is
+// already the right shape and this file does not change.
+//
+// Every measurement is in inches on purpose. A sticker sheet is a physical
+// object and the numbers come off the packet; converting them to pixels would
+// only introduce a rounding error between the screen and the paper.
 // ---------------------------------------------------------------------------
 
 const SHEET = Object.freeze({
-  perSheet: 30,
-  columns: 3,
-  labelWidth: '2.625in',
-  labelHeight: '1in',
-  columnGap: '0.125in',
+  stock: 'Avery 5164',
+  perSheet: 6,
+  columns: 2,
+  tagWidth: '3.33in',
+  tagHeight: '4in',
+  columnGap: '0.19in',
   marginTop: '0.5in',
-  marginLeft: '0.1875in',
+  marginLeft: '0.16in',
 });
 
-// One QR per code. Drawn as SVG so it stays sharp at any printer resolution -
-// a raster QR at 1 inch is exactly the thing that will not scan.
-async function qrFor(code) {
+// How many peelable stickers are on one tag. Four is the number the database
+// enforces too - bag_labels.sticker_seq is checked between 1 and 4 - so this
+// is not a display choice that can drift on its own.
+const STICKERS = [1, 2, 3, 4];
+
+// One QR. Drawn as SVG so it stays sharp at any printer resolution - a raster
+// QR at this size is exactly the thing that will not scan.
+async function qrFor(code, seq) {
   try {
-    return await QRCode.toString(bags.labelUrl(code), {
+    return await QRCode.toString(bags.labelUrl(code, seq), {
       type: 'svg',
       margin: 0,
       // High correction, because this is going on a laundry bag. It will get
       // creased, damp and rubbed, and H survives roughly a third of the code
-      // being unreadable. A six-character URL is small enough that the extra
-      // redundancy costs nothing in printed size.
+      // being unreadable.
       errorCorrectionLevel: 'H',
       color: { dark: '#101210', light: '#ffffff' },
     });
   } catch (err) {
-    console.error(`Could not draw a QR for ${code}: ${err.message}`);
+    console.error(`Could not draw a QR for ${code}${seq ? `-${seq}` : ''}: ${err.message}`);
     return '';
   }
 }
@@ -59,25 +85,45 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// One tag: the header that stays on the bag we collect, and the four stickers
+// that come off it.
+function tagMarkup({ code, tagQr, stickerQrs }) {
+  const stickers = STICKERS.map(
+    (n, i) => `
+      <div class="lb-sticker">
+        <div class="lb-sq">${stickerQrs[i]}</div>
+        <div class="lb-st">
+          <div class="lb-scode">${esc(code)}</div>
+          <div class="lb-sseq">-${n}</div>
+        </div>
+      </div>`
+  ).join('');
+
+  return `
+    <div class="lb-tag">
+      <div class="lb-head">
+        <div class="lb-hq">${tagQr}</div>
+        <div class="lb-ht">
+          <div class="lb-brand">${esc(site.name)} bag tag</div>
+          <div class="lb-code">${esc(code)}</div>
+          <div class="lb-hint">Stays on this bag</div>
+        </div>
+      </div>
+      <div class="lb-peel">${stickers}</div>
+    </div>`;
+}
+
 // The sheet itself, ready to print. `labels` are rows from bag_labels.
 async function labelSheetBody(labels) {
   const drawn = await Promise.all(
-    labels.map(async (l) => ({ code: l.code, qr: await qrFor(l.code) }))
+    labels.map(async (l) => ({
+      code: l.code,
+      tagQr: await qrFor(l.code, null),
+      stickerQrs: await Promise.all(STICKERS.map((n) => qrFor(l.code, n))),
+    }))
   );
 
-  const stickers = drawn
-    .map(
-      (l) => `
-    <div class="lb-sticker">
-      <div class="lb-qr">${l.qr}</div>
-      <div class="lb-text">
-        <div class="lb-brand">${esc(site.name)}</div>
-        <div class="lb-code">${esc(l.code)}</div>
-        <div class="lb-hint">Scan me</div>
-      </div>
-    </div>`
-    )
-    .join('');
+  const tags = drawn.map(tagMarkup).join('');
 
   return `
 <style>
@@ -97,44 +143,84 @@ async function labelSheetBody(labels) {
 
   .lb-grid {
     display: grid;
-    grid-template-columns: repeat(${SHEET.columns}, ${SHEET.labelWidth});
+    grid-template-columns: repeat(${SHEET.columns}, ${SHEET.tagWidth});
     column-gap: ${SHEET.columnGap};
     row-gap: 0;
   }
 
-  .lb-sticker {
-    width: ${SHEET.labelWidth};
-    height: ${SHEET.labelHeight};
+  .lb-tag {
+    width: ${SHEET.tagWidth};
+    height: ${SHEET.tagHeight};
     display: flex;
-    align-items: center;
-    gap: 0.1in;
-    padding: 0.06in 0.1in;
-    /* Deliberately no border: the sticker's own edge is the border, and a
-       printed rule that misses the die-cut by a millimetre looks like a fault.
-       The dashed guide below only exists on screen. */
+    flex-direction: column;
+    padding: 0.12in;
+    /* Deliberately no border on the tag: the label's own die-cut edge is the
+       border, and a printed rule that misses it by a millimetre reads as a
+       fault. The dashed guide below only exists on screen. */
     overflow: hidden;
+    color: #101210;
   }
 
-  .lb-sticker .lb-qr { width: 0.82in; height: 0.82in; flex: none; }
-  .lb-sticker .lb-qr svg { display: block; width: 100%; height: 100%; }
+  /* --- the header, which stays on the bag we collect --- */
+  .lb-head { display: flex; align-items: center; gap: 0.12in; height: 1.02in; flex: none; }
+  .lb-hq { width: 0.95in; height: 0.95in; flex: none; }
+  .lb-hq svg { display: block; width: 100%; height: 100%; }
+  .lb-ht { min-width: 0; }
 
-  .lb-text { min-width: 0; }
   .lb-brand {
     font-family: var(--font-mono); font-size: 7pt; font-weight: 700;
-    letter-spacing: 0.14em; text-transform: uppercase; color: #101210;
+    letter-spacing: 0.13em; text-transform: uppercase;
   }
-  /* THE CODE IS THE FALLBACK, so it is set big enough to read at arm's length
-     in a badly lit basement when the camera will not focus. */
+  /* THE ID IS THE FALLBACK, so it is set big enough to read at arm's length in
+     a badly lit basement when the camera will not focus. */
   .lb-code {
-    font-family: var(--font-mono); font-size: 19pt; font-weight: 700;
-    letter-spacing: 0.06em; color: #101210; line-height: 1.05; margin: 0.01in 0;
+    font-family: var(--font-mono); font-size: 27pt; font-weight: 700;
+    letter-spacing: 0.05em; line-height: 1.02; margin: 0.02in 0;
   }
-  .lb-hint { font-family: var(--font-mono); font-size: 6.5pt; color: #5B635B; letter-spacing: 0.08em; }
+  .lb-hint { font-family: var(--font-mono); font-size: 6.5pt; color: #5B635B; letter-spacing: 0.07em; }
+
+  /* --- the four peelable stickers --- */
+  .lb-peel {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    /* The cut lines. A dashed rule is the instruction: this is where the
+       scissors go, and each piece peels off its own backing afterwards. */
+    border-top: 1px dashed #101210;
+    margin-top: 0.06in;
+  }
+
+  .lb-sticker {
+    display: flex; align-items: center; gap: 0.08in;
+    padding: 0.06in 0.04in;
+    min-width: 0;
+    border-right: 1px dashed #101210;
+    border-bottom: 1px dashed #101210;
+  }
+  /* The outer edges are the label's own edge, not a cut. */
+  .lb-sticker:nth-child(2n) { border-right: 0; }
+  .lb-sticker:nth-child(n + 3) { border-bottom: 0; }
+
+  .lb-sq { width: 0.78in; height: 0.78in; flex: none; }
+  .lb-sq svg { display: block; width: 100%; height: 100%; }
+
+  .lb-st { min-width: 0; }
+  .lb-scode {
+    font-family: var(--font-mono); font-size: 10.5pt; font-weight: 700;
+    letter-spacing: 0.04em; line-height: 1.05;
+  }
+  /* The number is what the attendant is actually reading off, so it is the
+     biggest thing on the sticker. */
+  .lb-sseq {
+    font-family: var(--font-mono); font-size: 24pt; font-weight: 700;
+    line-height: 1;
+  }
 
   /* On screen only, so you can see where the die cuts fall before wasting a
      sheet of labels. */
   @media screen {
-    .lb-sticker { outline: 1px dashed #C4CBC2; outline-offset: -1px; }
+    .lb-tag { outline: 1px dashed #C4CBC2; outline-offset: -1px; }
   }
 
   /* ---- on paper ---- */
@@ -147,35 +233,41 @@ async function labelSheetBody(labels) {
     @page { size: letter; margin: 0; }
 
     .lb-sheet {
-      border: 0; border-radius: 0; box-shadow: none; padding: ${SHEET.marginTop} 0 0 ${SHEET.marginLeft};
+      border: 0; border-radius: 0; box-shadow: none;
+      padding: ${SHEET.marginTop} 0 0 ${SHEET.marginLeft};
       width: 8.5in; max-width: none; overflow: visible;
     }
     .lb-grid { page-break-inside: auto; }
-    .lb-sticker { break-inside: avoid; page-break-inside: avoid; }
+    .lb-tag { break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
 
-<div class="lb-noprint" style="max-width:640px;">
-  <p class="eyebrow" style="margin:0 0 8px;">Stickers</p>
+<div class="lb-noprint" style="max-width:660px;">
+  <p class="eyebrow" style="margin:0 0 8px;">Bag tags</p>
   <h1 style="margin:0 0 14px;font-size:40px;line-height:1.05;">${labels.length} bag ${
-    labels.length === 1 ? 'label' : 'labels'
+    labels.length === 1 ? 'tag' : 'tags'
   }</h1>
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);">
-    Print these on Avery 5160 labels - the standard 30-per-sheet address label,
-    about ten dollars a box anywhere. Set the printer to <strong>100% scale, not
-    "fit to page"</strong>, or nothing will line up. Keep the roll in the van;
-    a sticker means nothing until a driver scans it onto a bag.
+    Print these on <strong>${esc(SHEET.stock)}</strong> labels - the 6 per sheet
+    shipping label, sold everywhere. Set the printer to
+    <strong>100% scale, not "fit to page"</strong>, or nothing will line up.
+  </p>
+  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);">
+    Each tag has one id and <strong>four numbered stickers</strong> under it.
+    The tag stays on the bag we collect. The laundromat cuts the stickers apart
+    along the dashed lines and puts one on each bag it packs - however many that
+    turns out to be. All four say the same id, so it is still one order.
   </p>
 </div>
 
 <div class="lb-actions">
   <button type="button" class="btn" onclick="window.print()">Print this sheet</button>
-  <a class="btn btn-outline" href="/ops/labels">Back to labels</a>
+  <a class="btn btn-outline" href="/ops/labels">Back to bag tags</a>
 </div>
 
 <div class="lb-sheet">
-  <div class="lb-grid">${stickers}</div>
+  <div class="lb-grid">${tags}</div>
 </div>`;
 }
 
-module.exports = { labelSheetBody, SHEET };
+module.exports = { labelSheetBody, SHEET, STICKERS };
