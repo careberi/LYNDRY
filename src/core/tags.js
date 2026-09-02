@@ -284,6 +284,43 @@ async function cycleSticker(parent, seq) {
   return { ok: true, state: STICKER.UNUSED };
 }
 
+// THE DRIVER TICKS A FINISHED BAG OFF AS HE PICKS IT UP.
+//
+// A toggle, like the attendant's sticker taps: not collected, then collected,
+// then back if he set one down again. Same reasoning - a mis-tap at a counter
+// has nobody to undo it, so tapping again is the escape.
+//
+// Per BAG rather than per order, because that is how they come across a
+// counter. He is not sorting them into orders as he goes and should not have
+// to; the sticker already says which order each one is.
+async function toggleCollected(labelId) {
+  const { data: row, error: findError } = await db
+    .from('bag_labels')
+    .select('id, collected_at, finished_at')
+    .eq('id', labelId)
+    .maybeSingle();
+
+  if (findError) throw findError;
+  if (!row) return { ok: false, detail: 'No bag with that id.' };
+
+  // NOTHING THE LAUNDROMAT HAS NOT FINISHED. A bag they are still folding is
+  // not on the counter to be picked up, and ticking it would put it in the van
+  // in the system while it is still in a machine.
+  if (!row.finished_at) {
+    return { ok: false, detail: 'The laundromat has not marked that one finished yet.' };
+  }
+
+  const collected = !row.collected_at;
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ collected_at: collected ? new Date().toISOString() : null })
+    .eq('id', labelId);
+
+  if (error) throw error;
+  return { ok: true, collected };
+}
+
 async function markSubBagReady(parent, seq, { weightLb = null } = {}) {
   const n = Number(seq);
   if (!Number.isInteger(n) || n < 1 || n > 4) {
@@ -514,6 +551,7 @@ module.exports = {
   stageOf,
   markSubBagReady,
   cycleSticker,
+  toggleCollected,
   stickersOn,
   stickerState,
   STICKER,

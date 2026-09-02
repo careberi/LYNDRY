@@ -3013,6 +3013,24 @@ router.post('/ops/run/here', guard, may('orders.drive'), async (req, res, next) 
 
 // Handing a load over at the laundromat. Several orders, one visit, so this
 // loops fulfilment.dropAtPartner rather than being a new way to do it.
+// Ticking a finished bag off at the laundromat counter. One bag, one tap.
+router.post('/ops/run/collected', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const labelId = String((req.body || {}).label_id || '');
+    if (!UUID.test(labelId)) return res.redirect(303, '/ops/run');
+
+    const result = await tags.toggleCollected(labelId);
+
+    if (!result.ok) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    return res.redirect(303, '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/run/dropped', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const body = req.body || {};

@@ -807,10 +807,17 @@ async function board(dateIso, fromTime, driverId = null) {
   if (readyIds.length) {
     const { data: packed } = await db
       .from('bag_labels')
-      .select('order_id, sticker_seq, code, finished_at')
+      .select('id, order_id, sticker_seq, code, finished_at, collected_at')
       .in('order_id', readyIds)
       .eq('leg', 'DELIVERY')
-      .not('finished_at', 'is', null);
+      .not('finished_at', 'is', null)
+      // A STABLE ORDER, because this is a tick-list somebody works down. With
+      // no ordering Postgres is free to hand the rows back differently every
+      // time, and the buttons jumped around after each tap - a driver holding
+      // six bags loses his place, which is exactly the mistake the list exists
+      // to prevent.
+      .order('code', { ascending: true })
+      .order('sticker_seq', { ascending: true });
 
     for (const row of packed || []) {
       if (!finishedByOrder.has(row.order_id)) finishedByOrder.set(row.order_id, []);

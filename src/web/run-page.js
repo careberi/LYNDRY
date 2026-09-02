@@ -372,29 +372,61 @@ function partnerCard(run) {
     </p>
 
     ${
-      // WHICH TAGS TO ASK FOR. A count tells him how many to expect; the tags
-      // tell him what to say at the counter and what to check he is holding.
-      // These are the stickers the laundromat marked finished, so they are what
-      // is physically sitting on their shelf with our id on it.
+      // TICK EACH BAG OFF AS IT COMES INTO YOUR HANDS.
+      //
+      // NEIL'S FLOW, and the unit is the point: these are ALL the finished bags
+      // at this laundromat, whoever they belong to. He is standing at a counter
+      // being handed bags one at a time - he does not sort them into orders as
+      // he goes and should not have to, because the sticker already says which
+      // order each one is.
+      //
+      // Not collected, tap, collected. Tap again if he sets one down: a mis-tap
+      // at a counter has nobody to undo it.
+      //
+      // THE WEIGHING COMES AFTER, not interleaved. Gather everything, then
+      // weigh the load, then the check against what we collected from the
+      // customer, then the clips - which is the original sequence with the
+      // picking-up separated out in front of it.
       !dropping && (stop.finishedBags || []).length
-        ? `<div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
+        ? (() => {
+            const bags = stop.finishedBags;
+            const left = bags.filter((b) => !b.collected_at).length;
+
+            return `
+           <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
                        background:var(--paper-200);">
-             <p class="eyebrow" style="margin:0 0 10px;">Ask for these</p>
-             <div style="display:flex;flex-wrap:wrap;gap:8px;">
-               ${stop.finishedBags
-                 .map(
-                   (b) => `<span style="padding:7px 11px;border:2px solid var(--ink-900);border-radius:10px;
-                                        background:var(--paper-000);font-family:var(--font-mono);
-                                        font-weight:700;font-size:15px;">
-                             ${escapeHtml(b.code)}${b.sticker_seq ? `-${b.sticker_seq}` : ''}
-                           </span>`
-                 )
-                 .join('')}
-             </div>
-             <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
-               What they told us they have packed. Count them before you weigh.
+             <p class="eyebrow" style="margin:0 0 4px;">Pick these up</p>
+             <p style="font-size:15px;line-height:1.5;margin:0 0 14px;">
+               ${
+                 left
+                   ? `Tap each one as they hand it to you. <strong>${left} still to go.</strong>`
+                   : 'All of them are in the van. Weigh the load next.'
+               }
              </p>
-           </div>`
+
+             <form method="post" action="/ops/run/collected"
+                   style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+               ${bags
+                 .map((b) => {
+                   const got = Boolean(b.collected_at);
+                   return `
+               <button type="submit" name="label_id" value="${escapeHtml(b.id)}"
+                       style="width:100%;padding:14px 10px;border:2px solid var(--ink-900);
+                              border-radius:12px;box-shadow:var(--shadow-pop-xs);cursor:pointer;
+                              background:${got ? 'var(--suds-500)' : 'var(--paper-000)'};">
+                 <span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:16px;">
+                   ${escapeHtml(b.code)}${b.sticker_seq ? `-${b.sticker_seq}` : ''}
+                 </span>
+                 <span style="display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:0.07em;
+                              text-transform:uppercase;margin-top:4px;">
+                   ${got ? 'Collected' : 'Not yet'}
+                 </span>
+               </button>`;
+                 })
+                 .join('')}
+             </form>
+           </div>`;
+          })()
         : ''
     }
 
@@ -452,15 +484,24 @@ function partnerCard(run) {
             // one job is how they drift.
             const waiting = (stop.orders || []).filter((o) => o.return_bag_count == null);
 
+            // NOTHING ELSE UNTIL EVERY BAG IS IN HIS HANDS. The weighing card
+            // below is the next step, and offering it while bags are still on
+            // the shelf invites a load being weighed short - which is the one
+            // thing the weight check exists to catch, defeated by doing it in
+            // the wrong order. The tick-list above is the whole screen until it
+            // is finished.
+            const uncollected = (stop.finishedBags || []).filter((b) => !b.collected_at).length;
+            if (uncollected) return '';
+
             if (waiting.length) {
               return `
            <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);
                        border-radius:14px;background:var(--paper-200);">
-             <p class="eyebrow" style="margin:0 0 8px;">Weigh before anything moves</p>
+             <p class="eyebrow" style="margin:0 0 8px;">Now weigh what you picked up</p>
              <p style="font-size:15px;line-height:1.55;margin:0;">
-               Ask how many bags and what they weigh, for each order. It gets
-               checked against what you collected from the customer, and only
-               then do the clips go on.
+               Everything is in your hands. Put it on their scale, order by
+               order - it gets checked against what you collected from the
+               customer, and only then do the clips go on.
              </p>
            </div>
 
