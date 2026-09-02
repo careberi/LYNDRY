@@ -237,6 +237,39 @@
    hover lifts up-and-left and deepens the shadow; press pushes it down-and-
    right onto a 1px shadow. It should feel like a latch closing. */
 
+/* ---------------------------------------------------------------------------
+   THE PAGE IS LIGHT, AND THE BROWSER HAS TO BE TOLD.
+
+   Neil's phone is in dark mode. The four sticker buttons on the laundromat page
+   rendered as empty white boxes there and perfectly on a desktop, because a
+   bare <button> with no colour of its own gets the UA's `buttontext` system
+   colour - and on a dark-mode iOS device that resolves to WHITE. White text on
+   our white button. The markup was identical; only the device differed.
+
+   Two fixes, because either alone leaves a gap:
+
+   `color-scheme: light` tells the browser this document is light whatever the
+   device is set to, so every system colour it picks - button text, form
+   controls, scrollbars, the tap highlight - is chosen for a light page. LYNDRY
+   is a line drawing on cream paper and deliberately has no dark variant, so
+   this is a statement of fact rather than a preference.
+
+   And a reset on <button> itself, because system colours are not the only way
+   a native control diverges: iOS also draws its own border, corner radius and
+   font on an un-reset button. Everything on this site that is a button either
+   carries .btn - which sets all of that and wins on specificity - or is a
+   hand-styled control like those stickers, and the hand-styled ones were
+   relying on defaults that are not the same on every device.
+   --------------------------------------------------------------------------- */
+:root { color-scheme: light; }
+
+button {
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--ink-900);
+  font-family: inherit;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
