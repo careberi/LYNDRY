@@ -230,10 +230,15 @@ const OPS_MENUS = Object.freeze([
       // calculators - it reads the real queue and nothing on it is invented.
       { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
       { href: '/ops/loadout', label: 'Load the van', permission: 'orders.act' },
-      // Under Today because an open issue is something happening NOW that is
-      // stopping an order moving - it belongs beside the board it is blocking,
-      // not filed with the people it happens to be about.
-      { href: '/ops/issues', label: 'Issues', permission: 'issues.manage' },
+      // ISSUES IS NOT LISTED HERE ANY MORE, at Neil's request, and it is worth
+      // saying why that is safe: it was never the only way in. The red banner
+      // at the top of EVERY ops page links straight to it whenever anything is
+      // open - and that banner deliberately has no dismiss button, because a
+      // customer whose shirt was ruined should be impossible to forget. The
+      // Admin page carries a card for it too.
+      //
+      // So the queue is still one tap away from wherever you are standing; it
+      // just is not taking up a line in a menu when there is nothing in it.
     ],
   },
   {
