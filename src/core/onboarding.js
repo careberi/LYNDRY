@@ -130,7 +130,12 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
     // the one that matters legally, and rewriting the timestamp every time
     // somebody retypes their number would destroy the evidence.
     if (sendWelcome) {
-      const open = await settings.takingOrders();
+      // An exempt number is never told we are shut, because for them we are
+      // not - bookPickup() will take their order. Same rule as the AI's prompt
+      // and the tool replies in actions.js: a number that can book must not be
+      // greeted with a closed sign.
+      const open =
+        booking.alwaysAllowed(existing) || (await settings.takingOrders());
       await sendAndLog(phone, welcomeBackMessage(existing, { open }), existing.id);
     }
     return { ok: true, customer: existing, created: false };
@@ -185,7 +190,7 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   // no question about laundry reads as a robot. Their message goes to the AI
   // instead, which knows they are brand new and answers what they said.
   if (sendWelcome) {
-    const open = await settings.takingOrders();
+    const open = booking.alwaysAllowed(customer) || (await settings.takingOrders());
     await sendAndLog(
       phone,
       welcomeMessage({ open, promoBlurb: open ? null : grantedBlurb }),

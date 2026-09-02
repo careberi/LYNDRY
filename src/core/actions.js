@@ -495,7 +495,14 @@ async function saveDetails(customer, input) {
   //
   // Same split as everywhere else, just pointing the other way: the prompt
   // asks, the code enforces - so the code has to know too.
-  if (!(await settings.takingOrders())) {
+  //
+  // AND IT HAS TO KNOW ABOUT THE EXEMPTION, which is the third place this
+  // check lives. bookPickup() and the prompt both learned that Neil's own
+  // number can book while the service is shut; this one did not, so his
+  // conversation walked through the setup normally and then had a "we are not
+  // booking just yet" pasted into the middle of it by a tool result. A rule
+  // enforced in three places has to be taught in three places.
+  if (!booking.alwaysAllowed(customer) && !(await settings.takingOrders())) {
     const reason = await settings.pausedReason();
 
     return (
