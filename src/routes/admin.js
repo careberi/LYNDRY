@@ -18,7 +18,12 @@ const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
-const { labelSheetBody, labelListQr, SHEET: LABEL_SHEET } = require('../web/labels');
+const {
+  labelSheetBody,
+  labelListQr,
+  labelDetailBody,
+  SHEET: LABEL_SHEET,
+} = require('../web/labels');
 const bags = require('../core/bags');
 const tags = require('../core/tags');
 const orderEvents = require('../core/order-events');
@@ -4090,8 +4095,9 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 
         <div style="min-width:0;">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <span style="font-family:var(--font-mono);font-size:18px;font-weight:700;letter-spacing:0.06em;
-                         ${state === 'EXPIRED' ? 'color:var(--ink-500);' : ''}">${escapeHtml(l.code)}</span>
+            <a href="/ops/labels/${encodeURIComponent(l.code)}"
+               style="font-family:var(--font-mono);font-size:18px;font-weight:700;letter-spacing:0.06em;
+                      ${state === 'EXPIRED' ? 'color:var(--ink-500);' : ''}">${escapeHtml(l.code)}</a>
             <span class="badge" style="background:${tone.colour};">${escapeHtml(tone.label)}</span>
           </div>
 
@@ -4247,13 +4253,84 @@ router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// GET /ops/labels/:code - one bag tag, in full
+//
+// The tag drawn the way it prints, a QR big enough to scan off the screen, the
+// URL, and which order it is on. Reached by tapping an id on the list.
+//
+// Declared BEFORE /ops/labels/sheet would otherwise catch it: Express takes the
+// first route that matches, not the most specific, so a bare :code parameter
+// would swallow "sheet". The code format is checked instead of relying on the
+// order the routes happen to be written in - the same guard the partner routes
+// needed when /ops/partners/enquiries was being read as a partner named
+// "enquiries".
+// ---------------------------------------------------------------------------
+
+router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').toUpperCase();
+
+    // Only ever a real tag id. Anything else falls through to the routes below.
+    if (!new RegExp(`^[${bags.ALPHABET}]{${bags.CODE_LENGTH}}$`).test(code)) return next();
+
+    const { data: label, error } = await db
+      .from('bag_labels')
+      .select('*, orders(id, order_number, status)')
+      .eq('code', code)
+      .is('sticker_seq', null)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!label) return notFoundPage(res, 'No bag tag with that id.');
+
+    const { data: scans } = await db
+      .from('bag_label_scans')
+      .select('created_at, outcome')
+      .eq('code', code)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    return res.type('html').send(
+      adminPage({
+        title: `Bag tag ${code}`,
+        active: '/ops/labels',
+        body: await labelDetailBody(label, {
+          order: label.orders || null,
+          state: labelState(label),
+          scans: scans || [],
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/ops/labels/sheet', guard, may('orders.act'), async (req, res, next) => {
   try {
     const n = Math.max(1, Math.min(300, Number(req.query.n) || 30));
     const from = String(req.query.from || '');
 
-    let query = db.from('bag_labels').select('*').order('printed_at', { ascending: true }).limit(n);
-    if (from) query = query.gte('printed_at', from);
+    // ONE NAMED TAG, from the "print this one" button on a tag's own page. A
+    // reprint of a tag somebody has lost or damaged, which is otherwise only
+    // possible by printing a whole fresh sheet.
+    const only = String(req.query.only || '').toUpperCase();
+
+    let query = db
+      .from('bag_labels')
+      .select('*')
+      // Intake rows only, the same filter the list uses: a sticker a laundromat
+      // has used is a bag that came back, not stock to print.
+      .is('sticker_seq', null)
+      .order('printed_at', { ascending: true })
+      .limit(only ? 1 : n);
+
+    if (only) query = query.eq('code', only);
+    else if (from) query = query.gte('printed_at', from);
 
     const { data, error } = await query;
     if (error) throw error;

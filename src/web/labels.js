@@ -295,4 +295,109 @@ async function labelListQr(code) {
   }
 }
 
-module.exports = { labelSheetBody, labelListQr, SHEET, STICKERS };
+// ---------------------------------------------------------------------------
+// ONE BAG TAG, IN FULL.
+//
+// What you get by tapping an id on the list: the tag drawn the way it prints,
+// a QR big enough to scan off the screen from across a room, the URL under it,
+// and which order it is on.
+//
+// THE QR IS DELIBERATELY LARGE. The one on the list is 58px, which is a
+// thumbnail - enough to tell one row from another and not enough to point a
+// phone at from arm's length. This is the page you open when you actually want
+// to scan the thing, so it is sized for that.
+// ---------------------------------------------------------------------------
+
+async function labelDetailBody(label, { order = null, state, scans = [] }) {
+  const tagQr = await qrFor(label.code, null);
+  const stickerQrs = await Promise.all(STICKERS.map((n) => qrFor(label.code, n)));
+
+  const url = bags.labelUrl(label.code);
+  const dead = state === 'EXPIRED';
+
+  const sticker = (n, i) => `
+    <div style="padding:14px 10px;border:2px solid var(--ink-900);border-radius:12px;
+                background:var(--paper-050);text-align:center;">
+      <div style="font-family:var(--font-mono);font-weight:700;font-size:14px;margin-bottom:8px;">
+        ${esc(label.code)}-${n}
+      </div>
+      <div style="width:100%;max-width:120px;margin:0 auto;">${stickerQrs[i]}</div>
+    </div>`;
+
+  return `
+<a href="/ops/labels" style="font-size:15px;font-weight:600;">&larr; All bag tags</a>
+
+<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin:18px 0 8px;">
+  <h1 style="font-family:var(--font-mono);font-weight:700;font-size:44px;letter-spacing:0.06em;margin:0;">
+    ${esc(label.code)}
+  </h1>
+  <span class="badge" style="background:${
+    state === 'IN_USE' ? 'var(--suds-500)' : state === 'EXPIRED' ? 'var(--paper-300)' : 'var(--lilac-500)'
+  };">${esc(state === 'IN_USE' ? 'In use' : state === 'EXPIRED' ? 'Expired' : 'Outstanding')}</span>
+  ${
+    order
+      ? `<a href="/ops/orders/${esc(String(order.order_number))}" style="font-weight:700;font-size:17px;">
+           Order #${esc(String(order.order_number))}
+         </a>`
+      : '<span style="font-size:16px;color:var(--ink-500);">Not on a bag yet</span>'
+  }
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:26px;">
+
+  <div class="card card-xl" style="padding:26px;text-align:center;">
+    <p class="eyebrow" style="margin:0 0 14px;">The tag itself</p>
+    <div style="width:100%;max-width:260px;margin:0 auto;${dead ? 'opacity:0.3;' : ''}">
+      ${tagQr}
+    </div>
+    <p style="font-family:var(--font-mono);font-size:12px;line-height:1.5;margin:16px 0 0;
+              overflow-wrap:anywhere;">
+      ${
+        dead
+          ? `<s>${esc(url)}</s><br><span style="color:var(--stain-500);font-weight:700;">
+               dead - the order was delivered
+             </span>`
+          : `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`
+      }
+    </p>
+  </div>
+
+  <div class="card card-xl" style="padding:26px;">
+    <p class="eyebrow" style="margin:0 0 6px;">The four peelable stickers</p>
+    <p style="font-size:14px;line-height:1.55;color:var(--ink-700);margin:0 0 16px;">
+      All say ${esc(label.code)}. The number is what makes them individually
+      addressable, so a sticker tapped twice is not mistaken for a second bag.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;${dead ? 'opacity:0.3;' : ''}">
+      ${STICKERS.map(sticker).join('')}
+    </div>
+  </div>
+</div>
+
+${
+  scans.length
+    ? `
+<div class="card card-xl" style="padding:26px;margin-top:20px;">
+  <p class="eyebrow" style="margin:0 0 14px;">Every time somebody pointed a camera at it</p>
+  ${scans
+    .map(
+      (sc) => `
+    <div style="display:flex;flex-wrap:wrap;gap:10px 18px;padding:10px 0;
+                border-bottom:1px solid var(--ink-100);font-size:14px;">
+      <span style="font-variant-numeric:tabular-nums;color:var(--ink-500);min-width:150px;">
+        ${esc(String(sc.created_at).slice(0, 16).replace('T', ' '))}
+      </span>
+      <span style="font-weight:600;">${esc(sc.outcome || '')}</span>
+    </div>`
+    )
+    .join('')}
+</div>`
+    : ''
+}
+
+<div class="lb-actions" style="margin-top:24px;">
+  <a class="btn" href="/ops/labels/sheet?n=1&only=${encodeURIComponent(label.code)}">Print this one</a>
+</div>`;
+}
+
+module.exports = { labelSheetBody, labelListQr, labelDetailBody, SHEET, STICKERS };
