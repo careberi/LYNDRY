@@ -635,7 +635,10 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
       newTime === undefined ? booking.normaliseTime(order.pickup_time) : newTime
     );
 
-    const updated = await orders.reschedule(order, newDate, newTime, window);
+    // Same person, different door: they signed in and moved it on the website.
+    const updated = await orders.reschedule(order, newDate, newTime, window, {
+      actor: 'customer',
+    });
 
     await sendAndLog(customer.phone, booking.rescheduledMessage(updated), customer.id);
 

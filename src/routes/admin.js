@@ -402,6 +402,25 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0, head
   <title>${escapeHtml(title)} — ${site.name} ops</title>
   <!-- Internal, and full of customer addresses. Never index it. -->
   <meta name="robots" content="noindex, nofollow">
+
+  <!-- ADDED TO THE HOME SCREEN, THIS IS THE APP. Neil runs the ops site as a
+       home-screen bookmark and said it does not feel like one - and it did not,
+       because nothing here ever told the phone it was an app. Every tap ran
+       inside full Safari with its chrome and its reload spinner.
+
+       standalone drops the browser furniture. black-translucent puts the page
+       under the status bar so the top of the screen is ours. The theme colour
+       is the ops bar's ink, so the status bar matches it instead of flashing
+       white on every navigation.
+
+       It does not make the server faster. It removes the thing that made it
+       LOOK slow: a visible browser reloading a page on every tap. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="${escapeHtml(site.name)}">
+  <meta name="theme-color" content="#101210">
+  <link rel="manifest" href="/ops/app.webmanifest">
   <meta name="theme-color" content="#101210">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3525,6 +3544,64 @@ const reportForm = (req) => ({
   from: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : null,
   to: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : null,
   partner: UUID.test(String(req.query.partner || '')) ? String(req.query.partner) : null,
+});
+
+// THE MANIFEST. No guard on it: it holds a name, two colours and a start URL,
+// and a phone fetches it before anybody has signed in. Everything it points at
+// is still behind the sign-in.
+//
+// start_url is /ops/run rather than /ops, because the person who installs this
+// on a home screen is a driver and the round is what they open it for.
+// THE HOME SCREEN ICON. The same bag-and-bubble silhouette the favicon uses,
+// as a standalone SVG because a manifest cannot point at a data: URI.
+//
+// Padded to 20% on every side: iOS masks a home-screen icon into a rounded
+// square and a mark drawn to the edges loses its corners. The background is
+// paper rather than transparent, because a transparent icon on iOS renders
+// black and the mark is ink.
+const APP_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
+  `<rect width="64" height="64" rx="14" fill="#FFF8EC"/>` +
+  `<g transform="translate(12.8 12.8) scale(1.2)">` +
+  `<path d="M9 22 L9.6 30.6 L16 24" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="round"/>` +
+  `<rect x="2.3" y="10" width="27.4" height="16" rx="7" fill="#0EA47A" stroke="#101210" stroke-width="2.3"/>` +
+  `<path d="M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="round"/>` +
+  `<path d="M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6" fill="none" stroke="#101210" stroke-width="2.1" stroke-linecap="round"/>` +
+  `</g></svg>`;
+
+router.get('/ops/app-icon.svg', (req, res) => {
+  res.type('image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  return res.send(APP_ICON);
+});
+
+router.get('/ops/app.webmanifest', (req, res) => {
+  res.type('application/manifest+json');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  return res.send(
+    JSON.stringify({
+      name: `${site.name} ops`,
+      short_name: site.name,
+      start_url: '/ops/run',
+      scope: '/ops',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#FFF8EC',
+      theme_color: '#101210',
+      icons: [
+        {
+          // The favicon silhouette, as SVG so one file covers every size. The
+          // wordmark is a fifth of the mark's height and an illegible smear on
+          // a home screen, which is why the icon is the bag-and-bubble shape
+          // with no type in it - the same decision the browser tab favicon made.
+          src: '/ops/app-icon.svg',
+          sizes: 'any',
+          type: 'image/svg+xml',
+          purpose: 'any',
+        },
+      ],
+    })
+  );
 });
 
 router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res, next) => {

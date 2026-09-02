@@ -259,7 +259,11 @@ async function rescheduleOrder(customer, input) {
   // decides - and it cannot be talked past, because the refusal is arithmetic.
   if (window.substituted) return booking.cannotDoThatTime(window);
 
-  const updated = await orders.reschedule(order, input.new_date, newTime, window);
+  // The customer moved it themselves, in the thread. That is who the log
+  // should name, not the system that carried it out.
+  const updated = await orders.reschedule(order, input.new_date, newTime, window, {
+    actor: 'customer',
+  });
   return booking.rescheduledMessage(updated);
 }
 

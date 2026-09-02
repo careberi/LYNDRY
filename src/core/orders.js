@@ -2,6 +2,10 @@
 
 const db = require('../db');
 const { config } = require('../config');
+// Required lazily inside the function that uses it: order-events reads db
+// only, but orders is required by half of core/ and a top-level require
+// here is one more edge in that graph for one call site.
+
 
 // ---------------------------------------------------------------------------
 // The order state machine.
@@ -309,7 +313,7 @@ async function transition(order, to) {
   return data;
 }
 
-async function reschedule(order, newDate, newTime, window) {
+async function reschedule(order, newDate, newTime, window, by = null) {
   if (!isCancellable(order.status)) {
     throw new Error('That order has already been collected, so it cannot be rescheduled.');
   }
@@ -341,6 +345,36 @@ async function reschedule(order, newDate, newTime, window) {
 
   if (error) throw error;
   if (!data) throw new Error('That order changed while we were updating it. Try again.');
+
+  // A MOVE IS A CHANGE TO AN ORDER, AND EVERY CHANGE IS ON THE RECORD.
+  //
+  // This one was not. A customer could move their own pickup by text, or from
+  // /account, and leave no trace of who changed it or when - so "why is this
+  // Friday when I booked Thursday" had no answer. CLAUDE.md says every change
+  // to an order is written to order_events; this was the exception nobody had
+  // noticed.
+  //
+  // Recorded AFTER the write, so a refused move logs nothing. Best effort like
+  // every other entry: the audit trail must never be the thing that stops a
+  // customer rescheduling.
+  //
+  // `by` is passed by the caller, because the two doors are different people -
+  // the AI acting for the customer, and staff acting on the board - and "who
+  // moved this" is the whole question.
+  const wasWhen = [order.pickup_date, order.pickup_window_start]
+    .filter(Boolean)
+    .join(' ');
+  const nowWhen = [data.pickup_date, data.pickup_window_start].filter(Boolean).join(' ');
+
+  if (wasWhen !== nowWhen) {
+    await require('./order-events').record(order.id, {
+      kind: 'SCHEDULE',
+      summary: 'Pickup moved',
+      was: wasWhen || 'not set',
+      became: nowWhen || 'not set',
+      by: by || { actor: 'customer' },
+    });
+  }
 
   return data;
 }
