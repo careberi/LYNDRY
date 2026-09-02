@@ -199,6 +199,7 @@ async function create({
   notes,
   fromSchedule,
   preferences,
+  surchargeCents,
 }) {
   const { data, error } = await db
     .from('orders')
@@ -232,6 +233,11 @@ async function create({
       // and a 5pm load being booked with different details must not have the
       // first one's instructions change on the shelf.
       preferences: preferences || null,
+
+      // The paid wash options, in cents, as they stood when this order was
+      // taken. Stored beside the rate so changing what an option costs cannot
+      // re-price work already quoted.
+      surcharge_cents: Math.max(0, Number(surchargeCents) || 0),
 
       // Both halves of the price are recorded on the order itself, so that
       // changing either later never silently re-prices work already done.

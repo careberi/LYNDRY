@@ -298,7 +298,22 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // Null on orders taken before the minimum existed, which were genuinely not
   // subject to one.
   const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
-  const priceCents = Math.max(byWeight, floor);
+
+  // THE PAID OPTIONS, ON TOP OF THE MINIMUM.
+  //
+  // This is the path that actually prices orders today - settleWeight() has
+  // always added the surcharge and has never run on a real order. So the +$2
+  // options were advertised, agreed to, and then silently not charged: order
+  // #1932 chose free & clear AND fragrance-free, $4.00 between them, and paid
+  // exactly 35 lb at $2.00.
+  //
+  // AFTER the minimum, not inside it, matching settleWeight and for the same
+  // reason: the minimum is what a small load of washing is worth, and an extra
+  // we were asked for on top of it is separate work. Folding it in first would
+  // mean a 6 lb order paid for its fragrance-free detergent out of the minimum
+  // and we did that part for nothing.
+  const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
+  const priceCents = Math.max(byWeight, floor) + surcharge;
 
   // The photo goes up BEFORE the weight is written. If storage is having a bad
   // day we would rather refuse the whole step than record a charge whose
@@ -386,7 +401,11 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   //
   // When the minimum is what set the price, say so. "10 lb, so the total is
   // $25.00 at $2.00 a pound" is arithmetic the customer can see is wrong.
-  const minimumApplied = priceCents > byWeight;
+  // WAS THE MINIMUM WHAT DECIDED THE PRICE. Compared against the weight alone,
+  // NOT against the final total - the surcharge also makes priceCents exceed
+  // byWeight, and reading that as "the minimum applied" would tell a 35 lb
+  // customer their load was under our minimum.
+  const minimumApplied = floor > byWeight;
 
   // A SECOND WEIGHING IS A CORRECTION, and has to read like one.
   //
@@ -401,9 +420,21 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
     ? `Correction: your laundry weighed ${weight} lb, not ${previous} lb`
     : `Your laundry weighed ${weight} lb`;
 
+  // NAME THE ADD-ONS, or the arithmetic does not work.
+  //
+  // "35 lb, so the total is $74.00 at $2.00 a pound" is a sum the customer can
+  // do in their head and get $70. The same rule the discount already follows:
+  // a total that does not match the obvious arithmetic reads as a mistake
+  // unless the reason is in the same message.
+  const extras = surcharge > 0 ? ` plus ${money(surcharge)} for the wash options you chose` : '';
+
+  // With no add-ons the weight total IS the total, and saying the same figure
+  // twice reads as a system that cannot add up.
   const howPriced = minimumApplied
-    ? `${opening}, which is under our ${money(floor)} minimum, so the total is ${money(priceCents)}.`
-    : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
+    ? `${opening}, which is under our ${money(floor)} minimum${extras}, so the total is ${money(priceCents)}.`
+    : surcharge > 0
+      ? `${opening}, so that's ${money(byWeight)} at ${site.pricePerLb} a pound${extras} - ${money(priceCents)} in total.`
+      : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
 
   // What happens to the money, said as something still to come. Nothing is
   // taken here, so a sentence in the past tense would be a lie the customer

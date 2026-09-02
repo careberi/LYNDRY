@@ -722,6 +722,14 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     // their account later moves the default for next time and leaves this
     // order alone - which is the whole point of storing it here.
     preferences: prefs && Object.keys(prefs).length ? prefs : null,
+
+    // WHAT THE PAID OPTIONS COME TO, frozen at the same moment and for the same
+    // reason as the rate. It was never written: the column existed, the pricing
+    // read it, and nothing ever put a number in it - so every customer who
+    // chose free & clear detergent or fragrance-free softener was told +$2 and
+    // charged nothing. A real order, #1932, picked both and paid exactly its
+    // weight times the rate.
+    surchargeCents: wash.surchargeFor(prefs),
     pickupDate: window.date,
     pickupTime: normaliseTime(pickupTime),
     pickupWindowStart: window.start,
