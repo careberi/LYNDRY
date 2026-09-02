@@ -351,7 +351,7 @@ function orderTagPage(order, code, token, query = {}) {
                    <input class="field" id="lw" name="weight_lb" type="number" step="0.1"
                           min="0" max="400" inputmode="decimal" required>
                  </div>
-                 <button class="btn btn-ink btn-lg" type="submit">Save</button>
+                 <button class="btn btn-ink btn-lg" type="submit">${escapeHtml(t('Save'))}</button>
                </form>
                ${
                  query.weighed === 'bad'
@@ -396,58 +396,183 @@ function orderTagPage(order, code, token, query = {}) {
 // redact the ones it does not.
 // ---------------------------------------------------------------------------
 
-function stageHeader(label, order, stage, seq) {
+// ---------------------------------------------------------------------------
+// ENGLISH AND SPANISH, AND ONLY ON THIS PAGE.
+//
+// NEIL'S CALL: most of the people working a laundromat counter speak Spanish,
+// and this is the one screen we hand to somebody who does not work for us. It
+// is deliberately not a site-wide feature - the ops screens are for our own
+// staff and the marketing pages are a separate decision, so translating those
+// would be scope nobody asked for and copy nobody maintains.
+//
+// A plain object rather than an i18n library. There are about thirty strings,
+// they live on one page, and a dependency to look up thirty strings is a
+// dependency to keep patched for the rest of the project's life.
+//
+// THE KEY IS THE ENGLISH. If a string is missing from the Spanish table the
+// page falls back to English rather than showing a blank or a key name - a
+// laundromat with half a page in front of them can still work; one looking at
+// "wash.instructions.heading" cannot.
+// ---------------------------------------------------------------------------
+
+const ES = Object.freeze({
+  'Bag tag': 'Etiqueta de bolsa',
+  'Order': 'Pedido',
+  'Questions about this bag': 'Preguntas sobre esta bolsa',
+
+  // Stages
+  'Not on a bag yet': 'Todavia sin bolsa',
+  'Being collected': 'En recogida',
+  'In the van': 'En la furgoneta',
+  'Just arrived': 'Recien llegada',
+  'Being washed': 'En lavado',
+  'Ready for collection': 'Lista para recoger',
+  'Back in the van': 'De vuelta en la furgoneta',
+  'Delivered': 'Entregada',
+
+  // Weighing
+  'Weigh it to see the wash instructions': 'Pese la bolsa para ver las instrucciones',
+  'Weigh the bag and enter the weight to see the wash instructions.':
+    'Pese la bolsa y escriba el peso para ver las instrucciones de lavado.',
+  'Pounds': 'Libras',
+  'Save': 'Guardar',
+  'That did not look like a weight. Pounds, as a number.':
+    'Eso no parece un peso. Libras, en numero.',
+
+  // Washing
+  'How to wash it': 'Como lavarla',
+  'How everything is sorted': 'Como se separa la ropa',
+  'Time to turn it around': 'Tiempo para terminarla',
+  'Not picked up yet': 'Aun no recogida',
+  'When a bag is finished': 'Cuando termine una bolsa',
+  'Waiting for collection': 'Esperando recogida',
+  'Put one sticker off this tag on each finished bag, then tap its number here. However many bags this became - one, or four.':
+    'Ponga una pegatina de esta etiqueta en cada bolsa terminada y toque su numero aqui. Sean las bolsas que sean, una o cuatro.',
+  'Tap a number once its sticker is on a finished bag. Tapping the same one twice changes nothing.':
+    'Toque un numero cuando su pegatina ya este en una bolsa terminada. Tocar el mismo dos veces no cambia nada.',
+
+  // Wash fields, so the instructions themselves are readable
+  'Detergent': 'Detergente',
+  'Softener': 'Suavizante',
+  'Water': 'Agua',
+  'Standard scented': 'Con aroma normal',
+  'Free & clear, fragrance-free': 'Sin fragancia',
+  'No softener': 'Sin suavizante',
+  'Fragrance-free': 'Sin fragancia',
+  'Cold': 'Fria',
+  'Warm': 'Tibia',
+  'Hot': 'Caliente',
+
+  // Sorting standard
+  'Sort into whites/lights and colours/darks when practical.':
+    'Separe blancos/claros de colores/oscuros cuando sea posible.',
+  'Separate obvious delicates, heavily soiled items, and anything needing special care.':
+    'Aparte las prendas delicadas, las muy sucias y todo lo que necesite cuidado especial.',
+  "Never combine different customers' laundry.":
+    'Nunca mezcle la ropa de clientes distintos.',
+});
+
+// Which language this visitor is reading in. The query string decides, and the
+// choice is remembered in a cookie so somebody scanning twenty bags does not
+// tap the toggle twenty times.
+function langOf(req) {
+  const asked = String((req.query || {}).lang || '').toLowerCase();
+  if (asked === 'es' || asked === 'en') return asked;
+
+  const cookie = String(req.headers.cookie || '');
+  return /(?:^|;)\s*ly_lang=es(?:;|$)/.test(cookie) ? 'es' : 'en';
+}
+
+function translator(lang) {
+  if (lang !== 'es') return (text) => text;
+
+  return (text) => {
+    const exact = ES[text];
+    if (exact) return exact;
+
+    // THE COUNTDOWN IS BUILT, NOT WRITTEN, so it can never be in the table:
+    // fulfilment.turnaround() composes "1d 8h left" and "40m overdue" out of a
+    // number and a word. Only the word needs translating, and doing it here
+    // keeps the clock itself in one place rather than teaching fulfilment.js
+    // about languages it has no other reason to know about.
+    if (/\bleft$/.test(text)) return `quedan ${text.replace(/\s*left$/, '')}`;
+    if (/\boverdue$/.test(text)) return `${text.replace(/\s*overdue$/, '')} de retraso`;
+
+    return text;
+  };
+}
+
+// The toggle. Keeps the signature on the URL - without ?t= the page refuses.
+function langToggle(code, token, seq, lang) {
+  const base = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(token || ''))}${
+    seq ? `&s=${seq}` : ''
+  }`;
+
+  return `
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;">
+      <a class="btn btn-sm ${lang === 'en' ? '' : 'btn-outline'}" href="${base}&lang=en">English</a>
+      <a class="btn btn-sm ${lang === 'es' ? '' : 'btn-outline'}" href="${base}&lang=es">Espanol</a>
+    </div>`;
+}
+
+function stageHeader(label, order, stage, seq, t = (x) => x) {
   return `
     <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 8px;">Bag tag</p>
+      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(t('Bag tag'))}</p>
       <div style="font-family:var(--font-mono);font-size:38px;font-weight:700;letter-spacing:0.06em;line-height:1;">
         ${escapeHtml(label.code)}${seq ? `<span style="color:var(--ink-400);">-${seq}</span>` : ''}
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;">
         <span class="badge" style="background:var(--sunbeam-500);">
-          ${escapeHtml(tags.STAGE_LABEL[stage] || stage)}
+          ${escapeHtml(t(tags.STAGE_LABEL[stage] || stage))}
         </span>
         <span style="font-family:var(--font-mono);font-size:13px;color:var(--ink-500);">
-          Order #${escapeHtml(String(order.order_number))}
+          ${escapeHtml(t('Order'))} #${escapeHtml(String(order.order_number))}
         </span>
       </div>
     </div>`;
 }
 
-function weightBox({ code, token, heading, blurb, action, error }) {
+function weightBox({ code, token, heading, blurb, action, error, t = (x) => x }) {
   return `
     <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(heading)}</p>
-      <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">${blurb}</p>
+      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(t(heading))}</p>
+      <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">${escapeHtml(t(blurb))}</p>
       <form method="post" action="${action}?t=${encodeURIComponent(String(token || ''))}"
             style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
         <div style="flex:1 1 160px;">
-          <label class="field-label" for="w">Pounds</label>
+          <label class="field-label" for="w">${escapeHtml(t('Pounds'))}</label>
           <input class="field" id="w" name="weight_lb" type="number" step="0.1" min="0" max="400"
                  inputmode="decimal" autofocus required>
         </div>
-        <button class="btn btn-ink btn-lg" type="submit">Save</button>
+        <button class="btn btn-ink btn-lg" type="submit">${escapeHtml(t('Save'))}</button>
       </form>
       ${
         error
           ? `<p style="font-size:15px;color:var(--stain-500);margin:14px 0 0;">
-               That did not look like a weight. Pounds, as a number.
+               ${escapeHtml(t('That did not look like a weight. Pounds, as a number.'))}
              </p>`
           : ''
       }
     </div>`;
 }
 
-function bagTagPage(label, order, code, token, query) {
+function bagTagPage(label, order, code, token, query, lang = 'en') {
   const stage = tags.stageOf(label, order);
   const t = encodeURIComponent(String(token || ''));
   const seq = query.s && /^[1-4]$/.test(String(query.s)) ? Number(query.s) : null;
   const bad = query.weighed === 'bad';
 
-  const header = stageHeader(label, order, stage, seq);
+  // `say` rather than `t`, because `t` is already the URL token on this page
+  // and two things called t in one function is how a bug gets written.
+  const say = translator(lang);
+
+  const header =
+    langToggle(code, token, seq, lang) + stageHeader(label, order, stage, seq, say);
+
   const footer = `
     <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
-      Questions about this bag: ${escapeHtml(site.publicPhoneDisplay)}.
+      ${escapeHtml(say('Questions about this bag'))}: ${escapeHtml(site.publicPhoneDisplay)}.
     </p>`;
 
   // --- at the customer's door: our own weight ------------------------------
@@ -455,7 +580,7 @@ function bagTagPage(label, order, code, token, query) {
     return page({
       title: `Bag ${code}`,
       body: header + weightBox({
-        code, token, error: bad,
+        code, token, error: bad, t: say,
         heading: 'What does this bag weigh?',
         blurb: 'Put it on the scale and type what it says. This is the number that prices the order.',
         action: `/o/${encodeURIComponent(code)}/weight`,
@@ -468,10 +593,13 @@ function bagTagPage(label, order, code, token, query) {
     return page({
       title: `Bag ${code}`,
       body: header + weightBox({
-        code, token, error: bad,
+        code, token, error: bad, t: say,
         heading: 'Weigh it to see the wash instructions',
-        blurb: `Your own scale, this bag only. We weighed it too, so this is a cross-check
-                that catches a bad scale on either side.`,
+        // AN INSTRUCTION, NOT AN EXPLANATION. This said whose scale to use and
+        // why we check it, which is our reasoning rather than their next move.
+        // The person reading it is standing at a counter with a bag; they need
+        // to know what to do, and the rest is ours to worry about.
+        blurb: 'Weigh the bag and enter the weight to see the wash instructions.',
         action: `/o/${encodeURIComponent(code)}/weight`,
       }) + footer,
     });
@@ -486,20 +614,20 @@ function bagTagPage(label, order, code, token, query) {
       title: `Bag ${code}`,
       body: header + `
     <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 14px;">How to wash it</p>
+      <p class="eyebrow" style="margin:0 0 14px;">${escapeHtml(say('How to wash it'))}</p>
       <dl style="display:grid;grid-template-columns:auto 1fr;gap:10px 22px;margin:0;font-size:16px;">
         ${lines
           .map(([k, v]) =>
-            `<dt style="color:var(--ink-500);">${escapeHtml(k)}</dt>` +
-            `<dd style="margin:0;font-weight:700;">${escapeHtml(v)}</dd>`)
+            `<dt style="color:var(--ink-500);">${escapeHtml(say(k))}</dt>` +
+            `<dd style="margin:0;font-weight:700;">${escapeHtml(say(v))}</dd>`)
           .join('')}
       </dl>
     </div>
 
     <div class="card" style="padding:28px;margin-bottom:20px;background:var(--paper-200);">
-      <p class="eyebrow" style="margin:0 0 12px;">How everything is sorted</p>
+      <p class="eyebrow" style="margin:0 0 12px;">${escapeHtml(say('How everything is sorted'))}</p>
       <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.7;">
-        ${wash.SORTING.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}
+        ${wash.SORTING.map((l) => `<li>${escapeHtml(say(l))}</li>`).join('')}
       </ul>
     </div>
 
@@ -507,18 +635,17 @@ function bagTagPage(label, order, code, token, query) {
       clock && clock.urgent ? 'var(--stain-500)' : 'var(--sunbeam-500)'
     };${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
       <p class="eyebrow" style="margin:0 0 8px;${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
-        Time to turn it around
+        ${escapeHtml(say('Time to turn it around'))}
       </p>
       <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
-        ${escapeHtml(clock ? clock.text : 'Not picked up yet')}
+        ${escapeHtml(clock ? say(clock.text) : say('Not picked up yet'))}
       </div>
     </div>
 
     <div class="card" style="padding:28px;">
-      <p class="eyebrow" style="margin:0 0 8px;">When a bag is finished</p>
+      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
       <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
-        Put one sticker off this tag on each finished bag, then tap its number
-        here. <strong>However many bags this became</strong> - one, or four.
+        ${escapeHtml(say('Put one sticker off this tag on each finished bag, then tap its number here. However many bags this became - one, or four.'))}
       </p>
       <form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${t}"
             style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -531,8 +658,7 @@ function bagTagPage(label, order, code, token, query) {
           .join('')}
       </form>
       <p class="field-hint" style="margin-top:14px;">
-        Tap a number once its sticker is on a finished bag. Tapping the same one
-        twice changes nothing.
+        ${escapeHtml(say('Tap a number once its sticker is on a finished bag. Tapping the same one twice changes nothing.'))}
       </p>
     </div>` + footer,
     });
@@ -545,7 +671,7 @@ function bagTagPage(label, order, code, token, query) {
       body: header + `
     <div class="card" style="padding:32px;text-align:center;">
       <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.15;margin-bottom:12px;">
-        Waiting for collection
+        ${escapeHtml(say('Waiting for collection'))}
       </div>
       <p style="font-size:16px;line-height:1.6;margin:0;">
         This one is marked finished and our driver has been told. Nothing else
@@ -703,7 +829,23 @@ router.get('/o/:code', async (req, res, next) => {
       // WHAT THIS SHOWS DEPENDS ON WHERE THE BAG IS. One sticker, scanned by
       // two different people at four different moments, and each is shown the
       // one thing they can do right now. See bagTagPage().
-      return res.type('html').send(bagTagPage(label, order, code, req.query.t, req.query));
+      // REMEMBER THE LANGUAGE. A laundromat scanning twenty bags should not
+      // have to tap the toggle twenty times. Scoped to /o, so it exists only on
+      // the one page it means anything on, and it holds nothing but "en" or
+      // "es" - no session, no identity, nothing worth stealing.
+      const lang = langOf(req);
+
+      if (req.query.lang === 'en' || req.query.lang === 'es') {
+        res.cookie('ly_lang', lang, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: config.env === 'production',
+          path: '/o',
+          maxAge: 180 * 24 * 60 * 60 * 1000,
+        });
+      }
+
+      return res.type('html').send(bagTagPage(label, order, code, req.query.t, req.query, lang));
   } catch (err) {
     return next(err);
   }
