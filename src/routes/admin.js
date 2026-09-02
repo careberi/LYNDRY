@@ -229,7 +229,15 @@ const OPS_MENUS = Object.freeze([
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
       { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
-      { href: '/ops/loadout', label: 'Load the van', permission: 'orders.act' },
+      // LOAD THE VAN IS NOT LISTED, at Neil's request: "it shouldn't be
+      // something I could select on my own". It is a step of the round, not a
+      // destination - you reach it from the collect-from-the-laundromat stop on
+      // Your round, do it, and are put back where you were.
+      //
+      // The route still exists and is still guarded. Removing it entirely would
+      // mean folding the scanning into the run page, which is the one thing
+      // CLAUDE.md warns about here: two ways to do one job is how they drift.
+      // So there is one implementation, reached from one place.
       // ISSUES IS NOT LISTED HERE ANY MORE, at Neil's request, and it is worth
       // saying why that is safe: it was never the only way in. The red banner
       // at the top of EVERY ops page links straight to it whenever anything is
@@ -3281,7 +3289,10 @@ async function renderLoadout(req, res, { built = false } = {}) {
   return res.type('html').send(
     adminPage({
       title: 'Load the van',
-      active: '/ops/loadout',
+      // Highlighted as the round, because that is what it is a step of. A nav
+      // that lights up nothing while you are standing on a page reads as
+      // having fallen out of the app.
+      active: '/ops/run',
       body: loadoutBody({
         run,
         built,
@@ -3329,7 +3340,11 @@ router.post('/ops/loadout/build', guard, may('orders.act'), async (req, res, nex
       `${sequenced.length} stop${sequenced.length === 1 ? '' : 's'}, about ${miles.toFixed(1)} miles.` +
       (lost ? ` ${lost} address could not be found and sorted last.` : '');
 
-    return res.redirect(303, `/ops/loadout?built=1&note=${encodeURIComponent(note)}`);
+    // BACK TO THE ROUND, not back to this page. Building the run is the last
+    // thing that happens here; leaving the driver looking at a finished
+    // scanning screen makes him find his own way onward, which is the opposite
+    // of a screen that tells you the one next thing.
+    return res.redirect(303, `/ops/run?note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
   }
