@@ -262,10 +262,11 @@ const OPS_MENUS = Object.freeze([
       // orders, the weight thresholds, and a way through to promotions, text
       // blasts and issues. The individual screens still exist and still work -
       // this is a front door, not a replacement.
+      // ONE WAY IN. Taking orders, promotions and text blasts are reached from
+      // the Admin page and nowhere else - Neil's call, and it is what makes the
+      // consolidation real rather than a fifth door onto the same four rooms.
+      // The routes still exist and still work; they are simply not listed here.
       { href: '/ops/admin', label: 'Admin', permission: 'service.manage' },
-      { href: '/ops/settings', label: 'Taking orders?', permission: 'service.manage' },
-      { href: '/ops/promotions', label: 'Promotions', permission: 'service.manage' },
-      { href: '/ops/broadcast', label: 'Text blast', permission: 'service.manage' },
     ],
   },
   {
@@ -317,6 +318,20 @@ function opsNav(user, active) {
     // folded into a menu. Deliberately NOT opened on load - a panel covering
     // the page you just asked for is worse than a highlighted word.
     const here = items.some((i) => i.href === active);
+
+    // A MENU WITH ONE THING IN IT IS NOT A MENU. Once Business held only
+    // Admin, opening a panel to reveal a single link was a tap that bought
+    // nothing - so a group of one renders as the link itself, wearing the
+    // item's name rather than the group's. Same rule that already drops a
+    // group nobody has permission for: the nav shows what you can do, not the
+    // shape of a table in the source.
+    if (items.length === 1) {
+      const only = items[0];
+      return `
+        <a class="ops-menu-solo" href="${only.href}"${
+          only.href === active ? ' aria-current="page"' : ''
+        }>${escapeHtml(only.label)}</a>`;
+    }
 
     const links = items
       .map(

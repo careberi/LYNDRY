@@ -615,6 +615,23 @@
    --------------------------------------------------------------------------- */
 .ops-menu { position: relative; flex: none; }
 
+/* A GROUP WITH ONE ITEM IN IT renders as a plain link rather than a dropdown
+   you have to open to find a single entry. It has to LOOK like the summaries
+   beside it - same size, weight and colour - or the nav reads as one odd item
+   among four rather than five of the same thing. */
+.ops-menu-solo {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--paper-200);
+  padding: 6px 0;
+  text-decoration: none;
+}
+.ops-menu-solo:hover { color: var(--suds-300); }
+.ops-menu-solo[aria-current='page'] { color: var(--suds-300); }
+
 .ops-menu > summary {
   list-style: none;
   cursor: pointer;

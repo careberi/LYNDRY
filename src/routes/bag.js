@@ -658,8 +658,12 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
         ${escapeHtml(say('Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.'))}
       </p>
 
+      <!-- A TWO BY TWO GRID, not a wrapping row. Flex-wrap sized each button by
+           its own content, so three fitted on the first line and the fourth
+           stretched across the second on its own - four identical stickers
+           drawn four different sizes. They are the same object; they look it. -->
       <form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${t}"
-            style="display:flex;gap:10px;flex-wrap:wrap;">
+            style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         ${stickers
           .map(({ seq, state }) => {
             // COLOUR SAYS WHICH STATE, so one tap can mean "advance this" and
@@ -674,7 +678,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
 
             return `
         <button type="submit" name="seq" value="${seq}"
-                style="flex:1 1 100px;min-width:100px;padding:12px 10px;border:2px solid var(--ink-900);
+                style="width:100%;padding:16px 10px;border:2px solid var(--ink-900);
                        border-radius:12px;box-shadow:var(--shadow-pop-xs);cursor:pointer;${look}">
           <span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:17px;">
             ${escapeHtml(code)}-${seq}

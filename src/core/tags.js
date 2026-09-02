@@ -304,7 +304,14 @@ async function markSubBagReady(parent, seq, { weightLb = null } = {}) {
     sticker_seq: n,
     // Position within the order's outgoing bags, so "bag 2 of 3" still works
     // across an order whose bags came from several intake bags.
-    position: siblings.length + 1,
+    //
+    // THE HIGHEST SO FAR PLUS ONE, NOT THE COUNT PLUS ONE. Counting assumes
+    // the positions are contiguous, and they stop being contiguous the moment
+    // a sticker is cycled back to unused and its row is deleted: one row left
+    // sitting at position 2 makes "count + 1" produce 2 again, and the unique
+    // index on (order_id, leg, position) rejects it with a 500 in the
+    // laundromat's face. Found by tapping a sticker off and back on.
+    position: siblings.reduce((max, b) => Math.max(max, Number(b.position) || 0), 0) + 1,
     code: parent.code,
     bound_at: new Date().toISOString(),
     weight_lb: weightLb == null ? null : Number(weightLb),
