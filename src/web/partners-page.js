@@ -392,6 +392,40 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
           hint: "Arrive after this and it is tomorrow's wash, whatever time they close.",
         })}
       </div>
+
+      <!-- HOW THE MONEY GOES BACK THE OTHER WAY. Everything above is what a
+           wash costs; this is how often they bill us for it and how long we
+           have to pay. Per partner, because it is agreed with each one
+           separately - a second laundromat need not want the first one's
+           cycle. -->
+      <div class="pt-two">
+        <label class="field">
+          <span class="field-label">How often they invoice us</span>
+          <select class="select" name="billing_period">
+            ${[
+              ['DAILY', 'Every day'],
+              ['WEEKLY', 'Weekly'],
+              ['BIWEEKLY', 'Every two weeks'],
+              ['MONTHLY', 'Monthly'],
+            ]
+              .map(
+                ([value, label]) =>
+                  `<option value="${value}"${
+                    (p.billing_period || 'BIWEEKLY') === value ? ' selected' : ''
+                  }>${label}</option>`
+              )
+              .join('')}
+          </select>
+        </label>
+        ${field({
+          name: 'payment_terms_days',
+          label: 'Days we have to pay',
+          value: p.payment_terms_days == null ? 15 : p.payment_terms_days,
+          type: 'number',
+          attrs: 'step="1" min="0" max="120" placeholder="15"',
+          hint: 'From their invoice to our payment.',
+        })}
+      </div>
     </div>
 
     <div class="card card-xl" style="padding:26px;margin-bottom:24px;">

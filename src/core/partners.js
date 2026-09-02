@@ -232,9 +232,30 @@ function fromForm(form) {
       : null,
     dropoff_cutoff: isLaundromat ? clean(form.dropoff_cutoff, 8) : null,
 
+    // HOW OFTEN THEY BILL US AND HOW LONG WE HAVE TO PAY. Laundromat-only, and
+    // cleared with the rest when a record is switched to a management company,
+    // for the same reason: terms left on somebody they were never agreed with
+    // get read as real later.
+    //
+    // Both fall back rather than accepting anything: the column has a CHECK on
+    // it, and a typo in a form field is not worth a 500 on the save.
+    billing_period: isLaundromat
+      ? BILLING_PERIODS.includes(String(form.billing_period))
+        ? String(form.billing_period)
+        : 'BIWEEKLY'
+      : 'BIWEEKLY',
+
+    payment_terms_days: isLaundromat
+      ? Math.min(120, Math.max(0, wholeFrom(form.payment_terms_days) ?? 15))
+      : 15,
+
     notes: clean(form.notes, 2000),
   };
 }
+
+// The cycles a laundromat can bill on. Mirrors the CHECK constraint, so the
+// form and the database cannot disagree about what is allowed.
+const BILLING_PERIODS = Object.freeze(['DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY']);
 
 async function create(form) {
   const row = fromForm(form);
@@ -578,6 +599,7 @@ async function weightHistory(partnerId, { limit = 200 } = {}) {
 }
 
 module.exports = {
+  BILLING_PERIODS,
   TYPES,
   STATUSES,
   WEEKDAYS,
