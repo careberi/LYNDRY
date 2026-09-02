@@ -252,24 +252,53 @@ function dateProblem(iso) {
 //
 // Six in the morning and nine at night are the outer edges: early enough for
 // somebody leaving for work, late enough for somebody getting back from it.
+// EVEN TWO-HOUR SLOTS, AND THEY STOP WHERE THE LAUNDROMAT DOES.
+//
+// Neil asked for two-hour slots, and named seven of them from 6am to 8pm. They
+// do not all fit, and the reason is the only laundromat we have: Fancy K is
+// open 7:30am to 7pm. A bag collected between 6 and 8pm cannot be dropped off
+// before they shut, so it would sit in the van overnight and the next-day
+// promise starts a day late. A 6-8am slot has the same problem at the other
+// end - nowhere is open to take it.
+//
+// So the day runs 8am to 6pm: five slots, every one of which can be collected
+// AND handed over the same day with time to drive there.
+//
+// WHEN A SECOND LAUNDROMAT OPENS LATER, THIS IS THE LINE TO CHANGE. It is
+// written down rather than derived from partner_hours on purpose - a customer
+// is promised a window and it is stored on their order, so windows must not
+// silently move because somebody edited a partner's opening times.
 const PICKUP_WINDOWS = Object.freeze([
-  Object.freeze({ start: '06:00', end: '09:00' }),
-  Object.freeze({ start: '09:00', end: '12:00' }),
+  Object.freeze({ start: '08:00', end: '10:00' }),
+  Object.freeze({ start: '10:00', end: '12:00' }),
   Object.freeze({ start: '12:00', end: '14:00' }),
-  Object.freeze({ start: '14:00', end: '17:00' }),
-  Object.freeze({ start: '17:00', end: '21:00' }),
+  Object.freeze({ start: '14:00', end: '16:00' }),
+  Object.freeze({ start: '16:00', end: '18:00' }),
 ]);
 
-// How much of a window must be LEFT for it to still take a booking. Measured
-// against the window's end, not its start: a window that is underway is still
-// a real option — the van is out until it closes. "Today at 4:30", texted at
-// 3:32, belongs in the 3 to 6 window, and the first version of this rule
-// threw it to tomorrow, which put a real order on the wrong day.
-const WINDOW_CUTOFF_MIN = 60;
+// A WINDOW CLOSES THE MOMENT IT STARTS. Neil's rule, and it is strict on
+// purpose: at 8:01 the 8-10 slot is gone and the earliest is 10-12.
+//
+// THIS REVERSES WHAT WAS HERE, and the old comment is worth keeping because it
+// records the cost. It used to measure against the window's END, so a window
+// already underway still took bookings - "today at 4:30", texted at 3:32, went
+// into the 3-6 window. Under this rule that same customer gets the next one.
+//
+// The trade Neil chose: a van cannot be re-routed to a door it has already
+// driven past, so a slot that has begun is one we may not be able to keep. A
+// window we miss is worse than a later one we hit.
+//
+// Kept as a constant rather than inlined so the two places that ask - choosing
+// a window, and telling the AI which are left - can never disagree about it.
+const WINDOW_CLOSES_AT_START = true;
 
-// Where the day starts for somebody who did not name a time. The early window
-// exists for people who ask for it, not for people who said nothing.
-const DEFAULT_FROM = '09:00';
+// Where the day starts for somebody who did not name a time. The earliest
+// window exists for people who ask for it, not for people who said nothing -
+// so this lands in the SECOND slot, 10-12. It moved with the windows: it used
+// to be 9am, which fell in the middle of the old 9-12 slot and is now inside
+// the first one, which would quietly promise every silent customer an 8am
+// knock.
+const DEFAULT_FROM = '10:00';
 
 // Accepts what a form sends ("18:00") and what Postgres returns ("18:00:00"),
 // and returns a clean "HH:MM" — or null if it is not a time at all.
@@ -365,7 +394,7 @@ function chooseWindow(date, requestedTime) {
   const nowMin = toMinutes(now.time);
 
   const usable = PICKUP_WINDOWS.filter((w) =>
-    isToday ? toMinutes(w.end) - WINDOW_CUTOFF_MIN >= nowMin : true
+    isToday ? toMinutes(w.start) > nowMin : true
   );
 
   if (!usable.length) return null;
@@ -444,9 +473,9 @@ function windowsToday(now = nowInService()) {
   const gone = [];
 
   for (const w of PICKUP_WINDOWS) {
-    // Same cutoff chooseWindow() uses, so the two can never disagree about
+    // Same test chooseWindow() uses, so the two can never disagree about
     // whether a window is still worth offering.
-    if (toMinutes(w.end) - WINDOW_CUTOFF_MIN >= nowMin) open.push(w);
+    if (toMinutes(w.start) > nowMin) open.push(w);
     else gone.push(w);
   }
 
