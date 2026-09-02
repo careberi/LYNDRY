@@ -91,13 +91,23 @@ async function weightLimits() {
     normalPct: Number(row.weight_normal_pct != null ? row.weight_normal_pct : 3),
     acceptablePct: Number(row.weight_acceptable_pct != null ? row.weight_acceptable_pct : 5),
     minLb: Number(row.weight_min_lb != null ? row.weight_min_lb : 2),
+
+    // DIRTY IN AGAINST CLEAN OUT, which is a different question from two scales
+    // weighing the same laundry and so has its own numbers. Water and grit come
+    // out in the wash, so lighter is expected; heavier is not, whatever the
+    // load weighs.
+    dryLossPct: Number(row.weight_dry_loss_pct != null ? row.weight_dry_loss_pct : 8),
+    gainLb: Number(row.weight_gain_lb != null ? row.weight_gain_lb : 0.5),
   };
 }
 
 // Set the three weight thresholds. Clamped rather than validated-and-refused:
 // a percentage of 0 or 900 is a typo, not an attack, and quietly holding it to
 // something sane beats a red error a busy person has to read.
-async function setWeightLimits({ normalPct, acceptablePct, minLb }, opsUserId = null) {
+async function setWeightLimits(
+  { normalPct, acceptablePct, minLb, dryLossPct, gainLb },
+  opsUserId = null
+) {
   const clamp = (v, lo, hi, fallback) => {
     const n = Number(v);
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
@@ -113,6 +123,11 @@ async function setWeightLimits({ normalPct, acceptablePct, minLb }, opsUserId = 
     // by accident rather than on purpose.
     weight_acceptable_pct: Math.max(normal, clamp(acceptablePct, 0, 50, 5)),
     weight_min_lb: clamp(minLb, 0, 20, 2),
+    weight_dry_loss_pct: clamp(dryLossPct, 0, 50, 8),
+    // In pounds, not a percentage, and capped low: laundry does not gain weight
+    // in a dryer, so a generous allowance here would only hide the one thing
+    // this check exists to catch.
+    weight_gain_lb: clamp(gainLb, 0, 10, 0.5),
     updated_at: new Date().toISOString(),
     updated_by: opsUserId,
   };

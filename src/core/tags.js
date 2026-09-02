@@ -397,15 +397,25 @@ async function subBagsOf(parentId) {
 const DRY_LOSS_PCT = 0.08;   // 8% lighter is unremarkable
 const GAIN_LB = 0.5;         // anything heavier than a rounding error is not
 
-function checkHandover({ wentIn, cameBack }) {
+// `limits` comes from the settings row, so the two allowances are the admin's
+// rather than constants. Falls back to the defaults when nothing is passed,
+// which keeps every existing caller working unchanged.
+function checkHandover({ wentIn, cameBack }, limits = null) {
   const before = wentIn == null ? null : Number(wentIn);
   const after = cameBack == null ? null : Number(cameBack);
   if (before == null || after == null || before <= 0) return null;
 
   const difference = after - before;          // negative is lighter
-  const allowedLoss = before * DRY_LOSS_PCT;
 
-  if (difference > GAIN_LB) {
+  // The admin's numbers when they are handed over, the constants otherwise so
+  // every existing caller keeps working. DRY_LOSS_PCT is a fraction here and a
+  // percentage in the settings row, which is why it is divided.
+  const lossPct = limits && limits.dryLossPct != null ? Number(limits.dryLossPct) / 100 : DRY_LOSS_PCT;
+  const gain = limits && limits.gainLb != null ? Number(limits.gainLb) : GAIN_LB;
+
+  const allowedLoss = before * lossPct;
+
+  if (difference > gain) {
     return {
       ok: false,
       direction: 'HEAVIER',

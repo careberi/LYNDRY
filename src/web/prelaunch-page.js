@@ -180,6 +180,34 @@ ${banner(problem, 'bad')}
         <span style="font-weight:700;">lb</span>
       </div>
     </div>
+    <div style="flex:1 1 100%;padding-top:18px;margin-top:6px;border-top:2px solid var(--ink-100);">
+      <p class="eyebrow" style="margin:0 0 6px;">Dirty in against clean out</p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 14px;">
+        A different question, so it has its own numbers. Water and grit come out
+        in the wash, so laundry comes back <strong>lighter</strong> - that is
+        normal and this says how much. Heavier is never normal, whatever the
+        load weighs, so that one is a flat allowance rather than a percentage.
+      </p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1 1 150px;">
+          <label class="field-label" for="dl">May come back lighter by</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input class="field" id="dl" name="dry_loss_pct" type="number" step="0.5" min="0" max="50"
+                   value="${escapeHtml(String(limits.dryLossPct))}" required style="min-width:0;">
+            <span style="font-weight:700;">%</span>
+          </div>
+        </div>
+        <div style="flex:1 1 150px;">
+          <label class="field-label" for="gl">May come back heavier by</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input class="field" id="gl" name="gain_lb" type="number" step="0.1" min="0" max="10"
+                   value="${escapeHtml(String(limits.gainLb))}" required style="min-width:0;">
+            <span style="font-weight:700;">lb</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <button class="btn btn-ink btn-lg" type="submit">Save</button>
   </form>
 

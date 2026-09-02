@@ -72,7 +72,132 @@ function orderRow(order, { reverse }) {
 // shouts.
 // ---------------------------------------------------------------------------
 
-function loadWalkBody({ bags: outstanding, current, state, notice, problem, run }) {
+// THE TWO CHECKS, SAID PLAINLY TO THE DRIVER AND IN FULL TO AN ADMIN.
+//
+// Neil's split. A driver at a tailgate needs one line per check and a way
+// onward: bags accounted for, weights agree, go. The numbers behind that are
+// three scales and two comparisons per order, which is a paragraph he has no
+// use for and would stop reading by the second one - and a check nobody reads
+// is a check that is not happening.
+//
+// An admin gets the arithmetic, because they are the one who has to decide what
+// a disagreement means.
+//
+// NOTHING HERE BLOCKS THE VAN. A failed check is shown, loudly, and the run can
+// still be built: the bags are physically in the van by this point, and
+// refusing to sequence them would leave a driver holding laundry with no route
+// and no way to give it back. It is a thing to sort out, not a door to lock.
+function reconciliation({ recon, showDetail }) {
+  if (!recon || !recon.results.length) return '';
+
+  const settled = recon.results.filter((r) => !r.pending);
+  if (!settled.length) return '';
+
+  const bagsOk = settled.every((r) => r.count.ok);
+
+  const weightOk = settled.every(
+    (r) =>
+      !r.weight ||
+      ((!r.weight.vsPartner || r.weight.vsPartner.band !== 'EXCEPTION') &&
+        (!r.weight.vsCustomer || r.weight.vsCustomer.ok))
+  );
+
+  const line = (label, ok, detail) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;
+                border-bottom:1px solid var(--ink-100);">
+      <span style="width:26px;height:26px;flex:none;border:2px solid var(--ink-900);border-radius:8px;
+                   background:${ok ? 'var(--suds-500)' : 'var(--stain-500)'};
+                   color:${ok ? 'var(--ink-900)' : 'var(--paper-050)'};
+                   display:inline-flex;align-items:center;justify-content:center;
+                   font-weight:700;font-size:15px;">${ok ? '&#10003;' : '!'}</span>
+      <div style="min-width:0;">
+        <div style="font-weight:700;font-size:16px;">${escapeHtml(label)}</div>
+        <div style="font-size:14px;color:var(--ink-700);line-height:1.5;">${detail}</div>
+      </div>
+    </div>`;
+
+  const bagCount = settled.reduce((t, r) => t + r.count.aboard, 0);
+  const missing = settled.flatMap((r) => r.count.missing);
+
+  const detail = () =>
+    settled
+      .map((r) => {
+        const w = r.weight;
+        return `
+      <div style="padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">
+          Order #${escapeHtml(String(r.order.order_number))}
+        </div>
+        <dl style="display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:0;font-size:14px;">
+          <dt style="color:var(--ink-500);">Bags</dt>
+          <dd style="margin:0;">${r.count.aboard} of ${r.count.collected} aboard</dd>
+
+          <dt style="color:var(--ink-500);">On the van</dt>
+          <dd style="margin:0;font-weight:700;">${w ? w.total.toFixed(1) : '-'} lb</dd>
+
+          <dt style="color:var(--ink-500);">Laundromat said</dt>
+          <dd style="margin:0;">${
+            r.order.partner_weight_lb == null
+              ? 'nothing'
+              : `${Number(r.order.partner_weight_lb).toFixed(1)} lb${
+                  w && w.vsPartner ? ` &middot; ${escapeHtml(w.vsPartner.band.toLowerCase())}` : ''
+                }`
+          }</dd>
+
+          <dt style="color:var(--ink-500);">Collected dirty</dt>
+          <dd style="margin:0;">${
+            r.order.weight_lb == null
+              ? 'not weighed'
+              : `${Number(r.order.weight_lb).toFixed(1)} lb${
+                  w && w.vsCustomer
+                    ? w.vsCustomer.ok
+                      ? ' &middot; within drying loss'
+                      : ` &middot; <strong>${escapeHtml(w.vsCustomer.direction.toLowerCase())}</strong>`
+                    : ''
+                }`
+          }</dd>
+        </dl>
+      </div>`;
+      })
+      .join('');
+
+  return `
+  <div class="card card-xl" style="padding:26px;margin-bottom:20px;
+              background:${bagsOk && weightOk ? 'var(--suds-300)' : 'var(--stain-100)'};">
+    <p class="eyebrow" style="margin:0 0 12px;">Before you drive</p>
+
+    ${line(
+      'Bag check',
+      bagsOk,
+      bagsOk
+        ? `All ${bagCount} bag${bagCount === 1 ? '' : 's'} you picked up are in the van.`
+        : `<strong>${missing.length} still not aboard:</strong> ${escapeHtml(missing.join(', '))}`
+    )}
+
+    ${line(
+      'Weight check',
+      weightOk,
+      weightOk
+        ? 'What you weighed agrees with the laundromat and with what you collected.'
+        : 'The weights do not line up. It is recorded and somebody will look at it.'
+    )}
+
+    <p style="margin:16px 0 0;font-size:16px;font-weight:700;">
+      ${bagsOk && weightOk ? 'All done. Ready to go.' : 'Logged. You can still drive - this is for the morning.'}
+    </p>
+
+    ${
+      showDetail
+        ? `<details style="margin-top:18px;">
+             <summary style="cursor:pointer;font-weight:600;font-size:15px;">The numbers behind it</summary>
+             <div style="margin-top:12px;">${detail()}</div>
+           </details>`
+        : ''
+    }
+  </div>`;
+}
+
+function loadWalkBody({ bags: outstanding, current, state, notice, problem, run, recon = null, showDetail = false }) {
   const done = run.length;
 
   const banner = (text, bg, fg = 'var(--ink-900)') => `
@@ -187,14 +312,15 @@ function loadWalkBody({ bags: outstanding, current, state, notice, problem, run 
     </div>
   </div>`
       : `
+  ${reconciliation({ recon, showDetail })}
+
   <div class="card card-xl" style="padding:28px;">
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 10px;">
       Everything is aboard.
     </h2>
     <p style="font-size:16px;line-height:1.6;margin:0 0 20px;">
-      ${done} bag${done === 1 ? '' : 's'} in the van. Build the run and it will
-      put the stops in order - load in reverse, highest stop deepest, so stop 1
-      is by the doors.
+      Build the run and it will put the stops in order - load in reverse,
+      highest stop deepest, so stop 1 is by the doors.
     </p>
     <form method="post" action="/ops/loadout/build" style="margin:0;">
       <button type="submit" class="btn btn-primary btn-lg btn-full">Build the run</button>

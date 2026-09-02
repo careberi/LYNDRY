@@ -295,6 +295,129 @@ async function markLoaded(labelId) {
   return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// RECONCILING THE LOAD, once every bag is aboard.
+//
+// NEIL'S TWO CHECKS, and they answer different questions:
+//
+//   THE COUNT   is everything we took off their counter now in the van?
+//               Cheap, and it is the one that catches a bag set down and
+//               forgotten between the shelf and the tailgate.
+//
+//   THE WEIGHT  for each order, does the total of its bags agree with the two
+//               other scales that have touched this laundry - the laundromat's
+//               figure, and what the driver collected from the customer?
+//
+// WHY IT HAPPENS HERE AND NOT AT THE COUNTER. This is the first moment every
+// bag has a weight: they are weighed one at a time as they go in, so no total
+// exists until the last one is aboard. Asking earlier would be asking a
+// question nothing could answer.
+//
+// TWO COMPARISONS, AND THEY ARE NOT THE SAME SHAPE.
+//
+//   against the laundromat  two scales, same clean laundry. Symmetric - a gap
+//                           either way just means a scale is off - and it goes
+//                           through the admin's three bands.
+//
+//   against the customer    DIRTY in against CLEAN out. Asymmetric on purpose:
+//                           water and grit come out in the wash, so lighter is
+//                           normal and heavier means somebody else's clothes
+//                           are in the pile. tags.checkHandover() owns that.
+//
+// It writes the summed weight onto the order and reports; it raises nothing and
+// blocks nothing by itself. The caller decides what a failure means, because
+// "hold the van" and "tell somebody in the morning" are different answers and
+// this is not the place to choose between them.
+// ---------------------------------------------------------------------------
+
+async function reconcileLoad(driverId = null) {
+  const partners = require('./partners');
+  const settings = require('./settings');
+  const tags = require('./tags');
+
+  // Everything collected off a laundromat that is now aboard, with its order.
+  let query = db
+    .from('bag_labels')
+    .select('*, orders(id, order_number, driver_id, weight_lb, partner_weight_lb, return_bag_count, return_weight_lb)')
+    .eq('leg', 'DELIVERY')
+    .not('collected_at', 'is', null);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = (data || []).filter((b) => b.orders && (!driverId || b.orders.driver_id === driverId));
+
+  const byOrder = new Map();
+  for (const row of rows) {
+    if (!byOrder.has(row.order_id)) byOrder.set(row.order_id, { order: row.orders, bags: [] });
+    byOrder.get(row.order_id).bags.push(row);
+  }
+
+  const limits = await settings.weightLimits();
+  const results = [];
+
+  for (const [orderId, { order, bags: mine }] of byOrder) {
+    const aboard = mine.filter((b) => b.loaded_at);
+    const weighed = aboard.filter((b) => b.weight_lb != null);
+
+    // THE COUNT. Everything picked up should be in the van.
+    const count = {
+      collected: mine.length,
+      aboard: aboard.length,
+      ok: aboard.length === mine.length,
+      missing: mine.filter((b) => !b.loaded_at).map((b) => `${b.code}-${b.sticker_seq}`),
+    };
+
+    // A HALF-WEIGHED ORDER IS NOT COMPARED AGAINST A WHOLE ONE. Summing what
+    // has been weighed so far and calling it the total would flag every order
+    // mid-load as light - the same trap the partner's per-bag weights had.
+    if (!count.ok || weighed.length !== aboard.length || !aboard.length) {
+      results.push({ order, count, weight: null, pending: true });
+      continue;
+    }
+
+    const total = weighed.reduce((t, b) => t + Number(b.weight_lb || 0), 0);
+
+    const vsPartner =
+      order.partner_weight_lb == null
+        ? null
+        : partners.compareWeights(
+            { weight_lb: total, partner_weight_lb: Number(order.partner_weight_lb) },
+            limits
+          );
+
+    // Dirty in against clean out. Never Math.abs - lighter and heavier mean
+    // opposite things here.
+    const vsCustomer =
+      order.weight_lb == null
+        ? null
+        : tags.checkHandover({ wentIn: Number(order.weight_lb), cameBack: total }, limits);
+
+    results.push({
+      order,
+      count,
+      weight: { total, vsPartner, vsCustomer },
+      pending: false,
+    });
+  }
+
+  return { results, limits };
+}
+
+// Write the summed van weight onto each order, once its bags are all aboard and
+// weighed. Separate from the comparing so a screen can show the reconciliation
+// without committing to it, and so a failed write cannot lose the reading.
+async function recordLoadedWeights(results) {
+  for (const r of results) {
+    if (r.pending || !r.weight) continue;
+
+    await db
+      .from('orders')
+      .update({ return_weight_lb: r.weight.total.toFixed(2) })
+      .eq('id', r.order.id);
+  }
+}
+
 async function currentRun() {
   const { data, error } = await db
     .from('orders')
@@ -415,6 +538,8 @@ async function allBagsScanned(orderIdOrOrder) {
 
 module.exports = {
   toLoad,
+  reconcileLoad,
+  recordLoadedWeights,
   loadStateOf,
   weighAndClip,
   markLoaded,

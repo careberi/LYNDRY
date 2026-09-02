@@ -3394,7 +3394,28 @@ async function renderLoadout(req, res, { built = false } = {}) {
   // page becomes the build-the-run screen it always was.
   const outstanding = await loadout.toLoad();
 
-  if (outstanding.length) {
+  // THE TWO CHECKS, once there is anything to check. Computed on every render
+  // rather than stored: it is a reading of the bags, and a stored verdict would
+  // go stale the moment somebody corrected a weight.
+  const recon = await loadout.reconcileLoad().catch((err) => {
+    console.error(`Could not reconcile the load: ${err.message}`);
+    return null;
+  });
+
+  // The summed weight is written the moment every bag is aboard and weighed,
+  // which is the first point a total exists. It is what the return leg has been
+  // missing since the weighing moved off the laundromat counter.
+  if (recon) await loadout.recordLoadedWeights(recon.results).catch(() => {});
+
+  // THE WALK RENDERS EVEN WHEN NOTHING IS LEFT, because "everything is aboard,
+  // here are the two checks, build the run" is the last screen OF the walk -
+  // not a different page. Gated on outstanding.length it was dead code: the
+  // only way to reach it was to have bags left, in which case there is always a
+  // current one.
+  //
+  // The old build-the-run page still answers for a driver who has nothing
+  // collected at all, which is the state before any of this starts.
+  if (outstanding.length || (recon && recon.results.some((r) => !r.pending))) {
     // WHICH BAG HE IS HOLDING, chosen by scanning it. ?bag= carries it between
     // steps rather than a column, because "the bag currently in his hand" is
     // not a fact about the bag - it lasts one minute and belongs to one screen.
@@ -3405,8 +3426,9 @@ async function renderLoadout(req, res, { built = false } = {}) {
 
     // Once a bag is weighed it stays on screen through the clip step without
     // needing to be rescanned - it is the same bag, still in his hands.
-    const current = picked || outstanding.find((b) => b.weight_lb != null) || outstanding[0];
-    const isPicked = Boolean(picked) || current.weight_lb != null;
+    const current =
+      picked || outstanding.find((b) => b.weight_lb != null) || outstanding[0] || null;
+    const isPicked = Boolean(picked) || Boolean(current && current.weight_lb != null);
 
     return res.type('html').send(
       adminPage({
@@ -3417,6 +3439,8 @@ async function renderLoadout(req, res, { built = false } = {}) {
           current,
           state: loadout.loadStateOf(current, isPicked),
           run,
+          recon,
+          showDetail: roles.can(req.opsUser, 'service.manage'),
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),
@@ -5162,6 +5186,8 @@ router.post('/ops/admin/weights', guard, may('service.manage'), async (req, res,
         normalPct: body.normal_pct,
         acceptablePct: body.acceptable_pct,
         minLb: body.min_lb,
+        dryLossPct: body.dry_loss_pct,
+        gainLb: body.gain_lb,
       },
       req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null
     );
@@ -5171,7 +5197,9 @@ router.post('/ops/admin/weights', guard, may('service.manage'), async (req, res,
     // they only discover when an order does not flag.
     const note =
       `Saved. Normal up to ${saved.weight_normal_pct}%, acceptable up to ` +
-      `${saved.weight_acceptable_pct}%, always allowing at least ${saved.weight_min_lb} lb.`;
+      `${saved.weight_acceptable_pct}%, always allowing at least ${saved.weight_min_lb} lb. ` +
+      `Clean laundry may come back ${saved.weight_dry_loss_pct}% lighter or ` +
+      `${saved.weight_gain_lb} lb heavier.`;
 
     return res.redirect(303, `/ops/admin?note=${encodeURIComponent(note)}`);
   } catch (err) {
