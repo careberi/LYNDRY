@@ -636,8 +636,57 @@ async function board(dateIso, fromTime, driverId = null) {
     .in('status', ['REQUESTED', 'ASSIGNED', 'DEPOSITED']);
   if (driverId) pickupQuery = pickupQuery.eq('driver_id', driverId);
 
-  const { data: pickups, error: pickupError } = await pickupQuery;
+  const { data: allPickups, error: pickupError } = await pickupQuery;
   if (pickupError) throw pickupError;
+
+  // A ROUND SHOWS ITS OWN STOPS AND NOBODY ELSE'S.
+  //
+  // The query above asks for the whole DAY, which is right - the board has to
+  // know what else is booked. It was then all handed to the router, so two
+  // customers promised 2 to 4pm appeared on the 12 to 2pm round with arrival
+  // times of 12:27 and 12:39. Neil spotted it: those are not stops on this
+  // round, and a driver reading that sheet turns up two hours before he said
+  // he would.
+  //
+  // The window a customer was promised is on the ORDER - stored when they
+  // booked, never recomputed - so this is a filter and not a calculation.
+  const round = booking.PICKUP_WINDOWS.find(
+    (w) => start >= w.start && start < w.end
+  ) || booking.PICKUP_WINDOWS[0];
+
+  // Stored as "14:00:00", written in the config as "14:00".
+  const sameWindow = (a, b) => String(a || '').slice(0, 5) === String(b || '').slice(0, 5);
+
+  const pickups = (allPickups || []).filter((o) =>
+    sameWindow(o.pickup_window_start, round.start)
+  );
+
+  // A PICKUP THAT WAS MISSED MUST NOT SIMPLY VANISH.
+  //
+  // Filtering strictly is what Neil asked for and is right, but it has an edge
+  // that would be worse than the bug it fixes: an order promised 8 to 10am and
+  // never collected belongs to a round that has gone, so at two in the
+  // afternoon it would appear on no board at all. That is the silent gap the
+  // unassigned-order banner exists to close, arrived at a second way.
+  //
+  // So they are collected separately and shown as what they are - late, and
+  // somebody's laundry - rather than being quietly spliced into a round they
+  // were never part of.
+  const overdue = (allPickups || []).filter(
+    (o) =>
+      !sameWindow(o.pickup_window_start, round.start) &&
+      o.pickup_window_end &&
+      String(o.pickup_window_end).slice(0, 5) <= start &&
+      date <= now.date
+  );
+
+  // What the rest of the day still holds, so the board can say the round is
+  // not the whole picture without putting those stops in the sequence.
+  const laterToday = (allPickups || []).filter(
+    (o) =>
+      !sameWindow(o.pickup_window_start, round.start) &&
+      !overdue.includes(o)
+  );
 
   // Bags we are holding that still need washing, and bags a laundromat has
   // finished. Not filtered by date: a bag collected yesterday and still in the
@@ -1040,6 +1089,9 @@ async function board(dateIso, fromTime, driverId = null) {
     base,
     home,
     serviceBase,
+    round,
+    overdue,
+    laterToday,
     vehicle,
     load: {
       ...capacity,

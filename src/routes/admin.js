@@ -4254,18 +4254,30 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       }
 
       <div class="card card-xl" style="padding:28px;max-width:560px;">
-        ${sectionHeading('Print', 'A fresh sheet')}
+        ${sectionHeading('Generate', 'New bag tags')}
         <form method="post" action="/ops/labels" style="margin:18px 0 0;">
           <label class="eyebrow" for="count" style="display:block;margin-bottom:8px;">How many</label>
           <div style="display:flex;gap:12px;align-items:flex-start;">
+            <!-- ANY NUMBER FROM 1 TO 50, at Neil's request, and the framing
+                 matters as much as the number. This makes BAG TAGS; a sheet is
+                 just how they come out of the printer. It was step="6" because
+                 six fit on a sheet - true of the paper and none of the
+                 browser's business - so typing 3 got "please enter a valid
+                 value, the two nearest valid values are 1 and 7" and refused
+                 to submit. Wanting three tags is not an error.
+
+                 The only invalid number is zero. Fifty is Neil's ceiling: a
+                 typo of 300 is a lot of wasted label stock, and nobody needs
+                 that many at once. -->
             <input class="input input-lg" type="number" id="count" name="count"
-                   min="1" max="300" step="6" value="30" required style="flex:1;">
+                   min="1" max="50" step="1" value="30" required style="flex:1;">
             <button type="submit" class="btn btn-lg">Make them</button>
           </div>
           <span class="field-hint" style="display:block;margin-top:10px;">
-            Six to a sheet on ${escapeHtml(LABEL_SHEET.stock)} shipping labels,
-            which is ordinary stock sold everywhere. Print at 100% scale, not
-            "fit to page".
+            One at a time, or up to fifty. They print six to a sheet on
+            ${escapeHtml(LABEL_SHEET.stock)} shipping labels, ordinary stock
+            sold everywhere - ask for fewer than six and the rest of the sheet
+            comes out blank. Print at 100% scale, not "fit to page".
           </span>
         </form>
       </div>
@@ -4318,7 +4330,10 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 
 router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
   try {
-    const wanted = Math.max(1, Math.min(300, Number((req.body || {}).count) || 30));
+    // Clamped rather than refused, and capped at 50 to match the form. The
+    // browser check is a convenience; this is the one that counts, because a
+    // POST does not have to come from the form.
+    const wanted = Math.max(1, Math.min(50, Math.floor(Number((req.body || {}).count)) || 30));
 
     // Stamped a moment before minting so the sheet can find exactly this batch
     // again on a refresh, without a redirect carrying 30 codes in the URL.

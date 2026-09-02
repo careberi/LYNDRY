@@ -375,6 +375,8 @@ function routingBoardBody({
          </p>`
   }
 
+  ${otherRounds(board, showNames)}
+
   ${baseCard(board, canSetBase, baseSaved)}
 
   ${
@@ -1024,6 +1026,69 @@ function baseCard(board, canSetBase, saved) {
           : ''
       }
     </div>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// WHAT IS NOT ON THIS ROUND.
+//
+// The board used to hand every one of the day's pickups to the router whatever
+// window they were promised, so two customers booked for 2 to 4pm turned up on
+// the 12 to 2pm sheet with arrival times of 12:27 and 12:39. A driver reading
+// that knocks two hours before he said he would.
+//
+// They are filtered out of the sequence now. These two lists are what stops
+// that fix creating a worse problem: a stop that is on no round is a stop
+// nobody drives to, and it would go missing quietly.
+//
+// LATE IS LOUD AND LATER IS QUIET, because they are not the same news. A
+// window that has closed with the bag still on the doorstep is somebody
+// waiting; the rest of the day is just the rest of the day.
+// ---------------------------------------------------------------------------
+function otherRounds(board, showNames) {
+  const line = (o) =>
+    `<li style="margin:0 0 6px;">
+       <a href="/ops/orders/${escapeHtml(o.order_number)}" style="font-weight:700;color:inherit;">#${escapeHtml(
+         o.order_number
+       )}</a>${showNames && o.customers ? ` &middot; ${escapeHtml(o.customers.name || '')}` : ''}
+       <span style="color:var(--ink-700);">&middot; ${escapeHtml(
+         booking.describeWindow(o.pickup_window_start, o.pickup_window_end) || 'no window set'
+       )}</span>
+     </li>`;
+
+  const late = board.overdue || [];
+  const later = board.laterToday || [];
+
+  return `
+    ${
+      late.length
+        ? `<div style="margin:0 0 20px;padding:16px 19px;border:2px solid var(--ink-900);border-radius:14px;
+                       background:var(--stain-500);color:var(--paper-050);box-shadow:var(--shadow-pop-sm);">
+             <div class="eyebrow" style="margin:0 0 8px;color:var(--paper-050);">Missed</div>
+             <p style="margin:0 0 10px;font-size:15px;line-height:1.5;font-weight:700;">
+               ${late.length === 1 ? 'One pickup' : `${late.length} pickups`} whose window has
+               closed and that nobody has collected. They are not on this round -
+               pick the round they were promised, or move them.
+             </p>
+             <ul style="margin:0;padding-left:20px;font-size:15px;">${late.map(line).join('')}</ul>
+           </div>`
+        : ''
+    }
+    ${
+      later.length
+        ? `<p style="margin:0 0 20px;font-size:14px;line-height:1.55;color:var(--ink-700);">
+             ${later.length === 1 ? 'One other pickup is' : `${later.length} other pickups are`}
+             booked today in a different round: ${later
+               .map(
+                 (o) =>
+                   `<a href="/ops/orders/${escapeHtml(o.order_number)}" style="color:inherit;font-weight:700;">#${escapeHtml(
+                     o.order_number
+                   )}</a> ${escapeHtml(booking.describeWindow(o.pickup_window_start, o.pickup_window_end) || '')}`
+               )
+               .join(', ')}. Switch rounds above to see them.
+           </p>`
+        : ''
+    }`;
 }
 
 module.exports = { routingBoardBody };
