@@ -1620,6 +1620,17 @@ function bagsCard(order, labels, canAct, { mayOverride = false, refused = false 
 // GET /ops/orders/:id — one order, in full
 // ---------------------------------------------------------------------------
 
+// IS a LATER THAN b, FOR TWO TIMESTAMPS THAT MAY NOT BE WRITTEN THE SAME WAY.
+//
+// Postgres hands back "2026-09-02T04:12:34.567891+00:00" and JavaScript writes
+// "2026-09-02T04:12:35.000Z". Comparing those as STRINGS is not just imprecise,
+// it is wrong: the offset and the Z sort against each other before the clock
+// does, so a message a full second later can compare as earlier. Parse both.
+function isAfter(a, b) {
+  if (!a || !b) return false;
+  return new Date(a).getTime() > new Date(b).getTime();
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req, res, next) => {
@@ -3563,7 +3574,25 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
 
     // Numbers with no customer row. These are people who texted and never
     // signed up — worth chasing, and invisible everywhere else in ops.
-    const leads = threads.filter((t) => !t.customer);
+    //
+    // MINUS THE ONES SOMEBODY HAS ALREADY DEALT WITH. The banner used to count
+    // every such number ever, so once anybody had texted once it never went
+    // away - and a warning that is always on is one nobody reads.
+    //
+    // Dismissing is a TIMESTAMP, not a flag: it says "I have dealt with
+    // everything they have said so far". Text us again afterwards and you are
+    // back in the banner, because somebody trying a second time after being
+    // ignored is a better lead than the first time, not a worse one.
+    const { data: dismissedRows } = await db.from('dismissed_leads').select('phone, dismissed_at');
+    const dismissed = new Map((dismissedRows || []).map((d) => [d.phone, d.dismissed_at]));
+
+    const isOpenLead = (t) => {
+      if (t.customer) return false;
+      const at = dismissed.get(t.phone);
+      return !at || isAfter(t.last.created_at, at);
+    };
+
+    const leads = threads.filter(isOpenLead);
 
     const row = (t) => {
       const who = t.customer
@@ -3599,10 +3628,30 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
       ${
         leads.length
           ? `<div class="card" style="padding:18px 22px;margin-bottom:28px;background:var(--sunbeam-500);">
-               <p style="margin:0;font-size:16px;">
+               <p style="margin:0 0 4px;font-size:16px;">
                  <strong>${leads.length} ${leads.length === 1 ? 'number has' : 'numbers have'} texted without signing up.</strong>
-                 They got sent the signup link automatically. Nothing else chases them.
+                 The AI answered them in the thread. Nothing else chases them.
                </p>
+               <p style="margin:10px 0 0;font-size:15px;line-height:1.55;">
+                 Open a thread to reply, or mark it dealt with to clear it from
+                 here. If they text again, they come back.
+               </p>
+               <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+                 ${leads
+                   .slice(0, 8)
+                   .map((t) => {
+                     const d = t.phone.replace(/\D/g, '');
+                     return `<a class="btn btn-sm btn-outline" href="/ops/messages/${encodeURIComponent(d)}">
+                               ${escapeHtml(formatPhone(t.phone))}
+                             </a>`;
+                   })
+                   .join('')}
+                 ${
+                   leads.length > 8
+                     ? `<span style="align-self:center;font-size:14px;">and ${leads.length - 8} more</span>`
+                     : ''
+                 }
+               </div>
              </div>`
           : ''
       }
@@ -3718,6 +3767,17 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     // hold anything against, and the AI was never talking to it either.
     const hold = customer ? await issues.holdFor(customer.id).catch(() => null) : null;
 
+    // A lead is somebody who texted and never signed up. Whether they are still
+    // OPEN depends on the timestamp, not a flag: dealt with, then texted again,
+    // means they need dealing with again.
+    const { data: dismissal } = customer
+      ? { data: null }
+      : await db.from('dismissed_leads').select('dismissed_at, note').eq('phone', phone).maybeSingle();
+
+    const latest = thread.length ? thread[thread.length - 1].created_at : null;
+    const leadOpen =
+      !customer && (!dismissal || (latest && isAfter(latest, dismissal.dismissed_at)));
+
     const heading = customer ? customer.name || 'Unnamed customer' : formatPhone(phone);
 
     const who = customer
@@ -3758,6 +3818,47 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         &middot; ${thread.length} message${thread.length === 1 ? '' : 's'}
         ${customer && customer.address_line1 ? `&middot; ${escapeHtml(addressOf(customer))}` : ''}
       </p>
+
+      ${
+        // A LEAD, AND WHETHER ANYBODY HAS DEALT WITH THEM.
+        //
+        // This is the only place the yellow banner on the conversations list
+        // can actually be cleared, which is the point: you clear it by looking
+        // at the thread, not by dismissing a number you never read.
+        !customer
+          ? leadOpen
+            ? `<div class="card card-xl" style="padding:22px;margin-bottom:20px;background:var(--sunbeam-500);">
+                 <p class="eyebrow" style="margin:0 0 8px;">Never signed up</p>
+                 <p style="font-size:16px;line-height:1.6;margin:0 0 14px;">
+                   They texted and never became a customer. Reply below, or mark
+                   it dealt with to clear it from the conversations screen.
+                   <strong>If they text again they come back</strong>, so
+                   nothing is lost.
+                 </p>
+                 ${
+                   canSend
+                     ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/dismiss"
+                              style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                          <div style="flex:1 1 240px;min-width:0;">
+                            <label class="field-label" for="why">What happened? (optional)</label>
+                            <input class="field" id="why" name="note" type="text" maxlength="200"
+                                   placeholder="called them, not interested">
+                          </div>
+                          <button class="btn btn-ink" type="submit">Dealt with</button>
+                        </form>`
+                     : ''
+                 }
+               </div>`
+            : `<div class="card" style="padding:16px 20px;margin-bottom:20px;">
+                 <p style="margin:0;font-size:15px;line-height:1.55;color:var(--ink-700);">
+                   Marked dealt with ${escapeHtml(timeAgo(dismissal.dismissed_at))}${
+                     dismissal.note ? ` - ${escapeHtml(dismissal.note)}` : ''
+                   }. They are not counted on the conversations screen unless
+                   they text again.
+                 </p>
+               </div>`
+          : ''
+      }
 
       ${
         // THE AI HAS STOPPED TALKING AND IS WAITING FOR YOU.
@@ -3821,6 +3922,48 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     );
   } catch (err) {
     next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/messages/:phone/dismiss - this lead has been dealt with
+//
+// Clears one number out of the yellow banner on the conversations screen. It is
+// an UPSERT on a timestamp rather than a flag, so "dealt with" means "dealt
+// with as of now" - if they text again their message is newer than this row and
+// they reappear, which is right: somebody trying a second time after being
+// ignored is a better lead than the first time.
+//
+// Behind messages.send rather than messages.view because it is a decision about
+// a person rather than a thing you read, and it is the same people who would
+// have called them.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/messages/:phone/dismiss', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const phone = normalisePhone(req.params.phone);
+    if (!phone) return res.redirect(303, '/ops/messages');
+
+    const back = `/ops/messages/${encodeURIComponent(phone.replace(/\D/g, ''))}`;
+    const note = String((req.body || {}).note || '').trim().slice(0, 200) || null;
+
+    const { error } = await db.from('dismissed_leads').upsert(
+      {
+        phone,
+        dismissed_at: new Date().toISOString(),
+        // The machine key has no person attached, exactly like resolving an
+        // issue. It dismisses as nobody rather than failing.
+        dismissed_by: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+        note,
+      },
+      { onConflict: 'phone' }
+    );
+
+    if (error) throw error;
+
+    return res.redirect(303, `${back}?note=${encodeURIComponent('Marked dealt with.')}`);
+  } catch (err) {
+    return next(err);
   }
 });
 
