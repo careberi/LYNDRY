@@ -89,47 +89,86 @@ can be waved away silently is not a check.
 
 ## Outstanding
 
-### A. Seven two-hour pickup slots
+*Reviewed 2 Sep 2026, against the running system rather than from memory.*
 
-Replace the five uneven windows (6-9, 9-12, 12-2, 2-5, 5-9) with seven even
-ones: **6-8, 8-10, 10-12, 12-2, 2-4, 4-6, 6-8**.
+### Done since this list was last written
 
-Knock-on to check: the next-day promise is derived from the LAST window, so the
-delivery deadline moves from 9pm to 8pm. Every existing order keeps the window
-it was promised - they are stored on the order, not recomputed.
+**A. Two-hour pickup slots** and **B. a window closes the moment it starts** are
+both built. `PICKUP_WINDOWS` is 8-10, 10-12, 12-2, 2-4, 4-6 and
+`WINDOW_CLOSES_AT_START` is true - verified: at 08:05 the 8-10 slot is gone and
+the earliest offered is 10-12.
 
-### B. A slot closes the moment it starts
+FIVE WINDOWS, NOT THE SEVEN ORIGINALLY WRITTEN HERE, and that is deliberate.
+Neil asked for slots "fitting the laundromat's hours"; Fancy K opens at 7:30 and
+shuts at 7, so a 6-8am pickup could not be dropped off and a 6-8pm one would
+arrive after they closed.
 
-At 8:01 you cannot book the 8-10 slot; the earliest is 10-12.
+### 1. The laundromat page is a sales page, not an instruction set
 
-**This reverses a deliberate rule.** Today a window stays bookable until an hour
-before its END, and the comment says why: "today at 4:30", texted at 3:32,
-belongs in the 3-6 window, and the first version threw it to tomorrow, which put
-a real order on the wrong day. Neil's new rule is stricter and is his call - but
-it means somebody texting at 8:05 for "this morning" gets 10am, not 8am.
+`/for-laundromats` explains the arrangement to an owner. It has to also teach
+the attendant the job: scan the bag tag, enter the weight, get the wash
+instructions, and what the four peelable stickers are for - one per bag they
+pack, so one bag in becomes however many bags out and each still carries our
+id. Wants a picture of a bag tag and a diagram of how it threads into their own
+in-house tracking, plus how a finished order is called in for collection, and
+how invoicing works.
 
-### C. Route the laundromat choice across today AND tomorrow
+### 2. Weight corrections have nowhere to live
+
+Neil's call: **an admin can correct a weight, a driver cannot.** The loose
+weight box went when the order page became a record, so a fat-fingered weight
+is now uncorrectable from any screen. Behind `orders.override` or a permission
+of its own, logged to `order_events` with both numbers and a name, exactly as
+the old correction box did.
+
+### 3. Route the laundromat choice across today AND tomorrow
 
 When an order comes in, choose its laundromat from the whole picture: what is
 being picked up and dropped off today, and what is booked for tomorrow - not
-just distance from that one door.
+just distance from that one door. `dispatch.planPartnerFor()` already chooses at
+booking but weighs one order in isolation.
 
-Partly built: `dispatch.planPartnerFor()` already chooses at booking, but it
-weighs one order in isolation.
+### 4. Reschedules are not written to the change log
 
-### D. Weight corrections have nowhere to live
+A customer can move their own pickup by text and leave no trace of who changed
+it or when. CLAUDE.md says every change to an order is recorded; this one is
+not.
 
-Removing the loose weight box from a running order means a fat-fingered weight
-can no longer be fixed from that page. Needs an explicit "correct something"
-rather than being loose in the flow.
+### 5. The ops app is slow on a phone
+
+Measured, not guessed: production answers a trivial request in ~130ms, `/ops`
+renders in ~410ms and `/ops/run` in ~750ms across 14 sequential database calls.
+So a tap costs roughly 0.4-0.9s and every one is a full page load.
+
+Three levers, in order of payoff: there is **no web app manifest**, so the
+home-screen bookmark runs inside full Safari rather than standalone; several
+more database calls can be batched; and the Railway and Supabase regions should
+be checked against each other, because every one of those 14 calls pays that gap
+twice.
+
+### 6. Orphaned code from today's changes
+
+`/ops/loadout`'s door-scan and `allBagsScanned` were bypassed by the door-flow
+change. `pickupSequence()` and `workCard()` are called by nothing since the
+order page became a record - kept on purpose, because Neil said "maybe we'll
+come back to it later".
+
+---
+
+## Decided and not being built
+
+**A separate staging site.** Neil's call, asked directly: we carry on making
+changes against production. CLAUDE.md's "no more than one deployment target"
+stands. The cost is real and worth writing down - real customers and real orders
+are the test data, and every fix this week was verified against live rows.
 
 ---
 
 ## Waiting on Neil
 
-- **Fancy K has no Wednesday hours row**, so the router skips it every
-  Wednesday. Add the row if they are actually open.
-- **Order #1930 and +1 443-745-2665** are live in the database as a real
-  customer and order. Leave as a test, or clear?
-- **Test the camera scan on the iPhone.** Built and verified as far as a
-  decoder can be checked from here; the actual camera cannot be.
+- **Print bag tags.** There are ZERO blank tags left - every one is bound to an
+  order. A driver with no tag cannot label a bag.
+- **10DLC registration.** Still the only fix for the carrier delays: our side
+  answers in 4-9 seconds and Telnyx sat on messages for 72-210.
+- **Stripe keys.** Phase 8 is written and untested; no card has ever been
+  charged.
