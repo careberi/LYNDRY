@@ -446,6 +446,16 @@ const ES = Object.freeze({
   'Not picked up yet': 'Aun no recogida',
   'When a bag is finished': 'Cuando termine una bolsa',
   'Waiting for collection': 'Esperando recogida',
+  'Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.':
+    'Ponga una pegatina en cada bolsa que empaque. Toque su numero una vez para indicar que la esta usando, y otra vez cuando esa bolsa este terminada.',
+  'Tapped one by mistake? Keep tapping it and it goes back to not used.':
+    'Toco uno por error? Sigalo tocando y vuelve a sin usar.',
+  'This order is done': 'Este pedido esta terminado',
+  'Only when every bag for this order is packed and finished. We will come and collect it.':
+    'Solo cuando todas las bolsas de este pedido esten empacadas y terminadas. Pasaremos a recogerlo.',
+  'Not used': 'Sin usar',
+  'In use': 'En uso',
+  'Done': 'Terminada',
   'Put one sticker off this tag on each finished bag, then tap its number here. However many bags this became - one, or four.':
     'Ponga una pegatina de esta etiqueta en cada bolsa terminada y toque su numero aqui. Sean las bolsas que sean, una o cuatro.',
   'Tap a number once its sticker is on a finished bag. Tapping the same one twice changes nothing.':
@@ -557,7 +567,7 @@ function weightBox({ code, token, heading, blurb, action, error, t = (x) => x })
     </div>`;
 }
 
-function bagTagPage(label, order, code, token, query, lang = 'en') {
+function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []) {
   const stage = tags.stageOf(label, order);
   const t = encodeURIComponent(String(token || ''));
   const seq = query.s && /^[1-4]$/.test(String(query.s)) ? Number(query.s) : null;
@@ -645,20 +655,59 @@ function bagTagPage(label, order, code, token, query, lang = 'en') {
     <div class="card" style="padding:28px;">
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
       <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
-        ${escapeHtml(say('Put one sticker off this tag on each finished bag, then tap its number here. However many bags this became - one, or four.'))}
+        ${escapeHtml(say('Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.'))}
       </p>
+
       <form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${t}"
             style="display:flex;gap:10px;flex-wrap:wrap;">
-        ${[1, 2, 3, 4]
-          .map((n) => `
-        <button class="btn btn-outline btn-lg" type="submit" name="seq" value="${n}"
-                style="flex:1 1 90px;min-width:90px;">
-          ${escapeHtml(code)}-${n}
-        </button>`)
+        ${stickers
+          .map(({ seq, state }) => {
+            // COLOUR SAYS WHICH STATE, so one tap can mean "advance this" and
+            // the attendant never has to guess what tapping will do.
+            const look = {
+              UNUSED: 'background:var(--paper-000);',
+              IN_USE: 'background:var(--sunbeam-500);',
+              DONE: 'background:var(--suds-500);',
+            }[state];
+
+            const word = { UNUSED: 'Not used', IN_USE: 'In use', DONE: 'Done' }[state];
+
+            return `
+        <button type="submit" name="seq" value="${seq}"
+                style="flex:1 1 100px;min-width:100px;padding:12px 10px;border:2px solid var(--ink-900);
+                       border-radius:12px;box-shadow:var(--shadow-pop-xs);cursor:pointer;${look}">
+          <span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:17px;">
+            ${escapeHtml(code)}-${seq}
+          </span>
+          <span style="display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;
+                       text-transform:uppercase;margin-top:4px;">
+            ${escapeHtml(say(word))}
+          </span>
+        </button>`;
+          })
           .join('')}
       </form>
+
+      ${
+        // THE ATTENDANT SAYS WHEN IT IS FINISHED, rather than the system
+        // inferring it from the stickers. It used to become ready the moment
+        // every intake bag had one finished bag against it, which assumes one
+        // bag in becomes one bag out and stops watching. Only the person
+        // folding knows whether they are still folding.
+        stickers.some((x) => x.state === 'DONE')
+          ? `<form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${t}"
+                   style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
+               <button class="btn btn-primary btn-lg btn-full" type="submit" name="order" value="done">
+                 ${escapeHtml(say('This order is done'))}
+               </button>
+               <p class="field-hint" style="margin-top:12px;">
+                 ${escapeHtml(say('Only when every bag for this order is packed and finished. We will come and collect it.'))}
+               </p>
+             </form>`
+          : ''
+      }
       <p class="field-hint" style="margin-top:14px;">
-        ${escapeHtml(say('Tap a number once its sticker is on a finished bag. Tapping the same one twice changes nothing.'))}
+        ${escapeHtml(say('Tapped one by mistake? Keep tapping it and it goes back to not used.'))}
       </p>
     </div>` + footer,
     });
@@ -845,7 +894,16 @@ router.get('/o/:code', async (req, res, next) => {
         });
       }
 
-      return res.type('html').send(bagTagPage(label, order, code, req.query.t, req.query, lang));
+      // WHICH STICKERS ARE DOING WHAT. Only needed while the bag is at a
+      // laundromat - every other stage draws no sticker buttons - so it is not
+      // fetched for a bag sitting in the van.
+      const stage = tags.stageOf(label, order);
+      const stickers =
+        stage === tags.STAGES.WASHING ? await tags.stickersOn(label).catch(() => []) : [];
+
+      return res
+        .type('html')
+        .send(bagTagPage(label, order, code, req.query.t, req.query, lang, stickers));
   } catch (err) {
     return next(err);
   }
@@ -1153,34 +1211,48 @@ router.post('/o/:code/ready', async (req, res, next) => {
     // One intake bag becomes any number of finished bags, so this marks ONE
     // of them. The ORDER only becomes ready when every intake bag it holds
     // has at least one finished bag against it.
-    const seq = Number((req.body || {}).seq);
+    // TWO DIFFERENT TAPS ARRIVE HERE, and only one of them finishes the order.
+    //
+    //   seq=N      advance that sticker: unused -> in use -> done -> unused
+    //   order=done the attendant saying the whole order is packed and finished
+    //
+    // The order used to become READY by inference - the moment every intake bag
+    // had one finished bag against it. That assumes one bag in becomes one bag
+    // out and then stops watching, and only the person folding knows whether
+    // they are still folding. So they say so.
+    const body = req.body || {};
+    const seq = Number(body.seq);
     const parent = await bags.findByCode(code);
 
     if (parent && Number.isInteger(seq) && seq >= 1 && seq <= 4) {
-      const marked = await tags.markSubBagReady(parent, seq);
-      if (!marked.ok) return res.redirect(303, back + '&ready=bad');
+      const moved = await tags.cycleSticker(parent, seq);
+      if (!moved.ok) return res.redirect(303, back + '&ready=bad');
+
+      const said = { UNUSED: 'is not being used', IN_USE: 'is in use', DONE: 'is finished' }[
+        moved.state
+      ];
 
       await orderEvents.record(order.id, {
         kind: 'LABEL',
-        summary: marked.already
-          ? 'Sticker ' + code + '-' + seq + ' was already marked finished'
-          : code + '-' + seq + ' marked finished, ' + marked.count +
-            ' bag' + (marked.count === 1 ? '' : 's') + ' back from this one',
+        summary: `${code}-${seq} ${said}`,
         by: { actor: 'partner' },
       });
 
       await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
 
-      // EVERY INTAKE BAG NEEDS A FINISHED BAG AGAINST IT before the order is
-      // ready. Marking one sticker on a three-bag order says that wash is
-      // done, not that the order is, and sending a driver out for a third of
-      // it is a wasted trip.
-      const intake = await bags.forOrder(order.id, 'PICKUP');
-      const finished = await bags.forOrder(order.id, 'DELIVERY');
-      const covered = new Set(finished.map(function (b) { return b.parent_id; }).filter(Boolean));
-      const outstanding = intake.filter(function (b) { return !covered.has(b.id); }).length;
+      // Back to the same page, which redraws the sticker in its new colour.
+      // The order is NOT finished by this tap.
+      return res.redirect(303, back);
+    }
 
-      if (outstanding > 0) return res.redirect(303, back + '&ready=' + outstanding);
+    // Anything that is not "the order is done" changes nothing else here.
+    if (body.order !== 'done') return res.redirect(303, back);
+
+    // NOTHING IS FINISHED WITH NO FINISHED BAG. A stray tap on the button
+    // before anything has been packed would send a driver out for nothing.
+    const mine = parent ? await tags.stickersOn(parent) : [];
+    if (!mine.some((x) => x.state === tags.STICKER.DONE)) {
+      return res.redirect(303, back + '&ready=none');
     }
 
     // Already done. Tapping twice is somebody making sure, not an error.

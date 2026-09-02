@@ -222,6 +222,68 @@ const STAGE_LABEL = Object.freeze({
 //
 // Idempotent: scanning the same sticker again says so rather than inventing
 // another bag.
+// THE THREE STATES A STICKER CAN BE IN, from the laundromat's point of view.
+const STICKER = Object.freeze({ UNUSED: 'UNUSED', IN_USE: 'IN_USE', DONE: 'DONE' });
+
+function stickerState(row) {
+  if (!row) return STICKER.UNUSED;
+  return row.finished_at ? STICKER.DONE : STICKER.IN_USE;
+}
+
+// What each of the four stickers on a tag is doing right now.
+async function stickersOn(parent) {
+  const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
+  const mine = siblings.filter((b) => b.parent_id === parent.id);
+
+  return [1, 2, 3, 4].map((seq) => {
+    const row = mine.find((b) => b.sticker_seq === seq) || null;
+    return { seq, row, state: stickerState(row) };
+  });
+}
+
+// ONE TAP MOVES A STICKER ON: unused -> in use -> done -> unused.
+//
+// A cycle rather than three separate controls, because this is a phone held in
+// one hand at a counter and three buttons per sticker is twelve buttons. The
+// colour says which state it is in, so the tap is "advance this", not "guess".
+//
+// AND IT COMES BACK ROUND TO UNUSED ON PURPOSE. A mis-tap is the most likely
+// thing to happen on this page and there is nobody to undo it for them - going
+// round again is the escape. Deleting the row is safe: it carries nothing but
+// its own existence and its sequence, both of which are printed on the tag.
+async function cycleSticker(parent, seq) {
+  const n = Number(seq);
+  if (!Number.isInteger(n) || n < 1 || n > 4) {
+    return { ok: false, detail: 'That is not one of the four stickers on the tag.' };
+  }
+
+  const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
+  const existing = siblings.find((b) => b.parent_id === parent.id && b.sticker_seq === n) || null;
+
+  // Not used yet -> in use.
+  if (!existing) {
+    const made = await markSubBagReady(parent, n);
+    return made.ok ? { ok: true, state: STICKER.IN_USE } : made;
+  }
+
+  // In use -> done.
+  if (!existing.finished_at) {
+    const { error } = await db
+      .from('bag_labels')
+      .update({ finished_at: new Date().toISOString() })
+      .eq('id', existing.id);
+
+    if (error) throw error;
+    return { ok: true, state: STICKER.DONE };
+  }
+
+  // Done -> unused. The way back from a mis-tap.
+  const { error } = await db.from('bag_labels').delete().eq('id', existing.id);
+  if (error) throw error;
+
+  return { ok: true, state: STICKER.UNUSED };
+}
+
 async function markSubBagReady(parent, seq, { weightLb = null } = {}) {
   const n = Number(seq);
   if (!Number.isInteger(n) || n < 1 || n > 4) {
@@ -444,6 +506,10 @@ module.exports = {
   STAGE_LABEL,
   stageOf,
   markSubBagReady,
+  cycleSticker,
+  stickersOn,
+  stickerState,
+  STICKER,
   subBagsOf,
   collectFromPartner,
   findByTag,
