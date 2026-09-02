@@ -512,8 +512,43 @@ function table(headings, rows) {
 // would drift the first time one of them learned something.
 // ---------------------------------------------------------------------------
 
-function pickupSequence(order, tasks, { notice, problem, laundromats = [], mayOverride = false, refused = false }) {
-  const step = tasks.find((t) => !t.done) || null;
+// What the correction button names. "Correct something" tells a driver nothing
+// about what is about to change; "Correct bag 2's weight" tells him whether it
+// is the one he meant.
+function correctionLabel(task) {
+  if (task.key === 'bag_count') return 'how many bags';
+  if (task.key === 'return') return 'what came back';
+  if (task.key.startsWith('weigh_')) return `bag ${task.position}'s weight`;
+  return 'the last thing';
+}
+
+function pickupSequence(
+  order,
+  tasks,
+  { notice, problem, laundromats = [], mayOverride = false, refused = false, fixKey = null }
+) {
+  // CORRECTING THE LAST THING.
+  //
+  // Neil: a box at the top that takes him back to the last thing he did and
+  // lets him change it, with the change written down.
+  //
+  // ONLY STEPS THAT HOLD A VALUE can be corrected, and that is not a
+  // limitation being papered over - it is the difference between a number and
+  // an event. A weight or a bag count is a figure somebody typed and can
+  // retype. "Handed it to the laundromat" is something that happened; the
+  // state machine refuses to un-happen it, and it should, because the bags are
+  // on their counter. That needs a person and an issue, not an edit box.
+  const CORRECTABLE = new Set(['bag_count', 'return']);
+  const canFix = (t) => t.done && (CORRECTABLE.has(t.key) || t.key.startsWith('weigh_'));
+
+  const fixable = tasks.filter(canFix);
+  const lastFixable = fixable.length ? fixable[fixable.length - 1] : null;
+
+  // Which one is being corrected, if any. Named rather than "the last one" so
+  // the link survives a refresh and can point further back if it ever needs to.
+  const fixing = fixKey ? tasks.find((t) => t.key === fixKey && canFix(t)) : null;
+
+  const step = fixing || tasks.find((t) => !t.done) || null;
   const done = tasks.filter((t) => t.done).length;
 
   const banner = (text, background) => `
@@ -717,9 +752,35 @@ function pickupSequence(order, tasks, { notice, problem, laundromats = [], mayOv
     ${notice ? banner(notice, 'var(--suds-300)') : ''}
 
     ${
+      // THE WAY BACK. One button, at the top, naming what it will take you to -
+      // "Correct something" says nothing about what is about to change, and a
+      // driver tapping it should already know.
+      fixing
+        ? `<div style="margin:0 0 20px;padding:14px 18px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--sunbeam-500);">
+             <p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
+               <strong>Correcting a value.</strong> The old one and the new one
+               both go on the order with your name against them.
+             </p>
+             <a class="btn btn-sm btn-outline" href="/ops/orders/${order.order_number}">
+               Leave it as it is
+             </a>
+           </div>`
+        : lastFixable
+          ? `<a class="btn btn-outline btn-sm"
+                href="/ops/orders/${order.order_number}?fix=${encodeURIComponent(lastFixable.key)}"
+                style="display:inline-block;margin-bottom:18px;">
+               Correct ${escapeHtml(correctionLabel(lastFixable))}
+             </a>`
+          : ''
+    }
+
+    ${
       step
         ? `
-      <p class="eyebrow" style="margin:0 0 6px;">Step ${done + 1} of ${tasks.length}</p>
+      <p class="eyebrow" style="margin:0 0 6px;">${
+        fixing ? 'Putting it right' : `Step ${done + 1} of ${tasks.length}`
+      }</p>
       <h3 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 8px;">
         ${escapeHtml(step.title)}
       </h3>
@@ -2194,6 +2255,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
       ${pickupTasks
         ? pickupSequence(order, pickupTasks, {
+            // Which value is being corrected, if any. A key rather than "the
+            // last one" so a refresh lands in the same place.
+            fixKey: req.query.fix ? String(req.query.fix).slice(0, 40) : null,
             laundromats,
             mayOverride: roles.can(req.opsUser, 'orders.override'),
             refused: /did not|short|heavier|lighter/i.test(String(req.query.problem || '')),
@@ -3307,10 +3371,29 @@ router.post(
       const back = backTo(req, order);
       const body = req.body || {};
 
+      // WHAT IT SAID BEFORE, read before the write so a correction can name
+      // both numbers. Neil's rule for the correction box: log that this was
+      // changed, and from what to what.
+      const before = await bags.findByCode(body.code);
+      const wasWeight = before && before.weight_lb != null ? Number(before.weight_lb) : null;
+
       const result = await bags.recordBagWeight(body.code, body.weight_lb, req.file, { order });
 
       if (!result.ok) {
         return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+      }
+
+      // Only when it CHANGED. Re-saving the same number is a driver making
+      // sure, not a correction, and a log full of "45 lb became 45 lb" is a log
+      // nobody reads.
+      if (wasWeight != null && wasWeight !== Number(body.weight_lb)) {
+        await orderEvents.record(order.id, {
+          kind: 'WEIGHT',
+          summary: `Bag ${before.position || ''} weight corrected`.replace('  ', ' '),
+          was: `${wasWeight.toFixed(1)} lb`,
+          became: `${Number(body.weight_lb).toFixed(1)} lb`,
+          by: { opsUser: req.opsUser },
+        });
       }
 
       // THE CLIP GOES ON HERE, the moment the bag has a weight and is about to

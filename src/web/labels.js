@@ -88,26 +88,30 @@ function esc(s) {
 // One tag: the header that stays on the bag we collect, and the four stickers
 // that come off it.
 function tagMarkup({ code, tagQr, stickerQrs }) {
+  // ID ACROSS THE TOP, QR CENTRED UNDERNEATH. Neil's layout.
+  //
+  // It reads better than the side-by-side arrangement it replaces for the
+  // reason a sticker is looked at in the first place: the id is what somebody
+  // reads out, so it wants the full width rather than a column beside a square.
+  // The QR then sits centred below it and can be as large as the sticker
+  // allows, which is what decides whether a camera locks on.
+  //
+  // The sequence rides on the id - L4XK92-2, one line - rather than sitting off
+  // to the side. It is part of what a person says out loud, not a footnote.
   const stickers = STICKERS.map(
     (n, i) => `
       <div class="lb-sticker">
+        <div class="lb-scode">${esc(code)}-${n}</div>
         <div class="lb-sq">${stickerQrs[i]}</div>
-        <div class="lb-st">
-          <div class="lb-scode">${esc(code)}</div>
-          <div class="lb-sseq">-${n}</div>
-        </div>
       </div>`
   ).join('');
 
   return `
     <div class="lb-tag">
       <div class="lb-head">
+        <div class="lb-brand">${esc(site.name)} bag tag &middot; stays on this bag</div>
+        <div class="lb-code">${esc(code)}</div>
         <div class="lb-hq">${tagQr}</div>
-        <div class="lb-ht">
-          <div class="lb-brand">${esc(site.name)} bag tag</div>
-          <div class="lb-code">${esc(code)}</div>
-          <div class="lb-hint">Stays on this bag</div>
-        </div>
       </div>
       <div class="lb-peel">${stickers}</div>
     </div>`;
@@ -161,11 +165,15 @@ async function labelSheetBody(labels) {
     color: #101210;
   }
 
-  /* --- the header, which stays on the bag we collect --- */
-  .lb-head { display: flex; align-items: center; gap: 0.12in; height: 1.02in; flex: none; }
-  .lb-hq { width: 0.95in; height: 0.95in; flex: none; }
+  /* --- the header, which stays on the bag we collect ---
+     Stacked, like the stickers below it: brand, then the id across the full
+     width, then the QR centred under it. */
+  .lb-head {
+    display: flex; flex-direction: column; align-items: center;
+    height: 1.72in; flex: none; text-align: center;
+  }
+  .lb-hq { width: 0.86in; height: 0.86in; flex: none; margin-top: 0.03in; }
   .lb-hq svg { display: block; width: 100%; height: 100%; }
-  .lb-ht { min-width: 0; }
 
   .lb-brand {
     font-family: var(--font-mono); font-size: 7pt; font-weight: 700;
@@ -174,10 +182,9 @@ async function labelSheetBody(labels) {
   /* THE ID IS THE FALLBACK, so it is set big enough to read at arm's length in
      a badly lit basement when the camera will not focus. */
   .lb-code {
-    font-family: var(--font-mono); font-size: 27pt; font-weight: 700;
-    letter-spacing: 0.05em; line-height: 1.02; margin: 0.02in 0;
+    font-family: var(--font-mono); font-size: 30pt; font-weight: 700;
+    letter-spacing: 0.05em; line-height: 1.02; margin: 0.02in 0 0.04in;
   }
-  .lb-hint { font-family: var(--font-mono); font-size: 6.5pt; color: #5B635B; letter-spacing: 0.07em; }
 
   /* --- the four peelable stickers --- */
   .lb-peel {
@@ -192,9 +199,11 @@ async function labelSheetBody(labels) {
   }
 
   .lb-sticker {
-    display: flex; align-items: center; gap: 0.08in;
-    padding: 0.06in 0.04in;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.03in;
+    padding: 0.05in 0.03in;
     min-width: 0;
+    text-align: center;
     border-right: 1px dashed #101210;
     border-bottom: 1px dashed #101210;
   }
@@ -202,19 +211,15 @@ async function labelSheetBody(labels) {
   .lb-sticker:nth-child(2n) { border-right: 0; }
   .lb-sticker:nth-child(n + 3) { border-bottom: 0; }
 
-  .lb-sq { width: 0.78in; height: 0.78in; flex: none; }
+  .lb-sq { width: 0.72in; height: 0.72in; flex: none; }
   .lb-sq svg { display: block; width: 100%; height: 100%; }
 
-  .lb-st { min-width: 0; }
+  /* THE ID GETS THE FULL WIDTH, which is the whole point of stacking. It is
+     what somebody reads out when the camera will not focus, so it is set as
+     large as the sticker allows rather than squeezed beside a square. */
   .lb-scode {
-    font-family: var(--font-mono); font-size: 10.5pt; font-weight: 700;
-    letter-spacing: 0.04em; line-height: 1.05;
-  }
-  /* The number is what the attendant is actually reading off, so it is the
-     biggest thing on the sticker. */
-  .lb-sseq {
-    font-family: var(--font-mono); font-size: 24pt; font-weight: 700;
-    line-height: 1;
+    font-family: var(--font-mono); font-size: 13pt; font-weight: 700;
+    letter-spacing: 0.03em; line-height: 1.05; white-space: nowrap;
   }
 
   /* On screen only, so you can see where the die cuts fall before wasting a
