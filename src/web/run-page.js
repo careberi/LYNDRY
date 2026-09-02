@@ -493,25 +493,26 @@ function partnerCard(run) {
              <p style="font-size:15px;line-height:1.5;margin:0 0 14px;">
                ${
                  left
-                   ? `Tap each one as they hand it to you. <strong>${left} still to go.</strong>`
+                   ? `Tap each one as they hand it to you. <strong data-left="${left}">${left} still to go.</strong>`
                    : 'All of them are in the van.'
                }
              </p>
 
-             <form method="post" action="/ops/run/collected"
+             <form method="post" action="/ops/run/collected" data-quick
                    style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                ${bags
                  .map((b) => {
                    const got = Boolean(b.collected_at);
                    return `
                <button type="submit" name="label_id" value="${escapeHtml(b.id)}"
+                       data-got="${got ? '1' : '0'}"
                        style="width:100%;padding:14px 10px;border:2px solid var(--ink-900);
                               border-radius:12px;box-shadow:var(--shadow-pop-xs);cursor:pointer;
                               background:${got ? 'var(--suds-500)' : 'var(--paper-000)'};">
                  <span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:16px;">
                    ${escapeHtml(b.code)}${b.sticker_seq ? `-${b.sticker_seq}` : ''}
                  </span>
-                 <span style="display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:0.07em;
+                 <span data-state style="display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:0.07em;
                               text-transform:uppercase;margin-top:4px;">
                    ${got ? 'Collected' : 'Not yet'}
                  </span>
@@ -744,7 +745,8 @@ function runBody({ run, notice = null, problem = null }) {
     ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run)) : travelCard(run)}
   </div>
   ${scannerScript()}
-  ${returnFromMapsScript()}`;
+  ${returnFromMapsScript()}
+  ${quickTapScript()}`;
 }
 
 
@@ -886,6 +888,91 @@ function returnFromMapsScript() {
 
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && armed()) refresh();
+  });
+})();
+</script>`;
+}
+
+
+
+// ---------------------------------------------------------------------------
+// TICKING BAGS OFF WITHOUT WAITING FOR THE PAGE.
+//
+// Neil, at a counter with seven bags: "when I tap on the link on my iPhone it
+// takes a really long time for it to register." Each tap was a form post, a
+// redirect and a full re-render - three network hops and a page rebuild before
+// the button changed colour. On cellular that is seconds, per bag, while
+// somebody is handing you laundry.
+//
+// The button now flips IMMEDIATELY and the post goes in the background. The
+// server is still the only thing that decides anything: if the request fails
+// the button flips back and says so, and the next page load shows the truth
+// either way.
+//
+// FAILS SAFE. With no JavaScript these are ordinary submit buttons in an
+// ordinary form and behave exactly as they did - which is the promise this
+// screen makes, because it is used in a basement on two bars.
+//
+// The LAST tap does a real reload on purpose: collecting the final bag is what
+// reveals the next control, and that is the server's decision to make, not a
+// guess made in the browser.
+// ---------------------------------------------------------------------------
+function quickTapScript() {
+  return `
+<script>
+(function () {
+  var form = document.querySelector('form[data-quick]');
+  if (!form || !window.fetch) return;
+
+  var counter = document.querySelector('[data-left]');
+
+  form.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest && e.target.closest('button[name="label_id"]');
+    if (!btn || btn.disabled) return;
+
+    e.preventDefault();
+
+    var wasGot = btn.getAttribute('data-got') === '1';
+    var left = counter ? Number(counter.getAttribute('data-left')) : null;
+
+    // The last one to collect: let the real submit happen, because what comes
+    // after it is the server's call.
+    if (!wasGot && left === 1) { form.submit(); return; }
+
+    var paint = function (got) {
+      btn.setAttribute('data-got', got ? '1' : '0');
+      btn.style.background = got ? 'var(--suds-500)' : 'var(--paper-000)';
+      var label = btn.querySelector('[data-state]');
+      if (label) label.textContent = got ? 'Collected' : 'Not yet';
+      if (counter && left !== null) {
+        var now = left + (got ? -1 : 1);
+        counter.setAttribute('data-left', now);
+        counter.textContent = now + ' still to go.';
+        left = now;
+      }
+    };
+
+    paint(!wasGot);
+    btn.disabled = true;
+
+    var body = new URLSearchParams();
+    body.set('label_id', btn.value);
+
+    fetch(form.action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      credentials: 'same-origin',
+      redirect: 'follow',
+    })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); })
+      .catch(function () {
+        // Put it back. A bag that looks collected and is not is how one gets
+        // left on a counter.
+        paint(wasGot);
+        alert('That did not save. Check your signal and tap it again.');
+      })
+      .then(function () { btn.disabled = false; });
   });
 })();
 </script>`;

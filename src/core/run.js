@@ -537,6 +537,15 @@ async function forDriver(driverId, roundStart = null) {
   // WHICH BAGS AM I HANDING OVER. The laundromat stop knows which orders are
   // going there; the driver needs the numbers clipped to them, because that is
   // what he and the counter assistant can actually say out loud.
+  // ONE QUERY FOR EVERY LABEL ON THE ROUND, rather than one per order inside
+  // two nested loops. That was seven bag_labels round trips on a three-stop
+  // round, and each one is a network hop - most of the delay between tapping a
+  // bag at a counter and watching it turn green.
+  const everyOrderId = stops.flatMap((st) =>
+    (st.orders || (st.order ? [st.order] : [])).map((o) => o.id)
+  );
+  const labelsByOrder = await bags.forOrders(everyOrderId);
+
   for (const stop of stops) {
     const orders =
       stop.orders || (stop.kind === 'deliver' && stop.order ? [stop.order] : null);
@@ -545,7 +554,7 @@ async function forDriver(driverId, roundStart = null) {
     const numbers = [];
     let aboard = 0;
     for (const order of orders) {
-      const labels = await bags.forOrder(order.id);
+      const labels = labelsByOrder.get(order.id) || [];
       numbers.push(...bags.clipsFor(labels));
       // PICKUP bags that are actually in the van. A delivery sticker bound
       // later at the laundromat is not something we are carrying in.

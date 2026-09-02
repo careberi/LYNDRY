@@ -175,6 +175,35 @@ async function forOrder(orderId, leg = null) {
   return data || [];
 }
 
+
+// EVERY LABEL FOR A SET OF ORDERS, IN ONE ROUND TRIP.
+//
+// forOrder() in a loop is one query per order, and the guided run walks every
+// order on every stop - which was seven separate bag_labels queries on a
+// three-stop round, each one a network hop to Supabase. On a phone over
+// cellular that is most of the wait between tapping a bag and seeing it turn
+// green.
+//
+// Returns a Map keyed by order id so callers index rather than filter.
+async function forOrders(orderIds, leg = null) {
+  const ids = [...new Set((orderIds || []).filter(Boolean))];
+  const byOrder = new Map(ids.map((id) => [id, []]));
+  if (!ids.length) return byOrder;
+
+  let query = db.from('bag_labels').select('*').in('order_id', ids);
+  if (leg) query = query.eq('leg', leg);
+
+  const { data, error } = await query.order('position', { ascending: true });
+  if (error) throw error;
+
+  for (const row of data || []) {
+    const list = byOrder.get(row.order_id);
+    if (list) list.push(row);
+  }
+
+  return byOrder;
+}
+
 // The bags collected from the customer. These carry the weight that priced the
 // order and that a laundromat's figure is checked against.
 function pickupBags(orderId) {
@@ -589,6 +618,7 @@ module.exports = {
   mint,
   findByCode,
   forOrder,
+  forOrders,
   pickupBags,
   deliveryBags,
   legForStatus,
