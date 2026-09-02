@@ -1,7 +1,7 @@
 'use strict';
 
 const { escapeHtml, icon } = require('./layout');
-const { scanField, describeCodeFormat } = require('./scanner');
+const { scanField, scannerScript, describeCodeFormat } = require('./scanner');
 
 // ---------------------------------------------------------------------------
 // The driver's run: one stop, one thing to do.
@@ -489,10 +489,21 @@ function runBody({ run, notice = null, problem = null }) {
 
   const partnerStop = run.current.kind === 'dropoff' || run.current.kind === 'pickup_partner';
 
+  // THE SCANNER SCRIPT, WITHOUT WHICH THE CAMERA BUTTON NEVER APPEARS.
+  //
+  // This page draws scan fields and forgot to emit the script that drives them,
+  // so the button - which ships as display:none and is revealed by that script
+  // - stayed hidden on every phone, including the Android ones that have had a
+  // working decoder all along. It looked like a plain text box because that is
+  // exactly what it was.
+  //
+  // The load-out page has always included it. This is the guided run, the one
+  // screen a driver actually works from, and it did not.
   return `${head}
     ${progressBar(run.done, run.total)}
     ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run)) : travelCard(run)}
-  </div>`;
+  </div>
+  ${scannerScript()}`;
 }
 
 module.exports = { runBody };
