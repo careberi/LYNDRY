@@ -3413,11 +3413,48 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
           // it are not theirs, exactly as on the order page.
           showNames: roles.can(req.opsUser, 'customers.view'),
           showMoney: roles.can(req.opsUser, 'money.view'),
+          // MOVING THE BASE MOVES EVERY ROUTE FOR EVERYBODY, so it sits with
+          // the closed sign and the promotions rather than with the round. A
+          // driver still SEES where it is - the route starts there and that is
+          // worth being able to check - they just cannot move it.
+          canSetBase: roles.can(req.opsUser, 'service.manage'),
+          baseSaved: req.query.base === 'saved',
         }),
         user: req.opsUser,
         openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// WHERE THE VAN LIVES. The one thing on the routing page that writes anything -
+// the rest of it is deliberately a picture.
+//
+// Redirects back with ?base=saved rather than rendering, so a refresh repeats
+// the message and never the save. Same pattern as every other ops form.
+router.post('/ops/routing/base', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    // WHO CHANGED IT IS RECORDED BY THE SAVE ITSELF - app_settings carries
+    // updated_by and updated_at, which is the right place for it. order_events
+    // is per order and this belongs to no order.
+    await settings.setServiceBase(
+      {
+        line1: req.body.line1,
+        city: req.body.city,
+        state: req.body.state,
+        postalCode: req.body.postalCode,
+      },
+      req.opsUser.id
+    );
+
+    // Keep whatever day, round and driver they were looking at.
+    const keep = ['date', 'from', 'driver']
+      .filter((k) => req.query[k])
+      .map((k) => `${k}=${encodeURIComponent(String(req.query[k]))}`);
+
+    return res.redirect(303, `/ops/routing?${keep.concat('base=saved').join('&')}`);
   } catch (err) {
     return next(err);
   }

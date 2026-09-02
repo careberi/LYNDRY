@@ -276,6 +276,8 @@ function routingBoardBody({
   driverId = null,
   lockedToSelf = false,
   progress = null,
+  canSetBase = false,
+  baseSaved = false,
 }) {
   const r = config.routing;
 
@@ -372,6 +374,8 @@ function routingBoardBody({
            driver to get a route that starts where they do.
          </p>`
   }
+
+  ${baseCard(board, canSetBase, baseSaved)}
 
   ${
     problem
@@ -899,6 +903,127 @@ function quoteAnswer(q, { showMoney }) {
         : ''
     }
   </div>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// WHERE THE VAN LIVES, AND THE BOX TO CHANGE IT.
+//
+// This exists because Neil looked at the board and said the base "is not
+// associated with me" - and he was right. It was a pair of coordinates frozen
+// into the code with no street address attached, and no way to move it without
+// a deploy.
+//
+// It is on THIS page rather than tucked into settings because this is the page
+// where being wrong about it is visible: every mile and every arrival time
+// above is measured from it, so the address and the numbers it produced belong
+// in the same eyeful.
+//
+// ONLY AN ADMIN SEES THE FORM. Moving the base moves every route for everybody,
+// which is an owner's decision and not a step in anybody's round - the same
+// reasoning that puts the closed sign behind service.manage. A driver still
+// sees WHERE it is, because "the route starts here" is something they need to
+// be able to check.
+// ---------------------------------------------------------------------------
+function baseCard(board, canSetBase, saved) {
+  const b = board.serviceBase || {};
+
+  const line = b.set
+    ? [b.line1, b.city, b.state, b.postal_code].filter(Boolean).join(', ')
+    : null;
+
+  // THREE STATES, AND THEY ARE NOT THE SAME. Never set; set and found on the
+  // map; set and the geocoder could not place it. The third one still routes -
+  // from the old constant - and saying nothing about it would mean every
+  // distance on this page was quietly measured from the wrong town.
+  const status = !b.set
+    ? {
+        tone: 'var(--sunbeam-500)',
+        text:
+          'No base has been set, so every route on this page starts from a ' +
+          'default point in Fair Lawn that nobody chose.',
+      }
+    : !b.placed
+      ? {
+          tone: 'var(--stain-500)',
+          ink: 'var(--paper-050)',
+          text:
+            'We could not find that address on the map, so routes are still ' +
+            'being measured from the old default. Check the street and the zip.',
+        }
+      : null;
+
+  return `
+    <div style="margin:0 0 26px;padding:20px 22px;border:2px solid var(--ink-900);
+                border-radius:16px;background:var(--paper-050);box-shadow:var(--shadow-pop-sm);">
+      <div class="eyebrow" style="margin:0 0 8px;">Where the van starts and ends</div>
+      <div style="font-size:19px;font-weight:700;margin:0 0 4px;">
+        ${line ? escapeHtml(line) : 'Not set'}
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.55;color:var(--ink-700);max-width:60ch;">
+        Every mile and every arrival time above is measured from here, and any
+        driver without a base of their own starts here too.
+      </p>
+
+      ${
+        status
+          ? `<p style="margin:14px 0 0;padding:11px 14px;border:2px solid var(--ink-900);
+                       border-radius:11px;background:${status.tone};${
+                         status.ink ? `color:${status.ink};` : ''
+                       }font-size:14px;line-height:1.5;font-weight:700;">${status.text}</p>`
+          : ''
+      }
+
+      ${
+        saved
+          ? `<p style="margin:14px 0 0;padding:11px 14px;border:2px solid var(--ink-900);
+                       border-radius:11px;background:var(--suds-500);font-size:14px;font-weight:700;">
+               Saved. The route below is measured from the new base.
+             </p>`
+          : ''
+      }
+
+      ${
+        canSetBase
+          ? `<details style="margin:16px 0 0;">
+               <summary style="cursor:pointer;font-family:var(--font-mono);font-size:12px;
+                               font-weight:700;letter-spacing:0.12em;text-transform:uppercase;">
+                 ${b.set ? 'Change it' : 'Set the base'}
+               </summary>
+
+               <form method="post" action="/ops/routing/base" style="margin-top:16px;display:grid;gap:12px;max-width:560px;">
+                 <div>
+                   <label class="field-label" for="base_line1">Street address</label>
+                   <input class="input input-lg" id="base_line1" name="line1" required
+                          autocomplete="off" placeholder="1650 Chandler Dr"
+                          value="${escapeHtml(b.line1 || '')}" style="width:100%;">
+                 </div>
+
+                 <div class="grid-2-wide" style="gap:12px;">
+                   <div>
+                     <label class="field-label" for="base_city">Town</label>
+                     <input class="input input-lg" id="base_city" name="city" required
+                            placeholder="Fair Lawn"
+                            value="${escapeHtml(b.city || '')}" style="width:100%;">
+                   </div>
+                   <div>
+                     <label class="field-label" for="base_zip">Zip</label>
+                     <input class="input input-lg" id="base_zip" name="postalCode" required
+                            inputmode="numeric" placeholder="07410"
+                            value="${escapeHtml(b.postal_code || '')}" style="width:100%;">
+                   </div>
+                 </div>
+
+                 <button class="btn btn-primary btn-lg" type="submit">Save the base</button>
+                 <p style="margin:0;font-size:13px;color:var(--ink-700);line-height:1.5;">
+                   This moves the start of every round, for everybody. It does not
+                   change any order that is already booked.
+                 </p>
+               </form>
+             </details>`
+          : ''
+      }
+    </div>`;
 }
 
 module.exports = { routingBoardBody };

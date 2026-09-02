@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../db');
+const geocode = require('./geocode');
 
 // ---------------------------------------------------------------------------
 // The switches that change how the service behaves right now.
@@ -82,6 +83,100 @@ async function setTakingOrders(taking, reason, opsUserId) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// WHERE THE VAN LIVES.
+//
+// This used to be a pair of coordinates frozen into geocode.js with no street
+// address attached and nobody's name on the decision. Neil looked at the
+// routing board and said the base "is not associated with me", which was
+// exactly right - it was a point somebody had once typed, and there was no way
+// to move it without a code change and a deploy.
+//
+// It is load-bearing in a way that is easy to miss: every round is measured
+// from it, every driver with no base of their own falls back to it, and
+// nearest-driver assignment compares against it. Wrong by a mile and every
+// route is wrong from its first mile.
+//
+// THE CONSTANT SURVIVES AS THE LAST RESORT. A database that has never had a
+// base set behaves exactly as it did before, which is what makes this safe to
+// deploy without filling the form in first.
+// ---------------------------------------------------------------------------
+
+async function serviceBase() {
+  const row = await read();
+
+  const address = {
+    line1: row.base_address_line1 || null,
+    city: row.base_city || null,
+    state: row.base_state || null,
+    postal_code: row.base_postal_code || null,
+  };
+
+  const placed = row.base_lat != null && row.base_lng != null;
+
+  return {
+    ...address,
+    // `set` is whether somebody chose this, `placed` is whether we could find
+    // it on a map. They come apart: an address that the geocoder could not
+    // place is set but not placed, and the page has to say so rather than
+    // quietly routing from Fair Lawn as though nothing were wrong.
+    set: Boolean(address.line1),
+    placed,
+    failed: Boolean(row.base_geocode_failed),
+    lat: placed ? Number(row.base_lat) : geocode.BASE.lat,
+    lng: placed ? Number(row.base_lng) : geocode.BASE.lng,
+  };
+}
+
+// Save a new base and put it on the map. The lookup is done HERE rather than
+// left to a later pass, because this is a form somebody just submitted and
+// "it will sort itself out eventually" is not an answer when the next thing
+// they do is look at the route it produced.
+async function setServiceBase({ line1, city, state, postalCode }, opsUserId = null) {
+  const clean = (v, n) => String(v == null ? '' : v).trim().slice(0, n) || null;
+
+  const address = {
+    address_line1: clean(line1, 120),
+    city: clean(city, 80),
+    state: clean(state, 2) || 'NJ',
+    postal_code: clean(postalCode, 10),
+  };
+
+  const row = {
+    base_address_line1: address.address_line1,
+    base_city: address.city,
+    base_state: address.state,
+    base_postal_code: address.postal_code,
+    // Cleared before the lookup, never after. A failed geocode must leave the
+    // base unplaced rather than still pointing at the previous building - the
+    // old pin is the one answer that is definitely wrong now.
+    base_lat: null,
+    base_lng: null,
+    base_geocoded_at: null,
+    base_geocode_failed: false,
+    updated_at: new Date().toISOString(),
+    updated_by: opsUserId,
+  };
+
+  if (address.address_line1) {
+    const found = await geocode.lookupOnce(geocode.addressLine(address));
+    if (found) {
+      row.base_lat = found.lat;
+      row.base_lng = found.lng;
+      row.base_geocoded_at = new Date().toISOString();
+    } else {
+      row.base_geocode_failed = true;
+      row.base_geocoded_at = new Date().toISOString();
+    }
+  }
+
+  const { error } = await db.from('app_settings').update(row).eq('id', true);
+  if (error) throw error;
+
+  cached = null;
+  return serviceBase();
+}
+
 // THE WEIGHT THRESHOLDS, as the comparison code wants them. Read through here
 // so there is one place that knows the column names and one place that knows
 // what to do when the row cannot be read.
@@ -140,5 +235,7 @@ async function setWeightLimits(
 }
 
 module.exports = {
+  serviceBase,
+  setServiceBase,
   weightLimits,
   setWeightLimits, read, takingOrders, pausedReason, setTakingOrders, CACHE_MS };

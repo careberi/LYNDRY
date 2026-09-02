@@ -613,7 +613,10 @@ async function board(dateIso, fromTime, driverId = null) {
   // require here would close a loop through orders.js.
   const driversCore = require('./drivers');
   const driver = driverId ? await driversCore.find(driverId) : null;
-  const home = driver ? driversCore.baseOf(driver) : { ...geocode.BASE, own: false };
+  // THE SERVICE BASE IS A SETTING NOW, not a constant nobody chose. Read once
+  // per board rather than per driver - they all share it.
+  const serviceBase = await driversCore.serviceBase();
+  const home = driversCore.baseOf(driver, serviceBase);
 
   // THE ROUTE IS SOLVED FROM WHERE HE IS, NOT WHERE HE STARTED.
   //
@@ -1036,6 +1039,7 @@ async function board(dateIso, fromTime, driverId = null) {
     driver,
     base,
     home,
+    serviceBase,
     vehicle,
     load: {
       ...capacity,

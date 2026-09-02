@@ -76,11 +76,26 @@ function baseAddress(driver) {
 // which is what every route used before drivers had bases - so nothing breaks
 // on the day this ships and a driver whose base is not filled in yet still gets
 // a sensible route rather than none.
-function baseOf(driver) {
+// `fallback` is the SERVICE base, which is now a setting somebody typed rather
+// than a constant. It is passed in rather than read here because this is
+// synchronous and called in a loop - a database read per driver, per render,
+// for one value they all share is waste. Callers that have loaded settings pass
+// it; anything that has not still gets the frozen constant, which is exactly
+// what every route used before the setting existed.
+function baseOf(driver, fallback = null) {
   if (driver && driver.base_lat != null && driver.base_lng != null) {
     return { lat: Number(driver.base_lat), lng: Number(driver.base_lng), own: true };
   }
-  return { ...geocode.BASE, own: false };
+  const base = fallback || geocode.BASE;
+  return { lat: Number(base.lat), lng: Number(base.lng), own: false };
+}
+
+// The service base as everything that routes should see it: what Neil typed on
+// the routing page, or the constant if he never has.
+async function serviceBase() {
+  // Required lazily. settings requires geocode and drivers requires both, and
+  // a top-level require here closes the loop into a half-built module.
+  return require('./settings').serviceBase();
 }
 
 // Put a driver's base on the map. Best effort and after the fact, like the
@@ -358,9 +373,11 @@ async function nearest(at, { drivers = null, weekday = null, time = null } = {})
     if (working.length) candidates = working;
   }
 
+  const fallback = await serviceBase();
+
   let best = null;
   for (const driver of candidates) {
-    const base = baseOf(driver);
+    const base = baseOf(driver, fallback);
     const miles = geocode.milesBetween(base, at);
     if (!best || miles < best.miles) best = { driver, miles, ownBase: base.own };
   }
@@ -455,9 +472,11 @@ async function board(dateIso) {
 
   const all = data || [];
 
+  const fallback = await serviceBase();
+
   const rows = list.map((driver) => ({
     driver,
-    base: baseOf(driver),
+    base: baseOf(driver, fallback),
     orders: all.filter((o) => o.driver_id === driver.id),
     progress: progressOf(all.filter((o) => o.driver_id === driver.id)),
   }));
@@ -471,6 +490,7 @@ async function board(dateIso) {
 }
 
 module.exports = {
+  serviceBase,
   DRIVER_FIELDS,
   active,
   hoursFor,
