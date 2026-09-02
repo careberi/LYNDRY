@@ -504,7 +504,7 @@ function table(headings, rows) {
 // would drift the first time one of them learned something.
 // ---------------------------------------------------------------------------
 
-function pickupSequence(order, tasks, { notice, problem }) {
+function pickupSequence(order, tasks, { notice, problem, laundromats = [], mayOverride = false, refused = false }) {
   const step = tasks.find((t) => !t.done) || null;
   const done = tasks.filter((t) => t.done).length;
 
@@ -559,6 +559,122 @@ function pickupSequence(order, tasks, { notice, problem }) {
         <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:16px;">
           Save bag ${t.position}
         </button>
+      </form>`;
+    }
+
+    if (t.key === 'at_partner') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/at-partner" style="margin:0;">
+        ${
+          // Which laundromat, defaulted to the one this order was PLANNED for
+          // when it was booked. Still a choice - a partner can be shut on the
+          // day - but the expected answer is already selected, so the common
+          // case is one tap.
+          laundromats.length
+            ? `<label class="field-label" for="partner_id">Which laundromat</label>
+               <select class="input input-lg" id="partner_id" name="partner_id"
+                       style="width:100%;margin-bottom:14px;">
+                 ${laundromats
+                   .map(
+                     (p) =>
+                       `<option value="${p.id}"${
+                         p.id === order.intended_partner_id ? ' selected' : ''
+                       }>${escapeHtml(p.name)}</option>`
+                   )
+                   .join('')}
+                 <option value="">Somewhere else</option>
+               </select>`
+            : ''
+        }
+        <button type="submit" class="btn btn-primary btn-lg btn-full">Handed it over</button>
+      </form>`;
+    }
+
+    if (t.key === 'ready') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/ready" style="margin:0;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">They have finished it</button>
+      </form>`;
+    }
+
+    if (t.key === 'return') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/return"
+            style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:0;">
+        <div style="flex:1 1 150px;min-width:0;">
+          <label class="field-label" for="rc">Bags off their shelf</label>
+          <input class="field" id="rc" name="bag_count" type="number" min="1" max="40"
+                 inputmode="numeric" required autofocus>
+        </div>
+        <div style="flex:1 1 150px;min-width:0;">
+          <label class="field-label" for="rw">What they weigh</label>
+          <input class="field" id="rw" name="weight_lb" type="number" step="0.1" min="0" max="400"
+                 inputmode="decimal" required>
+        </div>
+        <button class="btn btn-primary btn-lg" type="submit">Save</button>
+        ${
+          refused && mayOverride
+            ? `<div style="flex:1 1 100%;padding-top:16px;margin-top:4px;
+                           border-top:2px dashed var(--stain-500);">
+                 <label class="field-label" for="ovr">Take it anyway - why?</label>
+                 <p class="field-hint" style="margin:0 0 10px;">
+                   It goes on the order with your name on it and still opens an
+                   issue for the morning.
+                 </p>
+                 <input class="field" id="ovr" name="override_reason" type="text" maxlength="300"
+                        placeholder="counted them twice with the owner, all four are here">
+               </div>`
+            : ''
+        }
+      </form>`;
+    }
+
+    if (t.key === 'out') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/out-for-delivery" style="margin:0;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">Out for delivery</button>
+      </form>`;
+    }
+
+    if (t.key === 'scan') {
+      return `
+      ${
+        (t.scan.labels || []).length
+          ? `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+               ${t.scan.labels
+                 .map(
+                   (l) => `<div style="display:flex;gap:10px;align-items:center;font-size:15px;">
+                             <span style="width:20px;height:20px;border:2px solid var(--ink-900);border-radius:5px;
+                                          background:${l.scanned ? 'var(--suds-500)' : 'var(--paper-000)'};
+                                          display:inline-flex;align-items:center;justify-content:center;
+                                          font-size:13px;font-weight:700;">${l.scanned ? '&#10003;' : ''}</span>
+                             <span style="font-family:var(--font-mono);font-weight:700;">${escapeHtml(l.code || '')}</span>
+                           </div>`
+                 )
+                 .join('')}
+             </div>`
+          : ''
+      }
+      ${scanField({
+        action: `/ops/orders/${order.order_number}/door-scan`,
+        label: 'Bag in your hand',
+        buttonLabel: 'Check',
+        autofocus: true,
+        hint: describeCodeFormat(),
+      })}`;
+    }
+
+    if (t.key === 'delivered') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/delivered"
+            enctype="multipart/form-data" style="margin:0;">
+        <label class="field-label" for="dphoto">Photo where you left them</label>
+        <input class="input input-lg" type="file" id="dphoto" name="photo"
+               accept="image/*" capture="environment" required style="width:100%;margin-bottom:14px;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">Delivered</button>
+        <span class="field-hint" style="display:block;margin-top:10px;">
+          This charges the card.
+        </span>
       </form>`;
     }
 
@@ -1204,7 +1320,11 @@ const ORDER_FIELDS =
   // The pickup sequence reads its last step off these. collected_at is
   // step 1 and van_confirmed_at is step 4; without them the card cannot
   // tell a door that is finished from one that has not started.
-  'collected_at, van_confirmed_at, ' +
+  'collected_at, van_confirmed_at, at_partner_at, ' +
+  // Where it was PLANNED to go, so the laundromat picker on the sequence can
+  // default to it. Without this the select had nothing selected and the
+  // common case stopped being one tap.
+  'intended_partner_id, ' +
   'delivery_photo_url, notes, created_at, from_schedule, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
@@ -2006,12 +2126,19 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     //
     // The steps come from src/core/run.js, the same function the guided run
     // uses, so there is one answer to "what now" rather than two.
-    const inPickupPhase =
-      ['REQUESTED', 'IN_PROCESS'].includes(order.status) && !order.van_confirmed_at;
+    // ONE TASK AT A TIME, FOR THE WHOLE ORDER. Neil's rule, extended past the
+    // doorstep: the page used to offer every legal transition at once - drop
+    // at partner AND out for delivery, with a weight box under them - which is
+    // a choice where the day has a sequence.
+    //
+    // Only while there is still something to do. A delivered or cancelled
+    // order falls back to the ordinary card, which is a record rather than a
+    // set of buttons.
+    const stillRunning = !['DELIVERED', 'CANCELED'].includes(order.status);
 
     const pickupTasks =
-      inPickupPhase && roles.can(req.opsUser, 'orders.act')
-        ? await runCore.tasksForCollect(order)
+      stillRunning && roles.can(req.opsUser, 'orders.act')
+        ? await runCore.tasksForOrder(order)
         : null;
 
     const bagScan = {
@@ -2059,6 +2186,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
       ${pickupTasks
         ? pickupSequence(order, pickupTasks, {
+            laundromats,
+            mayOverride: roles.can(req.opsUser, 'orders.override'),
+            refused: /did not|short|heavier|lighter/i.test(String(req.query.problem || '')),
             notice: req.query.note
               ? String(req.query.note).slice(0, 200)
               : req.query.done

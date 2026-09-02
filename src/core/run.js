@@ -156,6 +156,108 @@ async function tasksForCollect(order) {
   return tasks;
 }
 
+// ---------------------------------------------------------------------------
+// THE WHOLE ORDER, ONE TASK AT A TIME.
+//
+// NEIL'S RULE, extended past the doorstep: "There should only be one thing
+// that I can do at a specific time... there's a specific task to do. The
+// person doing that task has to click a confirmation that says that task is
+// done to get to the next task."
+//
+// The order page used to show every legal transition at once - Dropped at
+// partner AND Out for delivery, side by side, with a weight box under them.
+// Both were legal, because the laundromat leg is optional in the state
+// machine, so the page offered a choice where the day has a sequence.
+//
+// WHY THE CHOICE COLLAPSED. Since 0048 every order is PLANNED to a laundromat
+// when it is booked, so "is this going to a partner" is a fact on the order
+// rather than a question for whoever is looking at the screen. An order with a
+// laundromat goes to it; an order with none goes straight back out. Either way
+// there is one next thing.
+//
+// It reads the state machine rather than restating it - orders.ALLOWED_NEXT
+// still decides what is legal, and every button posts to the route it always
+// posted to. This only picks which one of them to show.
+// ---------------------------------------------------------------------------
+
+async function tasksAfterPickup(order) {
+  const tasks = [];
+  const partnerBound = Boolean(order.partner_id || order.intended_partner_id);
+
+  // --- to the laundromat ----------------------------------------------------
+  if (partnerBound) {
+    tasks.push({
+      key: 'at_partner',
+      title: order.at_partner_at ? 'Handed to the laundromat' : 'Hand it to the laundromat',
+      detail: 'Take the clips off as you hand them over - those numbers go back in the van.',
+      done: Boolean(order.at_partner_at) || ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status),
+    });
+
+    tasks.push({
+      key: 'ready',
+      title: order.status === 'AT_PARTNER' ? 'Waiting on the laundromat' : 'Laundromat has finished',
+      detail:
+        'They tap it themselves on the tag page. Mark it here if they tell you instead.',
+      done: ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status),
+    });
+
+    // --- what came back ------------------------------------------------------
+    //
+    // Before anything moves and before the customer is told anything. A real
+    // order once went out, and its customer was texted, while nobody had yet
+    // recorded what came off the shelf.
+    tasks.push({
+      key: 'return',
+      title:
+        order.return_bag_count != null
+          ? `${order.return_bag_count} bag${order.return_bag_count === 1 ? '' : 's'} back, ${Number(order.return_weight_lb || 0).toFixed(1)} lb`
+          : 'Weigh what came back',
+      detail:
+        'How many bags and what they weigh. It is checked against what you collected, and only then do the clips go on.',
+      done: order.return_bag_count != null,
+    });
+  }
+
+  // --- back out to the door -------------------------------------------------
+  tasks.push({
+    key: 'out',
+    title: order.status === 'OUT_FOR_DELIVERY' || order.status === 'DELIVERED'
+      ? 'Out for delivery'
+      : 'Load it and set off',
+    detail: 'The customer is texted that it is on its way.',
+    done: ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status),
+  });
+
+  // --- the door -------------------------------------------------------------
+  const scan = await loadout.allBagsScanned(order);
+
+  tasks.push({
+    key: 'scan',
+    title: scan.allScanned ? 'Bags checked' : 'Scan every bag at the door',
+    detail: 'The scan is a confirmation, not a search. It agrees or it shouts.',
+    done: Boolean(scan.allScanned),
+    scan,
+  });
+
+  tasks.push({
+    key: 'delivered',
+    title: order.status === 'DELIVERED' ? 'Delivered' : 'Photo, then delivered',
+    detail: 'One picture of the drop-off, however many bags there were. This charges the card.',
+    done: order.status === 'DELIVERED',
+    blockedBy: scan.allScanned ? null : 'scan',
+  });
+
+  return tasks;
+}
+
+// Every task for an order, from the doorstep to the doorstep. The pickup half
+// only while the bags are still at the customer's door; after that the rest.
+async function tasksForOrder(order) {
+  const pickup = await tasksForCollect(order);
+  const rest = await tasksAfterPickup(order);
+  return [...pickup, ...rest];
+}
+
 async function tasksForDeliver(order) {
   const scan = await loadout.allBagsScanned(order);
 
@@ -426,5 +528,7 @@ module.exports = {
   addressOf,
   stopDone,
   tasksForCollect,
+  tasksAfterPickup,
+  tasksForOrder,
   tasksForDeliver,
 };
