@@ -490,7 +490,7 @@ function table(headings, rows) {
 //
 //   1. Collect the bags       the screen says where and how many
 //   2. Tag each bag           one tag on it, scan the code
-//   3. Weigh each bag         on the scale, photograph the display
+//   3. Weigh each bag         on the scale, type what it says
 //   4. Clips on, in the van   the numbers, then a confirmation
 //
 // WHY HIDING THE LATER STEPS IS THE WHOLE POINT. The card used to show the
@@ -733,7 +733,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
         <button type="submit" class="btn btn-primary btn-lg btn-full">${s.label}</button>
         <span class="field-hint">
           One photo of where you left it, however many bags there were. The
-          customer gets a link to it that expires after 30 days.
+          customer gets a link to it on our own domain, which keeps working.
         </span>
       </form>`
       : `

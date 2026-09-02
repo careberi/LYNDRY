@@ -457,7 +457,7 @@ function bagTagPage(label, order, code, token, query) {
       body: header + weightBox({
         code, token, error: bad,
         heading: 'What does this bag weigh?',
-        blurb: 'Put it on the scale and photograph the display. This is the number that prices the order.',
+        blurb: 'Put it on the scale and type what it says. This is the number that prices the order.',
         action: `/o/${encodeURIComponent(code)}/weight`,
       }) + footer,
     });

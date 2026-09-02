@@ -38,7 +38,7 @@ const loadout = require('./loadout');
 // A PICKUP, IN THE ORDER A DRIVER ACTUALLY DOES IT.
 //
 // He is standing at a door with his hands full. So: how many bags are there?
-// Then one bag at a time - sticker on it, on the scale, photograph the display -
+// Then one bag at a time - tag on it, then on the scale -
 // and on to the next. Then they go in the van.
 //
 // The old order asked for stickers before anybody had said how many bags there
