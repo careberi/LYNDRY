@@ -283,7 +283,7 @@ const OPS_MENUS = Object.freeze([
     items: [
       // The dashboard first: taking orders, the weight thresholds, and the way
       // through to promotions, text blasts and issues.
-      { href: '/ops/admin', label: 'Admin', permission: 'service.manage' },
+      { href: '/ops/admin', label: 'Admin dashboard', permission: 'service.manage' },
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
       // "Messages" at Neil's request. It was called Conversations to make the
       // point that the screen is one row per phone NUMBER and holds people who
@@ -5273,7 +5273,7 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
 
     return res.type('html').send(
       adminPage({
-        title: 'Admin',
+        title: 'Admin dashboard',
         active: '/ops/admin',
         body: adminDashboardBody({
           settings: current,

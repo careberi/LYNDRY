@@ -80,7 +80,7 @@ function adminDashboardBody({
 
   return `
 <p class="eyebrow" style="margin:0 0 8px;">The business</p>
-<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Admin</h1>
+<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Admin dashboard</h1>
 <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
   Everything you decide, in one place. The day itself - orders, the round,
   routing - is under Dashboard.

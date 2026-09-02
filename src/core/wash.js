@@ -24,8 +24,17 @@ const OPTIONS = Object.freeze({
     label: 'Detergent',
     default: 'STANDARD',
     choices: Object.freeze([
-      Object.freeze({ value: 'STANDARD', label: 'Standard scented', cents: 0 }),
-      Object.freeze({ value: 'FREE_CLEAR', label: 'Free & clear, fragrance-free', cents: 200 }),
+      Object.freeze({ value: 'STANDARD', label: 'Standard scented', short: 'Standard Scented', cents: 0 }),
+      Object.freeze({
+        value: 'FREE_CLEAR',
+        label: 'Free & clear, fragrance-free',
+        // SHORT NAMES EXIST FOR THE TEXT MESSAGE ONLY. The full label is what a
+        // laundromat reads off a tag, where there is room and precision
+        // matters; this is what a customer reads on a phone, where every
+        // character is billed by the segment.
+        short: 'Free & Clear',
+        cents: 200,
+      }),
     ]),
   }),
 
@@ -33,9 +42,9 @@ const OPTIONS = Object.freeze({
     label: 'Softener',
     default: 'STANDARD',
     choices: Object.freeze([
-      Object.freeze({ value: 'STANDARD', label: 'Standard scented', cents: 0 }),
-      Object.freeze({ value: 'NONE', label: 'No softener', cents: 0 }),
-      Object.freeze({ value: 'FRAGRANCE_FREE', label: 'Fragrance-free', cents: 200 }),
+      Object.freeze({ value: 'STANDARD', label: 'Standard scented', short: 'Standard Scented', cents: 0 }),
+      Object.freeze({ value: 'NONE', label: 'No softener', short: 'No Softener', cents: 0 }),
+      Object.freeze({ value: 'FRAGRANCE_FREE', label: 'Fragrance-free', short: 'Fragrance-Free', cents: 200 }),
     ]),
   }),
 
@@ -144,24 +153,45 @@ function orList(items) {
   return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
 }
 
+// NEIL'S WORDING, BUILT FROM THE OPTIONS ABOVE.
+//
+// A labelled list rather than a sentence, which is a deliberate exception to
+// the never-send-a-menu rule and worth saying why it is not one: there are no
+// numbers to reply with, no codes, no "reply 1 for". A customer answers it the
+// way they would answer a person - "cold, standard, no softener" - and the
+// three lines only make the choices legible instead of running them together
+// in a paragraph that has to be read twice.
+//
+// GENERATED, NOT TYPED OUT, so a price that changes on the options above
+// changes what the customer is quoted. The one thing this file must never do
+// is name a figure the billing code does not agree with.
+//
+// Title Case and the short names, because this is the customer's message. The
+// full labels are what a laundromat reads off a tag, where there is room; here
+// every character is billed by the segment. It lands at 183 characters - two
+// segments, the same as the sentence it replaces, so the clarity is free.
 const QUESTION = (() => {
-  const water = orList(OPTIONS.water_temp.choices.map((c) => c.label.toLowerCase()));
+  const name = (c) => c.short || c.label;
 
-  const priced = (key) =>
-    orList(
-      OPTIONS[key].choices.map(
-        // "&" is ASCII and would send fine, but nobody says it out loud.
-        (c) =>
-          `${c.label.toLowerCase().replace(' & ', ' and ')}` +
-          `${c.cents ? ` for ${money(c.cents)} more` : ''}`
-      )
+  // "a, b, or c" - Neil's punctuation, including the serial comma, because
+  // this list is read at a glance rather than out loud.
+  const list = (choices) => {
+    const parts = choices.map(
+      (c) => `${name(c)}${c.cents ? ` (+${money(c.cents)})` : ''}`
     );
+    if (parts.length < 3) return parts.join(' or ');
+    return `${parts.slice(0, -1).join(', ')}, or ${parts[parts.length - 1]}`;
+  };
 
-  return (
-    `How do you like it washed: ${water} water? ` +
-    `For detergent, ${priced('detergent')}? ` +
-    `And for softener, ${priced('fabric_softener')}?`
-  );
+  return [
+    'How would you like your laundry washed?',
+    '',
+    `Water: ${list(OPTIONS.water_temp.choices)}`,
+    '',
+    `Detergent: ${list(OPTIONS.detergent.choices)}`,
+    '',
+    `Softener: ${list(OPTIONS.fabric_softener.choices)}`,
+  ].join('\n');
 })();
 
 module.exports = {
