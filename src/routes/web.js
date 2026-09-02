@@ -236,8 +236,31 @@ async function extraTokensFor(page, req) {
   // The partner form needs empty values for its fields on a fresh visit.
   if (page.path === '/partners') return partnerTokens();
 
-  // The home page shows a QR code that opens the customer's messaging app.
-  if (page.path === '/') return { QR_SVG: await textUsQrSvg() };
+  // The home page shows a QR code that opens the customer's messaging app,
+  // and says what went wrong when a submission bounced back.
+  //
+  // ONLY THE TWO PROBLEMS THAT ARE THE VISITOR'S OWN INPUT. Everything else
+  // /start can refuse - an opted-out number, a throttle - answers with the
+  // ordinary success page, because saying more would reveal something about a
+  // NUMBER rather than about the form. An unticked box and an unreadable
+  // number reveal nothing: the visitor is the one person who already knows.
+  if (page.path === '/') {
+    const problems = {
+      consent: 'Tick the box to say we can text you, then try again.',
+      phone: 'That does not look like a US mobile number. Ten digits, area code first.',
+    };
+
+    const said = problems[String(req.query.problem || '')] || null;
+
+    return {
+      QR_SVG: await textUsQrSvg(),
+      START_PROBLEM: said
+        ? `<p role="alert" style="margin:14px 0 0;padding:12px 15px;border:2px solid var(--ink-900);
+                   border-radius:12px;background:var(--stain-500);color:var(--paper-050);
+                   font-size:15px;font-weight:600;max-width:540px;">${escapeHtml(said)}</p>`
+        : '',
+    };
+  }
 
   return {};
 }
@@ -501,16 +524,30 @@ router.post('/start', async (req, res, next) => {
     }
 
     if (form.sms_consent !== 'yes') {
-      // The box is `required` in the markup, so reaching here means the form
-      // was posted by something other than the page. No text is sent.
+      // SAY SO, rather than showing the success page.
+      //
+      // Everything else here answers identically whatever happened, because a
+      // refusal must not reveal anything about the NUMBER somebody typed -
+      // "that number has opted out" would turn this form into a way to find out
+      // who is a customer. An unticked box reveals nothing about anybody: it is
+      // the visitor's own input, and they are the one person who already knows.
+      //
+      // The silent success page was the worst of both. Neil clicked Text me
+      // without ticking it and got no error, no text and no explanation - and
+      // a visitor who thinks they have signed up and never hears from us is
+      // one we have simply lost.
       console.warn('Refused a /start submission with no consent box ticked.');
-      return done();
+      return res.redirect(303, '/?problem=consent#start');
     }
 
     const phone = normalisePhone(form.phone);
     if (!phone) {
+      // Also the visitor's own input, and also safe to say out loud: a number
+      // that does not parse is not a number we could be revealing anything
+      // about. Everything below this point IS about a real number and goes
+      // back to answering identically.
       console.warn('Refused a /start submission with an unusable number.');
-      return done();
+      return res.redirect(303, '/?problem=phone#start');
     }
 
     if (

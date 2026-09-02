@@ -700,10 +700,16 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
   }
 
   // Their wash, as they chose it. Drops out entirely if somehow unset.
+  //
+  // THROUGH wash.js, NOT AGAINST VALUES TYPED OUT HERE. This read
+  // detergent === 'HYPOALLERGENIC', which has not been a value since the paid
+  // options went in - so somebody who chose FREE_CLEAR was told in writing
+  // they were getting "standard detergent", while being charged $2 extra for
+  // the one they actually picked. And fabric_softener is a string now, so
+  // 'NONE' was truthy and read back as "softener on": the exact opposite of
+  // what they asked for, in the one message that is the record of the order.
   const wash = prefs.water_temp
-    ? ` Washed ${String(prefs.water_temp).toLowerCase()} with ` +
-      `${prefs.detergent === 'HYPOALLERGENIC' ? 'hypoallergenic' : 'standard'} detergent, ` +
-      `${prefs.fabric_softener ? 'softener on' : 'no softener'}.`
+    ? ` ${wash.describeSaved(prefs)}.`
     : '';
 
   // The price, and WHEN it gets taken. Stated as something that has not

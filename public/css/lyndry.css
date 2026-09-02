@@ -382,8 +382,25 @@
    opacity rather than display:none keeps it reachable by keyboard and by
    screen readers — and it still gates form submission, which is the whole
    point of the consent box. */
-.check { display: inline-flex; align-items: flex-start; gap: 12px; cursor: pointer; }
-.check input { position: absolute; opacity: 0; width: 0; height: 0; }
+.check {
+  position: relative; display: inline-flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+/* THE INPUT SITS ON TOP OF ITS OWN BOX, INVISIBLE BUT REAL.
+   It used to be width:0 height:0, which looks identical and breaks the one
+   thing a required checkbox is for: a browser CANNOT show "Please check this
+   box" on a control it cannot focus, so Chrome refused the submit and said
+   nothing at all. Click Text me with the box unticked and the page simply did
+   not respond - no error, no text, no explanation.
+   Real dimensions, still invisible, still styled by the span next to it. */
+.check input {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
 
 .check-box {
   display: grid;

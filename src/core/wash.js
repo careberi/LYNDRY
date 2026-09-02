@@ -129,6 +129,36 @@ function describeChoices(key) {
     .join(', ');
 }
 
+// WHAT ONE CUSTOMER ACTUALLY CHOSE, as a sentence for a text message.
+//
+// Not to be confused with describeChoices() above, which lists what is on
+// OFFER for a key. This one reads a saved profile back, and it is what the
+// booking confirmation says - the single message that is the record of the
+// order, so it has to be right.
+//
+// It reads through washLines(), which is the same function the laundromat's
+// tag page uses, so a customer and the person washing their clothes are being
+// told the same thing from the same place.
+function describeSaved(prefs) {
+  const lines = washLines(prefs);
+  if (!lines.length) return '';
+
+  const water = lines.find(([k]) => k === 'Water');
+  const detergent = lines.find(([k]) => k === 'Detergent');
+  const softener = lines.find(([k]) => k === 'Softener');
+
+  const parts = [];
+  if (water) parts.push(`Washed ${water[1].toLowerCase()}`);
+  if (detergent) parts.push(`with ${detergent[1].toLowerCase()} detergent`);
+  if (softener) {
+    parts.push(
+      /^no /i.test(softener[1]) ? 'and no softener' : `and ${softener[1].toLowerCase()} softener`
+    );
+  }
+
+  return parts.join(' ');
+}
+
 // THE WASH QUESTION, IN THE ONE PLACE IT IS ALLOWED TO EXIST.
 //
 // Built from OPTIONS above rather than typed out, so a price that changes here
@@ -204,4 +234,5 @@ module.exports = {
   surchargeFor,
   washLines,
   describeChoices,
+  describeSaved,
 };
