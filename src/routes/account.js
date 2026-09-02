@@ -562,6 +562,9 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
         bad_date: result.detail,
         bad_time: result.detail,
         already_booked: 'You already have a pickup booked. Move it rather than booking a second.',
+        // Exactly what the text thread says, from the same function - the two
+        // doors must not explain the same refusal two different ways.
+        time_unavailable: result.say,
       }[result.reason];
 
       return back(res, `?error=${encodeURIComponent(message || 'That did not work.')}`);

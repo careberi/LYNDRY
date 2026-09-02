@@ -80,6 +80,11 @@ async function createOrder(customer, input) {
       case 'bad_date':
       case 'bad_time':
         return result.detail;
+      // The run they asked for has gone. The sentence explains which one and
+      // offers the next; nothing has been booked, and nothing will be until
+      // they say yes and the AI calls again with a time we can actually do.
+      case 'time_unavailable':
+        return result.say;
       case 'already_booked':
         return (
           `You've already got a pickup booked for ${booking.whenLine(result.order)}. ` +
@@ -229,6 +234,24 @@ async function rescheduleOrder(customer, input) {
     input.new_date,
     newTime === undefined ? normaliseTime(order.pickup_time) : newTime
   );
+
+  // WE DO NOT MOVE SOMEBODY TO A TIME THEY DID NOT ASK FOR.
+  //
+  // A customer texted "update my order to be picked up today at 1" at ten past
+  // twelve and got back, as settled fact, "no problem at all, we've moved it to
+  // Wednesday 2 Sep between 2 and 4pm". The window was correct - the midday run
+  // had already gone out - but nobody asked them whether 2 to 4 suited, and the
+  // order had already been changed by the time they read it.
+  //
+  // So the code refuses instead. It explains which run has gone, offers the
+  // next one, and asks. Nothing is written.
+  //
+  // THE SECOND CALL NEEDS NO NEW ARGUMENT AND NO REMEMBERED STATE: if they say
+  // yes, the AI calls again with a time inside the window it was offered, that
+  // time is one we can actually do, and it books. If they say no, nothing ever
+  // happened. Same shape as the booking recap - the model asks, the code
+  // decides - and it cannot be talked past, because the refusal is arithmetic.
+  if (window.substituted) return booking.cannotDoThatTime(window);
 
   const updated = await orders.reschedule(order, input.new_date, newTime, window);
   return booking.rescheduledMessage(updated);

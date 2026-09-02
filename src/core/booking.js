@@ -449,11 +449,107 @@ function nextDay(iso) {
 
 // The window a customer actually gets, rolling to tomorrow when today is done.
 // Always returns something, so nothing ever has to ask the customer to pick.
+//
+// IT ALSO SAYS WHEN IT COULD NOT GIVE THEM WHAT THEY ASKED FOR, and that half
+// is the point. A customer texted "update my order to be picked up today at 1"
+// at ten past twelve and was told, as settled fact, "no problem at all, we've
+// moved it to Wednesday 2 Sep between 2 and 4pm". The window was right - the
+// midday run had already started, so 1pm was gone - but nobody had asked them
+// whether 2 to 4 suited, and the change was already made by the time they read
+// it.
+//
+// Picking the window is arithmetic and belongs here. Deciding that a DIFFERENT
+// time is acceptable belongs to the customer. So this returns both the answer
+// and whether the answer is what they asked for, and the caller has to deal
+// with the difference rather than papering over it.
 function windowFor(date, requestedTime) {
-  return chooseWindow(date, requestedTime) || {
+  const asked = normaliseTime(requestedTime);
+  const today = chooseWindow(date, requestedTime);
+
+  const window = today || {
     ...chooseWindow(nextDay(date), requestedTime),
     rolledToNextDay: true,
   };
+
+  // No time asked for is not a substitution - there was nothing to substitute.
+  // They said "tomorrow" and we picked a sensible window, which is the deal.
+  if (!asked) return { ...window, askedFor: null, substituted: false, why: null };
+
+  const askedMin = toMinutes(asked);
+  const inside =
+    !window.rolledToNextDay &&
+    askedMin >= toMinutes(window.start) &&
+    askedMin < toMinutes(window.end);
+
+  // The very last minute of the day belongs to the window that ends on it - the
+  // same exception chooseWindow makes, and it has to be made in both places or
+  // "9pm" reads as a substitution for itself.
+  const isCloseOfPlay = !window.rolledToNextDay && askedMin === toMinutes(window.end);
+
+  if (inside || isCloseOfPlay) {
+    return { ...window, askedFor: asked, substituted: false, why: null };
+  }
+
+  return {
+    ...window,
+    askedFor: asked,
+    substituted: true,
+    // Three reasons, and a customer would react differently to each. Rolling
+    // to another day is a bigger change than shifting a couple of hours.
+    why: window.rolledToNextDay
+      ? 'day_full'
+      : askedMin < toMinutes(window.start)
+        ? 'window_running'
+        : 'after_hours',
+  };
+}
+
+// The refusal, as a sentence somebody would actually say. Written here rather
+// than at each call site so the text thread and the website cannot end up
+// explaining the same thing two different ways.
+//
+// IT NAMES THE WINDOW THEY ASKED FOR, not just the time. "Our 12 to 2 run is
+// already out" is a reason; "we cannot do 1pm" is a brush-off, and the whole
+// point of this sentence is that the customer can see why and decide.
+function cannotDoThatTime(window) {
+  const offer = describeWindow(window.start, window.end);
+  const sameDay = !window.rolledToNextDay && window.date === today();
+  const when = sameDay ? 'today' : readableDate(window.date);
+  const asked = readableTime(window.askedFor);
+
+  if (window.why === 'day_full') {
+    return (
+      `${asked} today is not something we can promise - we are done for the ` +
+      `day. The next slot is ${when} ${offer}. Does that work?`
+    );
+  }
+
+  if (window.why === 'after_hours') {
+    return `We do not run as late as ${asked}. The closest we can do is ${when} ${offer}. Does that work?`;
+  }
+
+  // window_running. Two quite different situations wear the same reason code,
+  // and saying the wrong one sounds like we are not paying attention: a run
+  // that is out on the road right now, and one that finished this morning.
+  const askedMin = toMinutes(window.askedFor);
+  const theirs = PICKUP_WINDOWS.find(
+    (w) => askedMin >= toMinutes(w.start) && askedMin < toMinutes(w.end)
+  );
+  const nowMin = toMinutes(nowInService().time);
+
+  const running =
+    theirs && nowMin >= toMinutes(theirs.start) && nowMin < toMinutes(theirs.end);
+
+  const reason = running
+    ? // "between 12 and 2pm" is how we describe a promise; "12 to 2" is how
+      // somebody refers to a run. Same window, different job for the words.
+      `our ${describeWindow(theirs.start, theirs.end).replace('between ', '').replace(' and ', ' to ')} run is already out`
+    : `${asked} has already gone for today`;
+
+  // The reason is built as a clause so it can be read either way round; this
+  // is the whole message, so it gets a capital.
+  const opener = reason.charAt(0).toUpperCase() + reason.slice(1);
+  return `${opener}, so we cannot get to you then. The next one we can do is ${when} ${offer}. Does that work?`;
 }
 
 // WHICH WINDOWS ARE STILL BOOKABLE TODAY, and which have gone.
@@ -590,6 +686,18 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   // The window is decided here and stored, never recomputed. If today is done
   // it rolls to tomorrow rather than asking the customer to choose again.
   const window = windowFor(pickupDate, pickupTime);
+
+  // NOBODY IS BOOKED INTO A TIME THEY DID NOT AGREE TO. Same rule as moving an
+  // existing pickup, and for the same reason: a window we chose because theirs
+  // had gone is a different promise from the one they made, and it needs a yes.
+  //
+  // A STANDING ORDER IS EXEMPT, and has to be. It was agreed once, weeks ago,
+  // and the overnight job that books it has nobody to ask - refusing there
+  // would mean a customer with a Tuesday morning arrangement quietly stops
+  // being collected the first time the job runs late.
+  if (window.substituted && !fromSchedule) {
+    return { ok: false, reason: 'time_unavailable', window, say: cannotDoThatTime(window) };
+  }
 
   const order = await orders.create({
     customerId: customer.id,
@@ -756,6 +864,7 @@ module.exports = {
   endOfDeliveryDay,
   PICKUP_WINDOWS,
   windowFor,
+  cannotDoThatTime,
   describeWindow,
   listWindows,
   windowsToday,
