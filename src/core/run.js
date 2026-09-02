@@ -374,7 +374,27 @@ async function forDriver(driverId) {
     total: stops.length,
     finished: stops.length > 0 && !current,
     mapLink: current && current.address ? mapLink(current.address) : null,
+
+    // HAS HE SET OFF? "I'm here" is gated behind the directions being opened,
+    // so arrival cannot be confirmed at a place nobody drove to.
+    //
+    // Already standing there counts. Every laundromat visit is two stops at
+    // one door, and a driver who has just handed the dirty bags over is not
+    // going to navigate to where his feet are.
+    navigating: Boolean(stillThere || (arrivalOrder && arrivalOrder.navigating_at)),
   };
+}
+
+// "Take me there." Records that the driver opened the directions, so the
+// arrival button can appear. Best effort: failing to record this must never
+// stop somebody getting directions.
+async function setOff(orderId) {
+  const { error } = await db
+    .from('orders')
+    .update({ navigating_at: new Date().toISOString() })
+    .eq('id', orderId);
+
+  if (error) console.error(`Could not record setting off: ${error.message}`);
 }
 
 // "I'm here." Sets the flag on whichever order carries this stop's arrival.
@@ -390,7 +410,10 @@ async function arrive(orderId) {
 // Cleared whenever a step completes, so the next stop starts at "go here"
 // rather than believing he is still standing at the last one.
 async function leave(orderId) {
-  const { error } = await db.from('orders').update({ arrived_at: null }).eq('id', orderId);
+  const { error } = await db
+    .from('orders')
+    .update({ arrived_at: null, navigating_at: null })
+    .eq('id', orderId);
   if (error) throw error;
 }
 
@@ -399,6 +422,7 @@ module.exports = {
   arrive,
   leave,
   mapLink,
+  setOff,
   addressOf,
   stopDone,
   tasksForCollect,

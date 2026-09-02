@@ -338,6 +338,7 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
       price_cents: priceCents,
       weight_photo_path: photoPath,
       arrived_at: null,
+      navigating_at: null,
     })
     .eq('id', order.id)
     .select('*')

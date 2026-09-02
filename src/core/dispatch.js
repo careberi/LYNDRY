@@ -171,7 +171,10 @@ const BOARD_FIELDS =
   'pickup_window_end, pickup_time, bag_count, weight_lb, partner_id, ' +
   // The guided run reads its position from these, so they travel with the board
   // rather than being fetched again per stop.
-  'collected_at, delivered_at, arrived_at, ' +
+  // navigating_at rides with arrived_at because they answer two halves of the
+  // same question - has he set off, and has he got there. Selecting one and
+  // not the other left the arrival button permanently hidden.
+  'collected_at, delivered_at, arrived_at, navigating_at, ' +
   // WHAT CAME BACK OFF THE LAUNDROMAT, which is how the collect stop knows
   // whether this order has been weighed back in yet. Without them the run has
   // no way to tell a bag still sitting on a shelf from one already in the van,

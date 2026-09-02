@@ -271,7 +271,13 @@ async function transition(order, to) {
   const stamp = TIMESTAMP_FOR[to];
   if (stamp) changes[stamp] = new Date().toISOString();
 
-  if (LEAVES_THE_STOP.includes(to)) changes.arrived_at = null;
+  // navigating_at goes with it. Both describe "the driver is at this order's
+  // next stop right now", and leaving one behind would let the arrival button
+  // appear on the NEXT stop before he had set off for it.
+  if (LEAVES_THE_STOP.includes(to)) {
+    changes.arrived_at = null;
+    changes.navigating_at = null;
+  }
 
   const { data, error } = await db
     .from('orders')

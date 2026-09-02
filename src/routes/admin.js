@@ -2667,6 +2667,52 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
 // deliberately changes nothing about the order except a flag saying the driver
 // is standing at it. Everything that actually moves an order still goes through
 // the same routes the order page uses.
+// "Take me there" goes through us on its way to Google Maps.
+//
+// A GET rather than a POST because it is a LINK - a driver taps it and expects
+// to end up looking at a map, not at a form submission. It changes one flag
+// that only affects which button this driver sees next, so it is not the kind
+// of state change a GET has any business avoiding.
+//
+// Same tab, no target=_blank, and that is the point: opening a new tab would
+// leave this page untouched, so it would still be showing the un-navigated
+// version when he came back. On a phone the Maps app takes the link anyway and
+// the browser stays where it was.
+router.get('/ops/run/going/:id', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const orderId = String(req.params.id);
+    if (!UUID.test(orderId)) return res.redirect(303, '/ops/run');
+
+    const order = await loadOrderForAction(orderId);
+    if (!order) return res.redirect(303, '/ops/run');
+
+    // The same round check every other action does. A driver must not be able
+    // to set off for somebody else's stop.
+    if (
+      !roles.can(req.opsUser, 'customers.view') &&
+      order.driver_id &&
+      order.driver_id !== req.opsUser.id
+    ) {
+      return res.redirect(303, '/ops/run');
+    }
+
+    const to = String(req.query.to || '').slice(0, 300);
+
+    // ONLY EVER OUR OWN MAPS LINK. `to` comes off the page as an address, and
+    // redirecting to whatever a query string asks for would make this an open
+    // redirector on our own domain - a ready-made phishing link, the same hole
+    // ?next= is guarded against on the sign-in page. The URL is rebuilt here
+    // from the address rather than trusted.
+    const destination = to ? runCore.mapLink(to) : null;
+
+    await runCore.setOff(order.id);
+
+    return res.redirect(302, destination || '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/run/here', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const orderId = String((req.body || {}).order_id || '');

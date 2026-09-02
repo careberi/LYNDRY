@@ -76,9 +76,16 @@ function travelCard(run) {
 
     ${
       run.mapLink
-        ? `<a class="btn btn-ink btn-lg btn-full" href="${escapeHtml(run.mapLink)}"
-              target="_blank" rel="noopener" style="margin-bottom:14px;">
-             Take me there ${icon('arrow-right', '22')}
+        ? // THROUGH US ON THE WAY TO THE MAP, so the page knows he set off and
+          // can offer the arrival button afterwards. Same tab on purpose: a new
+          // tab would leave this page untouched and still showing the button he
+          // has already tapped.
+          `<a class="btn btn-${run.navigating ? 'outline' : 'ink'} btn-lg btn-full"
+              href="/ops/run/going/${escapeHtml(run.arrivalOrder ? run.arrivalOrder.id : '')}?to=${encodeURIComponent(
+                run.current.address || ''
+              )}"
+              style="margin-bottom:14px;">
+             ${run.navigating ? 'Directions again' : 'Take me there'} ${icon('arrow-right', '22')}
            </a>`
         : `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
                      background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
@@ -109,7 +116,15 @@ function travelCard(run) {
       // cannot name asks the driver to confirm he has reached somewhere nobody
       // has decided on, and marks the order arrived at a place that does not
       // exist. The line above tells him what to do instead.
-      run.arrivalOrder && (stop.address || stop.kind === 'collect')
+      // ONE THING AT A TIME: directions, THEN arrival. Neil's call, and not
+      // only tidiness - "I'm here" is what unlocks the tasks for this stop, so
+      // a driver who can reach it without opening the directions can confirm
+      // he has arrived somewhere he never drove to, and the screen will then
+      // walk him through collecting a bag at the wrong door.
+      //
+      // Absent rather than disabled, like every other not-yet step on this
+      // screen. A greyed-out button invites tapping and explains nothing.
+      run.arrivalOrder && (stop.address || stop.kind === 'collect') && run.navigating
         ? `<form method="post" action="/ops/run/here" style="margin:0;">
              <input type="hidden" name="order_id" value="${escapeHtml(run.arrivalOrder.id)}">
              <button type="submit" class="btn btn-primary btn-lg btn-full">I'm here</button>
