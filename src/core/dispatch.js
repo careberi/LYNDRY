@@ -1158,6 +1158,26 @@ async function board(dateIso, fromTime, driverId = null) {
     (revenueCents * r2.cardFeePercent) / 100 + charges * r2.cardFeeFixedCents
   );
 
+  // WHAT THE ACTIVE ROUND'S CARD SAYS, once the run is actually known.
+  //
+  // The count was pickups only, which is right for a round nobody is driving
+  // yet and wrong the moment one starts. Neil was standing at a laundromat
+  // handing over three bags and the card for the round he was in said
+  // "nothing" - because both orders had been collected and loaded, so they had
+  // left the pickup count, and the drop-off belongs to no window at all.
+  //
+  // A round's card answers "what is on this round", and a laundromat visit is
+  // on it. So the active round counts the STOPS in the run below it, which is
+  // the same list the driver is looking at and therefore cannot disagree with
+  // it. Rounds nobody is driving keep the pickup count, because that is all
+  // there is to know about them yet.
+  //
+  // Only the display count. Which round is active was decided long before the
+  // stops existed, and re-deciding it here would be a second answer to a
+  // question already answered.
+  const outstanding = stops.filter((st) => !st.done).length || stops.length;
+  if (activeRound) activeRound.count = outstanding;
+
   return {
     date,
     start,

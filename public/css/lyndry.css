@@ -963,6 +963,54 @@
 .grid-2-narrow { grid-template-columns: 0.75fr 1.25fr; } /* sticky heading, content */
 .grid-3-address { display: grid; grid-template-columns: 2fr 0.8fr 1.2fr; gap: 16px; }
 
+/* TICKING A VAN CLIP OFF AT THE LAUNDROMAT.
+
+   A checkbox drawn as the big number the driver says out loud. The input is
+   the control - it is only visually hidden, never display:none - so it keeps
+   its focus ring, its tap target and, crucially, its `required` behaviour:
+   the browser refuses to submit and points at the first unticked one. No
+   JavaScript decides anything here. */
+.clip-tick { position: relative; display: inline-block; cursor: pointer; }
+
+.clip-tick input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.clip-tick span {
+  display: block;
+  min-width: 56px;
+  padding: 12px 14px;
+  border: 2px solid var(--ink-900);
+  border-radius: 12px;
+  background: var(--paper-000);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.1;
+  transition: background 90ms linear, transform 90ms linear;
+}
+
+/* Ticked: it has been taken off the bag and handed over. Ink on suds, like
+   every other "done" on this system. */
+.clip-tick input:checked + span {
+  background: var(--suds-500);
+  box-shadow: inset 0 0 0 2px var(--paper-000);
+}
+
+.clip-tick input:focus-visible + span {
+  outline: 3px solid var(--lilac-500);
+  outline-offset: 2px;
+}
+
+.clip-tick input:active + span { transform: translate(1px, 1px); }
+
 /* THE DAY'S ROUNDS ON /ops/run. Five equal cards on one line, always.
 
    A class rather than an inline grid-template-columns for the reason stated

@@ -543,11 +543,25 @@ async function forDriver(driverId, roundStart = null) {
     if (!orders) continue;
 
     const numbers = [];
+    let aboard = 0;
     for (const order of orders) {
       const labels = await bags.forOrder(order.id);
       numbers.push(...bags.clipsFor(labels));
+      // PICKUP bags that are actually in the van. A delivery sticker bound
+      // later at the laundromat is not something we are carrying in.
+      aboard += labels.filter((l) => l.leg === 'PICKUP' && l.loaded_at).length;
     }
     stop.clips = numbers.sort((a, b) => a - b);
+
+    // BAGS ARE BAGS, NOT ORDERS. The laundromat stop said "2 bags, 90 lb" over
+    // three clips, because the count was needsWash.length + pickups.length -
+    // one per ORDER. A driver handing over three bags reads that as being one
+    // short and starts looking for a bag that was never missing.
+    //
+    // Counted here rather than in dispatch because this is where the labels are
+    // already loaded; dispatch has the orders and would have to fetch them
+    // again to answer the same question.
+    if (stop.kind === 'dropoff' && aboard) stop.bags = aboard;
   }
 
   // The one he is on: the first that is not finished. Not "the next one after

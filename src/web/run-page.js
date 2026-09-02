@@ -525,14 +525,12 @@ function partnerCard(run) {
     }
 
     ${
-      // THE NUMBERS, BIG. This is the one thing said out loud at a counter, so
-      // it is the one thing that has to be readable at arm's length.
-      (stop.clips || []).length
+      // NOT DROPPING: just show what is coming back. There is nothing to tick
+      // off here - the collecting is done bag by bag on the panel above.
+      !dropping && (stop.clips || []).length
         ? `<div style="margin:0 0 22px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
                       background:var(--sunbeam-500);">
-             <p class="eyebrow" style="margin:0 0 10px;">${
-               dropping ? 'Hand over these' : 'Bringing back'
-             }</p>
+             <p class="eyebrow" style="margin:0 0 10px;">Bringing back</p>
              <div style="display:flex;flex-wrap:wrap;gap:10px;">
                ${(stop.clips || [])
                  .map(
@@ -545,11 +543,7 @@ function partnerCard(run) {
                  .join('')}
              </div>
              <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
-               ${
-                 dropping
-                   ? 'Take the clips off as you hand them over - those numbers go back in the van for the next bags.'
-                   : 'These are what you are collecting.'
-               }
+               These are what you are collecting.
              </p>
            </div>`
         : ''
@@ -557,11 +551,48 @@ function partnerCard(run) {
 
     ${
       dropping
-        ? `<form method="post" action="/ops/run/dropped" style="margin:0;">
+        ? // ONE FORM, so ticking the clips gates the button that ends the stop.
+          //
+          // NEIL'S CHANGE: the numbers used to be a poster - here are three
+          // clips, now tap "handed over all of them". He wanted each clip taken
+          // off deliberately, one at a time, and only then the button.
+          //
+          // IT IS CHECKBOXES AND CSS, NOT JAVASCRIPT. `required` on every box
+          // means the browser itself refuses to submit until all of them are
+          // ticked, and says which one is missing - no script, no disabled
+          // button that a driver taps and taps. This screen is used in a
+          // stairwell on two bars, and CLAUDE.md is explicit that a control
+          // which needs a script to work is a control that can fail to work.
+          `<form method="post" action="/ops/run/dropped" style="margin:0;">
              <input type="hidden" name="partner_id" value="${escapeHtml((stop.partner || {}).id || '')}">
              ${(stop.orders || [])
                .map((o) => `<input type="hidden" name="order_id" value="${escapeHtml(o.id)}">`)
                .join('')}
+
+             ${
+               (stop.clips || []).length
+                 ? `<div style="margin:0 0 22px;padding:16px 18px;border:2px solid var(--ink-900);
+                                border-radius:14px;background:var(--sunbeam-500);">
+                      <p class="eyebrow" style="margin:0 0 10px;">Hand over these van clips</p>
+                      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                        ${(stop.clips || [])
+                          .map(
+                            (n) => `
+                        <label class="clip-tick">
+                          <input type="checkbox" name="clip" value="${escapeHtml(n)}" required>
+                          <span>${escapeHtml(n)}</span>
+                        </label>`
+                          )
+                          .join('')}
+                      </div>
+                      <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
+                        Take each clip off as you hand the bag over and tap its
+                        number. Those numbers go back in the van for the next bags.
+                      </p>
+                    </div>`
+                 : ''
+             }
+
              <button type="submit" class="btn btn-primary btn-lg btn-full">
                Handed over ${stop.bags === 1 ? 'the bag' : `all ${stop.bags} bags`}
              </button>
@@ -761,13 +792,16 @@ function roundCards(run) {
     // naming the round.
     const when = String(r.label).replace(' and ', '-');
 
+    // STOPS, NOT PICKUPS. A laundromat visit is a stop on the round and a
+    // delivery is a stop on the round; calling them all pickups made the word
+    // wrong on exactly the round somebody is standing in.
     const note = late
       ? `${r.count} waiting`
       : r.count === 0
         ? 'nothing'
         : worked
           ? `${r.count} done`
-          : `${r.count} ${r.count === 1 ? 'pickup' : 'pickups'}`;
+          : `${r.count} ${r.count === 1 ? 'stop' : 'stops'}`;
 
     const inner =
       `<div class="rr-when">${escapeHtml(when)}</div>` +
