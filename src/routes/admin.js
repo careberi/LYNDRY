@@ -1399,7 +1399,29 @@ router.post('/ops/logout', (req, res) => {
 // this router is mounted first, so it sees every /ops request — and a script
 // calling /ops/today with a bad key would get a 302 to a sign-in page instead
 // of a clean 401. ADDING A PAGE BELOW MEANS ADDING `guard` TO IT.
-const guard = auth.requireAdminPage;
+// EVERY OPS PAGE IS no-store, AND THAT IS TWO PROBLEMS AT ONCE.
+//
+// Express puts an ETag on every rendered page and nothing set Cache-Control,
+// which lets a browser cache heuristically - it decides for itself how long a
+// page stays fresh and may serve it again without asking. On screens that
+// change every few minutes that is a driver looking at a round that has moved
+// on, and it is indistinguishable from a deploy not having landed. Neil hit it
+// on the collect stop.
+//
+// The second reason is the one that would matter even if nothing ever changed:
+// these pages carry customers' names, phone numbers and home addresses. That
+// is not something to leave sitting in a browser cache on a shared phone. It
+// is the same reason every ops page is noindex.
+//
+// Wrapped around the auth guard rather than added to each route, so a page
+// added later cannot forget - the same rule as `guard` itself.
+const guard = [
+  (req, res, next) => {
+    res.set('Cache-Control', 'no-store, private');
+    next();
+  },
+  auth.requireAdminPage,
+];
 
 // Counts what is unresolved, for the banner in the shell. Runs on every ops
 // page so a new page cannot accidentally hide the flag; a failure here returns
