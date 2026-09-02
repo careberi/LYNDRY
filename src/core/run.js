@@ -277,23 +277,56 @@ async function tasksForOrder(order) {
   return [...pickup, ...rest];
 }
 
+// AT THE DOOR: FIND THEM BY CLIP, STRIP THEM, LEAVE THEM, PHOTOGRAPH THEM.
+//
+// NEIL'S SEQUENCE, and it replaces scanning every bag. The scan was there to
+// prove the driver had the right bags - but by this point the CLIP already
+// says which bags these are, he is about to take the bag tag off anyway, and
+// scanning a tag seconds before binning it proves nothing the number on the
+// clip did not already prove.
+//
+// What the scan cannot do and the clip can: be read across a van without
+// unpacking it. "Clips 1 and 2" is how he finds them.
+//
+// STRIPPING IS A REAL STEP, not tidying. The bag tag is ours and the
+// laundromat's own ticket is theirs; either one left on a bag walks a
+// stranger's name, an order id and a laundromat's internal tracking into a
+// customer's house. It is also how a used tag gets back out of circulation.
 async function tasksForDeliver(order) {
-  const scan = await loadout.allBagsScanned(order);
+  const mine = await bags.forOrder(order.id, 'DELIVERY');
+  const aboard = mine.filter((b) => b.loaded_at);
+
+  const clips = bags.clipsFor(aboard);
+  const clipsOff = aboard.length > 0 && clips.length === 0;
+  const stripped = aboard.length > 0 && aboard.every((b) => b.released_at);
 
   return [
     {
-      key: 'scan',
-      title: scan.ok ? 'Bags checked' : 'Scan every bag',
-      detail: `${scan.scanned} of ${scan.total} scanned. This is what proves you have the right ones.`,
-      done: scan.ok,
-      scan,
+      key: 'clips',
+      title: clipsOff
+        ? 'Bags out of the van'
+        : clips.length
+          ? `Take clips ${clips.join(', ')} out`
+          : 'Take the bags out',
+      detail:
+        'Find them by the clip numbers, set them apart from the rest of the load, and take the clips off - those numbers go back in the van.',
+      done: clipsOff,
+      clips,
+    },
+    {
+      key: 'strip',
+      title: stripped ? 'Tags off' : 'Take the bag tags off',
+      detail:
+        "Ours and anything the laundromat put on. Nothing of theirs and nothing of ours goes into a customer's house.",
+      done: stripped,
+      blockedBy: clipsOff ? null : 'clips',
     },
     {
       key: 'delivered',
-      title: 'One photo where you left them, then done',
-      detail: 'However many bags, one picture of the drop-off.',
+      title: 'Leave them, photograph them, done',
+      detail: 'Where the customer asked. However many bags, one picture.',
       done: Boolean(order.delivered_at),
-      blockedBy: scan.ok ? null : 'scan',
+      blockedBy: stripped ? null : 'strip',
     },
   ];
 }

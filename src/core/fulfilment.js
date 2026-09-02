@@ -546,23 +546,18 @@ async function deliver(orderIn, file, { by = {} } = {}) {
 
   // EVERY BAG, OR NONE.
   //
-  // A three-bag order cannot be completed having handed over two. The scan at
-  // the door confirms the bag in the driver's hand is the right one; this is
-  // what makes sure he did it for all of them before walking away.
+  // NO SCAN AT THE DOOR ANY MORE. Neil's call, and the reasoning holds: by the
+  // time he is standing there the CLIP has already said which bags these are,
+  // and he takes the bag tag off before handing them over - so scanning a tag
+  // seconds before binning it proves nothing the clip did not.
   //
-  // An order with no labels passes. Labelling is new, and refusing to deliver a
-  // bag picked up before stickers existed would strand it on the van forever.
-  const scanned = await loadout.allBagsScanned(order);
-
-  if (!scanned.ok) {
-    return {
-      ok: false,
-      reason: 'invalid',
-      detail:
-        `${scanned.scanned} of ${scanned.total} bags scanned. Scan the rest before marking it delivered - ` +
-        `the whole order goes to the door together.`,
-    };
-  }
+  // What replaced it is not nothing. The clips are how he finds the right bags
+  // in the van, taking them off is a step he confirms, and stripping the tags
+  // is another - so a bag that was never in the van cannot reach a door, and
+  // one that reaches a door cannot arrive still wearing somebody's tracking.
+  //
+  // The photo above is still required and is still the proof of the doorstep
+  // itself.
 
   let photoPath = null;
   let photoUrl = null;

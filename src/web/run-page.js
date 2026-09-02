@@ -309,6 +309,41 @@ function taskControl(stop, task, order) {
     </form>`;
   }
 
+  if (task.key === 'clips') {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/clips-off${back}" style="margin:0;">
+      ${
+        (task.clips || []).length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
+               ${task.clips
+                 .map(
+                   (n) => `<span style="min-width:58px;padding:12px 16px;border:2px solid var(--ink-900);
+                                        border-radius:12px;background:var(--sunbeam-500);text-align:center;
+                                        font-family:var(--font-mono);font-weight:700;font-size:26px;">${n}</span>`
+                 )
+                 .join('')}
+             </div>`
+          : ''
+      }
+      <button type="submit" class="btn btn-primary btn-lg btn-full">Out of the van, clips off</button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        Set them apart from the rest of the load first. Those numbers go back in
+        the van for the next bags.
+      </span>
+    </form>`;
+  }
+
+  if (task.key === 'strip') {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/strip${back}" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">Tags are off</button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        Our bag tag and anything the laundromat stuck on. A customer should not
+        find somebody else's tracking on their laundry.
+      </span>
+    </form>`;
+  }
+
   if (task.key === 'scan') {
     return `
     ${scanField({

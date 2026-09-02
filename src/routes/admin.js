@@ -3257,6 +3257,47 @@ orderAction('in-van', async (order, req) => {
   return { ok: true };
 });
 
+// AT THE DOOR, STEP ONE: the bags are out of the van and the clips are off.
+//
+// Taking the clips off is what frees those numbers for the next load, and it is
+// the moment the driver has physically separated this order from the rest of
+// what he is carrying. Recorded rather than assumed because it is the thing
+// that stops the next stop's bags being confused with these.
+orderAction('clips-off', async (order, req) => {
+  const freed = await bags.unclipOrder(order.id);
+
+  if (freed.length) {
+    await orderEvents.record(order.id, {
+      kind: 'LABEL',
+      summary: `Clip${freed.length === 1 ? '' : 's'} ${freed.join(', ')} off at the door, back in the van`,
+      by: { opsUser: req.opsUser },
+    });
+  }
+
+  return { ok: true };
+});
+
+// AT THE DOOR, STEP TWO: the tags come off.
+//
+// Ours AND the laundromat's. Either one left on a bag walks an order id and
+// somebody else's internal tracking into a customer's house, and taking ours
+// off is also what retires it - a tag out of a bin points at nothing.
+//
+// releaseOrder() stamps released_at and deliberately does NOT clear order_id:
+// the link dies, the record does not, so the order page can still say which
+// tags were on which bag afterwards.
+orderAction('strip', async (order, req) => {
+  await bags.releaseOrder(order.id);
+
+  await orderEvents.record(order.id, {
+    kind: 'LABEL',
+    summary: 'Bag tags and any laundromat tracking removed at the door',
+    by: { opsUser: req.opsUser },
+  });
+
+  return { ok: true };
+});
+
 orderAction('at-partner', (order, req) =>
   fulfilment.dropAtPartner(order, {
     partnerId: (req.body || {}).partner_id || null,
