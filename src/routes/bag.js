@@ -587,7 +587,30 @@ function weightBox({ code, token, heading, blurb, action, error, t = (x) => x })
 function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []) {
   const stage = tags.stageOf(label, order);
   const t = encodeURIComponent(String(token || ''));
-  const seq = query.s && /^[1-4]$/.test(String(query.s)) ? Number(query.s) : null;
+  // A STICKER NUMBER ONLY MEANS SOMETHING ONCE THAT STICKER IS ON ITS OWN BAG.
+  //
+  // Neil scanned a bag we had just dropped off and the page called it
+  // NQHCT1-3. He had scanned one of the four peelable stickers rather than the
+  // header QR - easy to do, they are all on the same piece of paper - and the
+  // page read the -3 straight off the URL.
+  //
+  // At intake all four stickers are still attached to the one bag we brought,
+  // so -3 names a bag that does not exist yet. The suffix belongs only to the
+  // return leg, where the laundromat has peeled a sticker onto a bag THEY
+  // packed and it has a row of its own.
+  //
+  // So the sequence is honoured only when there is a sticker row to honour it
+  // with. Everything else about the page is unchanged: findByCode() has always
+  // resolved the intake bag whichever of the five QRs was scanned, which is why
+  // the wrong-looking title was the only symptom.
+  const asked = query.s && /^[1-4]$/.test(String(query.s)) ? Number(query.s) : null;
+  //
+  // stickersOn() always returns four entries, one per position, with `row` null
+  // for a sticker nobody has used. So the test is whether that sticker is
+  // actually ON something - not whether the position exists, which it always
+  // does.
+  const seq =
+    asked && (stickers || []).some((x) => Number(x.seq) === asked && x.row) ? asked : null;
   const bad = query.weighed === 'bad';
 
   // `say` rather than `t`, because `t` is already the URL token on this page
