@@ -2,6 +2,7 @@
 
 const { escapeHtml, icon } = require('./layout');
 const { scanField, scannerScript, describeCodeFormat } = require('./scanner');
+const booking = require('../core/booking');
 
 // ---------------------------------------------------------------------------
 // The driver's run: one stop, one thing to do.
@@ -70,7 +71,14 @@ function travelCard(run) {
     }
     ${
       stop.eta
-        ? `<p style="font-size:14px;color:var(--ink-500);margin:0 0 22px;">Due about ${escapeHtml(stop.eta)}</p>`
+        ? // TWELVE HOUR, like every other time on this system. The ETA is stored
+          // as 24-hour "18:10" and was printed raw, so the one screen a driver
+          // reads at a doorstep was the only one saying 18:10 while the window
+          // above it said 4-6pm. booking.readableTime is what the customer's
+          // confirmation uses, so there is one way a time is written.
+          `<p style="font-size:14px;color:var(--ink-500);margin:0 0 22px;">Due about ${escapeHtml(
+            booking.readableTime(stop.eta) || stop.eta
+          )}</p>`
         : '<div style="height:18px;"></div>'
     }
 
@@ -358,21 +366,6 @@ function taskControl(stop, task, order) {
       <button type="submit" class="btn btn-primary btn-lg btn-full">They are in the van</button>
       <span class="field-hint" style="display:block;margin-top:10px;">
         Put those clips on, load them, then tap this.
-      </span>
-    </form>`;
-  }
-
-  // THE WAY OUT OF READY AT A DOOR. Normally already done at the laundromat -
-  // see the note in tasksForDeliver - so seeing this means that pass was
-  // interrupted. Posts to the same route the JSON API uses, so there is one
-  // implementation of what "out for delivery" means.
-  if (task.key === 'out') {
-    return `
-    <form method="post" action="/ops/orders/${order.order_number}/out-for-delivery${back}" style="margin:0;">
-      <button type="submit" class="btn btn-primary btn-lg btn-full">It is on the van</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        Texts the customer that it is on its way. This normally happens when you
-        load up at the laundromat.
       </span>
     </form>`;
   }

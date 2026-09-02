@@ -360,29 +360,18 @@ async function tasksForDeliver(order) {
   const stripped = aboard.length > 0 && aboard.every((b) => b.released_at);
 
   return [
-    // A SAFETY NET, AND IT SHOULD NEVER BE THE STEP YOU SEE.
+    // NO "MARK IT OUT FOR DELIVERY" STEP HERE, and that is Neil's call after
+    // seeing one: "I shouldn't have to put the bags in the van, drive to a
+    // stop, then mark them as out for delivery."
     //
-    // Setting off happens at the laundromat, when the last bag comes off their
-    // counter - that is the physical moment and where the customer's "on its
-    // way" text belongs. But an order can reach a door still READY if that pass
-    // was interrupted, and when it did the delivery step failed against the
-    // state machine: "an order cannot go from READY to DELIVERED".
+    // He is right, and it is the same principle as everywhere else on this
+    // screen: a step exists because somebody has to DO something. Setting off
+    // is not an act at a doorstep - it already happened, at the laundromat,
+    // when the last bag came off their counter. So the system records it there
+    // (in /ops/run/collected-all) and the door goes straight to the work.
     //
-    // The machine was right. The screen had no way to satisfy it, and a red
-    // error at a doorstep with a customer's laundry in your hands is the worst
-    // place to find that out. So the step exists here too, and is already done
-    // in every normal round.
-    ...(['OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status)
-      ? []
-      : [
-          {
-            key: 'out',
-            title: 'Mark it out for delivery',
-            detail:
-              'This should have happened when you loaded the van. Tap it to text the customer that it is on its way, then carry on.',
-            done: false,
-          },
-        ]),
+    // A step that only asks the driver to tell the system what it could have
+    // worked out itself is a step that should not exist.
     {
       key: 'clips',
       title: clipsOff
