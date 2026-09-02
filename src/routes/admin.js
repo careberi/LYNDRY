@@ -18,7 +18,7 @@ const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
-const { labelSheetBody, SHEET: LABEL_SHEET } = require('../web/labels');
+const { labelSheetBody, labelListQr, SHEET: LABEL_SHEET } = require('../web/labels');
 const bags = require('../core/bags');
 const tags = require('../core/tags');
 const orderEvents = require('../core/order-events');
@@ -1564,10 +1564,26 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       ${dayStrip}
       <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
         ${statCard('To collect', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
+        ${
+          // ON THE VAN HAD NO CARD AT ALL, which is how a board with a bag
+          // sitting in the van read as five zeroes. Every other stage the bag
+          // can be in was counted; the one between the doorstep and the
+          // laundromat was not, so the summary said nothing was happening
+          // while the section below it listed the order.
+          statCard('On the van', g.van.length, g.van.length ? 'var(--lilac-300)' : undefined)
+        }
         ${statCard('At laundromat', g.partner.length)}
         ${statCard('Ready to collect', g.ready.length, g.ready.length ? 'var(--sunbeam-500)' : undefined)}
         ${statCard('Out for delivery', g.out.length)}
-        ${statCard('Pounds with us', poundsWithUs ? `${poundsWithUs} lb` : '0')}
+        ${
+          // "0 lb" on a board holding an unweighed bag is true and misleading.
+          // The scale has not happened yet, so there is no number - saying so
+          // is better than a zero that reads as "nothing in hand".
+          statCard(
+            'Pounds with us',
+            poundsWithUs ? `${poundsWithUs} lb` : withUs.length ? 'not weighed' : '0'
+          )
+        }
         ${late.length ? statCard('Late', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
         ${showMoney && owed.length ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)') : ''}
       </div>
@@ -3466,7 +3482,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 
     const showing = filter ? byState[filter] : labels;
 
-    const labelRow = (l) => {
+    const labelRow = (l, qr) => {
       const state = labelState(l);
       const tone = LABEL_STATES[state];
 
@@ -3480,10 +3496,19 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       const url = bags.labelUrl(l.code);
 
       return `
-      <div style="display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:10px 14px;
+      <div style="display:grid;grid-template-columns:12px 58px minmax(0,1fr) auto;gap:10px 14px;
                   align-items:start;padding:14px 0;border-bottom:1px solid var(--ink-100);">
         <span style="width:12px;height:12px;margin-top:6px;border:2px solid var(--ink-900);border-radius:50%;
                      background:${tone.colour};"></span>
+
+        <!-- THE ACTUAL QR, so a tag can be scanned straight off the screen.
+             Worth having before anything is printed: you can point a phone at
+             a monitor to check a code resolves, and a driver can bind a bag
+             without the printed sheet in his hand. Faded once the label is
+             retired, because that one opens nothing any more. -->
+        <div style="width:58px;height:58px;${state === 'EXPIRED' ? 'opacity:0.3;' : ''}">
+          ${qr || ''}
+        </div>
 
         <div style="min-width:0;">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -3523,6 +3548,11 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
         </div>
       </div>`;
     };
+
+    // One QR per row actually shown. SVG, so it stays sharp and costs no extra
+    // request - and only for the rows on screen, because drawing 600 to display
+    // 30 is work nobody sees.
+    const qrs = await Promise.all(showing.map((l) => labelListQr(l.code)));
 
     const body = `
       <div style="max-width:640px;">
@@ -3609,7 +3639,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 
         ${
           showing.length
-            ? showing.map(labelRow).join('')
+            ? showing.map((l, i) => labelRow(l, qrs[i])).join('')
             : `<p style="margin:0;font-size:15px;color:var(--ink-500);line-height:1.6;">
                  Nothing in that state.
                </p>`

@@ -270,4 +270,24 @@ async function labelSheetBody(labels) {
 </div>`;
 }
 
-module.exports = { labelSheetBody, SHEET, STICKERS };
+// A small QR for the bag tags LIST, not the printed sheet.
+//
+// Same URL as the tag itself, so pointing a phone at the screen goes exactly
+// where pointing it at the printed tag would. Medium correction rather than
+// high: this one is on a monitor, not creased and damp on a laundry bag, so
+// the extra redundancy would only cost pixels at 58px square.
+async function labelListQr(code) {
+  try {
+    return await QRCode.toString(bags.labelUrl(code), {
+      type: 'svg',
+      margin: 0,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#101210', light: '#00000000' },
+    });
+  } catch (err) {
+    console.error(`Could not draw a list QR for ${code}: ${err.message}`);
+    return '';
+  }
+}
+
+module.exports = { labelSheetBody, labelListQr, SHEET, STICKERS };
