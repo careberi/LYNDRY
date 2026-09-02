@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../db');
+const booking = require('./booking');
 const roles = require('./roles');
 const { config } = require('../config');
 const { sendAndLog } = require('./notify');
@@ -171,6 +172,51 @@ async function listRecent(limit = 40) {
   return data || [];
 }
 
+// EVERYTHING RAISED ON ONE DAY, open or closed.
+//
+// listRecent() answers "what is happening" and is capped at the last few dozen,
+// which is right for a queue and useless for looking back: an issue from three
+// weeks ago falls off it and there is no way to reach it at all. This answers
+// "what went on that day" instead.
+//
+// Bounded on created_at rather than resolved_at, because the day an issue
+// HAPPENED is the day you would look for it. One resolved a week later still
+// belongs to the day it was raised.
+// A DAY IN NEW JERSEY, NOT IN UTC. Railway runs in UTC and New Jersey is four
+// or five hours behind it, so a UTC midnight-to-midnight window is not the day
+// anybody here means - an issue raised at 9pm on Tuesday is already Wednesday
+// in UTC. Same trap as new Date().toISOString() being used for "today".
+//
+// The query pulls a day either side and the exact boundary is decided in JS by
+// asking what LOCAL date each timestamp falls on. That is correct across
+// daylight saving without anybody hardcoding an offset that is wrong for half
+// the year, and the volume here is a handful of rows.
+async function listForDay(dateIso) {
+  const wide = (iso, days) => {
+    const d = new Date(`${iso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString();
+  };
+
+  const { data, error } = await db
+    .from('issues')
+    .select('*, customers(id, name, phone), orders(order_number, status), ops_users(name)')
+    .gte('created_at', wide(dateIso, -1))
+    .lte('created_at', wide(dateIso, 1))
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  const localDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: booking.SERVICE_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  return (data || []).filter((i) => localDate.format(new Date(i.created_at)) === dateIso);
+}
+
 // Close one. Only ever called by a person pressing a button.
 async function resolve(issueId, opsUser, resolution) {
   const { data, error } = await db
@@ -241,6 +287,7 @@ module.exports = {
   openCount,
   resolve,
   alertRecipients,
+  listForDay,
   holdFor,
   personHasReplied,
 };

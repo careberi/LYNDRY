@@ -1003,7 +1003,7 @@ two what-if calculators.
 
 | Menu | The question |
 |---|---|
-| **Today** | What is happening right now: Your round, Orders, Routing, Load the van, Issues |
+| **Dashboard** | What is happening right now: Your round, Orders, Routing, Load the van, Issues |
 | **People** | Everyone you deal with: Customers, Conversations, Team, Partners |
 | **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag tags, Unit economics, Route planner |
 | **Resources** | How it all works, What happens to a bag, What we send a laundromat |
@@ -1089,7 +1089,7 @@ drops the sales pitch entirely: they typed their number into the home page
 thirty seconds ago, so the price is the page they are still looking at, and
 keeping both put it over one segment.
 
-**Issues sits under Today**, not with the people it happens to be about. An open
+**Issues sits under Dashboard**, not with the people it happens to be about. An open
 issue is something happening now that is stopping an order moving, so it belongs
 beside the board it is blocking. It is called **Issues** — "Needs a person" was
 a description of the queue rather than a name for it, and the red banner on the

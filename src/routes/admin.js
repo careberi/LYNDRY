@@ -205,7 +205,15 @@ function addressOf(c) {
 // one of them said route.
 const OPS_MENUS = Object.freeze([
   {
-    label: 'Today',
+    // "Dashboard" again, at Neil's request. It was called that once, renamed to
+    // "Today" because it had become a grab bag - a board, a scanning task, a
+    // message list and a problem queue under one word - and is now back.
+    //
+    // What makes it defensible this time is that the group actually is the
+    // live day: your round, the orders board, routing, loading the van, and
+    // the issues blocking them. Everything in it is about right now. If a
+    // screen goes in here that is not, it belongs in another menu.
+    label: 'Dashboard',
     items: [
       // First, because for somebody on the round it is the only screen that
       // matters - everything else is looking something up. Behind orders.drive,
@@ -3952,9 +3960,48 @@ router.get('/ops/process', guard, withIssues, (req, res) => {
 
 router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, res, next) => {
   try {
-    const all = await issues.listRecent(60);
+    // LOOKING BACK, OR LOOKING AT NOW.
+    //
+    // Without a date this is the queue: the most recent sixty, open first. That
+    // is the right answer to "what needs a person" and useless for "what went
+    // on last Tuesday" - an issue from three weeks ago falls off the list and
+    // there is no way to reach it at all.
+    //
+    // With ?date= it is everything raised THAT DAY, open or closed, in New
+    // Jersey's day rather than the server's.
+    const asked = String(req.query.date || '').trim();
+    const viewDate = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null;
+    const now = today();
+
+    const all = viewDate ? await issues.listForDay(viewDate) : await issues.listRecent(60);
     const open = all.filter((i) => i.status === 'OPEN');
     const closed = all.filter((i) => i.status === 'RESOLVED');
+
+    const shift = (iso, days) => {
+      const d = new Date(`${iso}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const dayStrip = `
+      <form method="get" action="/ops/issues"
+            style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:26px;">
+        <a class="btn btn-sm btn-outline" href="/ops/issues?date=${shift(viewDate || now, -1)}"
+           aria-label="The day before">&larr;</a>
+        <div>
+          <label class="field-label" for="date" style="margin-bottom:4px;">A day to look at</label>
+          <input class="field" id="date" name="date" type="date" value="${escapeHtml(viewDate || '')}"
+                 max="${escapeHtml(now)}" style="min-width:170px;">
+        </div>
+        <button class="btn btn-sm" type="submit">Show it</button>
+        ${
+          viewDate
+            ? `<a class="btn btn-sm btn-outline" href="/ops/issues?date=${shift(viewDate, 1)}"
+                  aria-label="The day after">&rarr;</a>
+               <a class="btn btn-sm" href="/ops/issues">Back to the queue</a>`
+            : ''
+        }
+      </form>`;
 
     const card = (i) => {
       const c = i.customers || {};
@@ -4014,14 +4061,41 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     };
 
     const body = `
-      ${sectionHeading('Issues', 'Open', open.length)}
+      ${dayStrip}
+
+      ${
+        viewDate
+          ? `<p class="eyebrow" style="margin:0 0 6px;">Looking back</p>
+             <h1 style="font-family:var(--font-display);font-weight:900;font-size:34px;letter-spacing:-0.03em;margin:0 0 8px;">
+               ${escapeHtml(longDate(viewDate))}
+             </h1>
+             <p style="font-size:15px;color:var(--ink-500);line-height:1.6;max-width:64ch;margin:0 0 30px;">
+               Everything raised that day, whether it was dealt with or not. An
+               issue resolved a week later still belongs to the day it happened.
+             </p>`
+          : ''
+      }
+
+      ${sectionHeading('Issues', viewDate ? 'Still open' : 'Open', open.length)}
       ${
         open.length
           ? open.map(card).join('')
-          : '<p style="font-size:17px;color:var(--ink-500);margin-bottom:56px;">Nothing open. Everything a customer raised has been dealt with.</p>'
+          : `<p style="font-size:17px;color:var(--ink-500);margin-bottom:56px;">${
+              viewDate
+                ? 'Nothing raised that day is still open.'
+                : 'Nothing open. Everything a customer raised has been dealt with.'
+            }</p>`
       }
 
       ${closed.length ? `<div style="margin-top:56px;">${sectionHeading('Dealt with', 'Resolved', closed.length)}${closed.map(card).join('')}</div>` : ''}
+
+      ${
+        viewDate && !all.length
+          ? `<p style="font-size:17px;color:var(--ink-500);">
+               Nothing was raised on ${escapeHtml(longDate(viewDate))}.
+             </p>`
+          : ''
+      }
     `;
 
     res.type('html').send(
