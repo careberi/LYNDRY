@@ -134,10 +134,17 @@ async function findByCode(code) {
   const normalised = normaliseCode(code);
   if (!normalised) return null;
 
+  // THE INTAKE BAG, not just any row with this code.
+  //
+  // A bag tag id is shared by up to five rows - the bag itself and the four
+  // stickers off it - so maybeSingle() on the code alone started throwing the
+  // moment a laundromat marked a finished bag. sticker_seq is null on exactly
+  // one of them, and that one is the bag.
   const { data, error } = await db
     .from('bag_labels')
     .select('*')
     .eq('code', normalised)
+    .is('sticker_seq', null)
     .maybeSingle();
 
   if (error) throw error;

@@ -89,3 +89,26 @@ comment on column orders.surcharge_cents is
   'What the chosen wash options add, frozen when the order is taken. Never '
   'read from the customer at billing time - changing what an option costs must '
   'not re-price work already quoted.';
+
+-- --- The code is no longer unique per row -----------------------------------
+--
+-- A bag tag id is now shared by up to FIVE rows: the intake bag itself, and the
+-- four peelable stickers that come off it. bag_labels_code_key made the code
+-- unique across the whole table, which is right for one sticker per bag and
+-- rejects the second row the moment a laundromat marks a finished bag.
+--
+-- Replaced with the two guarantees that actually matter. Two partial indexes
+-- rather than one over both columns, because Postgres treats NULLs as distinct
+-- in a unique index - a single index on (code, sticker_seq) would happily allow
+-- two intake bags carrying the same code.
+alter table bag_labels drop constraint if exists bag_labels_code_key;
+
+create unique index if not exists bag_labels_code_intake_idx
+  on bag_labels (code) where sticker_seq is null;
+
+create unique index if not exists bag_labels_code_sticker_idx
+  on bag_labels (code, sticker_seq) where sticker_seq is not null;
+
+comment on column bag_labels.code is
+  'The bag tag id. SHARED by the intake bag and every sticker off that tag - up '
+  'to five rows. Unique among intake bags, and unique per sticker within a tag.';

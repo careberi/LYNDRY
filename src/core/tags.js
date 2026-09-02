@@ -152,6 +152,120 @@ async function total(orderId, leg = 'PICKUP', expected = null) {
   };
 }
 
+// --- Where a bag is in the process ------------------------------------------
+
+// THE QR PAGE SHOWS A DIFFERENT THING AT EVERY STAGE, and this is what decides
+// which. One code, scanned by two different people at four different moments,
+// and each of them should see only the one thing they can do right now.
+//
+// DERIVED, NEVER STORED. It is read from the bag row and its order, both of
+// which already know. A stage column would be a second copy of the same fact
+// and would go stale the first time somebody used a different door - the same
+// reason the driver's position in his round is derived rather than kept.
+const STAGES = Object.freeze({
+  BLANK:     'BLANK',      // printed, not on a bag yet
+  TO_WEIGH:  'TO_WEIGH',   // on a bag at the customer's door, the driver must weigh it
+  IN_VAN:    'IN_VAN',     // weighed and clipped, on its way
+  TO_WEIGH_AT_PARTNER: 'TO_WEIGH_AT_PARTNER', // with the laundromat, they must weigh it
+  WASHING:   'WASHING',    // they weighed it, so the instructions are theirs to read
+  READY:     'READY',      // finished and waiting for the driver
+  COLLECTED: 'COLLECTED',  // scanned back into the van
+  DONE:      'DONE',       // delivered, and the sticker is retired
+});
+
+function stageOf(label, order) {
+  if (!label || !label.order_id || !order) return STAGES.BLANK;
+  if (label.released_at || order.status === 'DELIVERED') return STAGES.DONE;
+
+  // An OUTPUT bag has a life of its own once it exists: the laundromat made it,
+  // marked it ready, and the driver collects it.
+  if (label.leg === 'DELIVERY') {
+    if (label.loaded_at) return STAGES.COLLECTED;
+    return STAGES.READY;
+  }
+
+  // An INTAKE bag. Its stage is where the order is, plus whether the weight
+  // that stage needs has been given yet.
+  if (label.weight_lb == null) return STAGES.TO_WEIGH;
+
+  if (order.status === 'AT_PARTNER') {
+    return label.partner_weight_lb == null ? STAGES.TO_WEIGH_AT_PARTNER : STAGES.WASHING;
+  }
+
+  if (order.status === 'READY') return STAGES.READY;
+  return STAGES.IN_VAN;
+}
+
+// What the stage is called on the page, under the bag id. Neil asked for the
+// stage to be visible, so somebody scanning a sticker can see where the bag is
+// without having to work it out from what the page is offering them.
+const STAGE_LABEL = Object.freeze({
+  BLANK: 'Not on a bag yet',
+  TO_WEIGH: 'Being collected',
+  IN_VAN: 'In the van',
+  TO_WEIGH_AT_PARTNER: 'Just arrived',
+  WASHING: 'Being washed',
+  READY: 'Ready for collection',
+  COLLECTED: 'Back in the van',
+  DONE: 'Delivered',
+});
+
+// --- Sub bags: one bag in, several out --------------------------------------
+
+// Mark one of the four stickers as a finished bag.
+//
+// THE SEQUENCE IS WHY THIS WORKS. All four stickers print the same bag tag id,
+// so without it "sub bag 2 is ready" could only be inferred from the order the
+// scans happened to arrive in - and a sticker scanned twice would be
+// indistinguishable from a second bag. With the sequence in the URL, each
+// sticker is a fact rather than a guess.
+//
+// Idempotent: scanning the same sticker again says so rather than inventing
+// another bag.
+async function markSubBagReady(parent, seq, { weightLb = null } = {}) {
+  const n = Number(seq);
+  if (!Number.isInteger(n) || n < 1 || n > 4) {
+    return { ok: false, detail: 'That is not one of the four stickers on the tag.' };
+  }
+
+  const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
+  const already = siblings.find((b) => b.parent_id === parent.id && b.sticker_seq === n);
+
+  if (already) {
+    return { ok: true, already: true, bag: already, count: siblings.length };
+  }
+
+  const row = {
+    order_id: parent.order_id,
+    parent_id: parent.id,
+    leg: 'DELIVERY',
+    sticker_seq: n,
+    // Position within the order's outgoing bags, so "bag 2 of 3" still works
+    // across an order whose bags came from several intake bags.
+    position: siblings.length + 1,
+    code: parent.code,
+    bound_at: new Date().toISOString(),
+    weight_lb: weightLb == null ? null : Number(weightLb),
+  };
+
+  const { data, error } = await db.from('bag_labels').insert(row).select('*').single();
+  if (error) throw error;
+
+  return { ok: true, already: false, bag: data, count: siblings.length + 1 };
+}
+
+// The finished bags that came out of one intake bag.
+async function subBagsOf(parentId) {
+  const { data, error } = await db
+    .from('bag_labels')
+    .select('*')
+    .eq('parent_id', parentId)
+    .order('sticker_seq', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
 // --- Does what I am holding match what I should be holding? -----------------
 
 // THE COMPARISON THAT IS NOT SYMMETRIC.
@@ -305,6 +419,11 @@ async function collectFromPartner(order, { bagCount, weightLb, driverId = null }
 
 module.exports = {
   claim,
+  STAGES,
+  STAGE_LABEL,
+  stageOf,
+  markSubBagReady,
+  subBagsOf,
   collectFromPartner,
   findByTag,
   tagUrl,

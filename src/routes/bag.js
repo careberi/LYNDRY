@@ -371,6 +371,206 @@ function orderTagPage(order, code, token, query = {}) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// THE BAG TAG PAGE, WHICH CHANGES WITH THE BAG.
+//
+// One sticker, scanned by two different people at four different moments. Each
+// of them is shown the one thing they can do right now and nothing else:
+//
+//   at the door        the bag id, and a box for OUR weight
+//   just arrived       the bag id, and a box for THEIRS - the instructions are
+//                      behind it, which is what makes the weight get entered
+//   being washed       the wash instructions, the sorting standard, the clock,
+//                      and the four stickers to mark bags ready with
+//   ready              a holding screen until the driver scans it into the van
+//   in the van / done  a plain statement of where it is
+//
+// GATING THE INSTRUCTIONS BEHIND THE WEIGHT IS NEIL'S IDEA AND THE SHARPEST
+// ONE HERE. The number we need is collected by the thing they want, rather
+// than by asking nicely and hoping.
+//
+// STILL A BLIND DROP-OFF AT EVERY STAGE. The bag id, which bag of how many,
+// structured wash fields and a countdown. No name, no address, no phone, no
+// price, and no free text - a real saved preference reads "deliver to 16-51
+// Chandler Dr", so the page lists the fields it allows rather than trying to
+// redact the ones it does not.
+// ---------------------------------------------------------------------------
+
+function stageHeader(label, order, stage, seq) {
+  return `
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 8px;">Bag tag</p>
+      <div style="font-family:var(--font-mono);font-size:38px;font-weight:700;letter-spacing:0.06em;line-height:1;">
+        ${escapeHtml(label.code)}${seq ? `<span style="color:var(--ink-400);">-${seq}</span>` : ''}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;">
+        <span class="badge" style="background:var(--sunbeam-500);">
+          ${escapeHtml(tags.STAGE_LABEL[stage] || stage)}
+        </span>
+        <span style="font-family:var(--font-mono);font-size:13px;color:var(--ink-500);">
+          Order #${escapeHtml(String(order.order_number))}
+        </span>
+      </div>
+    </div>`;
+}
+
+function weightBox({ code, token, heading, blurb, action, error }) {
+  return `
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(heading)}</p>
+      <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">${blurb}</p>
+      <form method="post" action="${action}?t=${encodeURIComponent(String(token || ''))}"
+            style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1 1 160px;">
+          <label class="field-label" for="w">Pounds</label>
+          <input class="field" id="w" name="weight_lb" type="number" step="0.1" min="0" max="400"
+                 inputmode="decimal" autofocus required>
+        </div>
+        <button class="btn btn-ink btn-lg" type="submit">Save</button>
+      </form>
+      ${
+        error
+          ? `<p style="font-size:15px;color:var(--stain-500);margin:14px 0 0;">
+               That did not look like a weight. Pounds, as a number.
+             </p>`
+          : ''
+      }
+    </div>`;
+}
+
+function bagTagPage(label, order, code, token, query) {
+  const stage = tags.stageOf(label, order);
+  const t = encodeURIComponent(String(token || ''));
+  const seq = query.s && /^[1-4]$/.test(String(query.s)) ? Number(query.s) : null;
+  const bad = query.weighed === 'bad';
+
+  const header = stageHeader(label, order, stage, seq);
+  const footer = `
+    <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
+      Questions about this bag: ${escapeHtml(site.publicPhoneDisplay)}.
+    </p>`;
+
+  // --- at the customer's door: our own weight ------------------------------
+  if (stage === tags.STAGES.TO_WEIGH) {
+    return page({
+      title: `Bag ${code}`,
+      body: header + weightBox({
+        code, token, error: bad,
+        heading: 'What does this bag weigh?',
+        blurb: 'Put it on the scale and photograph the display. This is the number that prices the order.',
+        action: `/o/${encodeURIComponent(code)}/weight`,
+      }) + footer,
+    });
+  }
+
+  // --- just arrived at the laundromat: their weight unlocks the wash -------
+  if (stage === tags.STAGES.TO_WEIGH_AT_PARTNER) {
+    return page({
+      title: `Bag ${code}`,
+      body: header + weightBox({
+        code, token, error: bad,
+        heading: 'Weigh it to see the wash instructions',
+        blurb: `Your own scale, this bag only. We weighed it too, so this is a cross-check
+                that catches a bad scale on either side.`,
+        action: `/o/${encodeURIComponent(code)}/weight`,
+      }) + footer,
+    });
+  }
+
+  // --- being washed: the instructions, and the four stickers ---------------
+  if (stage === tags.STAGES.WASHING) {
+    const lines = wash.washLines((order.customers || {}).preferences);
+    const clock = fulfilment.turnaround(order);
+
+    return page({
+      title: `Bag ${code}`,
+      body: header + `
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 14px;">How to wash it</p>
+      <dl style="display:grid;grid-template-columns:auto 1fr;gap:10px 22px;margin:0;font-size:16px;">
+        ${lines
+          .map(([k, v]) =>
+            `<dt style="color:var(--ink-500);">${escapeHtml(k)}</dt>` +
+            `<dd style="margin:0;font-weight:700;">${escapeHtml(v)}</dd>`)
+          .join('')}
+      </dl>
+    </div>
+
+    <div class="card" style="padding:28px;margin-bottom:20px;background:var(--paper-200);">
+      <p class="eyebrow" style="margin:0 0 12px;">How everything is sorted</p>
+      <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.7;">
+        ${wash.SORTING.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="card" style="padding:28px;margin-bottom:20px;background:${
+      clock && clock.urgent ? 'var(--stain-500)' : 'var(--sunbeam-500)'
+    };${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
+      <p class="eyebrow" style="margin:0 0 8px;${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
+        Time to turn it around
+      </p>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
+        ${escapeHtml(clock ? clock.text : 'Not picked up yet')}
+      </div>
+    </div>
+
+    <div class="card" style="padding:28px;">
+      <p class="eyebrow" style="margin:0 0 8px;">When a bag is finished</p>
+      <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
+        Put one sticker off this tag on each finished bag, then tap its number
+        here. <strong>However many bags this became</strong> - one, or four.
+      </p>
+      <form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${t}"
+            style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${[1, 2, 3, 4]
+          .map((n) => `
+        <button class="btn btn-outline btn-lg" type="submit" name="seq" value="${n}"
+                style="flex:1 1 90px;min-width:90px;">
+          ${escapeHtml(code)}-${n}
+        </button>`)
+          .join('')}
+      </form>
+      <p class="field-hint" style="margin-top:14px;">
+        Tap a number once its sticker is on a finished bag. Tapping the same one
+        twice changes nothing.
+      </p>
+    </div>` + footer,
+    });
+  }
+
+  // --- ready: a holding screen until the driver takes it -------------------
+  if (stage === tags.STAGES.READY) {
+    return page({
+      title: `Bag ${code}`,
+      body: header + `
+    <div class="card" style="padding:32px;text-align:center;">
+      <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.15;margin-bottom:12px;">
+        Waiting for collection
+      </div>
+      <p style="font-size:16px;line-height:1.6;margin:0;">
+        This one is marked finished and our driver has been told. Nothing else
+        to do with it.
+      </p>
+    </div>` + footer,
+    });
+  }
+
+  // --- everything else: say plainly where it is ----------------------------
+  const said = {
+    [tags.STAGES.IN_VAN]: 'In our van, on its way to be washed.',
+    [tags.STAGES.COLLECTED]: 'Back in our van, on its way to the customer.',
+    [tags.STAGES.DONE]: 'Delivered. This tag is finished with.',
+  }[stage] || 'Nothing to do with this one right now.';
+
+  return page({
+    title: `Bag ${code}`,
+    body: header + `
+    <div class="card" style="padding:28px;">
+      <p style="font-size:16px;line-height:1.6;margin:0;">${escapeHtml(said)}</p>
+    </div>` + footer,
+  });
+}
+
 function page({ title, body }) {
   return `<!doctype html>
 <html lang="en">
@@ -498,68 +698,12 @@ router.get('/o/:code', async (req, res, next) => {
       return res.status(404).type('html').send(nothingHere());
     }
 
-    // COUNTED WITHIN THE BAG'S OWN LEG. "Bag 2 of 3" has to mean two of the
-    // three bags in front of them - and after a laundromat has repacked, the
-    // pickup bags and the delivery bags are different objects in different
-    // numbers. Counting both sets together made a two-bag order read "of 5".
-    const siblings = await bags.forOrder(order.id, label.leg || 'PICKUP');
-    const total = siblings.length || 1;
+      await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
 
-    await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
-
-    const wash = washLines((order.customers || {}).preferences);
-
-    // A countdown rather than a date. "13h 40m left" is what somebody deciding
-    // which machine to load next actually needs; "back by Thursday" is not.
-    const clock = fulfilment.turnaround(order);
-
-    return res.type('html').send(
-      page({
-        title: `Bag ${code}`,
-        body: `
-    <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 8px;">Bag label</p>
-      <div style="font-family:var(--font-mono);font-size:38px;font-weight:700;letter-spacing:0.06em;line-height:1;">
-        ${escapeHtml(code)}
-      </div>
-      <div style="font-family:var(--font-mono);font-size:14px;color:var(--ink-500);margin-top:10px;">
-        Bag ${label.position || 1} of ${total} &middot; Order #${escapeHtml(String(order.order_number))}
-      </div>
-    </div>
-
-    <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 14px;">How to wash it</p>
-      <dl style="display:grid;grid-template-columns:auto 1fr;gap:10px 22px;margin:0;font-size:16px;">
-        ${wash
-          .map(
-            ([k, v]) =>
-              `<dt style="color:var(--ink-500);">${escapeHtml(k)}</dt>` +
-              `<dd style="margin:0;font-weight:700;">${escapeHtml(v)}</dd>`
-          )
-          .join('')}
-      </dl>
-    </div>
-
-    <div class="card" style="padding:28px;margin-bottom:20px;background:${
-      clock && clock.urgent ? 'var(--stain-500)' : 'var(--sunbeam-500)'
-    };${clock && clock.urgent ? 'color:var(--paper-050);' : ''}">
-      <p class="eyebrow" style="margin:0 0 8px;${
-        clock && clock.urgent ? 'color:var(--paper-050);' : ''
-      }">Time to turn it around</p>
-      <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
-        ${escapeHtml(clock ? clock.text : 'Not picked up yet')}
-      </div>
-    </div>
-
-    ${weightCard(label, order, siblings, code, req.query.t, req.query.weighed)}
-
-    ${readyCard(order, code, req.query.t)}
-
-    <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
-      Questions about this bag: ${escapeHtml(site.publicPhoneDisplay)}.
-    </p>`,
-      })
-    );
+      // WHAT THIS SHOWS DEPENDS ON WHERE THE BAG IS. One sticker, scanned by
+      // two different people at four different moments, and each is shown the
+      // one thing they can do right now. See bagTagPage().
+      return res.type('html').send(bagTagPage(label, order, code, req.query.t, req.query));
   } catch (err) {
     return next(err);
   }
@@ -856,6 +1000,46 @@ router.post('/o/:code/ready', async (req, res, next) => {
     }
 
     const back = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
+
+    // WHICH STICKER, AND THEREFORE WHICH FINISHED BAG.
+    //
+    // All four stickers on a tag print the same bag id, so without the
+    // sequence "sub bag 2 is ready" could only be inferred from the order the
+    // taps happened to arrive in - and the same sticker tapped twice would be
+    // indistinguishable from a second bag. The number makes it a fact.
+    //
+    // One intake bag becomes any number of finished bags, so this marks ONE
+    // of them. The ORDER only becomes ready when every intake bag it holds
+    // has at least one finished bag against it.
+    const seq = Number((req.body || {}).seq);
+    const parent = await bags.findByCode(code);
+
+    if (parent && Number.isInteger(seq) && seq >= 1 && seq <= 4) {
+      const marked = await tags.markSubBagReady(parent, seq);
+      if (!marked.ok) return res.redirect(303, back + '&ready=bad');
+
+      await orderEvents.record(order.id, {
+        kind: 'LABEL',
+        summary: marked.already
+          ? 'Sticker ' + code + '-' + seq + ' was already marked finished'
+          : code + '-' + seq + ' marked finished, ' + marked.count +
+            ' bag' + (marked.count === 1 ? '' : 's') + ' back from this one',
+        by: { actor: 'partner' },
+      });
+
+      await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
+
+      // EVERY INTAKE BAG NEEDS A FINISHED BAG AGAINST IT before the order is
+      // ready. Marking one sticker on a three-bag order says that wash is
+      // done, not that the order is, and sending a driver out for a third of
+      // it is a wasted trip.
+      const intake = await bags.forOrder(order.id, 'PICKUP');
+      const finished = await bags.forOrder(order.id, 'DELIVERY');
+      const covered = new Set(finished.map(function (b) { return b.parent_id; }).filter(Boolean));
+      const outstanding = intake.filter(function (b) { return !covered.has(b.id); }).length;
+
+      if (outstanding > 0) return res.redirect(303, back + '&ready=' + outstanding);
+    }
 
     // Already done. Tapping twice is somebody making sure, not an error.
     if (order.status === 'READY') return res.redirect(303, back);
