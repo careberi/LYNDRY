@@ -350,7 +350,10 @@ function checkHandover({ wentIn, cameBack }) {
 // Nothing is created when the weight fails. A refusal that had already written
 // four bag rows and taken four clips out of the pool would be a refusal that
 // changed things, and the driver would have to undo it before he could retry.
-async function collectFromPartner(order, { bagCount, weightLb, driverId = null } = {}) {
+async function collectFromPartner(
+  order,
+  { bagCount, weightLb, driverId = null, override = null } = {}
+) {
   const count = Number(bagCount);
   const weight = Number(weightLb);
 
@@ -366,7 +369,19 @@ async function collectFromPartner(order, { bagCount, weightLb, driverId = null }
   // THE GATE. Short means a bag is probably still on their shelf, and the one
   // place to find out is standing at the counter - not at somebody's door two
   // hours later.
-  if (check && !check.ok) {
+  //
+  // THE ESCAPE HATCH. The threshold is a guess and says so, and a laundromat
+  // closing in five minutes does not care. So an admin can push past it with a
+  // reason - never a driver, because the value of the check is that somebody
+  // other than the person in a hurry agreed it was fine.
+  //
+  // It is an override, not a bypass: the check still runs, the result still
+  // travels back on `overrode`, the caller still raises an issue, and the
+  // reason goes in the change log with a name on it. A refusal that can be
+  // waved away silently is not a check.
+  const overrode = Boolean(check && !check.ok && override && override.reason);
+
+  if (check && !check.ok && !overrode) {
     return { ok: false, reason: 'mismatch', check, detail: check.detail };
   }
 
@@ -410,6 +425,12 @@ async function collectFromPartner(order, { bagCount, weightLb, driverId = null }
   return {
     ok: true,
     check,
+    // Truthy only when the check FAILED and somebody chose to go anyway. The
+    // caller has to say so in the audit trail and out loud on the page - a
+    // successful-looking result that quietly skipped a check is the thing this
+    // whole file exists to prevent.
+    overrode,
+    overrideReason: overrode ? String(override.reason).slice(0, 300) : null,
     count,
     weight,
     clips: clips.sort((a, b) => a - b),

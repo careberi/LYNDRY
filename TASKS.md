@@ -61,19 +61,33 @@ read before you start and hand to somebody else.
 behind `partners.view`. The thing most likely to go stale is the page nobody who
 works here ever opens.
 
+### 6. Van clips through the driver's run ✅
+
+The clip numbers were already computed and shown at the drop-off and at the
+door - what was missing was the collect stop. The run was offering "scan them
+into the van" for bags nobody had weighed back in, which is the wrong order:
+weigh, check, then clip. It now sends the driver to each order still waiting to
+be weighed, and only offers the van scan once they all are.
+
+`BOARD_FIELDS` carries `return_bag_count` now. Without it the run had no way to
+tell a bag still on a laundromat shelf from one already in the van - the same
+class of bug as the order page reading an unselected column and rendering
+nothing.
+
+### 7. The admin escape hatch on a weight mismatch ✅
+
+`orders.override`, which only an Admin holds. It appears **only after the check
+has actually refused** - offering "go anyway" beside a form nobody has
+submitted yet invites it to become the normal way through.
+
+It is an override, not a bypass. The check still runs, the reason goes in the
+change log with a name on it, an issue is still raised for the morning, and
+what the driver is told says plainly that it did **not** match. A refusal that
+can be waved away silently is not a check.
+
 ---
 
 ## Outstanding
-
-### 6. Van tags through the driver's run
-
-"Collect the bags on clips 4, 6, 10" on the run screen, and the clip coming off
-at the drop-off.
-
-### 7. The admin escape hatch on a weight mismatch
-
-Collecting finished work refuses when the weight does not match. A driver stood
-at a counter needs a way past it that leaves a record of who decided and why.
 
 ### 8. Route and order tracking reflecting the new process
 

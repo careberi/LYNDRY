@@ -54,6 +54,21 @@ const PERMISSIONS = Object.freeze({
   // handled somebody, and it carries money, so it is not the driver's to
   // browse even though the driver is in it.
   'orders.audit': 'Read the change log on an order',
+
+  // OVERRIDING A REFUSAL THE SYSTEM MADE FOR A REASON.
+  //
+  // Today that is one thing: the weight check when finished work is collected
+  // off a laundromat. It refuses because a short load means a bag is probably
+  // still on their shelf, and the counter is the one place that can be sorted
+  // out. But it is a guess with a guessed threshold in it, and a driver stood
+  // at a counter at six in the evening with a laundromat closing has to be able
+  // to get past it.
+  //
+  // NOT the driver's, deliberately. The whole point of the check is that
+  // somebody other than the person in a hurry decides it was fine - and the
+  // override is written into the change log with a reason, so "we waved it
+  // through" is a sentence with a name attached rather than a silent success.
+  'orders.override': 'Push past a refusal the system made, on the record',
 });
 
 const ROLES = Object.freeze({

@@ -1434,7 +1434,7 @@ function bagRow(order, l, total, canAct, done) {
 // at the moment he is holding them. The count is what he looks for; the WEIGHT
 // is what proves he has it, because he can only count what he can see and the
 // bag that gets left behind is the one behind the counter.
-function bagsCard(order, labels, canAct) {
+function bagsCard(order, labels, canAct, { mayOverride = false, refused = false } = {}) {
   const done = ['DELIVERED', 'CANCELED'].includes(order.status);
 
   const incoming = labels.filter((l) => (l.leg || 'PICKUP') === 'PICKUP');
@@ -1554,6 +1554,33 @@ function bagsCard(order, labels, canAct) {
                         inputmode="decimal" value="${order.return_weight_lb == null ? '' : order.return_weight_lb}">
                </div>
                <button class="btn btn-ink" type="submit">Save</button>
+
+               ${
+                 // THE ESCAPE HATCH. Only after the check has actually refused,
+                 // and only for somebody holding orders.override - a driver at
+                 // a counter is the person in a hurry, and the whole value of
+                 // the check is that somebody else agreed it was fine.
+                 //
+                 // Full width under the two number fields, because a reason is
+                 // a sentence and a sentence does not belong in a 150px box.
+                 refused && mayOverride
+                   ? `<div style="flex:1 1 100%;padding-top:16px;margin-top:4px;
+                                  border-top:2px dashed var(--stain-500);">
+                        <label class="field-label" for="ovr">
+                          Take it anyway - why?
+                        </label>
+                        <p class="field-hint" style="margin:0 0 10px;">
+                          Only if you are sure. It goes on the order with your
+                          name on it and still opens an issue for the morning,
+                          because going ahead tonight is not the same as the
+                          load being right.
+                        </p>
+                        <input class="field" id="ovr" name="override_reason" type="text"
+                               maxlength="300"
+                               placeholder="counted them twice with the owner, all four are here">
+                      </div>`
+                   : ''
+               }
              </form>
            </div>`
         : ''
@@ -1699,7 +1726,13 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
       })}
 
-      ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'))}
+      ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'), {
+        mayOverride: roles.can(req.opsUser, 'orders.override'),
+        // THE HATCH ONLY APPEARS AFTER A REFUSAL. Offering "go anyway" beside
+        // a form nobody has submitted yet invites it to be used as the normal
+        // way through, which is the opposite of what a check is for.
+        refused: /did not|short|heavier|lighter/i.test(String(req.query.problem || '')),
+      })}
       ${scannerScript()}
 
       ${(() => {
@@ -2809,10 +2842,21 @@ router.post('/ops/orders/:id/return', guard, may('orders.act'), async (req, res,
     const back = backTo(req, order);
     const body = req.body || {};
 
+    // THE ESCAPE HATCH, and who is allowed to pull it.
+    //
+    // Checked here rather than trusted from the form, because a hidden field
+    // whose route still fires is not a guard - the same rule the bag page and
+    // the team page already follow. A driver posting an override reason gets
+    // the refusal exactly as before.
+    const mayOverride = roles.can(req.opsUser, 'orders.override');
+    const reason = String(body.override_reason || '').trim();
+    const override = mayOverride && reason ? { reason } : null;
+
     const result = await tags.collectFromPartner(order, {
       bagCount: body.bag_count,
       weightLb: body.weight_lb,
       driverId: order.driver_id,
+      override,
     });
 
     if (!result.ok) {
@@ -2840,19 +2884,48 @@ router.post('/ops/orders/:id/return', guard, may('orders.act'), async (req, res,
     await orderEvents.record(order.id, {
       kind: 'WEIGHT',
       summary:
+        (result.overrode ? 'OVERRIDDEN: ' : '') +
         `${result.count} bag${result.count === 1 ? '' : 's'} collected from the laundromat, ` +
         `${result.weight.toFixed(1)} lb` +
         (result.clips.length ? ` on clip${result.clips.length === 1 ? '' : 's'} ${result.clips.join(', ')}` : ''),
       was: order.weight_lb == null ? null : `${order.weight_lb} lb collected`,
       became: `${result.weight.toFixed(1)} lb back`,
       by: { opsUser: req.opsUser },
+      // The reason only exists when somebody pushed past a refusal, which is
+      // exactly the row anybody reading this log later is looking for.
+      reason: result.overrode
+        ? `${result.check.detail} Waved through: ${result.overrideReason}`
+        : null,
     });
 
-    const note = result.ranOut
-      ? `${result.count} bags, ${result.weight.toFixed(1)} lb. ${result.ranOut}`
-      : `${result.count} bag${result.count === 1 ? '' : 's'}, ${result.weight.toFixed(1)} lb. ` +
-        `That matches what we collected. Clip${result.clips.length === 1 ? '' : 's'} ` +
-        `${result.clips.join(', ')}.`;
+    // AN OVERRIDE STILL RAISES THE ISSUE. Going ahead is a decision about
+    // tonight - the driver is at a counter and the laundromat is closing - and
+    // it is not the same as the load being right. Somebody still has to find
+    // out in the morning whether a bag is sitting on a shelf.
+    if (result.overrode) {
+      await issues
+        .raise({
+          customer: order.customers || null,
+          order,
+          reason: `${result.check.detail} Collected anyway by ${
+            (req.opsUser || {}).name || 'an admin'
+          }: ${result.overrideReason}`,
+        })
+        .catch((err) => console.error(`Could not raise an overridden handover: ${err.message}`));
+    }
+
+    // WHAT HE IS TOLD MUST NOT SAY "that matches" WHEN IT DID NOT. An override
+    // that reads back like a clean pass is worse than no override at all.
+    const clipList = `Clip${result.clips.length === 1 ? '' : 's'} ${result.clips.join(', ')}.`;
+
+    const note = result.overrode
+      ? `${result.count} bag${result.count === 1 ? '' : 's'}, ${result.weight.toFixed(1)} lb. ` +
+        `This did NOT match - taken anyway, and it is on the order and in Issues. ` +
+        (result.ranOut || clipList)
+      : result.ranOut
+        ? `${result.count} bags, ${result.weight.toFixed(1)} lb. ${result.ranOut}`
+        : `${result.count} bag${result.count === 1 ? '' : 's'}, ${result.weight.toFixed(1)} lb. ` +
+          `That matches what we collected. ${clipList}`;
 
     return res.redirect(303, `${back}?note=${encodeURIComponent(note)}`);
   } catch (err) {
