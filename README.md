@@ -3,7 +3,7 @@
 Laundry pickup and delivery. The whole customer experience happens over text
 message — there is no app to download.
 
-**Wash, dry and fold. $2.50 a pound. Picked up when you need it, back within 24 hours.**
+**Wash, dry and fold. $2.00 a pound. Picked up when you need it, back the next day.**
 
 ## Status
 

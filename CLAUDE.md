@@ -1612,7 +1612,9 @@ rule is only about text messages.
 ## Business facts
 
 - **Service:** wash, dry and fold only
-- **Price:** $2.50 per pound, weighed after pickup
+- **Price:** $2.00 per pound, weighed after pickup. The one source of
+  truth is `pricing.perPoundCents` in `src/config.js`; this line is a
+  description of it and drifted from it once already
 - **Turnaround:** next day, and the clock means it. A bag is due back by the
   end of the day after collection — the end of the last pickup window, derived
   from `PICKUP_WINDOWS` so changing the windows moves the promise. It used to
