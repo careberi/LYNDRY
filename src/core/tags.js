@@ -241,6 +241,32 @@ async function stickersOn(parent) {
   });
 }
 
+
+// EVERY INTAKE BAG ON THIS ORDER THAT NOBODY HAS FINISHED YET.
+//
+// Neil marked one bag of a two-bag order finished and the whole order went
+// READY - the second bag, RVR2E8, was never touched and was reported as done
+// alongside it, and the "come and collect" alert went out. The check only ever
+// looked at the stickers on the tag being scanned.
+//
+// An order is finished when EVERY bag we handed over has at least one finished
+// bag packed against it. One intake bag can become any number of packed bags,
+// so the test is "at least one", not a count - but it has to be true of all of
+// them.
+async function unfinishedBags(orderId) {
+  const intake = await bags.forOrder(orderId, 'PICKUP');
+
+  const outstanding = [];
+  for (const bag of intake) {
+    // A bag that never made it to the laundromat cannot be waiting on them.
+    if (bag.released_at) continue;
+    const stickers = await stickersOn(bag);
+    if (!stickers.some((x) => x.state === STICKER.DONE)) outstanding.push(bag);
+  }
+
+  return outstanding;
+}
+
 // ONE TAP MOVES A STICKER ON: unused -> in use -> done -> unused.
 //
 // A cycle rather than three separate controls, because this is a phone held in
@@ -563,6 +589,7 @@ module.exports = {
   cycleSticker,
   toggleCollected,
   stickersOn,
+  unfinishedBags,
   stickerState,
   STICKER,
   subBagsOf,

@@ -468,6 +468,11 @@ const ES = Object.freeze({
   'Tapped one by mistake? Keep tapping it and it goes back to not used.':
     'Toco uno por error? Sigalo tocando y vuelve a sin usar.',
   'This order is done': 'Este pedido esta terminado',
+  'Not yet - another bag from this order is still open.':
+    'Todavia no - otra bolsa de este pedido sigue abierta.',
+  'Still waiting on': 'Falta',
+  'Tap a sticker number first, so we know which bags are packed.':
+    'Toque primero el numero de una pegatina, para saber que bolsas estan empacadas.',
   'Only when every bag for this order is packed and finished. We will come and collect it.':
     'Solo cuando todas las bolsas de este pedido esten empacadas y terminadas. Pasaremos a recogerlo.',
   'Not used': 'Sin usar',
@@ -693,6 +698,32 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
     </div>
 
     <div class="card" style="padding:28px;">
+      <!-- WHY THE TAP DID NOTHING. The refusal used to redirect with
+           &ready=none and nothing read it, so an attendant tapped "this order
+           is done", the page came back looking identical, and there was no way
+           to tell whether it had worked. A silent refusal is worse than no
+           check: it teaches somebody to tap it again. -->
+      ${
+        query.ready === 'waiting'
+          ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);
+                       border-radius:12px;background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
+               <strong>${escapeHtml(say('Not yet - another bag from this order is still open.'))}</strong>
+               ${
+                 query.on
+                   ? `<br>${escapeHtml(say('Still waiting on'))}: <code style="font-weight:700;">${escapeHtml(
+                       String(query.on).slice(0, 120)
+                     )}</code>`
+                   : ''
+               }
+             </p>`
+          : query.ready === 'none'
+            ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);
+                         border-radius:12px;background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
+                 ${escapeHtml(say('Tap a sticker number first, so we know which bags are packed.'))}
+               </p>`
+            : ''
+      }
+
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
       <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
         ${escapeHtml(say('Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.'))}
@@ -1317,11 +1348,24 @@ router.post('/o/:code/ready', async (req, res, next) => {
     // Anything that is not "the order is done" changes nothing else here.
     if (body.order !== 'done') return res.redirect(303, back);
 
-    // NOTHING IS FINISHED WITH NO FINISHED BAG. A stray tap on the button
-    // before anything has been packed would send a driver out for nothing.
-    const mine = parent ? await tags.stickersOn(parent) : [];
-    if (!mine.some((x) => x.state === tags.STICKER.DONE)) {
-      return res.redirect(303, back + '&ready=none');
+    // EVERY BAG ON THE ORDER, NOT JUST THIS ONE.
+    //
+    // This looked only at the stickers on the tag being scanned. Neil marked
+    // one bag of a two-bag order finished and the whole order went READY - the
+    // second bag was never touched, was reported as done alongside it, and the
+    // "come and collect" alert went out to his phone. A driver would have
+    // driven to a counter for half an order.
+    //
+    // An order is finished when every bag we handed over has at least one
+    // packed bag against it. One in can become any number out, so the test per
+    // bag is "at least one" - but it has to hold for all of them.
+    const outstanding = await tags.unfinishedBags(order.id);
+    if (outstanding.length) {
+      const waiting = outstanding.map((b) => b.code).join(',');
+      return res.redirect(
+        303,
+        back + `&ready=waiting&on=${encodeURIComponent(waiting.slice(0, 120))}`
+      );
     }
 
     // Already done. Tapping twice is somebody making sure, not an error.
