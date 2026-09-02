@@ -440,9 +440,7 @@ function taskControl(stop, task, order) {
       <input class="input input-lg" type="file" id="photo" name="photo"
              accept="image/*" capture="environment" required style="width:100%;margin-bottom:16px;">
       <button type="submit" class="btn btn-primary btn-lg btn-full">Delivered</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        One picture of the drop-off, however many bags there were.
-      </span>
+
     </form>`;
   }
 

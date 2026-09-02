@@ -319,8 +319,10 @@ async function tasksAfterPickup(order) {
 
   tasks.push({
     key: 'delivered',
-    title: order.status === 'DELIVERED' ? 'Delivered' : 'Photo, then delivered',
-    detail: 'One picture of the drop-off, however many bags there were. This charges the card.',
+    title: order.status === 'DELIVERED' ? 'Delivered' : 'Drop the bags off',
+    // Same words as the run's own delivery step. Two lists describing one act
+    // in two different ways is how a driver ends up trusting neither.
+    detail: `${dropoffSpot(order)} This charges the card.`,
     done: order.status === 'DELIVERED',
     blockedBy: scan.allScanned ? null : 'scan',
   });
@@ -394,12 +396,44 @@ async function tasksForDeliver(order) {
     },
     {
       key: 'delivered',
-      title: 'Leave them, photograph them, done',
-      detail: 'Where the customer asked. However many bags, one picture.',
+      // SAY WHAT TO DO, THEN WHERE. Neil: "there is unnecessary wording on each
+      // of these steps, it should be straightforward."
+      //
+      // "Leave them, photograph them, done" is three instructions in a title,
+      // and "where the customer asked" TOLD him there was a spot without ever
+      // saying what it was - the one piece of information he actually needed at
+      // that door was the one thing the screen withheld.
+      title: 'Drop the bags off',
+      detail: dropoffSpot(order),
       done: Boolean(order.delivered_at),
       blockedBy: stripped ? null : 'strip',
     },
   ];
+}
+
+// WHERE THE CUSTOMER ASKED FOR IT, in their own words.
+//
+// dropoff_spot is the field the AI saves it to; special_instructions is the
+// older one and plenty of live customers still only have that. Both are read,
+// newest first, because a spot that exists and is not shown is worse than no
+// spot at all - the driver guesses, and the guess is a doorstep.
+//
+// The order's own snapshot wins over the customer row for the same reason it
+// does everywhere else: this is what THIS order was booked with.
+function dropoffSpot(order) {
+  const own = order.preferences && Object.keys(order.preferences).length ? order.preferences : null;
+  const prefs = own || (order.customers && order.customers.preferences) || {};
+
+  const spot = String(prefs.dropoff_spot || prefs.special_instructions || '').trim();
+
+  if (!spot) return 'Photograph them where you leave them.';
+
+  // Customers type "front door", not "Front door", and this is the start of a
+  // sentence on a screen somebody reads at a run.
+  const said = spot.charAt(0).toUpperCase() + spot.slice(1);
+  const stop = /[.!?]$/.test(said) ? '' : '.';
+
+  return `${said}${stop} Photograph them where you leave them.`;
 }
 
 // Is this stop finished?

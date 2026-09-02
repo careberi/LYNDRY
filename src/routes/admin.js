@@ -32,6 +32,8 @@ const drivers = require('../core/drivers');
 const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
 const { runBody } = require('../web/run-page');
+const reports = require('../core/reports');
+const { reportsBody } = require('../web/reports-page');
 const { teamMemberBody, ROLE_TONE } = require('../web/team-page');
 const loadout = require('../core/loadout');
 const { loadoutBody, loadWalkBody } = require('../web/loadout-page');
@@ -284,6 +286,10 @@ const OPS_MENUS = Object.freeze([
       // The dashboard first: taking orders, the weight thresholds, and the way
       // through to promotions, text blasts and issues.
       { href: '/ops/admin', label: 'Admin dashboard', permission: 'service.manage' },
+      // The reconciliation: three weights and the money beside them, per order.
+      // Under Admin rather than Tools because it reads real orders - Tools is
+      // the two calculators that read nothing.
+      { href: '/ops/reports', label: 'Weights and money', permission: 'money.view' },
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
       // "Messages" at Neil's request. It was called Conversations to make the
       // point that the screen is one row per phone NUMBER and holds people who
@@ -3423,6 +3429,72 @@ orderAction('delivered', (order, req) =>
 router.get('/ops/dispatch', (req, res) => {
   const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   res.redirect(301, `/ops/routing${query}`);
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/reports - the weights and the money, one row per order
+//
+// Neil's ask: the laundromat, the order, what it weighed coming in, what they
+// said it weighed, what came back out, the add-ons, the weight actually billed,
+// what the customer paid and what we will be invoiced - and a CSV of it.
+//
+// Behind money.view, which is Admin only. It shows the wholesale rate on every
+// row, and what we pay a laundromat is the one figure a driver must never be
+// handed.
+// ---------------------------------------------------------------------------
+const reportForm = (req) => ({
+  from: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || '')) ? String(req.query.from) : null,
+  to: /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || '')) ? String(req.query.to) : null,
+  partner: UUID.test(String(req.query.partner || '')) ? String(req.query.partner) : null,
+});
+
+router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res, next) => {
+  try {
+    const form = reportForm(req);
+    const report = await reports.rows({ from: form.from, to: form.to, partnerId: form.partner });
+
+    const { data: partnerRows } = await db
+      .from('partners')
+      .select('id, name')
+      .eq('type', 'LAUNDROMAT')
+      .order('name');
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Weights and money',
+        active: '/ops/reports',
+        body: reportsBody({ report, partners: partnerRows || [], form }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// The same rows, as a file. Same guard and the same query parameters, so
+// whatever is on the screen is what comes out - a CSV that answers a different
+// question from the page above it is worse than no CSV.
+router.get('/ops/reports.csv', guard, may('money.view'), async (req, res, next) => {
+  try {
+    const form = reportForm(req);
+    const report = await reports.rows({ from: form.from, to: form.to, partnerId: form.partner });
+
+    const name = `lyndry-weights-${report.start}-to-${report.end}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    // Never cached: it carries customer money and changes every day.
+    res.setHeader('Cache-Control', 'no-store, private');
+
+    // A BYTE ORDER MARK, so Excel opens it as UTF-8 rather than guessing at the
+    // system codepage and mangling any accented laundromat name.
+    return res.send('﻿' + reports.toCsv(report.rows));
+  } catch (err) {
+    return next(err);
+  }
 });
 
 router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res, next) => {

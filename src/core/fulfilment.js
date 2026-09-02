@@ -658,9 +658,22 @@ async function deliver(orderIn, file, { by = {} } = {}) {
     // no schedule already, and only when the delivery went cleanly - nobody
     // wants to be sold a weekly habit in the same breath as a failed card.
     const customer = Object.assign({}, order.customers, { schedules });
+    // A BLANK LINE, NOT A SPACE. Neil's call, and the reason is visible in the
+    // message he sent back: the photo URL ran straight into "Want us to make
+    // this a regular thing", so the link looked like it continued into the
+    // sentence and the offer looked like part of the delivery notice.
+    //
+    // Two different things are being said - here is your laundry, and would you
+    // like this regularly - so they get their own block.
+    //
+    // A newline is in the GSM alphabet, so this costs two characters and does
+    // NOT push the message into UCS-2. Anything added here still has to be
+    // counted.
     const offer =
       !recurring.isScheduled(customer) && settled
-        ? ` Want us to make this a regular thing? We can come every week or every other week.`
+        ? `
+
+Want us to make this a regular thing? We can come every week or every other week.`
         : '';
 
     // SAME DAY IS WORTH SAYING OUT LOUD, and this is the only moment it can be
