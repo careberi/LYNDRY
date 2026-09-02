@@ -580,9 +580,17 @@ already happen.
 a three-bag order leaves the run waiting on a bag that does not exist. Only once
 the count is known — a count nobody has entered is not a limit of zero.
 
-**Per-bag scale photos satisfy the weight-evidence rule** (`photoOnBags`), and
-that flag must never be confused with "there is a file to upload". Conflating
-the two made `recordWeight` try to store a photo that was never passed.
+**THERE IS NO SCALE PHOTO ANY MORE, and that is Neil's call.** A weight used to
+be refused without a picture of the display, because that number charges a card
+and 400 lb typed instead of 40 is a $1,000 charge. It is a photo step at every
+bag on every doorstep, every day, against a dispute that has not happened yet,
+and he decided the price was too high.
+
+`recordWeight()` still ACCEPTS a photo and stores it — the JSON API takes
+multipart and old orders keep theirs — it simply never demands one. Don't put
+the requirement back without asking; what replaced it is that every bag is
+weighed separately, the laundromat weighs it again and a gap raises an issue,
+and every figure is in `order_events` with a name against it.
 
 **Every bag is scanned before the camera exists, then one photo.** While
 anything on the order is unscanned the delivery form is not on the page at all —
@@ -844,10 +852,10 @@ the order is `AT_PARTNER`, and the route refuses it too. That second check is
 the only real one: this is the page with no login at all, so a hidden form whose
 route still fires is not a guard.
 
-**The scale photo is required, and the partner's weight is a cross-check.**
-`/ops/weight` will not save a first weighing without a photo of the display —
-the number charges a card. A laundromat may enter its own figure on the QR page;
-**`partner_weight_lb` is never read by the pricing code**. Ours bills.
+**The partner's weight is a cross-check, and ours is the one that bills.** A
+laundromat may enter its own figure on the QR page; **`partner_weight_lb` is
+never read by the pricing code**. Ours bills. (The scale photo that used to be
+required alongside it is gone — see above.)
 
 **The tolerance is the larger of a fixed amount and a percentage** —
 `TOLERANCE_LB` or `TOLERANCE_PCT` of the bag, in `src/core/partners.js`. It has

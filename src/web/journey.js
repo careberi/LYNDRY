@@ -30,7 +30,7 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '1 September 2026';  // bag tags with four numbered stickers, and the override
+const REVIEWED = '2 September 2026';  // no scale photo, and the pickup sequence
 
 // A step in one of the three legs. `who` is who physically does it, which is
 // the thing a reader most often wants and the thing prose is worst at keeping
@@ -215,7 +215,7 @@ function journeyBody() {
 
       ${step('One bag at a time: tag, scale, photo', 'Driver',
         `For each bag in turn he puts a <strong>bag tag</strong> on it, puts the bag
-         on the scale, and photographs the display with the bag on it. Then the next
+         on the scale and types what it says. Then the next
          bag. He is never asked for one total at the end - that makes him add up in
          his head and loses which bag was the heavy one.
          <br><br>
@@ -254,10 +254,16 @@ function journeyBody() {
     <div class="jn-note jn-stop">
       <h3>No photo, no weight</h3>
       <p>
-        A weight cannot be saved without a photograph of the scale that produced
-        it. That number is what charges somebody's card - 400 lb typed instead of
-        40 is a $1,000 charge - so the evidence and the figure are one step rather
-        than two.
+        <strong>There is no photograph of the scale.</strong> There used to be,
+        and it was required: that number charges somebody's card, and 400 lb
+        typed instead of 40 is a $1,000 charge. Neil's call to drop it - a photo
+        step at every bag on every doorstep is real time, every day, against a
+        dispute that has not happened yet.
+        <br><br>
+        So the weight is checked by other things instead: each bag is weighed on
+        its own rather than as a pile, the laundromat weighs it again and a gap
+        raises an issue, and every figure is in the order's change log with a
+        name against it.
       </p>
     </div>`)}
 

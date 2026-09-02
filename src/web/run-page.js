@@ -221,14 +221,10 @@ function taskControl(stop, task, order) {
              step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus
              placeholder="12.5" style="width:100%;margin-bottom:16px;">
 
-      <label class="field-label" for="photo">Photo of the scale</label>
-      <input class="input input-lg" type="file" id="photo" name="photo"
-             accept="image/*" capture="environment" required style="width:100%;margin-bottom:16px;">
-
       <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag ${task.position}</button>
       <span class="field-hint" style="display:block;margin-top:10px;">
-        Photograph the display with the bag on it. That photo settles any argument
-        about the number later.
+        This is what prices the bag. The card is charged when you mark the order
+        delivered.
       </span>
     </form>`;
   }

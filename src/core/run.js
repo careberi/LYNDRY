@@ -121,7 +121,7 @@ async function tasksForCollect(order) {
         label && label.weight_lb != null
           ? `Bag ${position} - ${label.weight_lb} lb`
           : `Weigh bag ${position}`,
-      detail: 'On the scale, then a photo of the display with the bag on it.',
+      detail: 'On the scale, and type what it says. This is what prices the bag.',
       done: Boolean(label && label.weight_lb != null),
       // Cannot weigh a bag that has nothing on it: the weight is recorded
       // against the tag, so there is nowhere to put the number.

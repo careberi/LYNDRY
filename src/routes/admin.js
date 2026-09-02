@@ -556,12 +556,6 @@ function pickupSequence(order, tasks, { notice, problem }) {
                step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus
                style="width:100%;" placeholder="Pounds">
 
-        <label class="field-label" for="bp" style="display:block;margin-top:18px;">
-          Photo of the scale
-        </label>
-        <input class="input input-lg" type="file" id="bp" name="photo"
-               accept="image/*" capture="environment" required style="width:100%;">
-
         <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:16px;">
           Save bag ${t.position}
         </button>
@@ -851,18 +845,10 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
                  placeholder="Pounds">
         </div>
 
-        <!-- capture="environment" opens the back camera straight away rather
-             than a file picker. On the first weighing it is required; on a
-             correction it is optional, because a typo is usually spotted after
-             the bag has gone and refusing the fix would leave the wrong number
-             on the order for good. -->
-        <label class="field-label" for="weight_photo" style="display:block;margin-top:18px;">
-          ${weighed ? 'New photo of the scale (optional)' : 'Photo of the scale'}
-        </label>
-        <input class="input input-lg" type="file" id="weight_photo" name="photo"
-               accept="image/*" capture="environment" ${weighed ? '' : 'required'}
-               style="width:100%;">
-
+        <!-- NO PHOTO FIELD. Neil's call: the scale photo is no longer asked
+             for or required anywhere a driver works. The JSON API still
+             accepts one and old orders keep theirs, so nothing that was
+             photographed is lost - we simply stop demanding it. -->
         <button type="submit" class="btn btn-${mustWeighFirst ? 'primary' : 'ink'} btn-lg btn-full"
                 style="margin-top:16px;">Save the weight</button>
 
@@ -870,7 +856,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
           This sets the price. The card is charged when you mark it delivered. ${
             weighed
               ? 'It has already been weighed once, so saving again is a correction and the customer is told so.'
-              : 'Photograph the display with the bag on it - that photo is what settles any argument about the number later.'
+              : ''
           }
         </span>
       </form>`
@@ -1866,7 +1852,7 @@ function bagsCard(order, labels, canAct, { mayOverride = false, refused = false 
 
     ${leg(
       'Collected from the customer',
-      'Picked up off the doorstep and weighed bag by bag, each with a photo of the scale. This is what priced the order. Every bag wears its own tag, and the four stickers on that tag are still on it.',
+      'Picked up off the doorstep and weighed bag by bag. This is what priced the order. Every bag wears its own tag, and the four stickers on that tag are still on it.',
       inCount,
       inWeight,
       incoming.length

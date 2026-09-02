@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '1 September 2026';  // bag tags with four numbered stickers, the override
+const REVIEWED = '2 September 2026';  // no scale photo, and the pickup sequence
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -437,15 +437,16 @@ function processBody(user) {
       )}
       ${step(
         5,
-        'WEIGH IT BEFORE IT LEAVES YOUR HANDS, AND PHOTOGRAPH THE SCALE',
+        'WEIGH IT BEFORE IT LEAVES YOUR HANDS',
         `The most important step on the round. The weight sets the price and
          <strong>charges the customer's card</strong>, so it has to be our
          number on our scale - never the laundromat's figure taken on trust.
-         The button will not save without a photo of the display with the bag
-         on it; ten seconds of work that settles every later argument in both
-         directions. The system refuses to let a bag go to a partner, or onto
-         the van, without a weight recorded. Getting it wrong by a factor of
-         ten is a four-figure charge on somebody's card.`
+         Each bag is weighed on its own, so the order total is the sum of
+         numbers that each belong to a bag somebody can point at. The system
+         refuses to let a bag go to a partner, or onto the van, without a
+         weight recorded. <strong>Get it right.</strong> Out by a factor of ten
+         is a four-figure charge on somebody's card, and there is no photograph
+         of the scale to check it against.`
       )}
       ${step(
         6,

@@ -131,7 +131,8 @@ router.post('/ops/ready', async (req, res, next) => {
 
 // Weighing sets the price and charges the card, so it answers with more than
 // a status: the driver screen shows whether the money actually moved.
-// Multipart, because the first weighing needs a photo of the scale. A caller
+// Multipart, because a scale photo MAY ride along - it is accepted and stored
+// but never required, since the driver's screens stopped asking for one. A caller
 // sending plain JSON still reaches the handler; it is refused there with a
 // sentence rather than here with a parse error.
 router.post('/ops/weight', upload.single('photo'), async (req, res, next) => {

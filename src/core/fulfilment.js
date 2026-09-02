@@ -265,39 +265,24 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
     return { ok: false, reason: 'illegal', detail: `That order is ${order.status}.` };
   }
 
-  // NO PHOTO OF THE SCALE, NO WEIGHT.
+  // NO PHOTO IS REQUIRED. NEIL'S CALL, and a reversal of the rule that used to
+  // live here.
   //
-  // Same rule as the delivery photo and for the same reason: this number
-  // charges a card, and ten seconds of a driver's time is what makes it
-  // answerable afterwards. It settles the argument in both directions - the
-  // customer certain their bag was not 40 lb, and the laundromat whose invoice
-  // says 44.
+  // It refused a first weighing without a picture of the scale display, on the
+  // grounds that this number charges a card and ten seconds of a driver's time
+  // is what makes it answerable afterwards. That reasoning has not stopped
+  // being true - what it costs is a photo step at every bag on every doorstep,
+  // and Neil has decided that price is too high for a business with one van.
   //
-  // Only on the FIRST weighing. A correction is a driver fixing a typo they
-  // just made, usually with the bag already gone, and refusing that would
-  // leave the wrong number on the order permanently - which is worse than a
-  // correction with no new photo. The original photo stays.
+  // WHAT WE GIVE UP, so nobody has to rediscover it: a customer certain their
+  // bag was not 40 lb, or a laundromat whose invoice says 44, now meets our
+  // word rather than a picture. The per-bag weights and the audit trail are
+  // still there; the photograph is not.
   //
-  // `photoOnBags` is the guided run saying the evidence already exists and is
-  // better than what this asks for: it photographed the scale for EVERY bag
-  // separately, so the order total is the sum of numbers that each have their
-  // own picture. Refusing that for want of one more photo of a pile would be
-  // the rule defeating its own purpose.
+  // A photo is still ACCEPTED and stored when one is sent - the JSON API takes
+  // multipart and old orders have theirs - it is simply never demanded.
   const firstWeighing = order.weight_lb == null;
-
-  // TWO DIFFERENT QUESTIONS, and conflating them uploaded a photo that was
-  // never passed: "is there a file to store" is not "is this number backed by
-  // evidence". photoOnBags answers the second and must not touch the first.
   const havePhoto = Boolean(photo && photo.buffer && photo.buffer.length);
-  const haveEvidence = havePhoto || photoOnBags;
-
-  if (firstWeighing && !haveEvidence) {
-    return {
-      ok: false,
-      reason: 'invalid',
-      detail: 'Photograph the scale display. The weight charges the card, so it needs evidence.',
-    };
-  }
 
   // The terms stored on the order, never today's terms. Changing the price or
   // the minimum must not re-price work that was already quoted.
