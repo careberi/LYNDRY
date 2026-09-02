@@ -120,4 +120,58 @@ function describeChoices(key) {
     .join(', ');
 }
 
-module.exports = { OPTIONS, KEYS, SORTING, choiceFor, isValid, surchargeFor, washLines, describeChoices };
+// THE WASH QUESTION, IN THE ONE PLACE IT IS ALLOWED TO EXIST.
+//
+// Built from OPTIONS above rather than typed out, so a price that changes here
+// changes what the customer is quoted, and an option that is added cannot be
+// missing from the question.
+//
+// It is a single verbatim string because the prompt used to carry TWO different
+// wordings of it, and a model handed the same question twice in two forms
+// paraphrases. On a live thread it produced "cold or warm water, regular or
+// hypoallergenic detergent, and softener or no?" - which dropped hot water,
+// invented a word we do not use, and, worst of all, dropped BOTH $2 charges.
+// A surcharge somebody first learns about on their bill is a complaint.
+function money(cents) {
+  return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+}
+
+// "a, b or c" - the way somebody says a list out loud. A trailing comma before
+// "or" reads as written-down rather than spoken, which is the whole register
+// this thread is trying to hold.
+function orList(items) {
+  if (items.length < 2) return items.join('');
+  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+const QUESTION = (() => {
+  const water = orList(OPTIONS.water_temp.choices.map((c) => c.label.toLowerCase()));
+
+  const priced = (key) =>
+    orList(
+      OPTIONS[key].choices.map(
+        // "&" is ASCII and would send fine, but nobody says it out loud.
+        (c) =>
+          `${c.label.toLowerCase().replace(' & ', ' and ')}` +
+          `${c.cents ? ` for ${money(c.cents)} more` : ''}`
+      )
+    );
+
+  return (
+    `How do you like it washed: ${water} water? ` +
+    `For detergent, ${priced('detergent')}? ` +
+    `And for softener, ${priced('fabric_softener')}?`
+  );
+})();
+
+module.exports = {
+  OPTIONS,
+  KEYS,
+  SORTING,
+  QUESTION,
+  choiceFor,
+  isValid,
+  surchargeFor,
+  washLines,
+  describeChoices,
+};

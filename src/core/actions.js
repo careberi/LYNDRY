@@ -7,6 +7,7 @@ const booking = require('./booking');
 const issues = require('./issues');
 const recurring = require('./recurring');
 const settings = require('./settings');
+const wash = require('./wash');
 const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -63,8 +64,7 @@ async function createOrder(customer, input) {
         );
       case 'no_preferences':
         return (
-          `Almost there! Just tell me how you like it washed: cold or warm water, ` +
-          `standard or free and clear detergent, and scented, none or fragrance-free softener?`
+          `Almost there! ${wash.QUESTION}`
         );
       case 'bad_date':
       case 'bad_time':
@@ -414,17 +414,27 @@ async function saveDetails(customer, input) {
   const prefs = { ...(customer.preferences || {}) };
   let prefsChanged = false;
 
-  if (['COLD', 'WARM', 'HOT'].includes(input.water_temp)) {
-    prefs.water_temp = input.water_temp;
-    prefsChanged = true;
-  }
-  if (['STANDARD', 'HYPOALLERGENIC'].includes(input.detergent)) {
-    prefs.detergent = input.detergent;
-    prefsChanged = true;
-  }
-  if (input.fabric_softener === 'yes' || input.fabric_softener === 'no') {
-    prefs.fabric_softener = input.fabric_softener === 'yes';
-    prefsChanged = true;
+  // VALIDATED THROUGH wash.js, NOT AGAINST A LIST TYPED OUT HERE.
+  //
+  // This is where every new customer's setup was silently failing. The lists
+  // here had not moved when the wash options did: detergent still accepted
+  // HYPOALLERGENIC, which no longer exists, so the FREE_CLEAR the AI correctly
+  // sent was DROPPED ON THE FLOOR. Softener was worse - stored as a boolean
+  // from "yes"/"no" while wash.js expects STANDARD, NONE or FRAGRANCE_FREE, so
+  // it could never be valid at all.
+  //
+  // The effect was a loop nobody could get out of: the customer answers, the
+  // answer is thrown away, hasPreferences() stays false, and the AI asks the
+  // same question again. Neil watched it happen on a live thread and had to
+  // raise an issue against it.
+  //
+  // wash.isValid is the only thing that decides now, so an option cannot exist
+  // in the tool schema and be unwritable here ever again.
+  for (const key of wash.KEYS) {
+    if (wash.isValid(key, input[key])) {
+      prefs[key] = input[key];
+      prefsChanged = true;
+    }
   }
   if (['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'].includes(input.pickup_method)) {
     prefs.default_pickup_method = input.pickup_method;
@@ -536,9 +546,12 @@ async function saveDetails(customer, input) {
   // you up with cold water" going to somebody who chose nothing.
   if (!booking.hasPreferences(updated)) {
     return (
-      `Great. How do you like it washed: cold or warm water, regular or ` +
-      `hypoallergenic detergent, and softener or no? And where should the ` +
-      `driver find the bag?`
+      // ONE WORDING, FROM wash.js. This sentence is written in CODE and shipped
+      // as the tool's own reply, so the prompt could never have corrected it -
+      // which is exactly how "regular or hypoallergenic detergent" kept
+      // reaching customers, naming an option that does not exist and quoting
+      // neither $2 charge. The bag location is asked separately.
+      wash.QUESTION
     );
   }
 
