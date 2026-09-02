@@ -89,132 +89,47 @@ can be waved away silently is not a check.
 
 ## Outstanding
 
-*(nothing - see below)*
+### A. Seven two-hour pickup slots
+
+Replace the five uneven windows (6-9, 9-12, 12-2, 2-5, 5-9) with seven even
+ones: **6-8, 8-10, 10-12, 12-2, 2-4, 4-6, 6-8**.
+
+Knock-on to check: the next-day promise is derived from the LAST window, so the
+delivery deadline moves from 9pm to 8pm. Every existing order keeps the window
+it was promised - they are stored on the order, not recomputed.
+
+### B. A slot closes the moment it starts
+
+At 8:01 you cannot book the 8-10 slot; the earliest is 10-12.
+
+**This reverses a deliberate rule.** Today a window stays bookable until an hour
+before its END, and the comment says why: "today at 4:30", texted at 3:32,
+belongs in the 3-6 window, and the first version threw it to tomorrow, which put
+a real order on the wrong day. Neil's new rule is stricter and is his call - but
+it means somebody texting at 8:05 for "this morning" gets 10am, not 8am.
+
+### C. Route the laundromat choice across today AND tomorrow
+
+When an order comes in, choose its laundromat from the whole picture: what is
+being picked up and dropped off today, and what is booked for tomorrow - not
+just distance from that one door.
+
+Partly built: `dispatch.planPartnerFor()` already chooses at booking, but it
+weighs one order in isolation.
+
+### D. Weight corrections have nowhere to live
+
+Removing the loose weight box from a running order means a fat-fingered weight
+can no longer be fixed from that page. Needs an explicit "correct something"
+rather than being loose in the flow.
 
 ---
 
-## Done, continued
+## Waiting on Neil
 
-### 8. Route and order tracking reflect the new process ✅
-
-The order page was drawing both legs as though every bag wore a tag of its own.
-A bag we collected wears its own bag tag, four stickers still on it; a bag the
-laundromat packed wears ONE of those and reads `7MQ5Y2-2`. The sequence is
-shown when there is one, and an outgoing row names the collected bag it came
-out of - which is the thread back, and the thing "is this wash all here" is
-actually a question about.
-
-### 9. `/ops/journey` and `/ops/process` ✅
-
-Both reviewed dates bumped to 1 September 2026.
-
-Journey: pickup is now "tag, scale, photo" with the four stickers explained,
-the collection step covers the admin override, and the long note about the
-identifier problem now describes **the answer that was actually built** rather
-than the ticket-sticker idea that was superseded. Its closing worry - that a
-clip carries nothing once it comes off - is answered now: the sticker outlives
-the clip.
-
-Process: the laundromat gained the step that makes the whole return leg work
-(peel a sticker onto each bag they pack), and the QR page is described as
-changing with the bag. Also fixed a stale claim: the wash allowlist still
-listed **hang-dry** as a field, which contradicts the rule that drying is not a
-choice.
-
-### 10. The AI sells instead of waiting ✅
-
-It was answering "hello" with "How can we help?" and a bare introduction to
-"who is this". Every reply that is not already about a booking now ends by
-offering one, in its own words.
-
-**Three times it does not push**, all deliberate: somebody unhappy or chasing a
-problem gets help and nothing else; somebody who already has a pickup booked is
-not sold another; and when we are not taking orders there is nothing to offer.
-
-**Note on why it looked worse than it was.** The service is currently set to
-closed, and the prompt correctly refuses to sell something that cannot be
-bought. Most of the passivity was that, not the tone. The selling shows up when
-the service is open - or right now on any number in `ALWAYS_BOOK_NUMBERS`.
-
----
-
-## Neil's own outstanding actions
-
-- **Set `SUPPORT_PHONE=+14437452665` in Railway.** The always-book exemption
-  does nothing until it is there, and the boot log says so on every deploy.
-- Print bag tags on Avery 5164 stock.
-- Add the Stripe live keys.
-- Rotate `ADMIN_API_KEY` - but note that rotating it kills the signature on
-  every QR already printed, so rotate **then** print.
-
----
-
-## 2 September, after the live thread tests
-
-### 11. The setup asked four questions in one breath ✅
-
-Water, detergent, softener and where to leave the bag, all in one message. That
-is a form. The wash is one short question now; the spot is its own message and
-asks **both ways round**, because one spot serves both legs.
-
-### 12. The closed sign lived in four places ✅
-
-`bookPickup()`, the prompt, `actions.js` and `onboarding.js` each check it, and
-only the first two had been taught about the exemption. Neil's number walked the
-whole setup, said "good to go", and got "we're not booking pickups just yet"
-from a tool result. Anything new reading `settings.takingOrders()` in a customer
-path has to call `booking.alwaysAllowed()` beside it.
-
-### 13. The AI goes quiet and waits for a person ✅
-
-Neil's call, after watching it happen. When the AI repeats itself it has run out
-of road, and everything it says after that makes things worse: it says the same
-thing a third time, or it apologises. Either way the customer now knows
-something is broken.
-
-So it says **nothing**. Not the repeat, and not a handoff line either - "let me
-get someone to help with that" is still the machine announcing it has failed. An
-issue is raised, both admin numbers are texted, and the conversation screen
-shows a red banner with a box to write the next message yourself. To the
-customer it is a pause and then a reply from LYNDRY, which is what happens at
-any small business when somebody goes to check.
-
-**The hold lifts on both halves and neither alone** - a person has actually sent
-something, AND the customer has replied to it. A draft nobody sent is not a
-reply, and a reply nobody responded to is not a conversation that has resumed.
-
-`messages.send` is its own permission (Admin and Sales, never Driver): reading a
-thread is looking something up, sending one reaches somebody's pocket and cannot
-be taken back. Same reason texting a laundromat sits behind `partners.manage`.
-
----
-
-### 14. Clearing the notification when an unknown number texts ✅
-
-The yellow banner on the conversations screen counted every number that had ever
-texted without signing up, so it could never go down - and a warning that is
-always on is one nobody reads.
-
-**Dismissing is a timestamp, not a flag.** It means "dealt with everything they
-have said so far", so a lead who texts again comes straight back - somebody
-trying a second time after being ignored is a better lead than the first time.
-You clear it from inside the thread, not the list, because marking a number
-dealt with without reading what they said is the mistake this exists to stop.
-
-### 15. A historical view on the orders board ✅
-
-`/ops?date=2026-08-26`, with a date picker and arrows either side. Forward only
-as far as today.
-
-**A past day is its own page, not the live board filtered.** Today's board
-groups by where each bag physically is, which is meaningless once the bags have
-all gone home; a past day answers "what happened" instead - picked up, delivered,
-pounds, billed. It says plainly that **statuses are current, not as-of**: a real
-snapshot would mean replaying `order_events`, and a page that quietly looked
-like one without being one would be worse than an honest one.
-
----
-
-## Outstanding
-
-*(nothing)*
+- **Fancy K has no Wednesday hours row**, so the router skips it every
+  Wednesday. Add the row if they are actually open.
+- **Order #1930 and +1 443-745-2665** are live in the database as a real
+  customer and order. Leave as a test, or clear?
+- **Test the camera scan on the iPhone.** Built and verified as far as a
+  decoder can be checked from here; the actual camera cannot be.
