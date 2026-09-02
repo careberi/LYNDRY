@@ -691,6 +691,9 @@ function roundCards(run) {
     const late = r.state === 'past' && !r.complete;
     const worked = r.state === 'past' && r.complete;
 
+    // Only the colours are inline. The box - five equal cells on one line, and
+    // the type sizes that keep them on it - is .run-round in lyndry.css, per
+    // the rule about inline grid styles beating the media queries.
     const style = late
       ? 'background:var(--stain-500);color:var(--paper-050);border-color:var(--ink-900);box-shadow:var(--shadow-pop-xs);'
       : r.state === 'now'
@@ -699,28 +702,28 @@ function roundCards(run) {
           ? 'background:var(--paper-200);border-color:var(--ink-300);color:var(--ink-500);'
           : 'background:var(--paper-050);border-color:var(--ink-300);color:var(--ink-500);';
 
+    // "10am-12pm", not "10am and 12pm". Five of these share one line on a
+    // phone, so the words have to be as short as they can be while still
+    // naming the round.
+    const when = String(r.label).replace(' and ', '-');
+
     const note = late
-      ? `${r.count} still waiting`
+      ? `${r.count} waiting`
       : r.count === 0
-        ? 'nothing booked'
+        ? 'nothing'
         : worked
           ? `${r.count} done`
           : `${r.count} ${r.count === 1 ? 'pickup' : 'pickups'}`;
 
-    const inner = `
-      <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:0.07em;
-                  text-transform:uppercase;margin-bottom:5px;">${escapeHtml(r.label)}</div>
-      <div style="font-size:14px;font-weight:${r.state === 'now' || late ? '700' : '400'};">${escapeHtml(note)}</div>`;
-
-    const box =
-      `flex:1 1 128px;min-width:118px;padding:13px 14px;border:2px solid;border-radius:14px;` +
-      `text-align:left;text-decoration:none;color:inherit;${style}`;
+    const inner =
+      `<div class="rr-when">${escapeHtml(when)}</div>` +
+      `<div class="rr-what" style="font-weight:${r.state === 'now' || late ? '700' : '400'};">${escapeHtml(note)}</div>`;
 
     // AN EMPTY ROUND IS NOT A LINK. There is nothing behind it, and a card that
     // opens onto "nothing here" teaches you to stop tapping the cards.
     return r.count === 0
-      ? `<div style="${box}">${inner}</div>`
-      : `<a href="/ops/run?round=${encodeURIComponent(r.start)}" style="${box};display:block;">${inner}</a>`;
+      ? `<div class="run-round" style="${style}">${inner}</div>`
+      : `<a class="run-round" href="/ops/run?round=${encodeURIComponent(r.start)}" style="${style}">${inner}</a>`;
   };
 
   const now = rounds.find((r) => r.state === 'now');
@@ -730,7 +733,7 @@ function roundCards(run) {
       <div class="eyebrow" style="margin:0 0 9px;">
         ${now ? `On the ${escapeHtml(now.label)} round` : "Today's rounds"}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:9px;">${rounds.map(card).join('')}</div>
+      <div class="run-rounds">${rounds.map(card).join('')}</div>
     </div>`;
 }
 

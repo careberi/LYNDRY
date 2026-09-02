@@ -963,6 +963,60 @@
 .grid-2-narrow { grid-template-columns: 0.75fr 1.25fr; } /* sticky heading, content */
 .grid-3-address { display: grid; grid-template-columns: 2fr 0.8fr 1.2fr; gap: 16px; }
 
+/* THE DAY'S ROUNDS ON /ops/run. Five equal cards on one line, always.
+
+   A class rather than an inline grid-template-columns for the reason stated
+   above, and it matters more here than anywhere: this is the strip a driver
+   looks at on a phone. It was flex-wrap, so the fifth card dropped onto its own
+   row at full width and the five stopped reading as one set of five.
+
+   They stay on one line at every width. The type shrinks instead, and the
+   labels are written compactly - "10am-12pm" rather than "10am and 12pm" - so
+   there is something to shrink. Below 380px the padding goes rather than the
+   line breaking: a wrapped round strip is a worse answer than a tight one. */
+.run-rounds {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 9px;
+}
+
+.run-round {
+  padding: 13px 11px;
+  border: 2px solid;
+  border-radius: 14px;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  min-width: 0;               /* let a grid cell actually shrink */
+}
+
+.run-round .rr-when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+  white-space: nowrap;
+}
+
+.run-round .rr-what { font-size: 13px; }
+
+@media (max-width: 620px) {
+  .run-rounds { gap: 6px; }
+  .run-round { padding: 10px 7px; }
+  .run-round .rr-when { font-size: 9px; letter-spacing: 0.02em; }
+  .run-round .rr-what { font-size: 11px; }
+}
+
+@media (max-width: 400px) {
+  .run-rounds { gap: 4px; }
+  .run-round { padding: 8px 5px; border-radius: 11px; }
+  .run-round .rr-when { font-size: 8px; letter-spacing: 0; }
+  .run-round .rr-what { font-size: 10px; }
+}
+
 .stack > * + * { margin-top: 18px; }
 
 /* A question-and-answer list, used on the FAQ-shaped sections. */

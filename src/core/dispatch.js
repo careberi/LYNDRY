@@ -639,6 +639,18 @@ async function board(dateIso, fromTime, driverId = null) {
   const { data: allPickups, error: pickupError } = await pickupQuery;
   if (pickupError) throw pickupError;
 
+  // Bags we are holding that still need washing, and bags a laundromat has
+  // finished. Not filtered by date: a bag collected yesterday and still in the
+  // van is today's problem whatever its pickup date says.
+  let handQuery = db
+    .from('orders')
+    .select(BOARD_FIELDS)
+    .in('status', ['IN_PROCESS', 'READY', 'OUT_FOR_DELIVERY']);
+  if (driverId) handQuery = handQuery.eq('driver_id', driverId);
+
+  const { data: inHand, error: handError } = await handQuery;
+  if (handError) throw handError;
+
   // A ROUND SHOWS ITS OWN STOPS AND NOBODY ELSE'S.
   //
   // The query above asks for the whole DAY, which is right - the board has to
@@ -657,19 +669,36 @@ async function board(dateIso, fromTime, driverId = null) {
   // Every round of the day, with what is still outstanding in it. Empty rounds
   // are kept: a slot with no pickups in it is a fact about the day, and hiding
   // it makes the day look shorter than it is.
+  // A COLLECTED BAG THAT HAS NOT BEEN WEIGHED IS STILL A STOP AT THAT DOOR,
+  // and it belongs to the round its customer was promised. Counting only
+  // un-collected orders said "1 pickup" on a round with two doors still to
+  // deal with - and worse, would have called the round COMPLETE the moment the
+  // last bag went in the van, moving the driver on and leaving an unweighed
+  // bag behind him. CLAUDE.md says this in as many words: leaving IN_PROCESS
+  // orders out of the collect leg made the stop vanish the instant he tapped
+  // Collected.
+  const stillAtDoor = (inHand || []).filter(
+    (o) => o.status === 'IN_PROCESS' && o.weight_lb == null
+  );
+
   const rounds = booking.PICKUP_WINDOWS.map((w) => {
-    const orders = (allPickups || []).filter((o) => sameWindow(o.pickup_window_start, w.start));
+    const waiting = (allPickups || []).filter((o) => sameWindow(o.pickup_window_start, w.start));
+    const unweighed = stillAtDoor.filter((o) => sameWindow(o.pickup_window_start, w.start));
+    const orders = waiting;
     return {
       start: w.start,
       end: w.end,
       label: booking.describeWindow(w.start, w.end).replace('between ', ''),
       orders,
-      count: orders.length,
+      unweighed,
+      // What the driver still has to do at a door in this round: bags to
+      // collect, plus bags collected and not yet on a scale.
+      count: orders.length + unweighed.length,
       // Started, by the clock. Separate from finished, because the two come
       // apart and that is the whole point below.
       begun: date < now.date || (date === now.date && now.time >= w.start),
       // NOTHING LEFT TO DO IN IT. An empty round is trivially complete.
-      complete: orders.length === 0,
+      complete: orders.length + unweighed.length === 0,
     };
   });
 
@@ -718,7 +747,7 @@ async function board(dateIso, fromTime, driverId = null) {
   // somebody is looking at one round and needs telling about another.
   const overdue = rounds
     .filter((r) => r !== activeRound && r.begun && !r.complete)
-    .flatMap((r) => r.orders);
+    .flatMap((r) => [...r.orders, ...r.unweighed]);
 
   // What the rest of the day still holds, so the board can say the round is
   // not the whole picture without putting those stops in the sequence.
@@ -726,17 +755,6 @@ async function board(dateIso, fromTime, driverId = null) {
     .filter((r) => r !== activeRound && !r.begun)
     .flatMap((r) => r.orders);
 
-  // Bags we are holding that still need washing, and bags a laundromat has
-  // finished. Not filtered by date: a bag collected yesterday and still in the
-  // van is today's problem whatever its pickup date says.
-  let handQuery = db
-    .from('orders')
-    .select(BOARD_FIELDS)
-    .in('status', ['IN_PROCESS', 'READY', 'OUT_FOR_DELIVERY']);
-  if (driverId) handQuery = handQuery.eq('driver_id', driverId);
-
-  const { data: inHand, error: handError } = await handQuery;
-  if (handError) throw handError;
 
   // --- the laundromats ------------------------------------------------------
 
