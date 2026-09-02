@@ -89,78 +89,52 @@ can be waved away silently is not a check.
 
 ## Outstanding
 
-*Reviewed 2 Sep 2026, against the running system rather than from memory.*
+*Reviewed 2 Sep 2026, against the running system.*
 
-### Done since this list was last written
+**Everything on the previous list is done.** Kept here as the record of what was
+decided, because several of these were decisions rather than tickets.
 
-**A. Two-hour pickup slots** and **B. a window closes the moment it starts** are
-both built. `PICKUP_WINDOWS` is 8-10, 10-12, 12-2, 2-4, 4-6 and
-`WINDOW_CLOSES_AT_START` is true - verified: at 08:05 the 8-10 slot is gone and
-the earliest offered is 10-12.
+| | |
+|---|---|
+| Two-hour windows, closing at their start | already built; verified at 08:05 |
+| The +$2 wash options | now billed, and the text explains the total |
+| Weight corrections | admin only, behind `orders.override` |
+| The bag tag | 4.75 x 2.38 hang tag, 12 to a sheet |
+| The laundromat page | teaches the attendant the job |
+| Partner billing terms | per partner, biweekly and 15 days by default |
+| Reschedules | written to the change log |
+| The ops app on a phone | installs standalone from the home screen |
+| Laundromat choice | counts today AND tomorrow |
 
-FIVE WINDOWS, NOT THE SEVEN ORIGINALLY WRITTEN HERE, and that is deliberate.
-Neil asked for slots "fitting the laundromat's hours"; Fancy K opens at 7:30 and
-shuts at 7, so a 6-8am pickup could not be dropped off and a 6-8pm one would
-arrive after they closed.
+### What is left, and none of it is blocking
 
-### 1. The laundromat page is a sales page, not an instruction set
+**Orphaned code.** `/ops/loadout`'s door-scan and `allBagsScanned` were bypassed
+by the door-flow change. `pickupSequence()` and `workCard()` are called by
+nothing since the order page became a record - kept on purpose, because Neil
+said "maybe we'll come back to it later".
 
-`/for-laundromats` explains the arrangement to an owner. It has to also teach
-the attendant the job: scan the bag tag, enter the weight, get the wash
-instructions, and what the four peelable stickers are for - one per bag they
-pack, so one bag in becomes however many bags out and each still carries our
-id. Wants a picture of a bag tag and a diagram of how it threads into their own
-in-house tracking, plus how a finished order is called in for collection, and
-how invoicing works.
+**The rest of the phone speed.** The manifest fixed how it feels; the server is
+still 400-750ms a page across 14 sequential database calls. More of those can be
+batched, and the Railway and Supabase regions are worth checking against each
+other - every one of those calls pays that gap twice.
 
-### 2. Weight corrections have nowhere to live
-
-Neil's call: **an admin can correct a weight, a driver cannot.** The loose
-weight box went when the order page became a record, so a fat-fingered weight
-is now uncorrectable from any screen. Behind `orders.override` or a permission
-of its own, logged to `order_events` with both numbers and a name, exactly as
-the old correction box did.
-
-### 3. Route the laundromat choice across today AND tomorrow
-
-When an order comes in, choose its laundromat from the whole picture: what is
-being picked up and dropped off today, and what is booked for tomorrow - not
-just distance from that one door. `dispatch.planPartnerFor()` already chooses at
-booking but weighs one order in isolation.
-
-### 4. Reschedules are not written to the change log
-
-A customer can move their own pickup by text and leave no trace of who changed
-it or when. CLAUDE.md says every change to an order is recorded; this one is
-not.
-
-### 5. The ops app is slow on a phone
-
-Measured, not guessed: production answers a trivial request in ~130ms, `/ops`
-renders in ~410ms and `/ops/run` in ~750ms across 14 sequential database calls.
-So a tap costs roughly 0.4-0.9s and every one is a full page load.
-
-Three levers, in order of payoff: there is **no web app manifest**, so the
-home-screen bookmark runs inside full Safari rather than standalone; several
-more database calls can be batched; and the Railway and Supabase regions should
-be checked against each other, because every one of those 14 calls pays that gap
-twice.
-
-### 6. Orphaned code from today's changes
-
-`/ops/loadout`'s door-scan and `allBagsScanned` were bypassed by the door-flow
-change. `pickupSequence()` and `workCard()` are called by nothing since the
-order page became a record - kept on purpose, because Neil said "maybe we'll
-come back to it later".
+**The event log is chatty.** Tapping a sticker logs every state change, so six
+taps in a second produced six rows, two of them identical. Harmless, and noise
+in a log that is deliberately append-only.
 
 ---
 
 ## Decided and not being built
 
 **A separate staging site.** Neil's call, asked directly: we carry on making
-changes against production. CLAUDE.md's "no more than one deployment target"
-stands. The cost is real and worth writing down - real customers and real orders
-are the test data, and every fix this week was verified against live rows.
+changes against production. CLAUDE.md's one-deployment-target rule stands. The
+cost is real and worth writing down - real customers and real orders are the
+test data, and every fix this week was verified against live rows.
+
+**Seven windows rather than five.** The original list said 6-8am through 6-8pm.
+Fancy K opens at 7:30 and shuts at 7, so a 6-8am pickup could not be dropped off
+and a 6-8pm one would arrive after they closed. Revisit if a laundromat with
+longer hours signs.
 
 ---
 
