@@ -34,8 +34,47 @@ const STATUSES = Object.freeze({
 // ordinary; a flat 5% is far too loose on a 10 lb load, where half a pound
 // should not be missed. Taking whichever is larger means the tolerance grows
 // with the bag, which is how scale error actually behaves.
+// THE DEFAULTS ONLY. The live numbers are set by the admin on the settings
+// screen and read from app_settings; these are what a fresh database starts
+// with and what is used if that read ever fails.
 const TOLERANCE_LB = 2;
 const TOLERANCE_PCT = 0.05;
+
+// NEIL'S THREE BANDS.
+//
+//   NORMAL      inside the normal percentage. Two scales describing the same
+//               laundry. Nothing to do.
+//   ACCEPTABLE  past normal, inside the exception line. Not worth stopping
+//               for, and worth COUNTING: a partner who sits here every single
+//               time has a scale that needs replacing, and one order in this
+//               band tells you nothing while forty do.
+//   EXCEPTION   past the exception line. Nothing is invoiced automatically -
+//               it is raised and an admin sets the poundage by hand.
+//
+// ONE SET OF NUMBERS FOR EVERY PARTNER, which is Neil's call: "it doesn't
+// matter if they have a bad scale. They need to get another one if they're
+// going to be doing our service." A per-partner override would let a bad scale
+// quietly loosen its own tolerance, which is the opposite of the point.
+const BANDS = Object.freeze({ NORMAL: 'NORMAL', ACCEPTABLE: 'ACCEPTABLE', EXCEPTION: 'EXCEPTION' });
+
+// THE FLOOR MATTERS AS MUCH AS THE PERCENTAGE. 5% of a 10 lb bag is half a
+// pound, which is inside what two honest scales differ by - without a minimum
+// every small order would raise an exception and the queue would be noise. A
+// flat allowance alone is no good either: 2 lb is far too tight on a 60 lb
+// load, where a 3 lb gap is ordinary. So it is the larger of the two, which is
+// how scale error actually behaves.
+function bandFor(ourWeightLb, difference, limits) {
+  const ours = Number(ourWeightLb || 0);
+  const gap = Math.abs(difference);
+
+  const minLb = Number(limits.minLb);
+  const normal = Math.max(minLb, ours * (Number(limits.normalPct) / 100));
+  const acceptable = Math.max(minLb, ours * (Number(limits.acceptablePct) / 100));
+
+  if (gap <= normal) return BANDS.NORMAL;
+  if (gap <= acceptable) return BANDS.ACCEPTABLE;
+  return BANDS.EXCEPTION;
+}
 
 function toleranceFor(ourWeightLb) {
   return Math.max(TOLERANCE_LB, Number(ourWeightLb || 0) * TOLERANCE_PCT);
@@ -43,7 +82,11 @@ function toleranceFor(ourWeightLb) {
 
 // Compare the two figures on an order. Returns null when there is nothing to
 // compare, so callers can treat "no answer yet" and "they agree" differently.
-function compareWeights(order) {
+// `limits` comes from the settings row. Passed in rather than read here so this
+// stays a pure function - it is called in loops on the partner page, and a
+// database read per row would be a page that gets slower the more orders a
+// laundromat has done.
+function compareWeights(order, limits = null) {
   const ours = order.weight_lb == null ? null : Number(order.weight_lb);
   const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
   if (ours == null || theirs == null) return null;
@@ -51,18 +94,49 @@ function compareWeights(order) {
   const difference = theirs - ours;
   const tolerance = toleranceFor(ours);
 
+  const bands = limits || {
+    normalPct: TOLERANCE_PCT * 100,
+    acceptablePct: TOLERANCE_PCT * 100,
+    minLb: TOLERANCE_LB,
+  };
+
+  const band = bandFor(ours, difference, bands);
+
   return {
     ours,
     theirs,
+    band,
+    // The percentage the two are apart, for saying it out loud. Against OUR
+    // weight, because that is the one we measured and the one being checked.
+    pct: ours > 0 ? (Math.abs(difference) / ours) * 100 : 0,
     // Signed, because the direction is the interesting part. Positive means
     // the laundromat read HEAVIER than us, which is the direction somebody
     // inflating a figure would push it.
     difference,
     absolute: Math.abs(difference),
     tolerance,
-    overThreshold: Math.abs(difference) > tolerance,
+    // Kept as the old name so nothing that already asks about it breaks. It
+    // means the same thing it always did - past the line where a person has to
+    // look - and that line is now the EXCEPTION band.
+    overThreshold: band === BANDS.EXCEPTION,
     heavier: difference > 0,
   };
+}
+
+// WHAT THE LAUNDROMAT IS INVOICED FOR.
+//
+// Their own reported weight, higher or lower than ours - Neil's rule, and the
+// reason it is not simply "the lower of the two" is that we are buying a wash
+// of what they actually put in the machine. If their scale says 50 and ours
+// said 45, they washed 50 lb as far as they can tell, and arguing it down by
+// five pounds every time is not a relationship that lasts.
+//
+// UNLESS THE TWO DISAGREE TOO MUCH. Past the exception line nothing is
+// invoiced automatically. Returns null, which is not "nothing" - it is "a
+// person has to decide", and the caller raises it.
+function partnerBillFor(check) {
+  if (!check) return null;
+  return check.band === BANDS.EXCEPTION ? null : check.theirs;
 }
 
 // --- Reading and writing them ----------------------------------------------
@@ -515,6 +589,9 @@ module.exports = {
   saveHours,
   loadByPartner,
   capacityOf,
+  BANDS,
+  bandFor,
+  partnerBillFor,
   TOLERANCE_LB,
   TOLERANCE_PCT,
   toleranceFor,

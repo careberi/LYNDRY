@@ -815,7 +815,7 @@ function turnaround(order) {
 // page, from delivery and from Neil settling a hold by hand, and it charges a
 // card. An order that is already settled returns and does nothing, so a
 // double-tap, a retry or two doors racing cannot charge twice.
-async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {}) {
+async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null, note = null } = {}) {
   if (order.weight_settled_at) {
     return { ok: true, already: true, priceCents: order.price_cents };
   }
@@ -826,13 +826,40 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
   let billable = null;
   let basis = null;
 
+  // Which band the two scales fell into, and what the laundromat is invoiced
+  // for. Both recorded on the order rather than recomputed later: the
+  // thresholds can move, and an invoice that changes after it has gone out is
+  // worse than one that is wrong.
+  let band = null;
+  let partnerBill = null;
+
   if (chosenLb != null) {
     // A person has looked at both and decided. This is the only way out of a
     // hold, and it wins over any arithmetic.
     billable = Number(chosenLb);
     basis = note || 'settled by hand';
+
+    // AND THE LAUNDROMAT'S SIDE IS THEIRS TO SET TOO. An exception holds both
+    // numbers, so settling one and leaving the other would put the order back
+    // on the board tomorrow with half of it decided. `partnerLb` defaults to
+    // the same figure - if a person has looked at two scales and picked one,
+    // that is usually what both sides are worth - but it can be given
+    // separately, because "charge the customer 50 and pay them 45" is a real
+    // decision somebody might make.
+    partnerBill = partnerLb != null ? Number(partnerLb) : Number(chosenLb);
+    band = partners.BANDS.EXCEPTION;
   } else if (ours != null && theirs != null) {
-    const check = partners.compareWeights({ weight_lb: ours, partner_weight_lb: theirs });
+    // The admin's thresholds, not constants. One set for every laundromat.
+    const limits = await settings.weightLimits();
+    const check = partners.compareWeights({ weight_lb: ours, partner_weight_lb: theirs }, limits);
+
+    band = check.band;
+
+    // WHAT WE PAY THEM, which is a separate question from what we charge the
+    // customer and is answered by THEIR scale. Null past the exception line -
+    // that is not "nothing", it is "a person has to decide", and the hold
+    // below is what makes somebody do it.
+    partnerBill = partners.partnerBillFor(check);
 
     if (check.overThreshold) {
       // HELD. Nothing is charged and nothing is texted - a customer told a
@@ -913,6 +940,15 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
       promotion_id: deal ? deal.promotion.id : null,
       weight_settled_at: new Date().toISOString(),
       weight_held_at: null,
+
+      // WHAT THE LAUNDROMAT IS INVOICED, and how far apart the two scales
+      // were. Recorded rather than recomputed, because the thresholds can move
+      // and an invoice that changes after it has gone out is worse than one
+      // that is wrong. Both null when only our own scale ever spoke, which is
+      // the ordinary case for an order that never went to a partner.
+      weight_band: band,
+      partner_bill_lb: partnerBill,
+      partner_bill_settled_at: partnerBill == null ? null : new Date().toISOString(),
     })
     .eq('id', order.id)
     // Only if nobody has settled it in the meantime. This is the race that

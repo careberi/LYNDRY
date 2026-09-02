@@ -82,4 +82,17 @@ async function setTakingOrders(taking, reason, opsUserId) {
   return data;
 }
 
-module.exports = { read, takingOrders, pausedReason, setTakingOrders, CACHE_MS };
+// THE WEIGHT THRESHOLDS, as the comparison code wants them. Read through here
+// so there is one place that knows the column names and one place that knows
+// what to do when the row cannot be read.
+async function weightLimits() {
+  const row = await read();
+  return {
+    normalPct: Number(row.weight_normal_pct != null ? row.weight_normal_pct : 3),
+    acceptablePct: Number(row.weight_acceptable_pct != null ? row.weight_acceptable_pct : 5),
+    minLb: Number(row.weight_min_lb != null ? row.weight_min_lb : 2),
+  };
+}
+
+module.exports = {
+  weightLimits, read, takingOrders, pausedReason, setTakingOrders, CACHE_MS };
