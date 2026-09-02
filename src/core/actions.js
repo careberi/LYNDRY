@@ -64,7 +64,7 @@ async function createOrder(customer, input) {
       case 'no_preferences':
         return (
           `Almost there! Just tell me how you like it washed: cold or warm water, ` +
-          `regular or hypoallergenic detergent, and softener or no?`
+          `standard or free and clear detergent, and scented, none or fragrance-free softener?`
         );
       case 'bad_date':
       case 'bad_time':

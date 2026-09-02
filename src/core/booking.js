@@ -6,6 +6,7 @@ const events = require('./order-events');
 const payments = require('../providers/payments');
 const { site } = require('../web/site');
 const { config } = require('../config');
+const wash = require('./wash');
 const settings = require('./settings');
 
 // ---------------------------------------------------------------------------
@@ -136,7 +137,15 @@ function hasAddress(customer) {
 // the asking mandatory rather than polite.
 function hasPreferences(customer) {
   const prefs = customer.preferences || {};
-  return Boolean(prefs.water_temp && prefs.detergent && prefs.fabric_softener != null);
+
+  // VALIDATED, NOT MERELY PRESENT. A value we no longer offer - an old
+  // HYPOALLERGENIC detergent, or a softener stored as the boolean it used to
+  // be - would otherwise satisfy a "is it set" check and then quietly fall back
+  // to the default when the wash lines were built. That is somebody's clothes
+  // washed a way they did not choose, with nothing anywhere saying so.
+  //
+  // Failing here just means they are asked again, which is the right outcome.
+  return wash.KEYS.every((key) => wash.isValid(key, prefs[key]));
 }
 
 // Is this address somewhere the van actually goes?

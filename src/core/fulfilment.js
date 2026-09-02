@@ -890,7 +890,17 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
   const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
   const byWeight = Math.round(billable * rate);
-  const beforeDiscount = Math.max(byWeight, floor);
+
+  // PAID WASH OPTIONS SIT ON TOP OF THE MINIMUM, NOT INSIDE IT.
+  //
+  // Free & clear detergent and fragrance-free softener each add a fixed amount,
+  // frozen onto the order when it was taken. They are added AFTER the minimum
+  // has done its work, because the minimum is what a small load of washing is
+  // worth and an extra we were asked for on top of it is a separate thing we
+  // did. Folding the surcharge in first would mean a 6 lb order paid for its
+  // fragrance-free detergent out of the minimum and we did that work for free.
+  const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
+  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
 
   // THE DISCOUNT COMES OFF AFTER THE MINIMUM, not before it.
   //
@@ -954,14 +964,19 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
   const customer = order.customers;
   const withCustomer = { ...settled, customers: customer };
 
-  // CHARGED HERE, not at the door. The charge sat at the door because a
-  // laundromat might read the weight differently after the money had moved -
-  // and settling against both scales is exactly what closes that window, so by
-  // the time this runs the disagreement can no longer appear.
-  const charge = await billing.chargeOrder(withCustomer, customer).catch((err) => {
-    console.error(`Could not charge order ${order.id}: ${err.message}`);
-    return { ok: false };
-  });
+  // NOTHING IS CHARGED HERE. Settling decides the amount; the doorstep collects
+  // it.
+  //
+  // Neil's call, and it went back and forth for a reason worth recording. The
+  // charge sat here briefly because settling against two scales closes the
+  // window in which a weight could be disputed, which made charging early look
+  // safe. It moved back because safe is not the only question: the customer
+  // pays at the moment they have their laundry in their hands, which is what
+  // they were told would happen and the thing that makes a decline recoverable
+  // rather than a refund.
+  //
+  // So this function's job ends at deciding the amount and telling them.
+  const charge = { ok: false, notYet: true };
 
   if (customer) {
     const minimumApplied = beforeDiscount > byWeight;
@@ -978,13 +993,11 @@ async function settleWeight(order, { by = {}, chosenLb = null, note = null } = {
       ? `${base} ${money(discountCents)} off for ${deal.promotion.name}, so the total is ${money(priceCents)}.`
       : `${base.replace(/that is /, 'the total is ')}`;
 
+    // Said as something still to come, because it is. Money moves at the door.
     const card = billing.describeCard(customer);
-    const paid =
-      charge && charge.ok
-        ? `We've taken that off your ${card || 'card'}.`
-        : card
-          ? `We'll take it off your ${card}.`
-          : `We'll settle up when we drop it back.`;
+    const paid = card
+      ? `We'll take it off your ${card} when we drop it back.`
+      : `We'll settle up when we drop it back.`;
 
     await sendAndLog(customer.phone, `${howPriced} ${paid}`, customer.id);
   }

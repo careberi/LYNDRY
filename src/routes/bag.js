@@ -6,6 +6,7 @@ const db = require('../db');
 const bags = require('../core/bags');
 const fulfilment = require('../core/fulfilment');
 const tags = require('../core/tags');
+const wash = require('../core/wash');
 const throttle = require('../core/throttle');
 const issues = require('../core/issues');
 const orderEvents = require('../core/order-events');
@@ -75,18 +76,11 @@ function clientIp(req) {
 // If a genuine instruction does not fit these five, the driver says it out
 // loud when he hands the bag over. That is the interface to a laundromat.
 function washLines(preferences) {
-  const p = preferences || {};
-  const out = [];
-
-  if (p.water_temp) out.push(['Water', String(p.water_temp).toLowerCase()]);
-  out.push(['Detergent', p.detergent === 'HYPOALLERGENIC' ? 'Hypoallergenic' : 'Standard']);
-  out.push(['Softener', p.fabric_softener ? 'Yes' : 'No']);
-  // NO DRYING OPTION. Neil's call: we tumble dry everything, so it is not a
-  // choice a customer gets to make and not a line a laundromat should be
-  // reading off a screen. A field offering it would eventually be answered.
-  if (p.separate_darks) out.push(['Sorting', 'Wash darks separately']);
-
-  return out;
+  // One definition, in src/core/wash.js, shared with the AI's tool schema, the
+  // pricing and the account page. An option cannot exist in one of them and not
+  // another, which is how a customer ends up choosing something the people
+  // doing the washing never see.
+  return wash.washLines(preferences);
 }
 
 // The one thing a laundromat may write.

@@ -4,6 +4,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { config } = require('../config');
 const { site } = require('../web/site');
 const booking = require('./booking');
+const wash = require('./wash');
 const settings = require('./settings');
 const promotions = require('./promotions');
 const recurring = require('./recurring');
@@ -235,13 +236,19 @@ const TOOLS = [
         },
         detergent: {
           type: 'string',
-          enum: ['STANDARD', 'HYPOALLERGENIC'],
-          description: 'The detergent they chose. Never fill this in unasked.',
+          enum: ['STANDARD', 'FREE_CLEAR'],
+          description:
+            'The detergent they chose. STANDARD is scented and included; '
+            + 'FREE_CLEAR is fragrance-free and adds $2 to the order. Never fill '
+            + 'this in unasked, and never quote a total that includes it - the '
+            + 'code works the price out.',
         },
         fabric_softener: {
           type: 'string',
-          enum: ['yes', 'no'],
-          description: 'Whether they want softener. Never fill this in unasked.',
+          enum: ['STANDARD', 'NONE', 'FRAGRANCE_FREE'],
+          description:
+            'The softener they chose. STANDARD is scented and NONE are both '
+            + 'included; FRAGRANCE_FREE adds $2. Never fill this in unasked.',
         },
         pickup_method: {
           type: 'string',
@@ -427,7 +434,7 @@ Same rule as everything else you cannot see: you are reading a text message, not
 
 WHAT LYNDRY DOES
 Wash, dry and fold only. No dry cleaning, pressing or alterations.
-EVERYTHING IS TUMBLE DRIED AND DRYING IS NOT A CHOICE. Asked to hang dry, air dry, line dry or leave something out of the dryer, the answer is that we tumble dry everything - say it plainly and do not offer an exception, do not promise to make a note of it, and never write it into their instructions. You have no field to put it in. A promise here is one the people doing the washing never see and cannot keep.
+WE DO NOT TAKE COMFORTERS, DUVETS OR ANYTHING BULKY OF THAT KIND. Asked, say so plainly and do not offer to check, do not say you will ask, and never book one in. EVERYTHING IS TUMBLE DRIED AND DRYING IS NOT A CHOICE. Asked to hang dry, air dry, line dry or leave something out of the dryer, the answer is that we tumble dry everything - say it plainly and do not offer an exception, do not promise to make a note of it, and never write it into their instructions. You have no field to put it in. A promise here is one the people doing the washing never see and cannot keep.
 NEVER MENTION A PARTNER, A LAUNDROMAT, OR ANYWHERE THE WORK HAPPENS. To the customer, LYNDRY collects their laundry, washes it, folds it and brings it back. How that gets done is ours. "It's with our partner being washed" is never an acceptable sentence; "it's being washed now" is the same fact without giving away how we run.
 ${site.pricePerLb} a pound with a $${(config.pricing.minimumCents / 100).toFixed(0)} minimum per pickup. The minimum covers the first ${config.pricing.minimumCents / config.pricing.perPoundCents} lb; a load under that costs the minimum and nothing is refunded for being light.
 THE CARD IS CHARGED ONCE, WHEN WE DELIVER IT. Never when they book, never at the scale, never twice. Weighing sets the price and they are texted it straight away; the money moves when the laundry is back at their door. Booking takes nothing: if they ask, the answer is that we save the card now and charge it when we drop the laundry back. A card is needed on file before the driver comes out, but saving a card is not a payment and must never be described as one.
@@ -476,12 +483,12 @@ If their first message is a greeting or a question, answer it warmly. Introduce 
 The moment they want a pickup, the setup is four short beats, IN THIS ORDER, and none may be skipped or invented:
   1. Name and street address, asked together in ONE message.
   2. When they want it collected: "When would you like it picked up?" Ask this BEFORE anything about the wash. It is the thing they came here for, and it is what tells them we can actually do it.
-  3. The wash and the handover, asked together in ONE message: "How do you like it washed: cold or warm water, regular or hypoallergenic detergent, softener or no? And where should the driver find the bag?" There are NO default wash settings. Never tell somebody what they have been "set up with" — they choose, or it does not get washed.
+  3. The wash and the handover, asked together in ONE message: "How do you like it washed: cold, warm or hot water? Standard scented detergent, or free and clear fragrance-free for $2 more? Scented softener, no softener, or fragrance-free for $2? And where should the driver find the bag?" There are NO default wash settings. Never tell somebody what they have been "set up with" — they choose, or it does not get washed.
   4. The recap, then their yes, then one save_details call carrying everything: name, address, preferences, pickup spot and the date.
 Skip any beat they have already answered. If their first message was "pick up my laundry today", beat 2 is done and you go straight from the address to the wash question.
 Call save_details along the way with whatever they have given so far; its reply tells you what is still missing.
 If their very first message is already a pickup request, do both at once: say you'd love to, and ask for the name and address in the same breath.
-For somebody brand new, the mandatory pre-booking recap and the address check are ONE message, not two. After they answer the wash question, fold everything together using THEIR choices: "Just to check: 16-50 Chandler Dr, Fair Lawn, NJ 07410, bag behind the side gate, washed warm with hypoallergenic detergent, no softener, and we'll come today. Good to go?" One message, one yes, booked.
+For somebody brand new, the mandatory pre-booking recap and the address check are ONE message, not two. After they answer the wash question, fold everything together using THEIR choices: "Just to check: 16-50 Chandler Dr, Fair Lawn, NJ 07410, bag behind the side gate, washed warm with free and clear detergent, no softener, and we'll come today. Good to go?" One message, one yes, booked.
 HARD RULE: never call save_details with a detail the customer did not say themselves until they have confirmed your version. A guessed zip code that is wrong sends the driver to the wrong town, so the recap is not politeness, it is the check.
 When the conversation already says WHEN they want the pickup, put that date (and time, if they gave one) in the save_details call you make after their yes, and everything is booked in one step. Somebody who said "pick up today" and then gave their address must never be asked when they would like a pickup; the thread above has the answer, so use it.
 Do not ask for their email, their preferences, a unit number they did not mention, or anything else at all. Name and street address is the entire list.
@@ -504,7 +511,7 @@ BUT "another", "a second one", "also", "as well" and "add" mean ADD, and you cal
 Never leave somebody with nothing booked when they were trying to book. If you cancel a pickup for somebody who was in the middle of arranging a different one, say so and offer the new time in the same breath.
 If they mention a time, whether that is "at 6", "sixish", "after work" or "first thing", put your best reading of it in pickup_time and book. Do not ask them to confirm the exact minute, and never ask for a time they did not bring up. We quote a window back to them afterwards, so a rough reading is fine.
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
-Wash preferences are chosen ONCE, by the customer, during their first setup. There are no defaults and you never invent one: if the notes below say NONE YET, ask before their first booking, in one message: "cold or warm water, regular or hypoallergenic detergent, and softener or no?" Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
+Wash preferences are chosen ONCE, by the customer, during their first setup. There are no defaults and you never invent one: if the notes below say NONE YET, ask before their first booking, in one message: "cold, warm or hot water? standard or free and clear detergent, which is $2 more? scented softener, none, or fragrance-free for $2?" Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
 Never state a price as a fact. If asked what it will cost, say it is ${site.pricePerLb} a pound and a typical bag runs about ${site.estimateRange}, weighed after pickup.
 REPEATING PICKUPS
 We come every week or every other week, on a day they choose. Those are the only two frequencies; never offer a third.
@@ -590,7 +597,10 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     // customers who had chosen nothing, and the AI repeated it back to one as
     // if they had. Unset is stated as unset, so the AI knows to ask.
     prefs.water_temp && prefs.detergent && prefs.fabric_softener != null
-      ? `Saved wash preferences: ${prefs.water_temp} water, ${prefs.detergent} detergent, fabric softener ${prefs.fabric_softener ? 'yes' : 'no'}`
+      ? `Saved wash preferences: ${wash
+          .washLines(prefs)
+          .map(([k, v]) => `${k.toLowerCase()} ${v.toLowerCase()}`)
+          .join(', ')}`
       : 'Saved wash preferences: NONE YET. They must choose before their first booking; ask.',
     prefs.default_pickup_method
       ? `Usual pickup: ${prefs.default_pickup_method === 'HAND_TO_DRIVER' ? 'hands it to the driver' : 'leaves the bag outside'}`
