@@ -484,6 +484,17 @@ if it passes do the clips go on**. So a clipped bag is a *verified* bag, and
 the clips in the van are the record that the load was weighed and matched
 before it moved.
 
+**An admin can push past a failed check, on the record.** `orders.override`,
+Admin only — never the driver, because the value of the check is that somebody
+other than the person in a hurry agreed. The threshold is a guess and says so,
+and a laundromat closing in five minutes does not care.
+
+It is an override, not a bypass: the check still runs, the reason goes in
+`order_events` with a name on it, an issue is still raised for the morning, and
+what the driver is told says plainly that it did **not** match. The box only
+appears *after* a refusal — offering "take it anyway" beside a form nobody has
+submitted yet makes it the normal way through.
+
 **A failed check creates nothing** — no bag rows, no clips out of the pool.
 A refusal that had already taken four clips would be a refusal the driver has
 to undo before he can weigh again.
@@ -725,14 +736,28 @@ opens), EXPIRED (order delivered, link dead). `/ops/labels` counts, colours and
 filters by it, and warns when blank stock drops below ten, because a driver with
 no sticker cannot label a bag and an unlabelled bag cannot be scanned at a door.
 
-**ONE TAG PER ORDER, CARRIED BY EVERY BAG OF IT.** `orders.tag_code` is the
-identifier: three bags in and four bags out all read the same code, because the
-tag is the ORDER and the order did not change when the laundromat repacked it.
+**ONE BAG TAG PER BAG, CARRYING FOUR NUMBERED PEELABLE STICKERS.** All five
+rows share the code — `7MQ5Y2` for the tag itself and `7MQ5Y2-1` through `-4`
+for the stickers. The id is what a person says out loud and is the same on all
+of them; `bag_labels.sticker_seq` is what makes them individually addressable,
+so a sticker tapped twice is not mistaken for a second bag.
 
-It replaced a unique code per bag, which was solving a problem nobody had — the
-wash instructions are per order, so a per-bag code told a laundromat nothing
-extra — while making the return leg genuinely hard, because a bag THEY packed
-had no code and somebody had to bind one to it at a counter.
+**The four stickers are the whole answer to the return leg.** One bag we
+collect becomes however many bags the laundromat packs, and each of those gets
+one sticker off the tag it came out of — `bag_labels.parent_id` is the thread
+back. So a bag THEY packed carries our id without anybody binding a fresh code
+to it at a counter, and without us being told in advance how many bags it will
+become.
+
+**This REVERSED the single order tag.** That model was right that the wash
+instructions are per order, and wrong that a bag needed no identity of its own.
+`orders.tag_code` stays and still resolves, so nothing already printed stopped
+working.
+
+**`/ops/labels` counts intake rows only** — `sticker_seq is null`. A row per
+sticker a laundromat has used is a bag that came back, not stock out of a
+printer, and counting them ran the blank-tag figure five times too high. Any
+new query about printed stock has to filter the same way.
 
 **The tag is RANDOM, never `order_number`.** A sequential value in a public URL
 lets anybody holding one read the next order's wash instructions by adding one
@@ -962,8 +987,8 @@ two what-if calculators.
 |---|---|
 | **Today** | What is happening right now: Your round, Orders, Routing, Load the van, Issues |
 | **People** | Everyone you deal with: Customers, Conversations, Team, Partners |
-| **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag stickers, Unit economics, Route planner |
-| **Help** | How it all works, What happens to a bag |
+| **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag tags, Unit economics, Route planner |
+| **Resources** | How it all works, What happens to a bag, What we send a laundromat |
 
 **Pre-launch lives under Business**: Taking orders?, Promotions, Text blast,
 all behind `service.manage` (Admin only). Closing the business, giving money
@@ -975,6 +1000,22 @@ the AI says AND what `bookPickup()` will do, and the second half is the one
 that matters: the prompt asks, the code refuses. Same split as the service
 area, because a model asked nicely not to book will eventually book. It shuts
 the text thread, the website form and the standing-order job together.
+
+**`ALWAYS_BOOK_NUMBERS` is exempt from the switch, and from the county.** Neil
+has to be able to put an order through while the service is shut and from an
+address outside Bergen — that is how the thing gets tested end to end and how he
+takes a favour for somebody he knows. Blank falls back to `SUPPORT_PHONE`.
+
+It waives exactly two rules, and both are decisions about *who we choose to
+serve* rather than facts a booking needs: the closed sign and the boundary. An
+address, wash preferences, a card and a real date are still required of him.
+**The AI is told the same thing**, so it cannot refuse in the thread something
+the code behind it would allow — the same sentence-versus-code gap that once
+read a passed pickup window straight back to a customer.
+
+**Its absence is completely silent, so it is said out loud twice** — a startup
+warning, and a line on `/ops/settings` where the closing actually happens. An
+exemption nobody can see is one you discover by trying, on the day it matters.
 
 **Turning it OFF takes a reason; turning it ON takes nothing.** Neil's call, and
 the reason is cleared on reopening so a stale one cannot surface the next time
@@ -1264,6 +1305,13 @@ scripts, it has no person attached, and it gets everything.
 `ADMIN_API_KEY`. Six digits is small enough to brute-force offline, which is
 exactly why the plaintext never lands in a row and why five wrong guesses kill
 a code regardless of its expiry. Codes are single-use and last 10 minutes.
+
+**The sign-in pages are `no-store`, and that is not housekeeping.** A cached
+sign-in form is served to somebody whose session is in fact still alive; the
+moment they submit it the next page sees a valid session and waves them
+through, which looks exactly like the code step being skipped. It was reported
+as one. Submitting a number while already signed in also must not text a code
+and write a credential row the next page then swallows.
 
 **The sign-in page must never reveal whether a number is registered.** An
 unknown number gets the identical "check your phone" response. Otherwise
