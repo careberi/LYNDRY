@@ -33,7 +33,13 @@ const { loadoutBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
 const partners = require('../core/partners');
 const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
-const { settingsBody, promotionsBody, broadcastBody, AUDIENCES } = require('../web/prelaunch-page');
+const {
+  adminDashboardBody,
+  settingsBody,
+  promotionsBody,
+  broadcastBody,
+  AUDIENCES,
+} = require('../web/prelaunch-page');
 const settings = require('../core/settings');
 const promotions = require('../core/promotions');
 const fulfilment = require('../core/fulfilment');
@@ -234,28 +240,45 @@ const OPS_MENUS = Object.freeze([
     label: 'People',
     items: [
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
-      // "Conversations" rather than "Messages": the screen is one row per phone
-      // number and holds people who never became customers, which is the whole
-      // reason it is worth reading.
-      { href: '/ops/messages', label: 'Conversations', permission: 'messages.view' },
+      // "Messages" at Neil's request. It was called Conversations to make the
+      // point that the screen is one row per phone NUMBER and holds people who
+      // never became customers - which is still true and still the reason it is
+      // worth reading, so the page says so in its own subtitle rather than
+      // relying on the menu word to carry it.
+      { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
       { href: '/ops/team', label: 'Team', permission: 'team.manage' },
-      // Neil's call: a partner is a relationship with a person, so it sits with
-      // the customers and the team rather than with the calculators.
-      { href: '/ops/partners', label: 'Partners', permission: 'partners.view' },
+      // "Laundromats", also Neil's. Worth knowing that the table behind it
+      // holds property managers too - partner_type is LAUNDROMAT or
+      // PROPERTY_MANAGER - so the name is narrower than the screen. It is the
+      // right word for what is actually in there today, and the day a property
+      // manager is added this label is the thing to revisit.
+      { href: '/ops/partners', label: 'Laundromats', permission: 'partners.view' },
     ],
   },
   {
     label: 'Business',
     items: [
-      // First in the group: whether we are open decides whether anything else
-      // in here matters.
+      // ONE PAGE FOR EVERYTHING YOU DECIDE. Neil's consolidation: taking
+      // orders, the weight thresholds, and a way through to promotions, text
+      // blasts and issues. The individual screens still exist and still work -
+      // this is a front door, not a replacement.
+      { href: '/ops/admin', label: 'Admin', permission: 'service.manage' },
       { href: '/ops/settings', label: 'Taking orders?', permission: 'service.manage' },
       { href: '/ops/promotions', label: 'Promotions', permission: 'service.manage' },
       { href: '/ops/broadcast', label: 'Text blast', permission: 'service.manage' },
+    ],
+  },
+  {
+    // TOOLS IS THINGS YOU OPERATE, not things you decide. Neil's split, and it
+    // is a real one: the three below are a label printer and two calculators
+    // you type made-up numbers into. Nothing in here changes the business -
+    // that is what Business is for.
+    label: 'Tools',
+    items: [
       { href: '/ops/labels', label: 'Bag tags', permission: 'orders.act' },
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
       // "Route planner" says which of the two it is. This one is a day you
-      // invent; Routing above is the day that exists.
+      // invent; Routing under Dashboard is the day that exists.
       { href: '/ops/planner', label: 'Route planner', permission: 'money.view' },
     ],
   },
@@ -4797,6 +4820,86 @@ router.post('/ops/partners/send-overview', guard, may('partners.manage'), async 
 // giving money away and texting everybody at once are the three things a
 // salesperson or a driver should never be able to do.
 // ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /ops/admin - everything you decide, on one page
+//
+// The consolidation Neil asked for. It reads what the individual screens read
+// and posts to the routes that already exist; the only thing that lives ONLY
+// here is the weight thresholds, which had no screen of their own.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, res, next) => {
+  try {
+    const [current, limits, promos, board] = await Promise.all([
+      settings.read({ fresh: true }),
+      settings.weightLimits(),
+      promotions.list().catch(() => []),
+      db
+        .from('orders')
+        .select('status, pickup_date')
+        .in('status', ['REQUESTED', 'IN_PROCESS', 'AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY']),
+    ]);
+
+    const rows = (board && board.data) || [];
+    const now = today();
+
+    const orderCounts = {
+      toCollect: rows.filter((o) => o.status === 'REQUESTED' && o.pickup_date <= now).length,
+      withUs: rows.filter((o) =>
+        ['IN_PROCESS', 'AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY'].includes(o.status)
+      ).length,
+    };
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Admin',
+        active: '/ops/admin',
+        body: adminDashboardBody({
+          settings: current,
+          limits,
+          promotions: promos,
+          openIssues: req.openIssues,
+          orderCounts,
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// The three weight thresholds. The only control that lives nowhere else.
+router.post('/ops/admin/weights', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+
+    const saved = await settings.setWeightLimits(
+      {
+        normalPct: body.normal_pct,
+        acceptablePct: body.acceptable_pct,
+        minLb: body.min_lb,
+      },
+      req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null
+    );
+
+    // Read back what was STORED rather than what was typed - the values are
+    // clamped, and telling somebody 900% was saved when 50% was would be a lie
+    // they only discover when an order does not flag.
+    const note =
+      `Saved. Normal up to ${saved.weight_normal_pct}%, acceptable up to ` +
+      `${saved.weight_acceptable_pct}%, always allowing at least ${saved.weight_min_lb} lb.`;
+
+    return res.redirect(303, `/ops/admin?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/ops/settings', guard, withIssues, may('service.manage'), async (req, res, next) => {
   try {

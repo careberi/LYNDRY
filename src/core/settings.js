@@ -94,5 +94,36 @@ async function weightLimits() {
   };
 }
 
+// Set the three weight thresholds. Clamped rather than validated-and-refused:
+// a percentage of 0 or 900 is a typo, not an attack, and quietly holding it to
+// something sane beats a red error a busy person has to read.
+async function setWeightLimits({ normalPct, acceptablePct, minLb }, opsUserId = null) {
+  const clamp = (v, lo, hi, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+  };
+
+  const normal = clamp(normalPct, 0, 50, 3);
+
+  const row = {
+    weight_normal_pct: normal,
+    // THE ACCEPTABLE BAND CANNOT SIT BELOW THE NORMAL ONE. If it did, the
+    // middle band would be empty and every order past normal would go straight
+    // to exception - which is the two-band behaviour this replaced, arrived at
+    // by accident rather than on purpose.
+    weight_acceptable_pct: Math.max(normal, clamp(acceptablePct, 0, 50, 5)),
+    weight_min_lb: clamp(minLb, 0, 20, 2),
+    updated_at: new Date().toISOString(),
+    updated_by: opsUserId,
+  };
+
+  const { error } = await db.from('app_settings').update(row).eq('id', true);
+  if (error) throw error;
+
+  cached = null;
+  return row;
+}
+
 module.exports = {
-  weightLimits, read, takingOrders, pausedReason, setTakingOrders, CACHE_MS };
+  weightLimits,
+  setWeightLimits, read, takingOrders, pausedReason, setTakingOrders, CACHE_MS };

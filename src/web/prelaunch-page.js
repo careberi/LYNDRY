@@ -26,6 +26,204 @@ function banner(text, tone) {
 
 // --- 1. Open or closed ------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// THE ADMIN DASHBOARD: everything you decide, on one page.
+//
+// NEIL'S CONSOLIDATION. Taking orders, promotions, text blasts and the weight
+// thresholds were four screens, three of which you visit to read one number and
+// leave. That is four taps to answer "what is the state of the business", and
+// the closed sign in particular lives on a screen nobody opens daily - which is
+// exactly why there is a banner shouting about it on every other page.
+//
+// WHAT IS INLINE AND WHAT STAYS A LINK, and the rule is not arbitrary: a
+// control that is one field and one button lives here; a control that needs its
+// own screen keeps it. Turning orders off is a toggle and a reason. Setting
+// three thresholds is three numbers. Writing a text to every customer you have
+// is not, and neither is creating a promotion - those get a summary and a way
+// through, because putting them inline would make this the page somebody sends
+// a blast from by accident.
+//
+// Nothing here is a second implementation. Every form posts to the route that
+// already existed, and the summaries read what the full screens read.
+// ---------------------------------------------------------------------------
+
+function adminDashboardBody({
+  settings,
+  limits,
+  promotions = [],
+  openIssues = 0,
+  orderCounts = {},
+  notice,
+  problem,
+}) {
+  const open = settings.taking_orders !== false;
+  const running = promotions.filter((p) => p.status === 'ACTIVE');
+
+  const stat = (label, value, bg) => `
+    <div class="card" style="padding:16px 20px;min-width:120px;flex:1 1 120px;${
+      bg ? `background:${bg};` : ''
+    }">
+      <div style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1;">${value}</div>
+      <div class="eyebrow" style="margin:6px 0 0;">${escapeHtml(label)}</div>
+    </div>`;
+
+  const card = (c) => `
+  <a href="${c.href}" style="display:block;text-decoration:none;color:inherit;">
+    <div class="card" style="padding:22px;height:100%;">
+      <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(c.eyebrow)}</p>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:21px;margin-bottom:8px;">
+        ${escapeHtml(c.title)}
+      </div>
+      <p style="font-size:14px;line-height:1.5;color:var(--ink-700);margin:0;">${escapeHtml(c.line)}</p>
+    </div>
+  </a>`;
+
+  return `
+<p class="eyebrow" style="margin:0 0 8px;">The business</p>
+<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Admin</h1>
+<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
+  Everything you decide, in one place. The day itself - orders, the round,
+  routing - is under Dashboard.
+</p>
+
+${banner(notice, 'good')}
+${banner(problem, 'bad')}
+
+<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:34px;">
+  ${stat('Taking orders', open ? 'Yes' : 'No', open ? 'var(--suds-300)' : 'var(--stain-100)')}
+  ${stat('Open issues', openIssues, openIssues ? 'var(--stain-100)' : undefined)}
+  ${stat('Promotions', running.length)}
+  ${stat('With us now', orderCounts.withUs || 0)}
+  ${stat('To collect', orderCounts.toCollect || 0)}
+</div>
+
+<div class="card card-xl" style="padding:0;overflow:hidden;margin-bottom:24px;">
+  <div style="padding:24px;background:${open ? 'var(--suds-300)' : 'var(--stain-100)'};
+              border-bottom:2px solid var(--ink-900);">
+    <p class="eyebrow" style="margin:0 0 6px;">Right now</p>
+    <div style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.1;">
+      ${open ? 'Open. Taking orders.' : 'Closed. Not taking orders.'}
+    </div>
+    ${
+      !open && settings.paused_reason
+        ? `<p style="font-size:15px;line-height:1.6;margin:10px 0 0;">
+             <strong>Customers are told:</strong> ${escapeHtml(settings.paused_reason)}
+           </p>`
+        : ''
+    }
+    ${
+      !open
+        ? config.alwaysBookNumbers.length
+          ? `<p style="font-size:14px;line-height:1.6;margin:10px 0 0;">
+               Exempt and can still book: ending
+               ${config.alwaysBookNumbers.map((n) => escapeHtml(n.slice(-4))).join(', ')}.
+             </p>`
+          : `<p style="font-size:14px;line-height:1.6;margin:10px 0 0;font-weight:700;color:var(--stain-500);">
+               Nobody is exempt - your own number cannot book either.
+             </p>`
+        : ''
+    }
+  </div>
+
+  <div style="padding:24px;">
+    ${
+      open
+        ? `<form method="post" action="/ops/settings/close">
+             <label class="field-label" for="reason">Why are we closed?</label>
+             <input class="field" id="reason" name="reason" type="text" maxlength="300"
+                    placeholder="we are still lining up our first laundromat"
+                    style="width:100%;margin-bottom:12px;">
+             <button class="btn btn-lg" type="submit">Stop taking orders</button>
+           </form>`
+        : `<form method="post" action="/ops/settings/open">
+             <button class="btn btn-primary btn-lg" type="submit">Start taking orders</button>
+           </form>`
+    }
+  </div>
+</div>
+
+<div class="card card-xl" style="padding:26px;margin-bottom:24px;">
+  <p class="eyebrow" style="margin:0 0 6px;">Two scales</p>
+  <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 10px;">
+    How far apart is too far
+  </h2>
+  <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 18px;">
+    The customer is charged the <strong>heavier</strong> of our weight and the
+    laundromat's, always. The laundromat is billed <strong>their own</strong>
+    figure - unless the two are further apart than the exception line, and then
+    nothing is invoiced until you decide it.
+  </p>
+
+  <form method="post" action="/ops/admin/weights"
+        style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+    <div style="flex:1 1 130px;">
+      <label class="field-label" for="np">Normal up to</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input class="field" id="np" name="normal_pct" type="number" step="0.5" min="0" max="50"
+               value="${escapeHtml(String(limits.normalPct))}" required style="min-width:0;">
+        <span style="font-weight:700;">%</span>
+      </div>
+    </div>
+    <div style="flex:1 1 130px;">
+      <label class="field-label" for="ap">Acceptable up to</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input class="field" id="ap" name="acceptable_pct" type="number" step="0.5" min="0" max="50"
+               value="${escapeHtml(String(limits.acceptablePct))}" required style="min-width:0;">
+        <span style="font-weight:700;">%</span>
+      </div>
+    </div>
+    <div style="flex:1 1 130px;">
+      <label class="field-label" for="ml">Always allow at least</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input class="field" id="ml" name="min_lb" type="number" step="0.5" min="0" max="20"
+               value="${escapeHtml(String(limits.minLb))}" required style="min-width:0;">
+        <span style="font-weight:700;">lb</span>
+      </div>
+    </div>
+    <button class="btn btn-ink btn-lg" type="submit">Save</button>
+  </form>
+
+  <p class="field-hint" style="margin-top:14px;max-width:62ch;">
+    The pounds figure is a floor, and it matters as much as the percentages:
+    5% of a 10 lb bag is half a pound, which is inside what two honest scales
+    differ by. Without it every small order would raise an exception.
+    <strong>One set of numbers for every laundromat</strong> - a bad scale is
+    something to replace, not something to make allowances for.
+  </p>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;">
+  ${[
+    {
+      href: '/ops/promotions',
+      eyebrow: 'Giving money away',
+      title: 'Promotions',
+      line: running.length ? running.map((p) => p.name).join(', ') : 'Nothing running',
+    },
+    {
+      href: '/ops/broadcast',
+      eyebrow: 'Everybody at once',
+      title: 'Text blast',
+      line: 'One message to every customer who has not opted out',
+    },
+    {
+      href: '/ops/issues',
+      eyebrow: 'Waiting on a person',
+      title: 'Issues',
+      line: openIssues ? `${openIssues} open` : 'Nothing open',
+    },
+    {
+      href: '/ops',
+      eyebrow: 'Where everything is',
+      title: 'Orders',
+      line: `${orderCounts.toCollect || 0} to collect, ${orderCounts.withUs || 0} with us`,
+    },
+  ]
+    .map(card)
+    .join('')}
+</div>`;
+}
+
 function settingsBody({ settings, notice, problem }) {
   const open = settings.taking_orders !== false;
 
@@ -346,4 +544,4 @@ ${
 }`;
 }
 
-module.exports = { settingsBody, promotionsBody, broadcastBody, AUDIENCES };
+module.exports = { adminDashboardBody, settingsBody, promotionsBody, broadcastBody, AUDIENCES };
