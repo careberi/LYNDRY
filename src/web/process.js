@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '31 August 2026';  // two-scale settlement, the order tag, pre-launch
+const REVIEWED = '1 September 2026';  // bag tags with four numbered stickers, the override
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -416,12 +416,16 @@ function processBody(user) {
       )}
       ${step(
         3,
-        'Sticker every bag, and enter its code',
-        `Your round asks for this first at every pickup. A label off the roll in
+        'Tag every bag, and enter its id',
+        `Your round asks for this first at every pickup. A bag tag off the stack in
          the van goes on each bag, and the six characters printed under the QR go
-         into the box. That is what binds a sticker to a bag. Print more from the
-         labels screen when the roll runs low. A sticker means nothing until it
-         is entered - blank stock is just paper.`
+         into the box. That is what binds a tag to a bag. Print more from the bag
+         tags screen when you get low. A tag means nothing until it is entered -
+         blank stock is just paper.
+         <br><br>
+         Leave all four numbered stickers on the tag. They are not yours to peel -
+         the laundromat takes them off one at a time as it packs the clean laundry,
+         which is how a bag they packed ends up carrying our id.`
       )}
       ${step(
         4,
@@ -524,16 +528,18 @@ function processBody(user) {
       ${step(
         1,
         'They take a bag off our driver',
-        `We hand over a bag we have already weighed, with a sticker on it. They
+        `We hand over a bag we have already weighed, with a bag tag on it. They
          wash, dry and fold it the way we asked.`
       )}
       ${step(
         2,
-        'They point a phone at the sticker',
-        `The QR opens one page. It shows the bag's code, which bag of how many,
-         how it should be washed, and how long is left on the promise. No app,
-         no install, no login, no password - it works on whatever cracked
-         Android is behind the counter.`
+        'They point a phone at the tag',
+        `The QR opens one page, and <strong>it changes with the bag</strong>. On
+         arrival it asks for their weight, and the wash instructions are behind
+         that - which is what makes the number get entered. After that it shows how
+         it should be washed, how everything is sorted, and how long is left on the
+         promise. No app, no install, no login, no password - it works on whatever
+         cracked Android is behind the counter.`
       )}
       ${step(
         3,
@@ -549,6 +555,18 @@ function processBody(user) {
       )}
       ${step(
         4,
+        'They peel a sticker onto each bag they pack',
+        `<strong>This is the step that makes the return leg work.</strong> They
+         empty our bag, wash the contents, and pack them into however many of their
+         own bags it takes - one, or four. Each of those gets one numbered sticker
+         off the tag that came in with it, and they tap that number on the same
+         page.
+         <br><br>
+         Nobody has to be told in advance how many bags it will become, and nobody
+         has to write a code on anything. The id is already printed four times.`
+      )}
+      ${step(
+        5,
         'They tell our driver it is done',
         `However they like. The driver records it in the system.`
       )}
@@ -561,9 +579,12 @@ function processBody(user) {
         wash a bag. It does not need to know whose bag it is.
       </p>
       <p>
-        The wash settings on that page come from an <strong>allowlist of five
-        structured fields</strong> - water, detergent, softener, hang-dry,
-        separate-darks. Anything a customer typed themselves is never printed
+        The wash settings on that page come from a <strong>short allowlist of
+        structured fields</strong> - water, detergent, softener - plus the sorting
+        standard, which is the same for everybody and is not a choice. Drying is
+        not a choice either: everything is tumble dried, so there is no field for
+        it and nobody can be promised an exception. Anything a customer typed
+        themselves is never printed
         there, however laundry-ish it looks. That is not caution for its own
         sake: a real saved preference on this system reads "Deliver to 16-51
         Chandler Dr, Fair Lawn, NJ", and somebody writing "separate the shirts

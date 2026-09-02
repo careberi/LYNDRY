@@ -89,12 +89,60 @@ can be waved away silently is not a check.
 
 ## Outstanding
 
-### 8. Route and order tracking reflecting the new process
+*(nothing - see below)*
 
-The order page, the run and the routing board all still describe bags the way
-they did before one bag in could become four bags out.
+---
 
-### 9. `/ops/journey` and `/ops/process`
+## Done, continued
 
-Both were updated this morning and the bag tag change supersedes parts of it.
-Reviewed dates get bumped in the same commit, as always.
+### 8. Route and order tracking reflect the new process ✅
+
+The order page was drawing both legs as though every bag wore a tag of its own.
+A bag we collected wears its own bag tag, four stickers still on it; a bag the
+laundromat packed wears ONE of those and reads `7MQ5Y2-2`. The sequence is
+shown when there is one, and an outgoing row names the collected bag it came
+out of - which is the thread back, and the thing "is this wash all here" is
+actually a question about.
+
+### 9. `/ops/journey` and `/ops/process` ✅
+
+Both reviewed dates bumped to 1 September 2026.
+
+Journey: pickup is now "tag, scale, photo" with the four stickers explained,
+the collection step covers the admin override, and the long note about the
+identifier problem now describes **the answer that was actually built** rather
+than the ticket-sticker idea that was superseded. Its closing worry - that a
+clip carries nothing once it comes off - is answered now: the sticker outlives
+the clip.
+
+Process: the laundromat gained the step that makes the whole return leg work
+(peel a sticker onto each bag they pack), and the QR page is described as
+changing with the bag. Also fixed a stale claim: the wash allowlist still
+listed **hang-dry** as a field, which contradicts the rule that drying is not a
+choice.
+
+### 10. The AI sells instead of waiting ✅
+
+It was answering "hello" with "How can we help?" and a bare introduction to
+"who is this". Every reply that is not already about a booking now ends by
+offering one, in its own words.
+
+**Three times it does not push**, all deliberate: somebody unhappy or chasing a
+problem gets help and nothing else; somebody who already has a pickup booked is
+not sold another; and when we are not taking orders there is nothing to offer.
+
+**Note on why it looked worse than it was.** The service is currently set to
+closed, and the prompt correctly refuses to sell something that cannot be
+bought. Most of the passivity was that, not the tone. The selling shows up when
+the service is open - or right now on any number in `ALWAYS_BOOK_NUMBERS`.
+
+---
+
+## Neil's own outstanding actions
+
+- **Set `SUPPORT_PHONE=+14437452665` in Railway.** The always-book exemption
+  does nothing until it is there, and the boot log says so on every deploy.
+- Print bag tags on Avery 5164 stock.
+- Add the Stripe live keys.
+- Rotate `ADMIN_API_KEY` - but note that rotating it kills the signature on
+  every QR already printed, so rotate **then** print.

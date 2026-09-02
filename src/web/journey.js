@@ -30,7 +30,7 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '31 August 2026';  // the order tag, and weigh-check-clip on the way back
+const REVIEWED = '1 September 2026';  // bag tags with four numbered stickers, and the override
 
 // A step in one of the three legs. `who` is who physically does it, which is
 // the thing a reader most often wants and the thing prose is worst at keeping
@@ -213,23 +213,27 @@ function journeyBody() {
          bags to walk him through. Asking for stickers before anybody has said how
          many bags there are is a question out of order.`)}
 
-      ${step('One bag at a time: sticker, scale, photo', 'Driver',
-        `For each bag in turn he sticks on a label carrying <strong>the order's
-         tag</strong>, puts the bag on the scale, and photographs the display with
-         the bag on it. Then the next bag. He is never asked for one total at the
-         end - that makes him add up in his head and loses which bag was the heavy
-         one.
+      ${step('One bag at a time: tag, scale, photo', 'Driver',
+        `For each bag in turn he puts a <strong>bag tag</strong> on it, puts the bag
+         on the scale, and photographs the display with the bag on it. Then the next
+         bag. He is never asked for one total at the end - that makes him add up in
+         his head and loses which bag was the heavy one.
          <br><br>
-         <strong>Every bag of the order carries the SAME tag</strong>, because the
-         tag is the order. A code per bag would tell the laundromat nothing extra -
-         the wash instructions are per order - and would make the return leg
-         impossible, since a bag they packed has no code and somebody would have to
-         bind one to it at a counter.`)}
+         <strong>A bag tag carries four numbered peelable stickers</strong>, all
+         printed with the same id - 7MQ5Y2, and then -1 through -4. The id is what a
+         person says out loud and it is the same on all four; the number is what
+         makes them individually addressable, so a sticker tapped twice cannot be
+         mistaken for a second bag.
+         <br><br>
+         The four are what make the return leg work. One bag we collect becomes
+         however many bags the laundromat packs, and each of those gets one sticker
+         off the tag it came out of - so a bag they packed carries an id without
+         anybody binding a fresh code to it at a counter.`)}
 
       ${step('A numbered clip goes on', 'Automatic',
         `Each weighed bag gets the lowest free clip number in his van, from a real
-         bag of ${config.routing.vanClips} numbered clips. A sticker code identifies
-         a bag perfectly and is useless shouted across a counter;
+         bag of ${config.routing.vanClips} numbered clips. A tag id identifies a bag
+         perfectly and is useless shouted across a counter;
          <em>"four, six and ten"</em> is what a driver and a counter assistant can
          actually say to each other. The clips are his own - another van's clip 4
          never collides with his.`)}
@@ -410,9 +414,20 @@ function journeyBody() {
          clip in his van, so a clipped bag is a <em>verified</em> bag and the clips
          are the record that this load was weighed and matched before it moved.
          <br><br>
-         Nothing is stuck to the finished bags. The clip attaches to the bag itself
-         rather than to a code, which is what lets the laundromat pack however many
-         bags it likes without being asked to label any of them.`)}
+         The clip attaches to the bag itself rather than to a code, so the count is
+         whatever the laundromat actually packed and nobody has to scan anything to
+         load the van.`)}
+
+      ${step('An admin can take a load that did not match', 'Admin only',
+        `The threshold is a guess and says so, and a laundromat closing in five
+         minutes does not care. So an admin - never the driver, because the value of
+         the check is that somebody other than the person in a hurry agreed - can
+         push past the refusal with a reason.
+         <br><br>
+         It is an <em>override</em>, not a bypass. The reason goes on the order with
+         a name on it, an issue is still raised for the morning, and what the driver
+         is told says plainly that it did not match. Going ahead tonight is a
+         decision about tonight; it is not the same as the load being right.`)}
 
       ${step('Load the van in reverse', 'Driver',
         `Bags load <strong>highest stop deepest</strong>, so stop 1 ends up by the
@@ -517,38 +532,45 @@ function journeyBody() {
     </div>
 
     <div class="jn-note" style="margin-top:18px;">
-      <h3>What answers the second one: a sticker on their ticket</h3>
+      <h3>What answers the second one: four stickers on the tag</h3>
       <p>
         <strong>A laundromat already keeps jobs apart</strong> - through washer,
         dryer and folding table. They have to; it is the whole trade. We are not
         introducing that discipline and we should not try to replace it.
       </p>
       <p>
-        So the answer is one more sticker, carrying the same order, that never goes
-        on a bag at all: <strong>it goes on the laundromat's own ticket</strong>,
-        which already follows the load. It outlives every intake bag, and it stays
-        scannable for the whole job - which matters, because that QR is how they
-        give us a weight and how they tell us the load is ready.
+        The problem is narrower than it looks. It is not "how does a laundromat
+        track a job" - they do that already. It is that <strong>the bag we put an
+        id on is not the bag that comes back</strong>. They empty ours, wash the
+        contents and pack them into their own, so at the moment of repacking the
+        identity has nowhere to live.
       </p>
       <p>
-        Nothing physical of ours has to come back. Two other answers were tried on
-        paper and dropped: a numbered plastic tag we lend out (our stock, in
-        somebody else's building, relying on it being returned) and a sticker on the
-        cart (a cart gets emptied into a dryer, and the tag is then on the wrong
-        object).
+        The answer is to print the identity <em>four times over</em>. A bag tag
+        carries four peelable stickers, all reading the same id and each carrying
+        its own number. When they pack a finished bag they peel one off and put it
+        on. <strong>One bag in can become four out and every one of them still says
+        which order it is</strong>, without anybody binding a fresh code to anything
+        at a counter, and without us being told in advance how many bags it will
+        take.
+      </p>
+      <p>
+        Two other answers were tried on paper and dropped: a numbered plastic tag we
+        lend out (our stock, in somebody else's building, relying on it being
+        returned) and a sticker on the cart (a cart gets emptied into a dryer, and
+        the tag is then on the wrong object).
       </p>
       <p style="border-top:2px solid var(--ink-900);padding-top:14px;">
-        <strong>What is actually built is simpler than that.</strong> The finished
-        bags carry nothing. The driver weighs them at the counter, and if the weight
-        matches what he collected, each bag gets a numbered clip from his van. The
-        clips are the identity for the whole van leg and come off at the customer's
-        door, so nothing of ours is ever left in somebody else's building and the
-        laundromat is never asked to label anything.
+        <strong>The clip is a separate thing and only lives in the van.</strong>
+        Once the weight matches, each finished bag also gets a numbered clip, which
+        is what a driver and a counter assistant can actually say out loud -
+        <em>"four, six and ten"</em>. It comes off at the customer's door, so
+        nothing of ours is left in somebody else's building.
       </p>
       <p>
-        <strong>What the clip does not do is outlive the van.</strong> It carries
-        nothing once it comes off at the door, so a bag returned or queried a week
-        later has nothing on it to read. Whether that matters is still open.
+        The sticker is what outlives the clip. A bag queried a week later still has
+        an id on it, which was the open question the last time this page was
+        written.
       </p>
     </div>
 
