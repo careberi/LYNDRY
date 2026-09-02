@@ -189,13 +189,32 @@ be taken back. Same reason texting a laundromat sits behind `partners.manage`.
 
 ---
 
+### 14. Clearing the notification when an unknown number texts ✅
+
+The yellow banner on the conversations screen counted every number that had ever
+texted without signing up, so it could never go down - and a warning that is
+always on is one nobody reads.
+
+**Dismissing is a timestamp, not a flag.** It means "dealt with everything they
+have said so far", so a lead who texts again comes straight back - somebody
+trying a second time after being ignored is a better lead than the first time.
+You clear it from inside the thread, not the list, because marking a number
+dealt with without reading what they said is the mistake this exists to stop.
+
+### 15. A historical view on the orders board ✅
+
+`/ops?date=2026-08-26`, with a date picker and arrows either side. Forward only
+as far as today.
+
+**A past day is its own page, not the live board filtered.** Today's board
+groups by where each bag physically is, which is meaningless once the bags have
+all gone home; a past day answers "what happened" instead - picked up, delivered,
+pounds, billed. It says plainly that **statuses are current, not as-of**: a real
+snapshot would mean replaying `order_events`, and a page that quietly looked
+like one without being one would be worse than an honest one.
+
+---
+
 ## Outstanding
 
-### 14. Clearing the notification when an unknown number texts
-
-A number that texts without signing up leaves a notification with no way to
-dismiss it.
-
-### 15. A historical view on the orders board
-
-Pick a date and see that day's board, rather than only today.
+*(nothing)*

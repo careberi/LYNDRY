@@ -66,11 +66,27 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 // A date-only string, formatted from its own parts. Parsing "2026-08-14" as a
 // Date makes it UTC midnight, which displays as the previous day in New Jersey.
+const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const FULL_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 function shortDate(iso) {
   if (!iso) return '—';
   const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
   const day = DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   return `${day} ${d} ${MONTHS[m - 1]}`;
+}
+
+// The same date written out, for a heading where it is the subject rather than
+// a cell in a table. "Tuesday 26 August 2026" reads as a day; "Tue 26 Aug" reads
+// as a column.
+function longDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const day = FULL_DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${day} ${d} ${FULL_MONTHS[m - 1]} ${y}`;
 }
 
 // A timestamp, shown in New Jersey's time rather than the server's.
@@ -1027,6 +1043,43 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     const all = data || [];
     const now = today();
 
+    // --- WHICH DAY ARE WE LOOKING AT ---------------------------------------
+    //
+    // Default today, which is the live board and behaves exactly as it always
+    // has. Any other date is a look BACK at what happened that day.
+    //
+    // The two are deliberately not the same page dressed differently. Today's
+    // board answers "what needs doing now" and groups by where each bag
+    // physically is. A past day cannot answer that - the bags all went home -
+    // so it answers "what happened" instead, and says so.
+    //
+    // NOTE WHAT THIS IS NOT: it is not a snapshot of how the board looked at
+    // 3pm that afternoon. Statuses are current, not as-of, so an order picked
+    // up on Tuesday reads DELIVERED here because that is what it is now.
+    // Reconstructing the board as it stood would mean replaying order_events,
+    // and a page that quietly looked like a snapshot without being one would
+    // be worse than one that is honest about it.
+    const asked = String(req.query.date || '').trim();
+    const viewDate = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : now;
+    const isToday = viewDate === now;
+
+    const shift = (iso, days) => {
+      const d = new Date(`${iso}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+
+    // A day is "delivered on" if the delivery timestamp falls on it. Compared
+    // on the date part rather than a range, because delivered_at is a full
+    // timestamp and the board only ever cares which day it was.
+    const deliveredOn = (o, iso) => o.delivered_at && String(o.delivered_at).slice(0, 10) === iso;
+
+    const dayPickups = all.filter((o) => o.pickup_date === viewDate);
+    const dayDeliveries = all.filter((o) => deliveredOn(o, viewDate));
+
+    const dayPounds = dayDeliveries.reduce((sum, o) => sum + Number(o.weight_lb || 0), 0);
+    const dayBilled = dayDeliveries.reduce((sum, o) => sum + (o.price_cents || 0), 0);
+
     // Grouped by WHERE THE BAG PHYSICALLY IS, not by a vague notion of
     // "active". The old board had three buckets and AT_PARTNER matched none
     // of them, so a 45 lb order sat invisible at a laundromat. Every status
@@ -1238,7 +1291,70 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       </section>`
       : '';
 
-    const body = `
+    // THE DAY PICKER. A plain GET form with three links either side of it, so
+    // it works with scripting off like every other ops control - and so a
+    // particular day is a URL you can send somebody.
+    const dayStrip = `
+      <form method="get" action="/ops"
+            style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:28px;">
+        <a class="btn btn-sm btn-outline" href="/ops?date=${shift(viewDate, -1)}"
+           aria-label="The day before">&larr;</a>
+        <div>
+          <label class="field-label" for="date" style="margin-bottom:4px;">Which day</label>
+          <input class="field" id="date" name="date" type="date" value="${escapeHtml(viewDate)}"
+                 max="${escapeHtml(now)}" style="min-width:170px;">
+        </div>
+        <button class="btn btn-sm" type="submit">Show it</button>
+        ${
+          // Only forward as far as today. There is nothing to look at in the
+          // future that Upcoming does not already show.
+          isToday
+            ? ''
+            : `<a class="btn btn-sm btn-outline" href="/ops?date=${shift(viewDate, 1)}"
+                  aria-label="The day after">&rarr;</a>
+               <a class="btn btn-sm" href="/ops">Back to today</a>`
+        }
+      </form>`;
+
+    // --- A PAST DAY --------------------------------------------------------
+    //
+    // Its own body rather than the live board with a filter on it. The live
+    // groups are about where a bag is right now, and on a past day every one
+    // of them would be empty or misleading.
+    const historyBody = `
+      ${dayStrip}
+
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:8px;">
+        <h1 style="font-family:var(--font-display);font-weight:900;font-size:34px;letter-spacing:-0.03em;margin:0;">
+          ${escapeHtml(longDate(viewDate))}
+        </h1>
+      </div>
+      <p style="font-size:15px;color:var(--ink-500);line-height:1.6;max-width:64ch;margin:0 0 30px;">
+        What happened that day. <strong>Statuses are where each order is now</strong>,
+        not where it was that afternoon, so an order collected that day reads as
+        delivered if it since was.
+      </p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
+        ${statCard('Picked up', dayPickups.length, dayPickups.length ? 'var(--suds-300)' : undefined)}
+        ${statCard('Delivered', dayDeliveries.length)}
+        ${statCard('Pounds delivered', dayPounds ? `${dayPounds.toFixed(0)} lb` : '0')}
+        ${showMoney ? statCard('Billed', money(dayBilled), dayBilled ? 'var(--sunbeam-500)' : undefined) : ''}
+      </div>
+
+      ${board('That day', 'Picked up', dayPickups)}
+      ${board('That day', 'Delivered', dayDeliveries)}
+
+      ${
+        dayPickups.length || dayDeliveries.length
+          ? ''
+          : `<p style="font-size:17px;color:var(--ink-500);">
+               Nothing was picked up or delivered on ${escapeHtml(longDate(viewDate))}.
+             </p>`
+      }`;
+
+    const body = isToday ? `
+      ${dayStrip}
       <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
         ${statCard('To collect', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
         ${statCard('At laundromat', g.partner.length)}
@@ -1265,9 +1381,18 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
           ? ''
           : '<p style="font-size:17px;color:var(--ink-500);">No orders yet. The first one will appear here the moment somebody books.</p>'
       }
-    `;
+    ` : historyBody;
 
-    res.type('html').send(adminPage({ title: 'Orders', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(
+      adminPage({
+        title: isToday ? 'Orders' : `Orders - ${longDate(viewDate)}`,
+        active: '/ops',
+        body,
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
   } catch (err) {
     next(err);
   }
