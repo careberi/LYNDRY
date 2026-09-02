@@ -3053,6 +3053,68 @@ router.post('/ops/run/collected', guard, may('orders.drive'), async (req, res, n
   }
 });
 
+// "All these bags are collected." One tap, after every sticker is ticked.
+//
+// It records the RETURN LEG from the ticks rather than from a weight: how many
+// bags came back is now a fact we hold per bag, named, rather than a number
+// somebody typed at a counter. Nothing is texted and nothing is charged here -
+// this only says the bags are in the van.
+router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const raw = (req.body || {}).order_id;
+    const ids = (Array.isArray(raw) ? raw : [raw]).filter((id) => UUID.test(String(id || '')));
+
+    if (!ids.length) return res.redirect(303, '/ops/run');
+
+    for (const orderId of ids) {
+      const order = await loadOrderForAction(orderId);
+      if (!order) continue;
+
+      if (
+        !roles.can(req.opsUser, 'customers.view') &&
+        order.driver_id &&
+        order.driver_id !== req.opsUser.id
+      ) {
+        continue;
+      }
+
+      const collected = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+        (b) => b.sticker_seq && b.collected_at
+      );
+
+      if (!collected.length) continue;
+
+      // REFUSE A HALF-COLLECTION rather than recording one. A bag the
+      // laundromat packed and nobody ticked is still on their shelf, and
+      // writing a count now would tell the rest of the system the order is
+      // complete when it is not.
+      const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+        (b) => b.sticker_seq && b.finished_at
+      );
+
+      if (collected.length < packed.length) continue;
+
+      await db
+        .from('orders')
+        .update({ return_bag_count: collected.length })
+        .eq('id', order.id)
+        .is('return_bag_count', null);
+
+      await orderEvents.record(order.id, {
+        kind: 'LABEL',
+        summary:
+          `${collected.length} bag${collected.length === 1 ? '' : 's'} collected from the laundromat: ` +
+          collected.map((b) => `${b.code}-${b.sticker_seq}`).join(', '),
+        by: { opsUser: req.opsUser },
+      });
+    }
+
+    return res.redirect(303, '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/run/dropped', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const body = req.body || {};

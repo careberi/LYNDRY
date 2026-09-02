@@ -488,17 +488,30 @@ async function outForDelivery(order, { by = {} } = {}) {
   // promise had already been sent.
   //
   // Bags out is NOT bags in - they repack into their own - so the count cannot
-  // be assumed, and the weight is what actually proves nothing was left behind.
-  // Only asked of an order that went to a laundromat; one we washed ourselves
-  // never left the van and has nothing to reconcile.
-  if (order.partner_id && (order.return_bag_count == null || order.return_weight_lb == null)) {
+  // be assumed. Only asked of an order that went to a laundromat; one we washed
+  // ourselves never left the van and has nothing to reconcile.
+  //
+  // THE WEIGHT IS NO LONGER REQUIRED HERE, and that is a deliberate reversal.
+  // It used to be, on the grounds that a WEIGHT proves nothing was left behind
+  // and a count cannot - which was true when the bags coming back were
+  // anonymous and a count was just a number somebody said out loud.
+  //
+  // They are not anonymous now. Every bag the laundromat packs carries a
+  // numbered sticker off the tag it came out of, and the driver ticks each one
+  // off a named list as it reaches his hands. return_bag_count is written from
+  // those ticks, so it is not a typed total - it is a set of bags we can name.
+  // A bag left on their shelf is an untapped button on the driver's screen.
+  //
+  // That is a stronger check than a total, not a weaker one: it does not only
+  // say something is missing, it says which one.
+  if (order.partner_id && order.return_bag_count == null) {
     return {
       ok: false,
       reason: 'unconfirmed',
       detail:
-        'Record what came back from the laundromat first - how many bags, and ' +
-        'what they weigh. The customer is told it is on the way as soon as you ' +
-        'do, so it needs to be right before that goes out.',
+        'Collect the bags from the laundromat first - tick each one off on your ' +
+        'round. The customer is told it is on the way as soon as this moves, so ' +
+        'it needs to be right before that goes out.',
     };
   }
 

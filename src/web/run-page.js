@@ -368,7 +368,13 @@ function partnerCard(run) {
     </h2>
     <p style="font-size:16px;line-height:1.5;margin:0 0 4px;">${escapeHtml(stop.address || '')}</p>
     <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 16px;">
-      ${stop.bags} bag${stop.bags === 1 ? '' : 's'}${stop.pounds ? `, ${stop.pounds.toFixed(0)} lb` : ''}.
+      ${stop.bags} bag${stop.bags === 1 ? '' : 's'}${
+        // NO POUNDAGE ON A COLLECT STOP. That figure is what went IN - the
+        // customer's dirty weight - and printing it beside bags he is picking
+        // up invites him to check one against the other, which is the weighing
+        // this stop deliberately no longer does.
+        dropping && stop.pounds ? `, ${stop.pounds.toFixed(0)} lb` : ''
+      }.
     </p>
 
     ${
@@ -400,7 +406,7 @@ function partnerCard(run) {
                ${
                  left
                    ? `Tap each one as they hand it to you. <strong>${left} still to go.</strong>`
-                   : 'All of them are in the van. Weigh the load next.'
+                   : 'All of them are in the van.'
                }
              </p>
 
@@ -482,45 +488,43 @@ function partnerCard(run) {
             // that records a return. Sending him there rather than repeating it
             // here is the same rule the load-out link follows: two ways to do
             // one job is how they drift.
-            const waiting = (stop.orders || []).filter((o) => o.return_bag_count == null);
-
-            // NOTHING ELSE UNTIL EVERY BAG IS IN HIS HANDS. The weighing card
-            // below is the next step, and offering it while bags are still on
-            // the shelf invites a load being weighed short - which is the one
-            // thing the weight check exists to catch, defeated by doing it in
-            // the wrong order. The tick-list above is the whole screen until it
-            // is finished.
+            // NO WEIGHING AT THIS STOP, and no order numbers either. Neil's
+            // call: he is picking bags off a counter for this round, and which
+            // order each belongs to is the sticker's business, not his.
+            //
+            // WHAT REPLACED THE WEIGHT CHECK, because something had to. The old
+            // rule was weigh-check-clip: compare what came back against what we
+            // collected, on the grounds that the WEIGHT proves nothing was left
+            // behind and a count cannot. That was true when the bags coming
+            // back were anonymous.
+            //
+            // They are not any more. Every bag the laundromat packed carries a
+            // numbered sticker, it is listed here by name, and the driver ticks
+            // each one as it reaches his hands. A bag left on their shelf is an
+            // untapped button on this screen. That is a stronger check than a
+            // total, not a weaker one - it does not just say something is
+            // missing, it says which.
             const uncollected = (stop.finishedBags || []).filter((b) => !b.collected_at).length;
             if (uncollected) return '';
 
-            if (waiting.length) {
+            const orderIds = [...new Set((stop.orders || []).map((o) => o.id))];
+            const unconfirmed = (stop.orders || []).filter((o) => o.return_bag_count == null);
+
+            if (unconfirmed.length) {
               return `
-           <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);
-                       border-radius:14px;background:var(--paper-200);">
-             <p class="eyebrow" style="margin:0 0 8px;">Now weigh what you picked up</p>
-             <p style="font-size:15px;line-height:1.55;margin:0;">
-               Everything is in your hands. Put it on their scale, order by
-               order - it gets checked against what you collected from the
-               customer, and only then do the clips go on.
+           <form method="post" action="/ops/run/collected-all" style="margin:0;">
+             ${orderIds
+               .map((id) => `<input type="hidden" name="order_id" value="${escapeHtml(id)}">`)
+               .join('')}
+             <button type="submit" class="btn btn-primary btn-lg btn-full">
+               All ${(stop.finishedBags || []).length} bag${
+                 (stop.finishedBags || []).length === 1 ? '' : 's'
+               } are collected
+             </button>
+             <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
+               Tap that once they are all in the van. The van scan comes after.
              </p>
-           </div>
-
-           ${waiting
-             .map(
-               (o) => `
-           <a class="btn btn-primary btn-lg btn-full" style="margin-bottom:10px;"
-              href="/ops/orders/${escapeHtml(String(o.order_number))}?from=run">
-             Order ${escapeHtml(String(o.order_number))}${
-                 o.weight_lb ? ` - went in at ${Number(o.weight_lb).toFixed(0)} lb` : ''
-               } ${icon('arrow-right', '22')}
-           </a>`
-             )
-             .join('')}
-
-           <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
-             ${waiting.length === 1 ? 'One order' : `${waiting.length} orders`} still to
-             weigh back in. The van scan comes after.
-           </p>`;
+           </form>`;
             }
 
             return `
