@@ -85,10 +85,16 @@ async function createOrder(customer, input) {
       // they say yes and the AI calls again with a time we can actually do.
       case 'time_unavailable':
         return result.say;
+      // NOT "book another one" - "put it out with the one you have". Neil's
+      // call, and it is the obvious answer: the van has not been to that door
+      // yet today, so extra bags need no second visit and no second booking.
+      // Offering to move it or add another sends somebody away to arrange
+      // something they do not need.
       case 'already_booked':
         return (
-          `You've already got a pickup booked for ${booking.whenLine(result.order)}. ` +
-          `Want me to move it, or add a second one after that?`
+          `Your pickup ${booking.whenLine(result.order)} hasn't been yet - just ` +
+          `put the extra bags out with the rest and the driver will take the lot. ` +
+          `Want different wash details on any of it?`
         );
       default:
         return `Let me get a person on this. Someone will come back to you shortly.`;

@@ -75,6 +75,20 @@ function clientIp(req) {
 //
 // If a genuine instruction does not fit these five, the driver says it out
 // loud when he hands the bag over. That is the interface to a laundromat.
+
+// THE WASH DETAILS FOR THIS BAG, not for this person.
+//
+// A customer may have two pickups on one day with different instructions, so
+// the order carries its own snapshot. Falls back to the customer row for every
+// order taken before orders.preferences existed - treating null as "no
+// preferences" would blank the instructions on live orders, which is the one
+// thing a laundromat cannot work around.
+function prefsFor(order) {
+  const own = order && order.preferences;
+  if (own && Object.keys(own).length) return own;
+  return (order && order.customers && order.customers.preferences) || {};
+}
+
 function washLines(preferences) {
   // One definition, in src/core/wash.js, shared with the AI's tool schema, the
   // pricing and the account page. An option cannot exist in one of them and not
@@ -262,7 +276,7 @@ function readyCard(order, code, token) {
 // trying to redact the ones it does not.
 // ---------------------------------------------------------------------------
 function orderTagPage(order, code, token, query = {}) {
-  const wash = washLines((order.customers || {}).preferences);
+  const wash = washLines(prefsFor(order));
   const clock = fulfilment.turnaround(order);
   const bagsIn = order.bag_count == null ? null : Number(order.bag_count);
 
@@ -620,7 +634,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
 
   // --- being washed: the instructions, and the four stickers ---------------
   if (stage === tags.STAGES.WASHING) {
-    const lines = wash.washLines((order.customers || {}).preferences);
+    const lines = wash.washLines(prefsFor(order));
     const clock = fulfilment.turnaround(order);
 
     return page({
@@ -880,7 +894,7 @@ router.get('/o/:code', async (req, res, next) => {
     const { data: order, error } = await db
       .from('orders')
       .select(
-        'id, order_number, status, collected_at, weight_lb, partner_weight_lb, customers(preferences)'
+        'id, order_number, status, collected_at, weight_lb, partner_weight_lb, preferences, customers(preferences)'
       )
       .eq('id', label.order_id)
       .maybeSingle();

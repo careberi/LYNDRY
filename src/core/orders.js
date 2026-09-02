@@ -198,6 +198,7 @@ async function create({
   bagCount,
   notes,
   fromSchedule,
+  preferences,
 }) {
   const { data, error } = await db
     .from('orders')
@@ -224,6 +225,13 @@ async function create({
       pickup_method: pickupMethod || null,
       bag_count: bagCount || null,
       notes: notes || null,
+
+      // THE WASH DETAILS THIS ORDER WAS BOOKED WITH, snapshotted here for the
+      // same reason the price is: so that changing them later cannot rewrite
+      // work already handed over. A customer with a 2pm load at the laundromat
+      // and a 5pm load being booked with different details must not have the
+      // first one's instructions change on the shelf.
+      preferences: preferences || null,
 
       // Both halves of the price are recorded on the order itself, so that
       // changing either later never silently re-prices work already done.

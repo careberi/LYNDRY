@@ -718,6 +718,10 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
 
   const order = await orders.create({
     customerId: customer.id,
+    // What they are set up with RIGHT NOW, frozen onto this order. Changing
+    // their account later moves the default for next time and leaves this
+    // order alone - which is the whole point of storing it here.
+    preferences: prefs && Object.keys(prefs).length ? prefs : null,
     pickupDate: window.date,
     pickupTime: normaliseTime(pickupTime),
     pickupWindowStart: window.start,
