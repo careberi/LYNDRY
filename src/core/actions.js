@@ -8,6 +8,7 @@ const issues = require('./issues');
 const recurring = require('./recurring');
 const settings = require('./settings');
 const wash = require('./wash');
+const geocode = require('./geocode');
 const payments = require('../providers/payments');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -353,15 +354,37 @@ async function updateProfile(customer, input) {
 
   if (PROFILE_COLUMNS.includes(field)) {
     const stored = field === 'state' ? value.toUpperCase() : value;
-    const { error } = await db.from('customers').update({ [field]: stored }).eq('id', customer.id);
+
+    // Same rule as save_details: changing one line of an address is still a
+    // move, and a stale pin is worse than no pin because nothing looks wrong.
+    const { data: saved, error } = await db
+      .from('customers')
+      .update(geocode.clearPinIfMoved(customer, { [field]: stored }))
+      .eq('id', customer.id)
+      .select('*')
+      .single();
+
     if (error) throw error;
+
+    if (saved && saved.lat == null && saved.address_line1) {
+      geocode.locate(saved).catch(() => {});
+    }
+
     return `Done, that's saved.`;
   }
 
   if (PREFERENCE_KEYS.includes(field)) {
     const preferences = { ...(customer.preferences || {}) };
-    preferences[field] =
-      field === 'fabric_softener' ? /^(yes|true|y|please)$/i.test(value) : value;
+    // VALIDATED, NOT COERCED. fabric_softener was still being stored as a
+    // boolean from "yes"/"no" here, exactly as it was in save_details before
+    // that was fixed - and wash.js expects STANDARD, NONE or FRAGRANCE_FREE.
+    // A boolean in that column fails hasPreferences() and puts the customer
+    // straight back into the loop where the AI asks the same question forever.
+    if (!wash.isValid(field, value)) {
+      return `I did not catch which option you meant. ${wash.QUESTION}`;
+    }
+
+    preferences[field] = value;
 
     const { error } = await db.from('customers').update({ preferences }).eq('id', customer.id);
     if (error) throw error;
@@ -463,14 +486,27 @@ async function saveDetails(customer, input) {
     changes.state = DEFAULT_STATE;
   }
 
+  // A MOVE THROWS THE MAP PIN AWAY. Without this the address changes and the
+  // coordinates do not, so every routing decision is made about the old house -
+  // which is exactly what happened when a customer moved to Glen Rock and the
+  // map kept them in Fair Lawn.
   const { data: updated, error } = await db
     .from('customers')
-    .update(changes)
+    .update(geocode.clearPinIfMoved(customer, changes))
     .eq('id', customer.id)
     .select('*')
     .single();
 
   if (error) throw error;
+
+  // Look the new address up in the background. It is a free rate-limited
+  // service and a customer is waiting on a text, so nothing waits on it - and
+  // if it fails, locate() will simply try again the next time a route is built.
+  if (updated.lat == null && updated.address_line1) {
+    geocode.locate(updated).catch((err) => {
+      console.error(`Could not re-pin ${updated.id} after a move: ${err.message}`);
+    });
+  }
 
   // People are called by their first name. "Thanks Neil Perry" is what a
   // form-letter says; the full name stays in the database for the driver and

@@ -237,4 +237,50 @@ function sequence(points, base) {
 // how this ends up defaulting to the middle of the ocean.
 const BASE = Object.freeze({ lat: 40.9404, lng: -74.1182 });
 
-module.exports = { locate, lookupOnce, sequence, milesBetween, addressLine, BASE };
+// The columns that decide where a customer is. address_line2 is deliberately
+// NOT one of them: a unit number moves nobody on a map, and re-geocoding on
+// "apt 3B" would spend a rate-limited lookup to arrive at the same pin.
+const ADDRESS_COLUMNS = ['address_line1', 'city', 'state', 'postal_code'];
+
+// A STORED PIN IS A CACHE OF AN ADDRESS, SO IT HAS TO DIE WITH IT.
+//
+// locate() returns early whenever lat and lng are set, which is right - it is
+// what stops every route build hammering a free public geocoder. But it means
+// the pin outlives the address unless somebody clears it, and nothing did: a
+// customer moved from Fair Lawn to Glen Rock, the address changed everywhere it
+// is printed, and the map still had them a mile and a half away. Every routing
+// decision made off that pin was made about the wrong house.
+//
+// ops_users has had this since drivers got a home base. Customers did not.
+//
+// Returns the changes with the pin nulled when the address actually moved, so
+// the next locate() looks it up again. Only when it MOVED - correcting a typo
+// in a name must not throw away a good pin and spend a lookup restoring it.
+function clearPinIfMoved(before, changes) {
+  const moved = ADDRESS_COLUMNS.some(
+    (col) => changes[col] !== undefined && String(changes[col] || '') !== String((before || {})[col] || '')
+  );
+
+  if (!moved) return changes;
+
+  return {
+    ...changes,
+    lat: null,
+    lng: null,
+    geocoded_at: null,
+    // Not sticky. An address that could not be found before may be findable
+    // now, and refusing to try again would strand them on the map for good.
+    geocode_failed: false,
+  };
+}
+
+module.exports = {
+  locate,
+  lookupOnce,
+  sequence,
+  milesBetween,
+  addressLine,
+  clearPinIfMoved,
+  ADDRESS_COLUMNS,
+  BASE,
+};

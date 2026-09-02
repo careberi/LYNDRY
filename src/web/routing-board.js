@@ -730,11 +730,25 @@ function routingBoardBody({
       pts.push([DATA.position.lat, DATA.position.lng]);
     }
 
+    // A LAUNDROMAT WE ARE NOT USING TODAY IS CONTEXT, NOT PART OF THE ROUND.
+    //
+    // It is still drawn - knowing where the others are is the point of having
+    // them on a map at all - but it must not decide the zoom. Every partner
+    // used to go into the bounds, so one in Paterson stretched the frame
+    // several miles west of a round that never leaves Glen Rock and Fair Lawn,
+    // and the actual stops ended up squeezed into a corner. The map looked
+    // broken because it was framing somewhere nobody is going.
+    //
+    // The map is a picture OF the run sheet, so the run sheet decides what it
+    // has to fit.
     DATA.partners.forEach(function (p) {
       L.marker([p.lat, p.lng], { icon: markerIcon('partner' + (p.used ? '' : ' unused'), 'L') })
         .addTo(map)
-        .bindTooltip(p.name, { direction: 'right', offset: [14, 0] });
-      pts.push([p.lat, p.lng]);
+        .bindTooltip(p.name + (p.used ? '' : ' - not used today'), {
+          direction: 'right',
+          offset: [14, 0],
+        });
+      if (p.used) pts.push([p.lat, p.lng]);
     });
 
     DATA.stops.forEach(function (s) {

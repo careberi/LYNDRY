@@ -470,7 +470,25 @@ async function currentPosition(driverId, dateIso) {
 async function board(dateIso, fromTime, driverId = null) {
   const date = dateIso || booking.today();
   const now = booking.nowInService();
-  const start = fromTime || (date === now.date ? now.time : '09:00');
+
+  // WHEN THE DAY STARTS, IF NOBODY SAID.
+  //
+  // "Now" is right during working hours and nonsense outside them. Opened at
+  // ten past midnight the board defaulted to 00:11, at which point no
+  // laundromat on earth is open - so it correctly reported that there was
+  // nowhere to put the bags, and correctly looked like it had lost the
+  // laundromat. Neil read it as exactly that.
+  //
+  // So a time outside the day's pickup windows falls forward to the first one.
+  // A round is not planned at midnight; the earliest anybody could actually
+  // set off is when the first window opens, and that is the honest default.
+  const dayStart = booking.PICKUP_WINDOWS[0].start;
+  const dayEnd = booking.PICKUP_WINDOWS[booking.PICKUP_WINDOWS.length - 1].end;
+
+  const clockNow = date === now.date ? now.time : dayStart;
+  const withinDay = clockNow >= dayStart && clockNow < dayEnd;
+
+  const start = fromTime || (withinDay ? clockNow : dayStart);
 
   const [hh, mm] = String(start).split(':').map(Number);
   const startMinutes = (Number.isFinite(hh) ? hh : 9) * 60 + (Number.isFinite(mm) ? mm : 0);
