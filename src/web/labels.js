@@ -42,15 +42,30 @@ const { site } = require('./site');
 // only introduce a rounding error between the screen and the paper.
 // ---------------------------------------------------------------------------
 
+// THE TAG IS 4.75 BY 2.38 WITH A PUNCH HOLE, matching the artwork Neil sent.
+//
+// It replaces the 3.33 x 4 inch Avery 5164 label. That was a self-adhesive
+// SHIPPING LABEL, which is the wrong object: it sticks to the bag, and a bag
+// tag has to hang off a handle where somebody can read it without turning the
+// bag over. 4.75 x 2.38 is an ordinary hang-tag size and the hole is punched.
+//
+// PORTRAIT, THREE ACROSS. At 2.38 inches wide, three fit across an 8.5 inch
+// page with margins - which is 12 to a sheet against the old 6, so a print run
+// is half the paper.
 const SHEET = Object.freeze({
-  stock: 'Avery 5164',
-  perSheet: 6,
-  columns: 2,
-  tagWidth: '3.33in',
-  tagHeight: '4in',
-  columnGap: '0.19in',
-  marginTop: '0.5in',
-  marginLeft: '0.16in',
+  stock: '4.75 x 2.38 hang tag',
+  perSheet: 12,
+  columns: 3,
+  tagWidth: '2.38in',
+  tagHeight: '4.75in',
+  columnGap: '0.12in',
+  marginTop: '0.35in',
+  marginLeft: '0.3in',
+
+  // Where the string goes. Centred, a quarter inch down, so a punch never
+  // clips the printing below it.
+  holeDiameter: '0.22in',
+  holeFromTop: '0.26in',
 });
 
 // How many peelable stickers are on one tag. Four is the number the database
@@ -98,21 +113,34 @@ function tagMarkup({ code, tagQr, stickerQrs }) {
   //
   // The sequence rides on the id - L4XK92-2, one line - rather than sitting off
   // to the side. It is part of what a person says out loud, not a footnote.
+  // FOUR STICKERS, STACKED, EACH WITH ITS ID ABOVE ITS QR. Neil's artwork.
+  //
+  // The band carries the id and the QR sits under it, because that is the
+  // order somebody uses them in: they read the code out, and the camera is the
+  // shortcut. Every band says the same id - all five rows of a tag share it -
+  // and the sequence rides on the end of it, L4XK92-2, because that is what a
+  // person says out loud rather than a footnote beside it.
   const stickers = STICKERS.map(
     (n, i) => `
       <div class="lb-sticker">
-        <div class="lb-scode">${esc(code)}-${n}</div>
+        <div class="lb-band">${esc(code)}-${n}</div>
         <div class="lb-sq">${stickerQrs[i]}</div>
       </div>`
   ).join('');
 
   return `
     <div class="lb-tag">
+      <!-- WHERE THE STRING GOES. Drawn rather than punched, so somebody with
+           an ordinary hole punch has a target and the printing below it is
+           already clear of the hole. -->
+      <div class="lb-hole"></div>
+
       <div class="lb-head">
-        <div class="lb-brand">${esc(site.name)} bag tag &middot; stays on this bag</div>
+        <div class="lb-brand">${esc(site.name)}</div>
         <div class="lb-code">${esc(code)}</div>
         <div class="lb-hq">${tagQr}</div>
       </div>
+
       <div class="lb-peel">${stickers}</div>
     </div>`;
 }
@@ -157,76 +185,84 @@ async function labelSheetBody(labels) {
     height: ${SHEET.tagHeight};
     display: flex;
     flex-direction: column;
-    padding: 0.12in;
-    /* Deliberately no border on the tag: the label's own die-cut edge is the
-       border, and a printed rule that misses it by a millimetre reads as a
-       fault. The dashed guide below only exists on screen. */
+    align-items: center;
+    padding: 0.1in 0.09in;
+    /* Deliberately no border: the tag's own cut edge is the border, and a
+       printed rule that misses it by a millimetre reads as a fault. */
     overflow: hidden;
     color: #101210;
   }
 
-  /* --- the header, which stays on the bag we collect ---
-     Stacked, like the stickers below it: brand, then the id across the full
-     width, then the QR centred under it. */
+  /* The punch mark. An outline, not a filled dot - it is a target for a hole
+     punch, and a solid circle would just waste toner on every tag. */
+  .lb-hole {
+    width: ${SHEET.holeDiameter};
+    height: ${SHEET.holeDiameter};
+    border: 1px solid #9a9a9a;
+    border-radius: 50%;
+    flex: none;
+    margin-top: ${SHEET.holeFromTop};
+    margin-bottom: 0.1in;
+  }
+
+  /* --- the header, which stays on the bag we collect --- */
   .lb-head {
     display: flex; flex-direction: column; align-items: center;
-    height: 1.72in; flex: none; text-align: center;
+    flex: none; text-align: center; width: 100%;
   }
-  .lb-hq { width: 0.86in; height: 0.86in; flex: none; margin-top: 0.03in; }
-  .lb-hq svg { display: block; width: 100%; height: 100%; }
 
   .lb-brand {
-    font-family: var(--font-mono); font-size: 7pt; font-weight: 700;
-    letter-spacing: 0.13em; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: 6pt; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase; color: #6a6a6a;
   }
+
   /* THE ID IS THE FALLBACK, so it is set big enough to read at arm's length in
      a badly lit basement when the camera will not focus. */
   .lb-code {
-    font-family: var(--font-mono); font-size: 30pt; font-weight: 700;
-    letter-spacing: 0.05em; line-height: 1.02; margin: 0.02in 0 0.04in;
+    font-family: var(--font-mono); font-size: 17pt; font-weight: 700;
+    letter-spacing: 0.05em; line-height: 1.05; margin: 0.01in 0 0.03in;
   }
 
-  /* --- the four peelable stickers --- */
+  /* The tag keeps a QR of its own. Every one of the five resolves to the same
+     bag, so this is not a second destination - it is the one that is still
+     there after all four stickers have been peeled off. */
+  .lb-hq { width: 0.55in; height: 0.55in; flex: none; }
+  .lb-hq svg { display: block; width: 100%; height: 100%; }
+
+  /* --- the four peelable stickers ---
+     Stacked, not a 2x2 grid. Each is a band with the id and a QR beneath it,
+     which is the order they get used in: read the code, or point a camera at
+     it. Dashed rules between them are the instruction - this is where the
+     scissors go, and each piece peels off its own backing afterwards. */
   .lb-peel {
     flex: 1 1 auto;
+    width: 100%;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    /* The cut lines. A dashed rule is the instruction: this is where the
-       scissors go, and each piece peels off its own backing afterwards. */
+    grid-template-rows: repeat(4, 1fr);
+    margin-top: 0.07in;
     border-top: 1px dashed #101210;
-    margin-top: 0.06in;
   }
 
   .lb-sticker {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 0.03in;
-    padding: 0.05in 0.03in;
-    min-width: 0;
-    text-align: center;
-    border-right: 1px dashed #101210;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     border-bottom: 1px dashed #101210;
+    padding: 0.02in 0;
+    min-height: 0;
   }
-  /* The outer edges are the label's own edge, not a cut. */
-  .lb-sticker:nth-child(2n) { border-right: 0; }
-  .lb-sticker:nth-child(n + 3) { border-bottom: 0; }
 
-  .lb-sq { width: 0.72in; height: 0.72in; flex: none; }
+  /* The last one needs no cut line under it - the tag ends there. */
+  .lb-sticker:last-child { border-bottom: 0; }
+
+  .lb-band {
+    font-family: var(--font-mono); font-size: 9pt; font-weight: 700;
+    letter-spacing: 0.05em; line-height: 1; margin-bottom: 0.03in;
+  }
+
+  .lb-sq { width: 0.62in; height: 0.62in; flex: none; }
   .lb-sq svg { display: block; width: 100%; height: 100%; }
-
-  /* THE ID GETS THE FULL WIDTH, which is the whole point of stacking. It is
-     what somebody reads out when the camera will not focus, so it is set as
-     large as the sticker allows rather than squeezed beside a square. */
-  .lb-scode {
-    font-family: var(--font-mono); font-size: 13pt; font-weight: 700;
-    letter-spacing: 0.03em; line-height: 1.05; white-space: nowrap;
-  }
-
-  /* On screen only, so you can see where the die cuts fall before wasting a
-     sheet of labels. */
-  @media screen {
-    .lb-tag { outline: 1px dashed #C4CBC2; outline-offset: -1px; }
-  }
 
   /* ---- on paper ---- */
   @media print {

@@ -950,6 +950,84 @@ function progressCard(order, tasks) {
   </div>`;
 }
 
+
+// ---------------------------------------------------------------------------
+// PUTTING A WRONG WEIGHT RIGHT.
+//
+// The loose weight box went when the order page became a record, and with it
+// the only way to fix a fat-fingered number. Neil: "all the weight correction
+// by the admin" - so it comes back, ADMIN ONLY, behind orders.override. A
+// driver can weigh a bag; deciding that a recorded weight was wrong is somebody
+// else's call, which is the same reasoning that puts the mismatch override
+// there.
+//
+// IT POSTS TO THE ROUTE THAT ALREADY EXISTS. /ops/orders/:id/bag-weight records
+// the bag, logs the correction with both numbers and a name, re-sums the order
+// and re-prices it through fulfilment. There is no second implementation of
+// "this bag now weighs X" - this is a way back to the one there is.
+//
+// NO MONEY MOVES, which is Neil's answer and is already true: recordWeight()
+// texts nothing and charges nothing - the price message moved to settleWeight()
+// and the card is taken at the door. So a correction after delivery fixes the
+// record and leaves the money alone, to be settled by hand. The card says so
+// rather than leaving somebody to wonder.
+//
+// FOLDED SHUT BY DEFAULT. This is a record page; a row of weight boxes sitting
+// open on it invites the loose editing that was removed on purpose.
+// ---------------------------------------------------------------------------
+function correctionsCard(order, labels, mayCorrect) {
+  if (!mayCorrect) return '';
+
+  const bags_ = (labels || []).filter(
+    (l) => (l.leg || 'PICKUP') === 'PICKUP' && !l.sticker_seq && l.weight_lb != null
+  );
+
+  if (!bags_.length) return '';
+
+  const charged = ['DELIVERED'].includes(order.status);
+
+  return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:28px;">
+    <details>
+      <summary style="cursor:pointer;font-family:var(--font-mono);font-size:12px;font-weight:700;
+                      letter-spacing:0.12em;text-transform:uppercase;">
+        Correct a weight
+      </summary>
+
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:16px 0 18px;max-width:60ch;">
+        ${
+          charged
+            ? 'This order has been delivered and the card taken. Correcting a weight fixes the record and re-prices the order - <strong>no money moves</strong>, so settle any difference yourself.'
+            : 'The old number and the new one both go on the order with your name against them.'
+        }
+      </p>
+
+      ${bags_
+        .map(
+          (b) => `
+      <form method="post" action="/ops/orders/${order.order_number}/bag-weight"
+            enctype="multipart/form-data"
+            style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin:0 0 14px;
+                   padding-bottom:14px;border-bottom:1px solid var(--ink-100);">
+        <input type="hidden" name="code" value="${escapeHtml(b.code)}">
+        <div style="flex:1 1 220px;min-width:0;">
+          <label class="field-label" for="w-${escapeHtml(b.code)}">
+            Bag ${escapeHtml(b.position || '?')} &middot; ${escapeHtml(b.code)} &middot; now ${escapeHtml(
+              Number(b.weight_lb).toFixed(1)
+            )} lb
+          </label>
+          <input class="input" type="number" id="w-${escapeHtml(b.code)}" name="weight_lb"
+                 step="0.1" min="0.1" max="200" inputmode="decimal" required
+                 placeholder="${escapeHtml(Number(b.weight_lb).toFixed(1))}" style="width:100%;">
+        </div>
+        <button class="btn btn-sm" type="submit">Correct it</button>
+      </form>`
+        )
+        .join('')}
+    </details>
+  </div>`;
+}
+
 function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true, labels: [] }, laundromats = [], mayOverride = false, refused = false }) {
   const weighed = order.weight_lb != null;
 
@@ -2432,6 +2510,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       </div>
 
       ${progressCard(order, pickupTasks)}
+      ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
       <!-- THE ACTION CARDS ARE GONE FROM THIS PAGE, at Neil's request.
            pickupSequence() and workCard() rendered the legal next steps as
            full-width buttons here, which made the order page a second way to
