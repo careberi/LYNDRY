@@ -355,6 +355,16 @@ Rules:
   confirmation step — nothing is ever confirmed twice. (Neil's call, twice:
   "re-confirm everything" for repeat customers, and "the pickup location and
   wash preferences are mandatory".)
+- **The wash question is ONE short question, and the spot is its own message.**
+  It was four questions in one breath — water, detergent, softener, and where
+  to leave the bag — which is a form, the one thing this product exists not to
+  be. The wash is the single stated exception to one-question-per-message,
+  because temperature and fragrance are one decision to a customer; it never
+  grows back into a list of every combination.
+- **The spot question asks both ways round** — "where should the driver pick
+  the laundry up and drop it back off?" One spot serves both legs, and asking
+  only where to *find* the bag leaves somebody expecting to be asked again
+  about the delivery.
 - Missing a required field? Ask for **that one field only**, then act.
 - A returning customer texting "laundry tomorrow" gets an order with zero
   follow-up questions.
@@ -1016,6 +1026,16 @@ read a passed pickup window straight back to a customer.
 **Its absence is completely silent, so it is said out loud twice** — a startup
 warning, and a line on `/ops/settings` where the closing actually happens. An
 exemption nobody can see is one you discover by trying, on the day it matters.
+
+**THE CLOSED SIGN IS CHECKED IN FOUR PLACES AND ALL FOUR HAVE TO KNOW** —
+`booking.bookPickup()`, the AI's prompt in `brain.js`, the tool replies in
+`actions.js`, and the canned welcome in `onboarding.js`. Only the first two
+were taught first, and Neil's own number then walked the entire setup, said
+"good to go", and got "we're not booking pickups just yet" from a tool result.
+`actions.js` and `onboarding.js` write those sentences **in code**, which is
+exactly why no prompt could ever have stopped it — and exactly why they each
+have to be taught separately. Anything new that reads `settings.takingOrders()`
+in a customer path has to call `booking.alwaysAllowed()` beside it.
 
 **Turning it OFF takes a reason; turning it ON takes nothing.** Neil's call, and
 the reason is cleared on reopening so a stale one cannot surface the next time

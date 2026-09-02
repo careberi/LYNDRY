@@ -146,3 +146,21 @@ the service is open - or right now on any number in `ALWAYS_BOOK_NUMBERS`.
 - Add the Stripe live keys.
 - Rotate `ADMIN_API_KEY` - but note that rotating it kills the signature on
   every QR already printed, so rotate **then** print.
+
+---
+
+## 2 September, after the live thread tests
+
+### 11. The setup asked four questions in one breath ✅
+
+Water, detergent, softener and where to leave the bag, all in one message. That
+is a form. The wash is one short question now; the spot is its own message and
+asks **both ways round**, because one spot serves both legs.
+
+### 12. The closed sign lived in four places ✅
+
+`bookPickup()`, the prompt, `actions.js` and `onboarding.js` each check it, and
+only the first two had been taught about the exemption. Neil's number walked the
+whole setup, said "good to go", and got "we're not booking pickups just yet"
+from a tool result. Anything new reading `settings.takingOrders()` in a customer
+path has to call `booking.alwaysAllowed()` beside it.
