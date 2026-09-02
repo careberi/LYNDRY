@@ -69,6 +69,23 @@ function today() {
   return nowInService().date;
 }
 
+// WHAT DAY A PAST MOMENT HAPPENED ON, in the timezone the vans drive in.
+//
+// nowInService() answers this for right now; this answers it for a stored
+// timestamp. Same reason it exists at all: a bag collected at eight in the
+// evening has a UTC date of TOMORROW, so comparing ISO strings would call a
+// genuine same-day turnaround an overnight one - and only ever in the evening,
+// which is exactly the sort of bug nobody reproduces.
+function serviceDateOf(instant) {
+  if (!instant) return null;
+  const at = instant instanceof Date ? instant : new Date(instant);
+  if (Number.isNaN(at.getTime())) return null;
+
+  const parts = {};
+  for (const p of CLOCK.formatToParts(at)) parts[p.type] = p.value;
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 // Add days to a date string without ever making a Date out of it.
 //
 // Date.UTC then getUTCDate is safe here because nothing is being converted
@@ -883,6 +900,7 @@ module.exports = {
   arrivalWindow,
   normaliseTime,
   today,
+  serviceDateOf,
   nowInService,
   PICKUP_METHODS,
 };

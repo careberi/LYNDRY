@@ -663,7 +663,32 @@ async function deliver(orderIn, file, { by = {} } = {}) {
         ? ` Want us to make this a regular thing? We can come every week or every other week.`
         : '';
 
-    return `Delivered! Your laundry is at your door.${price}${photo}${offer}`;
+    // SAME DAY IS WORTH SAYING OUT LOUD, and this is the only moment it can be
+    // said honestly. What we promise is next day, so a bag collected and
+    // returned between breakfast and teatime beat the promise - and a customer
+    // who is not told simply never notices they got something extra.
+    //
+    // Neil's wording: it is free, and saying so is the point. A turnaround that
+    // fast reads like something that will appear on the bill unless we say it
+    // will not.
+    //
+    // IT REPLACES THE OPENER RATHER THAN BEING ADDED TO IT, and the wording is
+    // as short as it is for a reason that is not style. This message already
+    // carries a price and a photo link and comes to 131 characters; a segment
+    // is 160 and carriers bill per segment. The obvious phrasing - "Delivered!
+    // Same day, at no extra charge - your laundry is at your door." - came to
+    // 162 and doubled the cost of every same-day delivery to say two words.
+    //
+    // So it leads with the news and keeps the sentence that was already there,
+    // at 157. Anything added here has to be counted, not eyeballed.
+    const sameDay =
+      order.collected_at && booking.serviceDateOf(order.collected_at) === booking.today();
+
+    const opener = sameDay
+      ? `Delivered same day, no extra charge! Your laundry is at your door.`
+      : `Delivered! Your laundry is at your door.`;
+
+    return `${opener}${price}${photo}${offer}`;
   }, by);
 
   if (!result.ok) return result;
@@ -759,12 +784,7 @@ function dueAt(order) {
   // Which day it was collected on, in New Jersey rather than UTC. Past 8pm
   // Eastern the two disagree, and using UTC would move a Monday evening
   // pickup's deadline forward a whole day.
-  const collectedOn = new Intl.DateTimeFormat('en-CA', {
-    timeZone: booking.SERVICE_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(order.collected_at));
+  const collectedOn = booking.serviceDateOf(order.collected_at);
 
   return booking.instantAt(booking.addDays(collectedOn, 1), booking.endOfDeliveryDay());
 }
