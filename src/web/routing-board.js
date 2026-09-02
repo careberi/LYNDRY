@@ -3,6 +3,7 @@
 const { escapeHtml, icon } = require('./layout');
 const { config } = require('../config');
 const partnersCore = require('../core/partners');
+const booking = require('../core/booking');
 
 // ---------------------------------------------------------------------------
 // /ops/routing - the day, on a map, from the live queue.
@@ -334,7 +335,7 @@ function routingBoardBody({
   <h1 style="margin:0 0 14px;font-size:40px;line-height:1.05;">The day, as it stands</h1>
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 22px;">
     Everything live in the queue for one day, put in the order it gets driven.
-    Pick a day and a starting time and it works out the route, which laundromat
+    Pick a day and a round and it works out the route, which laundromat
     the bags go to, and when the driver should be at each door. Nothing here
     changes anything - it is a picture, not a button.
   </p>
@@ -387,9 +388,26 @@ function routingBoardBody({
                value="${escapeHtml(board.date)}" style="width:100%;">
       </div>
       <div>
-        <label class="field-label" for="from">Leaving base at</label>
-        <input class="input input-lg" type="time" id="from" name="from"
-               value="${escapeHtml(board.start)}" style="width:100%;">
+        <!-- A ROUND, NOT A CLOCK TIME. Neil's change, and it matches how the
+             day is actually organised: the van goes out in the same two hour
+             windows customers are promised, so "which round" is a real
+             question and "leaving base at 11:17" was never one anybody asked.
+             It also stops the board being planned from whatever minute the
+             page happened to be opened.
+
+             The value posted is still the window's START, so everything
+             downstream is unchanged and an old ?from=HH:MM link still works. -->
+        <label class="field-label" for="from">Which round</label>
+        <select class="select input-lg" id="from" name="from" style="width:100%;">
+          ${booking.PICKUP_WINDOWS.map((w) => {
+            // The round a given start time belongs to, so reopening the page
+            // lands on the one you were looking at.
+            const chosen = board.start >= w.start && board.start < w.end;
+            return `<option value="${w.start}"${chosen ? ' selected' : ''}>${escapeHtml(
+              booking.describeWindow(w.start, w.end).replace('between ', '')
+            )}</option>`;
+          }).join('')}
+        </select>
       </div>
       ${
         // A driver only ever sees their own day, so there is nothing to pick
