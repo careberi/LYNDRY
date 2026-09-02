@@ -594,7 +594,7 @@ function runBody({ run, notice = null, problem = null }) {
       <a href="/ops" style="font-size:15px;font-weight:600;">All orders</a>
     </div>
 
-    ${roundStrip(run)}
+    ${roundCards(run)}
 
     ${problem ? banner(problem, 'var(--stain-500)', 'var(--paper-050)') : ''}
     ${notice ? banner(notice, 'var(--suds-300)') : ''}`;
@@ -602,13 +602,27 @@ function runBody({ run, notice = null, problem = null }) {
   if (!run.total) {
     return `${head}
     <div style="${CARD}">
+      <!-- IT SAYS WHAT IS EMPTY, AND THAT IS NOT THE SAME AS THE DAY BEING
+           EMPTY. Neil had two pickups booked for 2pm and this page told him
+           "nothing on today" at half past twelve, which was simply untrue - the
+           round he was standing in was empty, the day was not. A screen that
+           tells a driver he has finished when he has not is the worst thing
+           this page can do. -->
       <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 10px;">
-        Nothing on today
+        ${
+          (run.rounds || []).some((r) => r.count)
+            ? 'Nothing in this round'
+            : 'Nothing on today'
+        }
       </h2>
       <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0;">
-        No pickups booked to you and nothing in the van. If that looks wrong,
-        check the <a href="/ops">orders board</a> - an order with no driver on it
-        will not appear here.
+        ${
+          (run.rounds || []).some((r) => r.count)
+            ? `The rest of the day is up there - tap a round with pickups in it.`
+            : `No pickups booked to you and nothing in the van. If that looks wrong,
+               check the <a href="/ops">orders board</a> - an order with no driver on it
+               will not appear here.`
+        }
       </p>
     </div>
   </div>`;
@@ -650,43 +664,73 @@ function runBody({ run, notice = null, problem = null }) {
 
 
 // ---------------------------------------------------------------------------
-// WHICH ROUND HE IS IN.
+// THE DAY, AS CARDS YOU TAP.
 //
-// A day is a handful of two-hour rounds, and a driver looking at three stops
-// has no way to tell whether that is the whole day or the next hour. Worse, the
-// run only shows the round being driven now - so without this the other stops
-// look like they have gone missing.
+// NEIL'S DESIGN: one card per pickup window, tap one and the tasks below are
+// that window's. Work through them to the end and it is done; tap the next.
 //
-// NOTHING HERE IS PICKABLE, at Neil's request: the round you are in is whatever
-// time it is, not a choice. Past rounds are greyed rather than hidden because
-// "two of five done" is what he actually wants to know, and the ones ahead are
-// dim so he can see the day is not over.
+// EVERY WINDOW APPEARS, including the ones with nothing in them. A slot with no
+// pickups is a fact about the day, and hiding it makes the day look shorter
+// than it is - a driver counting three cards cannot tell whether that is the
+// shape of the day or the shape of what is left.
+//
+// A ROUND STAYS OPEN UNTIL ITS WORK IS DONE, not until its clock runs out.
+// Neil: "a time slot appears until it's fully completed". Two uncollected bags
+// at half past two are still the 12 to 2 round - the clock moving collects
+// nobody's laundry - so a round with work left in it is still tappable and
+// still says so.
 // ---------------------------------------------------------------------------
-function roundStrip(run) {
+function roundCards(run) {
   const rounds = run.rounds || [];
   if (!rounds.length) return '';
 
-  const chip = (r) => {
-    const style =
-      r.state === 'now'
-        ? 'background:var(--suds-500);border-color:var(--ink-900);font-weight:700;box-shadow:2px 2px 0 var(--ink-900);'
-        : r.state === 'past'
-          ? 'background:var(--paper-200);border-color:var(--ink-300);color:var(--ink-500);text-decoration:line-through;'
-          : 'background:var(--paper-000);border-color:var(--ink-300);color:var(--ink-500);';
+  const card = (r) => {
+    // Done is not the same as past. A window whose time has gone with bags
+    // still in it is LATE, and it has to look different from one that was
+    // worked through, or the two read as the same thing.
+    const late = r.state === 'past' && !r.complete;
+    const worked = r.state === 'past' && r.complete;
 
-    return `<span style="padding:7px 11px;border:2px solid;border-radius:999px;
-                         font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;
-                         text-transform:uppercase;white-space:nowrap;${style}">${escapeHtml(r.label)}</span>`;
+    const style = late
+      ? 'background:var(--stain-500);color:var(--paper-050);border-color:var(--ink-900);box-shadow:var(--shadow-pop-xs);'
+      : r.state === 'now'
+        ? 'background:var(--suds-500);border-color:var(--ink-900);box-shadow:var(--shadow-pop-xs);'
+        : worked
+          ? 'background:var(--paper-200);border-color:var(--ink-300);color:var(--ink-500);'
+          : 'background:var(--paper-050);border-color:var(--ink-300);color:var(--ink-500);';
+
+    const note = late
+      ? `${r.count} still waiting`
+      : r.count === 0
+        ? 'nothing booked'
+        : worked
+          ? `${r.count} done`
+          : `${r.count} ${r.count === 1 ? 'pickup' : 'pickups'}`;
+
+    const inner = `
+      <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:0.07em;
+                  text-transform:uppercase;margin-bottom:5px;">${escapeHtml(r.label)}</div>
+      <div style="font-size:14px;font-weight:${r.state === 'now' || late ? '700' : '400'};">${escapeHtml(note)}</div>`;
+
+    const box =
+      `flex:1 1 128px;min-width:118px;padding:13px 14px;border:2px solid;border-radius:14px;` +
+      `text-align:left;text-decoration:none;color:inherit;${style}`;
+
+    // AN EMPTY ROUND IS NOT A LINK. There is nothing behind it, and a card that
+    // opens onto "nothing here" teaches you to stop tapping the cards.
+    return r.count === 0
+      ? `<div style="${box}">${inner}</div>`
+      : `<a href="/ops/run?round=${encodeURIComponent(r.start)}" style="${box};display:block;">${inner}</a>`;
   };
 
-  const nowRound = rounds.find((r) => r.state === 'now');
+  const now = rounds.find((r) => r.state === 'now');
 
   return `
-    <div style="margin:0 0 18px;">
-      <div class="eyebrow" style="margin:0 0 8px;">
-        ${nowRound ? `You are on the ${escapeHtml(nowRound.label)} round` : "Outside the day's rounds"}
+    <div style="margin:0 0 22px;">
+      <div class="eyebrow" style="margin:0 0 9px;">
+        ${now ? `On the ${escapeHtml(now.label)} round` : "Today's rounds"}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:7px;">${rounds.map(chip).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:9px;">${rounds.map(card).join('')}</div>
     </div>`;
 }
 

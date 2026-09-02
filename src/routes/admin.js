@@ -2999,7 +2999,13 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
 
 router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
-    const state = await runCore.forDriver(req.opsUser.id);
+    // ?round= is the card he tapped. Validated to HH:MM so nothing odd reaches
+    // the window lookup; anything else falls back to "wherever I am".
+    const asked = /^\d{1,2}:\d{2}$/.test(String(req.query.round || ''))
+      ? String(req.query.round)
+      : null;
+
+    const state = await runCore.forDriver(req.opsUser.id, asked);
 
     return res.type('html').send(
       adminPage({

@@ -418,7 +418,7 @@ async function doneToday(driverId, dateIso) {
 }
 
 // The whole run for one driver, and which stop they are on.
-async function forDriver(driverId) {
+async function forDriver(driverId, roundStart = null) {
   const now = booking.nowInService();
   // NO TIME PASSED, ON PURPOSE. board() works out a sensible start itself and
   // falls forward to the first pickup window when the clock is outside the
@@ -426,26 +426,18 @@ async function forDriver(driverId) {
   // midnight the run asked which laundromat was open at 00:38, got the correct
   // answer of "none", and drew a drop-off stop for "a laundromat" with no
   // address and an "I'm here" button for a place it could not name.
-  const board = await dispatch.board(now.date, null, driverId);
+  // ROUNDSTART IS THE CARD HE TAPPED. Null means "wherever I am", and board()
+  // then picks the earliest round that has started and still has work in it -
+  // which is what a driver means by "the round I am on", clock or no clock.
+  const board = await dispatch.board(now.date, roundStart, driverId);
 
   // WHICH ROUND HE IS IN, AND WHICH ONES HE HAS BEEN THROUGH.
   //
-  // board() has already filtered the stops to the window the clock is in, so
-  // the run only ever shows the round being driven. This is the strip that says
-  // so: a day is a handful of two-hour rounds, and a driver looking at three
-  // stops has no way to tell whether that is the whole day or the next hour.
-  //
-  // Past rounds are shown greyed rather than hidden, because "I have done two
-  // of five" is the thing he actually wants to know, and future ones are shown
-  // dim - not pickable, at Neil's request. There is nothing to decide here: the
-  // round you are in is whatever time it is.
-  const rounds = booking.PICKUP_WINDOWS.map((w) => ({
-    start: w.start,
-    end: w.end,
-    label: booking.describeWindow(w.start, w.end).replace('between ', ''),
-    state:
-      now.time >= w.end ? 'past' : now.time >= w.start ? 'now' : 'ahead',
-  }));
+  // Worked out by board() alongside the filtering, so the cards and the stops
+  // below them can never describe two different rounds. Recomputing them here
+  // was the first version and is exactly the drift this codebase keeps warning
+  // about.
+  const rounds = board.rounds || [];
 
   const describe = (stop) => ({
     ...stop,

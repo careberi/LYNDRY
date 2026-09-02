@@ -650,16 +650,60 @@ async function board(dateIso, fromTime, driverId = null) {
   //
   // The window a customer was promised is on the ORDER - stored when they
   // booked, never recomputed - so this is a filter and not a calculation.
-  const round = booking.PICKUP_WINDOWS.find(
-    (w) => start >= w.start && start < w.end
-  ) || booking.PICKUP_WINDOWS[0];
 
   // Stored as "14:00:00", written in the config as "14:00".
   const sameWindow = (a, b) => String(a || '').slice(0, 5) === String(b || '').slice(0, 5);
 
-  const pickups = (allPickups || []).filter((o) =>
-    sameWindow(o.pickup_window_start, round.start)
-  );
+  // Every round of the day, with what is still outstanding in it. Empty rounds
+  // are kept: a slot with no pickups in it is a fact about the day, and hiding
+  // it makes the day look shorter than it is.
+  const rounds = booking.PICKUP_WINDOWS.map((w) => {
+    const orders = (allPickups || []).filter((o) => sameWindow(o.pickup_window_start, w.start));
+    return {
+      start: w.start,
+      end: w.end,
+      label: booking.describeWindow(w.start, w.end).replace('between ', ''),
+      orders,
+      count: orders.length,
+      // Started, by the clock. Separate from finished, because the two come
+      // apart and that is the whole point below.
+      begun: date < now.date || (date === now.date && now.time >= w.start),
+      // NOTHING LEFT TO DO IN IT. An empty round is trivially complete.
+      complete: orders.length === 0,
+    };
+  });
+
+  // WHICH ROUND IS BEING DRIVEN, AND IT IS NOT SIMPLY THE CLOCK.
+  //
+  // Neil: "a time slot appears until it's fully completed". A round with two
+  // uncollected bags in it at half past two is still the round he is on - the
+  // clock moving does not collect anybody's laundry. So the active round is the
+  // earliest one that has started and still has work in it, and only when
+  // everything behind is clear does it follow the clock forward.
+  //
+  // An explicit round wins over both. The routing board asks for one by name,
+  // and answering a direct question with "actually you are on this other one"
+  // would make the picker a suggestion.
+  const clockRound =
+    rounds.find((r) => start >= r.start && start < r.end) || rounds[rounds.length - 1];
+
+  const activeRound = fromTime
+    ? clockRound
+    : // Catching up: a round that started and still has bags in it. This wins
+      // over everything, because that is somebody waiting right now.
+      rounds.find((r) => r.begun && !r.complete) ||
+      // Nothing outstanding behind him, so look FORWARD to the next round that
+      // actually has work. Landing on the clock's round when it is empty and
+      // the day's two pickups are at 2pm told a driver "nothing on today" at
+      // half past twelve, which was simply untrue.
+      rounds.find((r) => !r.complete) ||
+      clockRound;
+
+  for (const r of rounds) {
+    r.state = r === activeRound ? 'now' : r.begun ? 'past' : 'ahead';
+  }
+
+  const pickups = activeRound.orders;
 
   // A PICKUP THAT WAS MISSED MUST NOT SIMPLY VANISH.
   //
@@ -669,24 +713,18 @@ async function board(dateIso, fromTime, driverId = null) {
   // afternoon it would appear on no board at all. That is the silent gap the
   // unassigned-order banner exists to close, arrived at a second way.
   //
-  // So they are collected separately and shown as what they are - late, and
-  // somebody's laundry - rather than being quietly spliced into a round they
-  // were never part of.
-  const overdue = (allPickups || []).filter(
-    (o) =>
-      !sameWindow(o.pickup_window_start, round.start) &&
-      o.pickup_window_end &&
-      String(o.pickup_window_end).slice(0, 5) <= start &&
-      date <= now.date
-  );
+  // With the active round now following the WORK rather than the clock, this
+  // only catches what a hand-picked round leaves behind - which is exactly when
+  // somebody is looking at one round and needs telling about another.
+  const overdue = rounds
+    .filter((r) => r !== activeRound && r.begun && !r.complete)
+    .flatMap((r) => r.orders);
 
   // What the rest of the day still holds, so the board can say the round is
   // not the whole picture without putting those stops in the sequence.
-  const laterToday = (allPickups || []).filter(
-    (o) =>
-      !sameWindow(o.pickup_window_start, round.start) &&
-      !overdue.includes(o)
-  );
+  const laterToday = rounds
+    .filter((r) => r !== activeRound && !r.begun)
+    .flatMap((r) => r.orders);
 
   // Bags we are holding that still need washing, and bags a laundromat has
   // finished. Not filtered by date: a bag collected yesterday and still in the
@@ -1089,7 +1127,8 @@ async function board(dateIso, fromTime, driverId = null) {
     base,
     home,
     serviceBase,
-    round,
+    rounds,
+    round: activeRound,
     overdue,
     laterToday,
     vehicle,
