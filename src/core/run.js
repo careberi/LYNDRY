@@ -334,9 +334,14 @@ async function tasksForDeliver(order) {
 // Is this stop finished?
 function stopDone(stop) {
   if (stop.kind === 'collect') {
-    // Weight comes from the bags now, but the order total is still what says
-    // the pickup is priced and finished with.
-    return Boolean(stop.order.collected_at) && stop.order.weight_lb != null;
+    // NOT `weight_lb != null`. That column is the SUM of the bag weights and is
+    // recomputed as each bag is weighed, so on a two-bag order it stops being
+    // null after bag 1 - and this said the door was finished. The run then
+    // moved to the next address with bag 2 untagged, unweighed and unclipped.
+    //
+    // van_confirmed_at is the last doorstep task and is blocked until every bag
+    // is tagged and weighed, so it means what this test needs it to mean.
+    return Boolean(stop.order.collected_at) && Boolean(stop.order.van_confirmed_at);
   }
   if (stop.kind === 'deliver') {
     return Boolean(stop.order.delivered_at);

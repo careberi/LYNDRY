@@ -174,7 +174,11 @@ const BOARD_FIELDS =
   // navigating_at rides with arrived_at because they answer two halves of the
   // same question - has he set off, and has he got there. Selecting one and
   // not the other left the arrival button permanently hidden.
-  'collected_at, delivered_at, arrived_at, navigating_at, ' +
+  // van_confirmed_at is what actually ends a doorstep, and leaving it out of
+  // this list is how a driver was sent to the next address with bag 2
+  // untagged: weight_lb is a SUM, so it stops being null the moment bag 1 is
+  // weighed, and every test written against it read a half-done door as done.
+  'collected_at, delivered_at, arrived_at, navigating_at, van_confirmed_at, ' +
   // WHAT CAME BACK OFF THE LAUNDROMAT, which is how the collect stop knows
   // whether this order has been weighed back in yet. Without them the run has
   // no way to tell a bag still sitting on a shelf from one already in the van,
@@ -678,7 +682,7 @@ async function board(dateIso, fromTime, driverId = null) {
   // orders out of the collect leg made the stop vanish the instant he tapped
   // Collected.
   const stillAtDoor = (inHand || []).filter(
-    (o) => o.status === 'IN_PROCESS' && o.weight_lb == null
+    (o) => o.status === 'IN_PROCESS' && !o.van_confirmed_at
   );
 
   const rounds = booking.PICKUP_WINDOWS.map((w) => {
@@ -791,7 +795,20 @@ async function board(dateIso, fromTime, driverId = null) {
   //
   // It also cannot go to the laundromat yet: the weight has to be ours, taken
   // before the bag left our hands.
-  const unweighed = (inHand || []).filter((o) => o.status === 'IN_PROCESS' && o.weight_lb == null);
+  // A DOOR IS FINISHED WHEN THE BAGS ARE IN THE VAN, NOT WHEN A NUMBER EXISTS.
+  //
+  // This was `weight_lb == null`, and orders.weight_lb is the SUM of the bag
+  // weights, recomputed every time a bag goes on the scale. So a two-bag order
+  // stopped being "unweighed" the instant bag 1 was weighed - it dropped out of
+  // the collect leg, the run moved to the next address, and bag 2 was never
+  // tagged, never weighed and never given a clip. It happened to Neil on a real
+  // order.
+  //
+  // van_confirmed_at is the last of the doorstep tasks and cannot be reached
+  // until every bag is tagged and weighed, so it is the honest test.
+  const unweighed = (inHand || []).filter(
+    (o) => o.status === 'IN_PROCESS' && !o.van_confirmed_at
+  );
 
   const collectStops = [...(pickups || []), ...unweighed].map((o) => ({ kind: 'collect', order: o }));
 
@@ -817,8 +834,12 @@ async function board(dateIso, fromTime, driverId = null) {
   // is about to pick up. Weighed only - an unweighed bag is still standing at
   // the customer's door as far as the run is concerned, and handing it over
   // would leave us billing off the laundromat's scale instead of our own.
+  // Ready for a laundromat means IN THE VAN, for the same reason. A bag whose
+  // order has a weight against it but is still on a doorstep cannot be handed
+  // over, and counting it here put pounds into the drop-off that were not on
+  // board yet.
   const needsWash = (inHand || []).filter(
-    (o) => o.status === 'IN_PROCESS' && o.weight_lb != null
+    (o) => o.status === 'IN_PROCESS' && Boolean(o.van_confirmed_at)
   );
   // WHAT IS GOING TO THE LAUNDROMAT, IN POUNDS.
   //
