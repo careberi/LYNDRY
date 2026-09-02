@@ -57,7 +57,17 @@ async function createOrder(customer, input) {
           ? `We're not booking pickups just yet - ${result.detail} I'll let you know the moment we are.`
           : `We're not booking pickups just yet, sorry. I'll let you know the moment we are.`;
       case 'no_address':
-        return `I don't have an address on file for you. Send your street address and I'll get it saved.`;
+        // SAY WHICH PART IS MISSING. "I don't have an address on file" is a
+        // flat contradiction to somebody who just gave one and watched it read
+        // back in a recap - which is exactly what happened: street and city
+        // saved, no zip, and the refusal claimed we had nothing.
+        //
+        // The zip is not bureaucracy here. It is the single thing that decides
+        // whether an address is in Bergen County, so a booking genuinely cannot
+        // proceed without it.
+        return customer.address_line1 && !customer.postal_code
+          ? `Almost there - what's the zip code for ${customer.address_line1}?`
+          : `I don't have an address on file for you. Send your street address and I'll get it saved.`;
       case 'out_of_area':
         return (
           `We don't reach ${customer.city || 'your area'} just yet, sorry. We cover ` +
