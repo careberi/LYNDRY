@@ -504,6 +504,20 @@ async function currentPosition(driverId, dateIso) {
 // screens say so rather than inventing a destination.
 // ---------------------------------------------------------------------------
 
+// Two load figures for one laundromat: what is on their floor and what is on
+// its way. Nulls on either side are normal - a partner with nothing there and
+// nothing planned appears in neither map.
+function mergeLoad(here, coming) {
+  if (!here && !coming) return undefined;
+  const a = here || { bags: 0, pounds: 0, unweighed: 0 };
+  const b = coming || { bags: 0, pounds: 0, unweighed: 0 };
+  return {
+    bags: a.bags + b.bags,
+    pounds: a.pounds + b.pounds,
+    unweighed: a.unweighed + b.unweighed,
+  };
+}
+
 async function planPartnerFor(order, customer) {
   try {
     const partnersCore = require('./partners');
@@ -518,6 +532,22 @@ async function planPartnerFor(order, customer) {
 
     const hoursByPartner = await partnersCore.hoursForAll();
     const loadByPartner = await partnersCore.loadByPartner();
+
+    // TODAY AND TOMORROW, NOT THIS ORDER ON ITS OWN. Neil's rule.
+    //
+    // loadByPartner counts bags physically on a floor, which is the right
+    // answer to "how full are they now" and the wrong one to "who should this
+    // go to": an order booked for tomorrow is on nobody's floor yet, so ten
+    // already planned to one partner left it looking empty and the eleventh
+    // went there too.
+    //
+    // The pickup day and the one after it, because a bag collected late in the
+    // day is washed the next morning and is still occupying their machines
+    // when the next day's work arrives.
+    const plannedByPartner = await partnersCore.plannedByPartner([
+      order.pickup_date,
+      booking.addDays(order.pickup_date, 1),
+    ]);
 
     // The weekday of the PICKUP, not of today. Booking on a Tuesday for a
     // Thursday collection has to ask who is open on Thursday.
@@ -536,7 +566,10 @@ async function planPartnerFor(order, customer) {
         at: p.lat != null && p.lng != null ? { lat: Number(p.lat), lng: Number(p.lng) } : null,
         hours,
         openNow: partnersCore.isOpenAt(hours, weekday, time),
-        capacity: partnersCore.capacityOf(p, loadByPartner.get(p.id)),
+        // On their floor PLUS on its way. Merged rather than added as a second
+        // field so every existing capacity rule - the routing board's, the
+        // chooser's - sees the fuller picture without knowing this exists.
+        capacity: partnersCore.capacityOf(p, mergeLoad(loadByPartner.get(p.id), plannedByPartner.get(p.id))),
       };
     });
 

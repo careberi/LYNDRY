@@ -508,6 +508,46 @@ async function saveHours(partnerId, form) {
 // AT_PARTNER means they are washing it. READY means they have finished but we
 // have not collected it yet - it is still taking up their floor, so it still
 // counts against what they can take today.
+// WHAT IS COMING, NOT JUST WHAT IS THERE.
+//
+// loadByPartner() counts bags physically on a laundromat's floor. That is the
+// right answer to "how full are they now" and the wrong one to "who should this
+// order go to", because an order booked for tomorrow is not on anybody's floor
+// yet - so ten orders already planned to one partner made it look empty and the
+// eleventh went there too.
+//
+// Neil's rule: choose from the whole picture, today AND tomorrow. `dates` is
+// the ISO days to count, and the caller decides which - normally the pickup day
+// and the one after it, because a bag collected late is washed the next
+// morning.
+//
+// Planned, NOT arrived: anything already AT_PARTNER or READY is counted by
+// loadByPartner and counting it twice would make every partner look full.
+async function plannedByPartner(dates) {
+  const days = (dates || []).filter(Boolean);
+  if (!days.length) return new Map();
+
+  const { data, error } = await db
+    .from('orders')
+    .select('intended_partner_id, weight_lb, bag_count, pickup_date, status')
+    .not('intended_partner_id', 'is', null)
+    .in('pickup_date', days)
+    .in('status', ['REQUESTED', 'ASSIGNED', 'DEPOSITED', 'IN_PROCESS']);
+
+  if (error) throw error;
+
+  const byPartner = new Map();
+  for (const order of data || []) {
+    const seen = byPartner.get(order.intended_partner_id) || { bags: 0, pounds: 0, unweighed: 0 };
+    seen.bags += Number(order.bag_count || 1);
+    if (order.weight_lb == null) seen.unweighed += 1;
+    else seen.pounds += Number(order.weight_lb);
+    byPartner.set(order.intended_partner_id, seen);
+  }
+
+  return byPartner;
+}
+
 async function loadByPartner() {
   const { data, error } = await db
     .from('orders')
@@ -610,6 +650,7 @@ module.exports = {
   describeHours,
   saveHours,
   loadByPartner,
+  plannedByPartner,
   capacityOf,
   BANDS,
   bandFor,
