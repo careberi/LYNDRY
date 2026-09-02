@@ -253,6 +253,20 @@ const OPS_MENUS = Object.freeze([
     // wearing a slightly wrong word, and the word is what to revisit if a
     // salesperson is ever confused by it.
     label: 'Admin',
+    // THE WHOLE GROUP IS ADMIN-ONLY, not just the items that already were.
+    // Neil's call. Without it a SALES user saw an "Admin" menu holding
+    // Customers and Messages, because those carry their own softer
+    // permissions - correct behaviour under a word that promised otherwise.
+    //
+    // THIS IS A MENU RULE, NOT ACCESS CONTROL, and the difference matters:
+    // /ops/customers still answers to anyone holding customers.view, so a Sales
+    // user who knows the URL still gets in. Hiding a page whose route still
+    // fires is exactly what this codebase says not to mistake for a guard. If
+    // those pages should be genuinely closed to Sales, the permissions in
+    // roles.js are the place, and doing that would leave the Sales role with
+    // nothing of its own - which is a decision about whether the role should
+    // exist, not a menu tweak.
+    permission: 'service.manage',
     items: [
       // The dashboard first: taking orders, the weight thresholds, and the way
       // through to promotions, text blasts and issues.
@@ -315,6 +329,10 @@ const OPS_MENUS = Object.freeze([
 
 function opsNav(user, active) {
   return OPS_MENUS.map((menu) => {
+    // A group can be gated as a whole, on top of each item's own permission.
+    // Used by Admin, which must not appear at all for somebody who is not one.
+    if (menu.permission && !roles.can(user, menu.permission)) return '';
+
     const items = menu.items.filter((i) => !i.permission || roles.can(user, i.permission));
     if (!items.length) return '';
 

@@ -114,7 +114,10 @@ const ROLES = Object.freeze({
       'orders.view',
       'customers.view',
       'messages.view',
-      'issues.manage',
+      // NOT issues.manage. Neil's call: the issues queue is the admin's, and
+      // it is where a customer's complaint, a weight dispute and a held price
+      // all land. Sales still sees the CONVERSATION an issue came out of,
+      // which is the part they can actually do something about.
       'partners.view',
       'partners.manage',
       'orders.audit',
