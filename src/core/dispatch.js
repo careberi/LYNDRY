@@ -390,7 +390,11 @@ function withEtas(stops, startMinutes, base, home = base) {
 
 // Sequence one leg, keeping anything already numbered in the van in its
 // existing order and solving the rest around it.
-function sequenceLeg(stops, base) {
+// `end` is where the leg has to finish - the laundromat for the pickup round,
+// the depot for the way home. It is not decoration: a leg sequenced without it
+// is optimised as though the van stops at the last door, which sent a driver
+// from the base to Glen Rock, back east to Paramus and then west to Paterson.
+function sequenceLeg(stops, base, end = null) {
   const numbered = stops
     .filter((s) => s.order && s.order.stop_number != null)
     .sort((a, b) => a.order.stop_number - b.order.stop_number);
@@ -401,7 +405,8 @@ function sequenceLeg(stops, base) {
 
   const { ordered } = geocode.sequence(
     placed.map((s) => ({ at: s.at, stop: s })),
-    base
+    base,
+    { end }
   );
 
   return [...numbered, ...ordered.map((o) => o.stop), ...unplaced];
@@ -719,11 +724,23 @@ async function board(dateIso, fromTime, driverId = null) {
     needsWash.reduce((t, o) => t + Number(o.weight_lb || 0), 0) +
     (pickups || []).reduce((t, o) => t + assumedPounds(o.customers), 0);
 
-  // Where the van is when it goes to the laundromat: the last pickup, or base
-  // if there are none.
-  const orderedCollect = sequenceLeg(collectStops, base);
-  const lastCollect = [...orderedCollect].reverse().find((s) => s.at);
-  const fromPoint = lastCollect ? lastCollect.at : base;
+  // TWO PASSES, AND THE REASON IS A CHICKEN AND EGG.
+  //
+  // The best order for the pickups depends on which laundromat the round ends
+  // at. Which laundromat is cheapest depends on where the van is when it sets
+  // off for one - which is the last pickup, which depends on the order.
+  //
+  // So: a rough pass to find roughly where the round finishes, choose the
+  // laundromat from that, then sequence the pickups properly knowing where they
+  // have to lead. The second pass is the one that gets driven.
+  //
+  // It is not circular in any way that matters: the first pass only has to be
+  // close enough to pick the right laundromat, and the laundromats are far
+  // enough apart that a door or two in a different order does not change which
+  // one wins.
+  const roughCollect = sequenceLeg(collectStops, base);
+  const roughLast = [...roughCollect].reverse().find((s) => s.at);
+  const fromPoint = roughLast ? roughLast.at : base;
 
   // Where it goes next, so the miles home from the laundromat are counted too.
   // The first delivery if there is one, otherwise back to base.
@@ -743,6 +760,15 @@ async function board(dateIso, fromTime, driverId = null) {
     onward,
     promiseMinutes,
   });
+
+  // THE PASS THAT COUNTS. Now the laundromat is known, the pickup round is
+  // solved as what it actually is: base to that laundromat, calling at these
+  // doors on the way.
+  const orderedCollect = sequenceLeg(
+    collectStops,
+    base,
+    choice.chosen && choice.chosen.at ? choice.chosen.at : null
+  );
 
   const partnerStops = [];
 
@@ -848,7 +874,14 @@ async function board(dateIso, fromTime, driverId = null) {
 
   // --- put the day together -------------------------------------------------
 
-  const stops = [...orderedCollect, ...partnerStops, ...sequenceLeg(deliverStops, base)];
+  // The delivery round finishes back at the depot, so that drive counts too.
+  // `home` is where the day ends; `base` is where the van is measured from now,
+  // and on a day already underway those are different places.
+  const stops = [
+    ...orderedCollect,
+    ...partnerStops,
+    ...sequenceLeg(deliverStops, base, home || base),
+  ];
 
   stops.forEach((s, i) => {
     s.position = i + 1;

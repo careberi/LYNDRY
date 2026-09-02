@@ -169,10 +169,78 @@ function milesBetween(a, b) {
 // Straight-line distance, deliberately. Real driving distances would mean a
 // routing service on the critical path of a driver loading a van, and being
 // wrong by a street is cheap while being unable to load is not.
-function sequence(points, base) {
-  const known = points.filter((p) => p.at);
-  const unknown = points.filter((p) => !p.at);
+// ---------------------------------------------------------------------------
+// PUTTING STOPS IN ORDER.
+//
+// WHERE A LEG ENDS IS PART OF THE PROBLEM, and leaving it out is what made this
+// wrong. It was nearest-neighbour from the base plus a 2-opt pass - a
+// respectable pair of techniques both optimising the wrong quantity, because
+// the total they measured stopped at the last door and ignored the drive from
+// there to wherever the leg actually has to finish.
+//
+// On a real day that produced
+//
+//   base -> Glen Rock -> Paramus -> Paterson    11.4 miles, 62 minutes
+//
+// when the answer was
+//
+//   base -> Paramus -> Glen Rock -> Paterson    10.4 miles, 36 minutes on Google
+//
+// Glen Rock IS the nearest door to the base, 2.1 miles against 3.0, so greedy
+// takes it - and then the van has to cross back east and out west again,
+// because the leg has to end at a laundromat in Paterson and nothing in the
+// arithmetic knew that.
+//
+// The fix is not a better heuristic. It is asking the right question: a pickup
+// round is not "visit these doors", it is "get from the base to the laundromat,
+// calling at these doors" - an open path with BOTH ends pinned.
+//
+// EXACT FOR THE SIZES WE ACTUALLY SEE. Up to eight stops there are at most
+// 40,320 orderings and trying every one costs a few milliseconds, so it does
+// not guess, it returns the shortest. Past that it is greedy plus 2-opt, both
+// now measuring the whole path including the final hop.
+// ---------------------------------------------------------------------------
 
+// Above this, an exact search stops being free. 8! is 40,320; 9! is 362,880.
+const EXACT_UP_TO = 8;
+
+// The length of a whole leg: base, every stop in turn, and the drive to
+// wherever it has to finish. THE LAST HOP COUNTS - omitting it is the bug this
+// function exists to have fixed.
+function pathMiles(list, from, end) {
+  let sum = 0;
+  let at = from;
+  for (const p of list) {
+    sum += milesBetween(at, p.at);
+    at = p.at;
+  }
+  if (end) sum += milesBetween(at, end);
+  return sum;
+}
+
+function bestExact(known, base, end) {
+  let best = known;
+  let bestMiles = Infinity;
+
+  const walk = (chosen, left) => {
+    if (!left.length) {
+      const miles = pathMiles(chosen, base, end);
+      if (miles < bestMiles) {
+        bestMiles = miles;
+        best = chosen.slice();
+      }
+      return;
+    }
+    for (let i = 0; i < left.length; i += 1) {
+      walk(chosen.concat(left[i]), left.slice(0, i).concat(left.slice(i + 1)));
+    }
+  };
+
+  walk([], known);
+  return { ordered: best, miles: bestMiles };
+}
+
+function greedyThen2opt(known, base, end) {
   const remaining = [...known];
   const ordered = [];
   let current = base;
@@ -180,7 +248,6 @@ function sequence(points, base) {
   while (remaining.length) {
     let best = 0;
     let bestDistance = Infinity;
-
     remaining.forEach((point, i) => {
       const d = milesBetween(current, point.at);
       if (d < bestDistance) {
@@ -188,23 +255,14 @@ function sequence(points, base) {
         best = i;
       }
     });
-
     current = remaining[best].at;
     ordered.push(remaining[best]);
     remaining.splice(best, 1);
   }
 
-  const total = (list) => {
-    let sum = 0;
-    let from = base;
-    list.forEach((p) => {
-      sum += milesBetween(from, p.at);
-      from = p.at;
-    });
-    return sum;
-  };
-
-  let best = total(ordered);
+  // 2-opt: reverse any run that shortens the path, until nothing does. Now
+  // measured against the full leg rather than the walk between doors.
+  let best = pathMiles(ordered, base, end);
   let improved = true;
   let guard = 0;
 
@@ -217,7 +275,7 @@ function sequence(points, base) {
         const candidate = ordered
           .slice(0, i)
           .concat(ordered.slice(i, j + 1).reverse(), ordered.slice(j + 1));
-        const length = total(candidate);
+        const length = pathMiles(candidate, base, end);
         if (length < best - 1e-9) {
           best = length;
           ordered.splice(0, ordered.length, ...candidate);
@@ -227,9 +285,22 @@ function sequence(points, base) {
     }
   }
 
+  return { ordered, miles: best };
+}
+
+// `end` is where the leg has to finish - the laundromat for a pickup round, the
+// depot for the way home. Omit it and the leg is open-ended, which is right for
+// a list that is not going anywhere afterwards.
+function sequence(points, base, { end = null } = {}) {
+  const known = points.filter((p) => p.at);
+  const unknown = points.filter((p) => !p.at);
+
+  const solved =
+    known.length <= EXACT_UP_TO ? bestExact(known, base, end) : greedyThen2opt(known, base, end);
+
   // Anything we could not place goes last, so it is obvious on screen that it
   // was not sequenced rather than being silently dropped into the middle.
-  return { ordered: ordered.concat(unknown), miles: best };
+  return { ordered: solved.ordered.concat(unknown), miles: solved.miles };
 }
 
 // Where the van starts and ends. One constant rather than a setting, because
