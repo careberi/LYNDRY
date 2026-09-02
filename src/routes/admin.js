@@ -1360,19 +1360,36 @@ function historyCard(events) {
 }
 
 // ---------------------------------------------------------------------------
-// The bags on an order, and the stickers on the bags.
+// The bags on an order, and the tags on the bags.
 //
-// A sticker means nothing until it is on a bag. Binding is a driver typing or
+// A tag means nothing until it is on a bag. Binding is a driver typing or
 // scanning the six characters printed under the QR, which is why the input is
-// a plain text box: the camera in phase 9c fills the same box, and on the day
-// the camera will not focus in a dark basement the driver reads the code out
-// and types it. The fallback is the primary path with one step added, not a
-// separate worse mode.
+// a plain text box: the camera fills the same box, and on the day the camera
+// will not focus in a dark basement the driver reads the code out and types
+// it. The fallback is the primary path with one step added, not a separate
+// worse mode.
+//
+// TWO KINDS OF ROW, AND THEY DO NOT LOOK THE SAME.
+//
+// A bag we collected wears its own bag tag - 7MQ5Y2, the whole tag, and the
+// four stickers are still on it. A bag the laundromat packed wears ONE of
+// those stickers, and reads 7MQ5Y2-2. Same id, because it is the same order
+// and the order did not change when they repacked it; different number,
+// because that is what makes one finished bag tellable from another.
+//
+// So the sequence is shown when there is one, and the row says which collected
+// bag it came out of. Rendering an outgoing bag as though it had a tag of its
+// own would suggest a second identity that does not exist.
 // ---------------------------------------------------------------------------
 
-function bagRow(order, l, total, canAct, done) {
+function bagRow(order, l, total, canAct, done, parents = []) {
   const retired = Boolean(l.released_at);
-  const url = l.code ? bags.labelUrl(l.code) : null;
+  const url = l.code ? bags.labelUrl(l.code, l.sticker_seq) : null;
+
+  // Which collected bag this one came out of. One bag in becomes any number of
+  // bags out, so this is the thread back - and it is the answer to "is this
+  // wash all here", which is a question about one parent and its children.
+  const parent = l.parent_id ? parents.find((b) => b.id === l.parent_id) : null;
 
   return `
     <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;">
@@ -1381,9 +1398,20 @@ function bagRow(order, l, total, canAct, done) {
           <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;letter-spacing:0.06em;${
             retired ? 'color:var(--ink-500);' : ''
           }">
-            ${escapeHtml(l.code || 'Bag ' + l.position)}
+            ${escapeHtml(l.code || 'Bag ' + l.position)}${
+              l.sticker_seq
+                ? `<span style="color:var(--ink-400);">-${escapeHtml(String(l.sticker_seq))}</span>`
+                : ''
+            }
           </span>
           <span class="eyebrow" style="margin:0;">Bag ${l.position} of ${total}</span>
+          ${
+            parent
+              ? `<span class="badge" style="background:var(--lilac-300);">from bag ${escapeHtml(
+                  String(parent.position)
+                )}</span>`
+              : ''
+          }
           ${
             l.weight_lb != null
               ? `<span class="badge" style="background:var(--sunbeam-300);">${escapeHtml(
@@ -1485,27 +1513,27 @@ function bagsCard(order, labels, canAct, { mayOverride = false, refused = false 
   <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
     <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:18px;">
       ${sectionHeading('The bags', 'In and out')}
-      <a href="/ops/labels" style="font-size:14px;font-weight:600;">Print more stickers</a>
+      <a href="/ops/labels" style="font-size:14px;font-weight:600;">Print more bag tags</a>
     </div>
 
     ${leg(
       'Collected from the customer',
-      'Picked up off the doorstep and weighed bag by bag, each with a photo of the scale. This is what priced the order.',
+      'Picked up off the doorstep and weighed bag by bag, each with a photo of the scale. This is what priced the order. Every bag wears its own tag, and the four stickers on that tag are still on it.',
       inCount,
       inWeight,
       incoming.length
         ? incoming.map((l) => bagRow(order, l, incoming.length, canAct, done)).join('')
-        : '<p style="color:var(--ink-500);font-size:15px;margin:14px 0 0;">Nothing labelled yet.</p>',
+        : '<p style="color:var(--ink-500);font-size:15px;margin:14px 0 0;">No bag tags on it yet.</p>',
       'var(--suds-100)'
     )}
 
     ${leg(
       'Collected from the laundromat',
-      'What came back off their shelf. A different number of bags is normal, because they repack into their own, so this count is recorded separately and never assumed from the one above.',
+      'What came back off their shelf. A different number of bags is normal, because they repack into their own, so this count is recorded separately and never assumed from the one above. Each of these wears one sticker off the tag it came out of, so the id is the same and the number is not.',
       outCount,
       outWeight,
       outgoing.length
-        ? outgoing.map((l) => bagRow(order, l, outgoing.length, canAct, done)).join('')
+        ? outgoing.map((l) => bagRow(order, l, outgoing.length, canAct, done, incoming)).join('')
         : '',
       'var(--sunbeam-100)'
     )}
