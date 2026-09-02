@@ -3131,6 +3131,8 @@ router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, re
 
     if (!ids.length) return res.redirect(303, '/ops/run');
 
+    const problems = [];
+
     for (const orderId of ids) {
       const order = await loadOrderForAction(orderId);
       if (!order) continue;
@@ -3172,6 +3174,29 @@ router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, re
           collected.map((b) => `${b.code}-${b.sticker_seq}`).join(', '),
         by: { opsUser: req.opsUser },
       });
+
+      // AND THAT IS THE MOMENT IT GOES OUT FOR DELIVERY.
+      //
+      // Every bag is off their counter and in the van, so the order is on its
+      // way and the customer should be told. Nothing else in the run did this:
+      // OUT_FOR_DELIVERY was only reachable from the order page's buttons, and
+      // those were removed when that page became a record. Two orders reached a
+      // doorstep still READY, and the delivery step failed against the state
+      // machine with "an order cannot go from READY to DELIVERED" - which was
+      // the machine doing its job and the screen having no way to satisfy it.
+      //
+      // Refusals are not swallowed silently: outForDelivery() will not move an
+      // order whose return leg is unrecorded, and that is worth seeing rather
+      // than discovering at a door.
+      const away = await fulfilment.outForDelivery(order, { by: { opsUser: req.opsUser } });
+      if (!away.ok && away.detail) problems.push(`#${order.order_number}: ${away.detail}`);
+    }
+
+    if (problems.length) {
+      return res.redirect(
+        303,
+        `/ops/run?problem=${encodeURIComponent(problems.join(' '))}`
+      );
     }
 
     return res.redirect(303, '/ops/run');

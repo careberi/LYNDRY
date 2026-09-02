@@ -362,6 +362,21 @@ function taskControl(stop, task, order) {
     </form>`;
   }
 
+  // THE WAY OUT OF READY AT A DOOR. Normally already done at the laundromat -
+  // see the note in tasksForDeliver - so seeing this means that pass was
+  // interrupted. Posts to the same route the JSON API uses, so there is one
+  // implementation of what "out for delivery" means.
+  if (task.key === 'out') {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/out-for-delivery${back}" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">It is on the van</button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        Texts the customer that it is on its way. This normally happens when you
+        load up at the laundromat.
+      </span>
+    </form>`;
+  }
+
   if (task.key === 'clips') {
     return `
     <form method="post" action="/ops/orders/${order.order_number}/clips-off${back}" style="margin:0;">
