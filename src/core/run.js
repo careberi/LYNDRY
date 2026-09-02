@@ -127,6 +127,63 @@ async function tasksForCollect(order) {
       // against the tag, so there is nowhere to put the number.
       blockedBy: label ? null : 'tag',
     });
+
+    // THREE STEPS PER BAG, NOT TWO. Tag it, weigh it, CLIP it.
+    //
+    // The clip used to be assigned silently at the scale and mentioned once at
+    // the end, inside "Clips 1 on, then load them". Neil walked a real order
+    // and was never told to put a clip on anything - the number existed in the
+    // database and nowhere in his hands. A step nobody is shown is a step that
+    // does not happen.
+    //
+    // It is per bag because the clip is per bag. One confirmation, naming the
+    // number, on the bag he is holding right now - not a list of numbers at the
+    // end to be matched up against bags already in the van.
+    tasks.push({
+      key: `clip_${position}`,
+      position,
+      label,
+      title:
+        label && label.clipped_at
+          ? `Clip ${label.clip_number} on bag ${position}`
+          : label && label.clip_number != null
+            ? `Put van clip ${label.clip_number} on bag ${position}`
+            : `Clip bag ${position}`,
+      detail:
+        'Take that numbered clip and put it on this bag, then confirm. It is how the bag is found in the van.',
+      done: Boolean(label && label.clipped_at),
+      clip: label ? label.clip_number : null,
+      // The clip is handed out by weighing, so there is nothing to put on until
+      // the bag has been on the scale.
+      blockedBy: label && label.weight_lb != null ? null : 'weigh',
+    });
+
+    // FOUR STEPS PER BAG: tag, weigh, clip, LOAD.
+    //
+    // Neil's sequence, said in full: "bag one tagged, and then bag one twenty
+    // five pounds, and then bag one van clip one, and then put bag on van, and
+    // then on bag two." He deals with ONE BAG COMPLETELY and then picks up the
+    // next, which is what a person actually does at a door with their hands
+    // full - not four bags tagged, then four weighed, then four loaded.
+    //
+    // It also means a bag is never left standing on a porch while its
+    // neighbour is being weighed, which is the failure the old one-tap-at-the-
+    // end version could not see.
+    tasks.push({
+      key: `load_${position}`,
+      position,
+      label,
+      title:
+        label && label.loaded_at
+          ? `Bag ${position} in the van`
+          : `Put bag ${position} in the van`,
+      detail: 'In it goes, then confirm. One bag finished before you pick up the next.',
+      done: Boolean(label && label.loaded_at),
+      clip: label ? label.clip_number : null,
+      // Nothing goes in the van without its clip on, because the clip is the
+      // only way it gets found again.
+      blockedBy: label && label.clipped_at ? null : 'clip',
+    });
   }
 
   // THE LAST STEP, AND IT IS NOT THE SAME AS THE LAST BAG BEING WEIGHED.
@@ -138,20 +195,22 @@ async function tasksForCollect(order) {
   const clips = bags.clipsFor(labels);
   const everyBagDone = bagCount > 0 && tasks.slice(2).every((t) => t.done);
 
-  tasks.push({
-    key: 'van',
-    title: order.van_confirmed_at
-      ? 'In the van'
-      : clips.length
-        ? `Clips ${clips.join(', ')} on, then load them`
-        : 'Put them in the van',
-    detail: clips.length
-      ? 'Put those numbered clips on the bags, load them, then tap this.'
-      : 'Tap this once all of them are actually in the van.',
-    done: Boolean(order.van_confirmed_at),
-    clips,
-    blockedBy: everyBagDone ? null : 'bags',
-  });
+  // ONLY WHERE THERE ARE NO BAGS TO WALK. With a bag count the loading is done
+  // one bag at a time above, and this would be a second tap that means the same
+  // thing - the order-level stamp is written by the last bag going aboard.
+  //
+  // It survives for the case where the count is not known yet, so the sequence
+  // still has an end rather than trailing off.
+  if (!bagCount) {
+    tasks.push({
+      key: 'van',
+      title: order.van_confirmed_at ? 'In the van' : 'Put them in the van',
+      detail: 'Tap this once all of them are actually in the van.',
+      done: Boolean(order.van_confirmed_at),
+      clips,
+      blockedBy: everyBagDone ? null : 'bags',
+    });
+  }
 
   return tasks;
 }

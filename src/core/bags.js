@@ -491,7 +491,14 @@ async function assignClip(label, driverId) {
 
   const { error } = await db
     .from('bag_labels')
-    .update({ clip_number: clip, clipped_at: new Date().toISOString(), unclipped_at: null })
+    // clipped_at is NOT set here. Assigning a clip is the system RESERVING a
+    // number; clipped_at means a driver has physically put that clip on that
+    // bag and said so. They were the same moment, which meant nobody was ever
+    // asked to do it - Neil weighed a bag and was never told a clip existed.
+    //
+    // clip_number is what makes the number taken, so reserving still keeps it
+    // out of anybody else's pool.
+    .update({ clip_number: clip, clipped_at: null, unclipped_at: null })
     .eq('id', label.id);
 
   if (error) throw error;
@@ -518,6 +525,44 @@ async function unclipOrder(orderId) {
 
 // What is on the van right now, as clip numbers, grouped by order. What the
 // laundromat stop reads off.
+
+// THE DRIVER SAYS THE CLIP IS ON. One bag, one confirmation - the step Neil
+// asked for and the one that was missing.
+async function confirmClip(label) {
+  if (!label || label.clip_number == null) {
+    return { ok: false, detail: 'That bag has no clip number yet.' };
+  }
+  if (label.clipped_at) return { ok: true, clip: Number(label.clip_number), already: true };
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ clipped_at: new Date().toISOString() })
+    .eq('id', label.id);
+
+  if (error) throw error;
+  return { ok: true, clip: Number(label.clip_number) };
+}
+
+
+// ONE BAG GOES IN THE VAN. Per bag, because a driver deals with one bag
+// completely and then picks up the next - and because a bag left on a porch
+// while its neighbour is weighed is invisible to a single tap at the end.
+async function loadBag(label) {
+  if (!label) return { ok: false, detail: 'No such bag.' };
+  if (!label.clipped_at) {
+    return { ok: false, detail: 'Put the clip on it first - that is how it gets found again.' };
+  }
+  if (label.loaded_at) return { ok: true, already: true };
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ loaded_at: new Date().toISOString() })
+    .eq('id', label.id);
+
+  if (error) throw error;
+  return { ok: true };
+}
+
 function clipsFor(labels) {
   return (labels || [])
     .filter((l) => l.clip_number != null && l.unclipped_at == null)
@@ -527,6 +572,8 @@ function clipsFor(labels) {
 
 module.exports = {
   clipsInUse,
+  confirmClip,
+  loadBag,
   assignClip,
   unclipOrder,
   clipsFor,

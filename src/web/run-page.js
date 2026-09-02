@@ -266,6 +266,59 @@ function taskControl(stop, task, order) {
     </form>`;
   }
 
+  // ONE BAG INTO THE VAN, confirmed. The last of the four steps that belong to
+  // a single bag - tag, weigh, clip, load - so the driver finishes the bag in
+  // his hands before picking up the next one.
+  if (task.key.startsWith('load_')) {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/bag-van${back}" style="margin:0;">
+      <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
+
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
+        Bag ${escapeHtml(task.position)}${
+          task.clip != null ? `, on clip <strong>${escapeHtml(task.clip)}</strong>` : ''
+        }, into the van.
+      </p>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        Bag ${escapeHtml(task.position)} is in the van
+      </button>
+    </form>`;
+  }
+
+  // ONE BAG, ONE CLIP, ONE CONFIRMATION. Neil asked for this by name: he was
+  // never told to put a clip on anything, because the number was assigned at
+  // the scale and only mentioned in a list at the very end.
+  //
+  // The number is the whole content of the screen. It is what he reads off,
+  // what he picks out of the bag of clips, and what he will say out loud at a
+  // laundromat counter, so it is set at the size of the thing you act on.
+  if (task.key.startsWith('clip_')) {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/bag-clip${back}" style="margin:0;">
+      <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
+
+      <div style="display:flex;align-items:center;gap:16px;margin:0 0 18px;">
+        <span style="min-width:88px;padding:16px 18px;border:2px solid var(--ink-900);
+                     border-radius:16px;background:var(--sunbeam-500);text-align:center;
+                     font-family:var(--font-mono);font-weight:700;font-size:40px;line-height:1;
+                     box-shadow:var(--shadow-pop-xs);">${escapeHtml(task.clip)}</span>
+        <span style="font-size:16px;line-height:1.5;">
+          Clip <strong>${escapeHtml(task.clip)}</strong> goes on the bag tagged
+          <code style="font-weight:700;">${escapeHtml((task.label || {}).code || '')}</code>.
+        </span>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        Clip ${escapeHtml(task.clip)} is on it
+      </button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        This is how the bag gets found in the van, and what you and the
+        laundromat counter say out loud.
+      </span>
+    </form>`;
+  }
+
   // STEP ONE NOW, not the last thing. He is handed the bags and then deals with
   // them, which is the real order of events at a door - and marking it
   // collected is what texts the customer to say we have been, so making that

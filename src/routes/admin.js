@@ -3826,6 +3826,112 @@ router.post('/ops/orders/:id/bag-count', guard, may('orders.act'), async (req, r
   }
 });
 
+// ONE BAG INTO THE VAN.
+//
+// The order-level van_confirmed_at is stamped HERE, by the last bag going
+// aboard, rather than by a separate tap. Everything downstream keys off that
+// column - the collect leg, the round count, what may go to a laundromat - so
+// it still has to be written; it simply is not a question anybody is asked
+// twice.
+router.post('/ops/orders/:id/bag-van', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = backTo(req, order);
+    const label = await bags.findByCode((req.body || {}).code);
+
+    if (!label || label.order_id !== order.id) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('That tag is not on this order.')}`
+      );
+    }
+
+    const result = await bags.loadBag(label);
+    if (!result.ok) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    // Is that all of them? The stamp goes on once, when the last one is in.
+    const labels = await bags.forOrder(order.id, 'PICKUP');
+    const expected = Number(order.bag_count || 0);
+    const aboard = labels.filter((l) => l.loaded_at).length;
+
+    if (expected && aboard >= expected && !order.van_confirmed_at) {
+      const { error } = await db
+        .from('orders')
+        .update({ van_confirmed_at: new Date().toISOString() })
+        .eq('id', order.id);
+      if (error) throw error;
+
+      const clips = bags.clipsFor(labels);
+      await orderEvents.record(order.id, {
+        kind: 'STATUS',
+        summary:
+          `${expected} bag${expected === 1 ? '' : 's'} loaded into the van` +
+          (clips.length ? ` on clip${clips.length === 1 ? '' : 's'} ${clips.join(', ')}` : ''),
+        by: { opsUser: req.opsUser },
+      });
+    }
+
+    const note =
+      expected && aboard >= expected
+        ? `All ${expected} bags are in the van.`
+        : `Bag ${label.position} is in. ${expected - aboard} to go.`;
+
+    return res.redirect(303, `${back}?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// THE DRIVER CONFIRMS A CLIP IS ON A BAG.
+//
+// Its own step because it is its own physical act. The clip is reserved when
+// the bag is weighed - that is where the number comes from - but until somebody
+// says they have put it on, nothing has happened in the van. Neil walked a real
+// order and was never asked to clip anything, which is how a bag ends up
+// aboard with no number on it and no way to pick it out at a laundromat.
+router.post('/ops/orders/:id/bag-clip', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = backTo(req, order);
+    const label = await bags.findByCode((req.body || {}).code);
+
+    if (!label || label.order_id !== order.id) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('That tag is not on this order.')}`
+      );
+    }
+
+    const result = await bags.confirmClip(label);
+    if (!result.ok) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    // Only the first time. Tapping it again is a driver making sure, and a log
+    // full of the same clip going on the same bag is a log nobody reads.
+    if (!result.already) {
+      await orderEvents.record(order.id, {
+        kind: 'LABEL',
+        summary: `Clip ${result.clip} on bag ${label.position} (${label.code})`,
+        by: { opsUser: req.opsUser },
+      });
+    }
+
+    return res.redirect(
+      303,
+      `${back}?note=${encodeURIComponent(`Clip ${result.clip} on bag ${label.position}.`)}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post(
   '/ops/orders/:id/bag-weight',
   guard,
