@@ -428,6 +428,25 @@ async function forDriver(driverId) {
   // address and an "I'm here" button for a place it could not name.
   const board = await dispatch.board(now.date, null, driverId);
 
+  // WHICH ROUND HE IS IN, AND WHICH ONES HE HAS BEEN THROUGH.
+  //
+  // board() has already filtered the stops to the window the clock is in, so
+  // the run only ever shows the round being driven. This is the strip that says
+  // so: a day is a handful of two-hour rounds, and a driver looking at three
+  // stops has no way to tell whether that is the whole day or the next hour.
+  //
+  // Past rounds are shown greyed rather than hidden, because "I have done two
+  // of five" is the thing he actually wants to know, and future ones are shown
+  // dim - not pickable, at Neil's request. There is nothing to decide here: the
+  // round you are in is whatever time it is.
+  const rounds = booking.PICKUP_WINDOWS.map((w) => ({
+    start: w.start,
+    end: w.end,
+    label: booking.describeWindow(w.start, w.end).replace('between ', ''),
+    state:
+      now.time >= w.end ? 'past' : now.time >= w.start ? 'now' : 'ahead',
+  }));
+
   const describe = (stop) => ({
     ...stop,
     address: stop.order ? addressOf(stop.order.customers) : addressOf(stop.partner),
@@ -517,6 +536,7 @@ async function forDriver(driverId) {
     date: board.date,
     driver: board.driver,
     base: board.base,
+    rounds,
     stops,
     current,
     arrivalOrder,

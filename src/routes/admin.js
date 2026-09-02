@@ -874,6 +874,76 @@ function pickupSequence(
   </div>`;
 }
 
+
+// ---------------------------------------------------------------------------
+// WHERE THIS ORDER HAS GOT TO.
+//
+// NEIL'S CALL: the order page no longer does the work. It used to carry the
+// legal next steps as full-width buttons, which made it a second place to
+// advance an order alongside the round - and two front doors onto one job is
+// how they drift. The round is where the work happens now; this is the record.
+//
+// IT IS FED FROM THE ROUND, not from a list written out again here.
+// run.tasksForOrder() is the same call the driver's screen makes, so the step
+// this page names and the step he is asked to do cannot disagree. A summary
+// that is one deploy behind the thing it summarises is worse than none.
+// ---------------------------------------------------------------------------
+function progressCard(order, tasks) {
+  // Delivered and cancelled orders have no sequence left to show. The cards
+  // below this one are the record of what happened.
+  if (!tasks || !tasks.length) return '';
+
+  const done = tasks.filter((t) => t.done).length;
+  const currentIndex = tasks.findIndex((t) => !t.done);
+
+  const row = (t, i) => {
+    const state = t.done ? 'done' : i === currentIndex ? 'now' : 'ahead';
+
+    const mark =
+      state === 'done'
+        ? `<span style="color:var(--suds-500);font-weight:700;">&#10003;</span>`
+        : state === 'now'
+          ? `<span style="color:var(--ink-900);font-weight:700;">&rarr;</span>`
+          : `<span style="color:var(--ink-300);">&middot;</span>`;
+
+    const text =
+      state === 'done'
+        ? 'color:var(--ink-500);'
+        : state === 'now'
+          ? 'color:var(--ink-900);font-weight:700;'
+          : 'color:var(--ink-500);';
+
+    return `
+      <li style="display:flex;gap:11px;align-items:baseline;margin:0 0 9px;font-size:16px;line-height:1.45;">
+        <span style="width:16px;flex:none;text-align:center;">${mark}</span>
+        <span style="${text}">${escapeHtml(t.title)}</span>
+      </li>`;
+  };
+
+  return `
+  <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
+    ${sectionHeading('Progress', 'Where it has got to')}
+
+    <p class="eyebrow" style="margin:0 0 14px;">
+      ${done} of ${tasks.length} done
+    </p>
+
+    <ul style="list-style:none;padding:0;margin:0 0 20px;">
+      ${tasks.map(row).join('')}
+    </ul>
+
+    <div style="height:12px;border:2px solid var(--ink-900);border-radius:999px;overflow:hidden;
+                background:var(--paper-000);margin:0 0 16px;">
+      <div style="height:100%;width:${Math.round((done / tasks.length) * 100)}%;background:var(--suds-500);"></div>
+    </div>
+
+    <p style="margin:0;font-size:14px;line-height:1.55;color:var(--ink-700);">
+      This page is a record. The work is done on
+      <a href="/ops/run" style="font-weight:700;color:inherit;">Your round</a>.
+    </p>
+  </div>`;
+}
+
 function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true, labels: [] }, laundromats = [], mayOverride = false, refused = false }) {
   const weighed = order.weight_lb != null;
 
@@ -2355,37 +2425,21 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         }
       </div>
 
-      ${pickupTasks
-        ? pickupSequence(order, pickupTasks, {
-            // Which value is being corrected, if any. A key rather than "the
-            // last one" so a refresh lands in the same place.
-            fixKey: req.query.fix ? String(req.query.fix).slice(0, 40) : null,
-            laundromats,
-            mayOverride: roles.can(req.opsUser, 'orders.override'),
-            refused: /did not|short|heavier|lighter/i.test(String(req.query.problem || '')),
-            notice: req.query.note
-              ? String(req.query.note).slice(0, 200)
-              : req.query.done
-                ? DONE_MESSAGES[String(req.query.done)] || null
-                : null,
-            problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
-          })
-        : workCard(order, {
-        canAct: roles.can(req.opsUser, 'orders.act'),
-        bagScan,
-        laundromats,
-        mayOverride: roles.can(req.opsUser, 'orders.override'),
-        refused: /did not|short|heavier|lighter/i.test(String(req.query.problem || '')),
-        // ?note= carries a sentence the action wrote itself, for steps where a
-        // fixed banner cannot say enough. Sliced and escaped like any other
-        // thing a person put in a URL.
-        notice: req.query.note
-          ? String(req.query.note).slice(0, 200)
-          : req.query.done
-            ? DONE_MESSAGES[String(req.query.done)] || null
-            : null,
-        problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
-          })}
+      ${progressCard(order, pickupTasks)}
+      <!-- THE ACTION CARDS ARE GONE FROM THIS PAGE, at Neil's request.
+           pickupSequence() and workCard() rendered the legal next steps as
+           full-width buttons here, which made the order page a second way to
+           advance an order alongside the round. Two front doors onto one job is
+           how they drift, and CLAUDE.md warns about exactly this.
+
+           progressCard() above replaces them with a read-only summary fed from
+           run.tasksForOrder() - the same call the driver's screen makes, so the
+           step this page names and the step he is asked to do cannot disagree.
+
+           Both functions are still here and still exported to nothing: they are
+           the whole implementation of the step sequence, Neil said "maybe we'll
+           come back to it later", and deleting them would mean writing them
+           again from scratch. -->
 
       ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'), {
         mayOverride: roles.can(req.opsUser, 'orders.override'),

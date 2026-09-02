@@ -594,6 +594,8 @@ function runBody({ run, notice = null, problem = null }) {
       <a href="/ops" style="font-size:15px;font-weight:600;">All orders</a>
     </div>
 
+    ${roundStrip(run)}
+
     ${problem ? banner(problem, 'var(--stain-500)', 'var(--paper-050)') : ''}
     ${notice ? banner(notice, 'var(--suds-300)') : ''}`;
 
@@ -644,6 +646,48 @@ function runBody({ run, notice = null, problem = null }) {
     ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run)) : travelCard(run)}
   </div>
   ${scannerScript()}`;
+}
+
+
+// ---------------------------------------------------------------------------
+// WHICH ROUND HE IS IN.
+//
+// A day is a handful of two-hour rounds, and a driver looking at three stops
+// has no way to tell whether that is the whole day or the next hour. Worse, the
+// run only shows the round being driven now - so without this the other stops
+// look like they have gone missing.
+//
+// NOTHING HERE IS PICKABLE, at Neil's request: the round you are in is whatever
+// time it is, not a choice. Past rounds are greyed rather than hidden because
+// "two of five done" is what he actually wants to know, and the ones ahead are
+// dim so he can see the day is not over.
+// ---------------------------------------------------------------------------
+function roundStrip(run) {
+  const rounds = run.rounds || [];
+  if (!rounds.length) return '';
+
+  const chip = (r) => {
+    const style =
+      r.state === 'now'
+        ? 'background:var(--suds-500);border-color:var(--ink-900);font-weight:700;box-shadow:2px 2px 0 var(--ink-900);'
+        : r.state === 'past'
+          ? 'background:var(--paper-200);border-color:var(--ink-300);color:var(--ink-500);text-decoration:line-through;'
+          : 'background:var(--paper-000);border-color:var(--ink-300);color:var(--ink-500);';
+
+    return `<span style="padding:7px 11px;border:2px solid;border-radius:999px;
+                         font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;
+                         text-transform:uppercase;white-space:nowrap;${style}">${escapeHtml(r.label)}</span>`;
+  };
+
+  const nowRound = rounds.find((r) => r.state === 'now');
+
+  return `
+    <div style="margin:0 0 18px;">
+      <div class="eyebrow" style="margin:0 0 8px;">
+        ${nowRound ? `You are on the ${escapeHtml(nowRound.label)} round` : "Outside the day's rounds"}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;">${rounds.map(chip).join('')}</div>
+    </div>`;
 }
 
 module.exports = { runBody };
