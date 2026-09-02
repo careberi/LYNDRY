@@ -82,12 +82,34 @@ function travelCard(run) {
            </a>`
         : `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
                      background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
-             No address we can put on a map. Ring the office before you set off.
+             ${
+               stop.kind === 'dropoff'
+                 ? 'No laundromat has been picked for these bags. Nobody is open, or none is set up. Sort that on Routing before you drive anywhere.'
+                 : 'No address we can put on a map. Ring the office before you set off.'
+             }
            </p>`
     }
 
     ${
-      run.arrivalOrder
+      // A PLAN IS NOT THE SAME AS A LIVE CHOICE, so it does not get to look
+      // like one. This is where the order was meant to go when it was booked;
+      // by now that laundromat may be shut or full, and the driver should ring
+      // ahead rather than turn up on the strength of a week-old decision.
+      stop.fromPlan
+        ? `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
+                     background:var(--sunbeam-500);font-size:15px;line-height:1.5;">
+             This is where the order was <strong>planned</strong> to go when it
+             was booked. Nothing confirmed it is open right now, so ring ahead.
+           </p>`
+        : ''
+    }
+
+    ${
+      // NO DESTINATION, NO ARRIVAL. Offering "I'm here" for a stop the screen
+      // cannot name asks the driver to confirm he has reached somewhere nobody
+      // has decided on, and marks the order arrived at a place that does not
+      // exist. The line above tells him what to do instead.
+      run.arrivalOrder && (stop.address || stop.kind === 'collect')
         ? `<form method="post" action="/ops/run/here" style="margin:0;">
              <input type="hidden" name="order_id" value="${escapeHtml(run.arrivalOrder.id)}">
              <button type="submit" class="btn btn-primary btn-lg btn-full">I'm here</button>

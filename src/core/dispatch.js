@@ -177,6 +177,10 @@ const BOARD_FIELDS =
   // no way to tell a bag still sitting on a shelf from one already in the van,
   // and the driver is offered "scan them in" for work nobody has checked.
   'return_bag_count, return_weight_lb, ' +
+  // Where this order was PLANNED to go, chosen when it was booked. The live
+  // choice wins when it has one; this is what stops a stop being drawn as "a
+  // laundromat" with no address when it does not.
+  'intended_partner_id, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb)';
 
 // WHAT ONE BAG WEIGHS WHEN NOBODY HAS WEIGHED IT YET.
@@ -467,6 +471,102 @@ async function currentPosition(driverId, dateIso) {
   return where ? { ...where, at: latest.at, kind: 'door' } : null;
 }
 
+// ---------------------------------------------------------------------------
+// WHERE IS THIS ORDER GOING? Answered when the order is BOOKED, not when a
+// board happens to be drawn.
+//
+// Neil's call. The laundromat used to be worked out live, over and over, and
+// only written down once the bags had actually been handed over - so a driver
+// looking at tomorrow's round saw a stop called "a laundromat" with no address
+// on it, and an "I'm here" button for a place the screen could not name.
+//
+// IT IS A PLAN, NOT A LOCK. It is chosen against the pickup day and the start
+// of the customer's window, which is the best guess available at booking time -
+// but a partner can be shut, full, or gone by then, so everything downstream
+// re-checks before the bags change hands. orders.partner_id remains the record
+// of where it ACTUALLY went, and the two are kept apart deliberately: "we meant
+// to go to Fancy K and ended up at Bergen Wash" is worth being able to see.
+//
+// Never throws. A booking must not fail because a geocoder was slow or nobody
+// has added a laundromat yet - an order with no plan is a real state, and the
+// screens say so rather than inventing a destination.
+// ---------------------------------------------------------------------------
+
+async function planPartnerFor(order, customer) {
+  try {
+    const partnersCore = require('./partners');
+
+    const where = await geocode.locate(customer || {});
+    if (!where) return null;
+
+    const laundromats = (await partnersCore.list({ type: 'LAUNDROMAT' })).filter(
+      (p) => p.status === 'ACTIVE'
+    );
+    if (!laundromats.length) return null;
+
+    const hoursByPartner = await partnersCore.hoursForAll();
+    const loadByPartner = await partnersCore.loadByPartner();
+
+    // The weekday of the PICKUP, not of today. Booking on a Tuesday for a
+    // Thursday collection has to ask who is open on Thursday.
+    const [y, m, d] = String(order.pickup_date).split('-').map(Number);
+    const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+
+    // The start of the window they were promised. A bag collected in the 9-12
+    // window reaches a laundromat late morning, so that is the hour to ask
+    // about - not midnight, and not whenever this code happens to run.
+    const time = order.pickup_window_start || booking.PICKUP_WINDOWS[0].start;
+
+    const rows = laundromats.map((p) => {
+      const hours = hoursByPartner.get(p.id) || [];
+      return {
+        ...p,
+        at: p.lat != null && p.lng != null ? { lat: Number(p.lat), lng: Number(p.lng) } : null,
+        hours,
+        openNow: partnersCore.isOpenAt(hours, weekday, time),
+        capacity: partnersCore.capacityOf(p, loadByPartner.get(p.id)),
+      };
+    });
+
+    const choice = chooseLaundromat(where, rows, {
+      weekday,
+      time,
+      // Nothing has been weighed yet, so the honest floor is what the minimum
+      // charge implies - the same estimate the routing board uses.
+      poundsToAdd: assumedPounds(customer),
+      onward: null,
+      promiseMinutes: 24 * 60 + toMinutesOfDay(booking.endOfDeliveryDay()),
+    });
+
+    return choice.chosen || null;
+  } catch (err) {
+    console.error(`Could not plan a laundromat for order ${order.id}: ${err.message}`);
+    return null;
+  }
+}
+
+// Writes the plan onto the order. Separate from choosing it so a caller can
+// re-plan without writing, and so a failed write cannot lose a booking.
+async function savePlannedPartner(order, customer) {
+  const chosen = await planPartnerFor(order, customer);
+  if (!chosen) return null;
+
+  const { error } = await db
+    .from('orders')
+    .update({
+      intended_partner_id: chosen.id,
+      intended_partner_at: new Date().toISOString(),
+    })
+    .eq('id', order.id);
+
+  if (error) {
+    console.error(`Could not save the planned laundromat: ${error.message}`);
+    return null;
+  }
+
+  return chosen;
+}
+
 async function board(dateIso, fromTime, driverId = null) {
   const date = dateIso || booking.today();
   const now = booking.nowInService();
@@ -644,10 +744,31 @@ async function board(dateIso, fromTime, driverId = null) {
   const partnerStops = [];
 
   if (needsWash.length || (pickups || []).length) {
+    // FALL BACK TO THE PLAN MADE AT BOOKING.
+    //
+    // The live choice above is the better answer when it has one: it knows
+    // what is open right now, what is already on each partner's floor, and
+    // where the van actually is. But it can come back empty - nothing open at
+    // this hour, nobody within range - and an empty answer used to draw a stop
+    // called "a laundromat" with no address and an "I'm here" button for a
+    // place the screen could not name.
+    //
+    // An order booked since 0048 carries the laundromat it was planned for, so
+    // there is something to show. It is marked as a plan rather than a live
+    // choice, because the driver deserves to know the difference between "this
+    // is where you are going" and "this is where we meant to send you, ring
+    // ahead".
+    const planned =
+      !choice.chosen &&
+      partnerRows.find((p) =>
+        [...needsWash, ...(pickups || [])].some((o) => o.intended_partner_id === p.id)
+      );
+
     partnerStops.push({
       kind: 'dropoff',
-      at: choice.chosen ? choice.chosen.at : null,
-      partner: choice.chosen,
+      at: choice.chosen ? choice.chosen.at : planned ? planned.at : null,
+      partner: choice.chosen || planned || null,
+      fromPlan: Boolean(!choice.chosen && planned),
       choice,
       bags: needsWash.length + (pickups || []).length,
       pounds: dropWeight,
@@ -1010,6 +1131,8 @@ module.exports = {
   LEGS,
   board,
   chooseLaundromat,
+  planPartnerFor,
+  savePlannedPartner,
   perMile,
   milesBetween,
   minutesFor,

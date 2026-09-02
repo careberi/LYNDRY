@@ -266,7 +266,13 @@ async function doneToday(driverId, dateIso) {
 // The whole run for one driver, and which stop they are on.
 async function forDriver(driverId) {
   const now = booking.nowInService();
-  const board = await dispatch.board(now.date, now.time, driverId);
+  // NO TIME PASSED, ON PURPOSE. board() works out a sensible start itself and
+  // falls forward to the first pickup window when the clock is outside the
+  // working day. Handing it now.time defeated that: opened at half past
+  // midnight the run asked which laundromat was open at 00:38, got the correct
+  // answer of "none", and drew a drop-off stop for "a laundromat" with no
+  // address and an "I'm here" button for a place it could not name.
+  const board = await dispatch.board(now.date, null, driverId);
 
   const describe = (stop) => ({
     ...stop,

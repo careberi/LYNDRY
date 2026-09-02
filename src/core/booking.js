@@ -589,6 +589,24 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     reason: window.date !== pickupDate ? `Asked for ${pickupDate}, rolled to the next slot` : null,
   });
 
+  // WHERE IT IS GOING, DECIDED NOW. Neil's call: the system should have the
+  // address the moment the order is placed, rather than working it out again
+  // every time somebody draws a board - which meant a driver looking at
+  // tomorrow's round saw a stop called "a laundromat" with no address on it.
+  //
+  // Deliberately NOT awaited, and deliberately unable to fail the booking. It
+  // may geocode, which is a rate-limited public service, and a customer waiting
+  // on a confirmation text must never wait on it. If it does not land, the
+  // boards still choose live exactly as they always did - this only means the
+  // answer is already there.
+  //
+  // require() here rather than at the top: dispatch requires this file, so a
+  // module-level import would be a cycle. Node caches it, so the cost is one
+  // lookup.
+  require('./dispatch')
+    .savePlannedPartner(order, customer)
+    .catch((err) => console.error(`Could not plan a laundromat: ${err.message}`));
+
   // NO MONEY MOVES HERE. The card is charged once, at the door. All this asks
   // is whether we have a card to charge when we get there.
   //
