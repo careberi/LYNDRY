@@ -193,12 +193,24 @@ async function tasksAfterPickup(order) {
       done: Boolean(order.at_partner_at) || ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status),
     });
 
+    // WHAT THE LAUNDROMAT HAS PACKED SO FAR, off their own sticker taps. It is
+    // their declaration, not our count - nothing here is in the van.
+    const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter((b) => b.sticker_seq);
+    const finished = packed.filter((b) => b.finished_at);
+
     tasks.push({
       key: 'ready',
-      title: order.status === 'AT_PARTNER' ? 'Waiting on the laundromat' : 'Laundromat has finished',
+      title:
+        order.status === 'AT_PARTNER'
+          ? finished.length
+            ? `Laundromat has ${finished.length} bag${finished.length === 1 ? '' : 's'} ready`
+            : 'Waiting on the laundromat'
+          : 'Laundromat has finished',
       detail:
-        'They tap it themselves on the tag page. Mark it here if they tell you instead.',
+        'They tap each sticker as they pack it. Mark it here if they tell you instead.',
       done: ['READY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status),
+      packed,
+      finished,
     });
 
     // --- what came back ------------------------------------------------------
@@ -211,10 +223,17 @@ async function tasksAfterPickup(order) {
       title:
         order.return_bag_count != null
           ? `${order.return_bag_count} bag${order.return_bag_count === 1 ? '' : 's'} back, ${Number(order.return_weight_lb || 0).toFixed(1)} lb`
-          : 'Weigh what came back',
+          : // IT IS A COLLECTION FIRST AND A WEIGHING SECOND, and the title now
+            // says so. "Weigh what came back" read as though the bags were
+            // already in the van - the driver still has to drive there and
+            // pick them up, and that is the actual next thing he does.
+            finished.length
+            ? `Collect ${finished.length} bag${finished.length === 1 ? '' : 's'} from the laundromat and weigh them`
+            : 'Collect from the laundromat and weigh what came back',
       detail:
-        'How many bags and what they weigh. It is checked against what you collected, and only then do the clips go on.',
+        'At their counter, before anything moves. Ask how many bags and what they weigh - it is checked against what you collected, and only then do the clips go on.',
       done: order.return_bag_count != null,
+      finished,
     });
   }
 

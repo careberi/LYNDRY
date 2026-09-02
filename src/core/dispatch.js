@@ -791,16 +791,51 @@ async function board(dateIso, fromTime, driverId = null) {
     readyByPartner.get(o.partner_id).push(o);
   }
 
+  // HOW MANY BAGS ARE ACTUALLY WAITING, which is not how many orders are.
+  //
+  // `bags` was list.length - the number of ORDERS at that laundromat - so a
+  // driver was told "1 bag" for an order the laundromat had packed into four.
+  // He arrives expecting one and has to work out the rest at the counter.
+  //
+  // The real number is the stickers they have marked finished. It is their
+  // declaration rather than our count, which is exactly right for a screen
+  // that says what to expect when you get there - and the weighing at the
+  // counter is what turns it into a fact.
+  const readyIds = [...readyByPartner.values()].flat().map((o) => o.id);
+  const finishedByOrder = new Map();
+
+  if (readyIds.length) {
+    const { data: packed } = await db
+      .from('bag_labels')
+      .select('order_id, sticker_seq, code, finished_at')
+      .in('order_id', readyIds)
+      .eq('leg', 'DELIVERY')
+      .not('finished_at', 'is', null);
+
+    for (const row of packed || []) {
+      if (!finishedByOrder.has(row.order_id)) finishedByOrder.set(row.order_id, []);
+      finishedByOrder.get(row.order_id).push(row);
+    }
+  }
+
   for (const [partnerId, list] of readyByPartner) {
     const partner = partnerRows.find((p) => p.id === partnerId);
+
+    const finished = list.flatMap((o) => finishedByOrder.get(o.id) || []);
+
     partnerStops.push({
       kind: 'pickup_partner',
       at: partner ? partner.at : null,
       partner,
       orders: list,
-      bags: list.length,
+      // Their count when they have given one, otherwise fall back to the
+      // number of orders rather than showing nothing - "some bags" is worse
+      // than a rough number a driver can check against.
+      bags: finished.length || list.length,
+      // The tags themselves, so the screen can name what to ask for rather
+      // than only counting it.
+      finishedBags: finished,
       pounds: list.reduce((t, o) => t + Number(o.weight_lb || 0), 0),
-      orders: list,
     });
   }
 

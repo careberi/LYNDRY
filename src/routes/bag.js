@@ -446,6 +446,9 @@ const ES = Object.freeze({
   'Not picked up yet': 'Aun no recogida',
   'When a bag is finished': 'Cuando termine una bolsa',
   'Waiting for collection': 'Esperando recogida',
+  'Marked finished and our driver has been told.':
+    'Marcado como terminado y nuestro conductor ya lo sabe.',
+  'Bags to hand over': 'Bolsas para entregar',
   'Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.':
     'Ponga una pegatina en cada bolsa que empaque. Toque su numero una vez para indicar que la esta usando, y otra vez cuando esa bolsa este terminada.',
   'Tapped one by mistake? Keep tapping it and it goes back to not used.':
@@ -727,9 +730,32 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
         ${escapeHtml(say('Waiting for collection'))}
       </div>
       <p style="font-size:16px;line-height:1.6;margin:0;">
-        This one is marked finished and our driver has been told. Nothing else
-        to do with it.
+        ${escapeHtml(say('Marked finished and our driver has been told.'))}
       </p>
+
+      ${
+        // WHICH BAGS THE DRIVER IS COMING FOR, named rather than counted. The
+        // page said only that the order was ready, so an attendant holding
+        // four bags had nothing to check them against and the driver had to
+        // work it out at the counter.
+        (stickers || []).filter((x) => x.state === 'DONE').length
+          ? `<div style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
+               <p class="eyebrow" style="margin:0 0 12px;">${escapeHtml(say('Bags to hand over'))}</p>
+               <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+                 ${stickers
+                   .filter((x) => x.state === 'DONE')
+                   .map(
+                     (x) => `<span style="padding:9px 13px;border:2px solid var(--ink-900);border-radius:10px;
+                                          background:var(--suds-500);font-family:var(--font-mono);
+                                          font-weight:700;font-size:16px;">
+                               ${escapeHtml(code)}-${x.seq}
+                             </span>`
+                   )
+                   .join('')}
+               </div>
+             </div>`
+          : ''
+      }
     </div>` + footer,
     });
   }
@@ -903,7 +929,9 @@ router.get('/o/:code', async (req, res, next) => {
       // fetched for a bag sitting in the van.
       const stage = tags.stageOf(label, order);
       const stickers =
-        stage === tags.STAGES.WASHING ? await tags.stickersOn(label).catch(() => []) : [];
+        stage === tags.STAGES.WASHING || stage === tags.STAGES.READY
+          ? await tags.stickersOn(label).catch(() => [])
+          : [];
 
       return res
         .type('html')

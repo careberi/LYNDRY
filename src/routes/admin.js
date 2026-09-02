@@ -237,8 +237,21 @@ const OPS_MENUS = Object.freeze([
     ],
   },
   {
-    label: 'People',
+    // ADMIN HOLDS WHAT AN OWNER DECIDES AND WHO THEY DEAL WITH. Neil's
+    // grouping: the dashboard, then the people - customers, their threads, the
+    // team, and the laundromats.
+    //
+    // WORTH KNOWING: the label says Admin and the group is not admin-only.
+    // Every entry still carries the permission that guards its own route, so a
+    // SALES user - who holds customers.view and messages.view - sees this menu
+    // with two things in it and none of the rest. That is correct behaviour
+    // wearing a slightly wrong word, and the word is what to revisit if a
+    // salesperson is ever confused by it.
+    label: 'Admin',
     items: [
+      // The dashboard first: taking orders, the weight thresholds, and the way
+      // through to promotions, text blasts and issues.
+      { href: '/ops/admin', label: 'Admin', permission: 'service.manage' },
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
       // "Messages" at Neil's request. It was called Conversations to make the
       // point that the screen is one row per phone NUMBER and holds people who
@@ -253,20 +266,6 @@ const OPS_MENUS = Object.freeze([
       // right word for what is actually in there today, and the day a property
       // manager is added this label is the thing to revisit.
       { href: '/ops/partners', label: 'Laundromats', permission: 'partners.view' },
-    ],
-  },
-  {
-    label: 'Business',
-    items: [
-      // ONE PAGE FOR EVERYTHING YOU DECIDE. Neil's consolidation: taking
-      // orders, the weight thresholds, and a way through to promotions, text
-      // blasts and issues. The individual screens still exist and still work -
-      // this is a front door, not a replacement.
-      // ONE WAY IN. Taking orders, promotions and text blasts are reached from
-      // the Admin page and nowhere else - Neil's call, and it is what makes the
-      // consolidation real rather than a fifth door onto the same four rooms.
-      // The routes still exist and still work; they are simply not listed here.
-      { href: '/ops/admin', label: 'Admin', permission: 'service.manage' },
     ],
   },
   {
@@ -2089,8 +2088,15 @@ function bagsCard(order, labels, canAct, { mayOverride = false, refused = false 
     )}
 
     ${leg(
-      'Collected from the laundromat',
-      'What came back off their shelf. A different number of bags is normal, because they repack into their own, so this count is recorded separately and never assumed from the one above. Each of these wears one sticker off the tag it came out of, so the id is the same and the number is not.',
+      order.return_bag_count != null ? 'Collected from the laundromat' : 'Packed by the laundromat',
+      order.return_bag_count != null
+        ? 'What we actually took off their shelf, weighed at the counter. A different number of bags is normal, because they repack into their own, so this count is recorded separately and never assumed from the one above.'
+        : // NOT COLLECTED YET, AND THE HEADING MUST NOT SAY IT IS. These rows
+          // appear the moment the laundromat taps a sticker, which is them
+          // saying "this bag is ours now" - not us saying we have it. Calling
+          // that "collected from the laundromat" put four bags in the van
+          // while they were still on somebody else's shelf.
+          'What the laundromat has put stickers on so far. They tap each one as they pack it, so this grows while they work. Nothing here is in the van yet - that happens when the driver collects and weighs it.',
       outCount,
       outWeight,
       outgoing.length

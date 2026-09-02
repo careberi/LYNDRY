@@ -372,6 +372,33 @@ function partnerCard(run) {
     </p>
 
     ${
+      // WHICH TAGS TO ASK FOR. A count tells him how many to expect; the tags
+      // tell him what to say at the counter and what to check he is holding.
+      // These are the stickers the laundromat marked finished, so they are what
+      // is physically sitting on their shelf with our id on it.
+      !dropping && (stop.finishedBags || []).length
+        ? `<div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
+                       background:var(--paper-200);">
+             <p class="eyebrow" style="margin:0 0 10px;">Ask for these</p>
+             <div style="display:flex;flex-wrap:wrap;gap:8px;">
+               ${stop.finishedBags
+                 .map(
+                   (b) => `<span style="padding:7px 11px;border:2px solid var(--ink-900);border-radius:10px;
+                                        background:var(--paper-000);font-family:var(--font-mono);
+                                        font-weight:700;font-size:15px;">
+                             ${escapeHtml(b.code)}${b.sticker_seq ? `-${b.sticker_seq}` : ''}
+                           </span>`
+                 )
+                 .join('')}
+             </div>
+             <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
+               What they told us they have packed. Count them before you weigh.
+             </p>
+           </div>`
+        : ''
+    }
+
+    ${
       // THE NUMBERS, BIG. This is the one thing said out loud at a counter, so
       // it is the one thing that has to be readable at arm's length.
       (stop.clips || []).length
