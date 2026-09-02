@@ -69,6 +69,16 @@ const PERMISSIONS = Object.freeze({
   // override is written into the change log with a reason, so "we waved it
   // through" is a sentence with a name attached rather than a silent success.
   'orders.override': 'Push past a refusal the system made, on the record',
+
+  // WRITING TO A REAL PHONE IS NOT READING A LIST. Separate from
+  // messages.view for the same reason texting a laundromat the partner link
+  // sits behind partners.manage: reading a thread is looking something up,
+  // and sending one is an act that reaches somebody's pocket and cannot be
+  // taken back.
+  //
+  // It is what lifts an AI hold. When the AI has stopped replying, somebody
+  // holding this is the only way the customer hears anything at all.
+  'messages.send': 'Text a customer directly from the conversation screen',
 });
 
 const ROLES = Object.freeze({
@@ -108,6 +118,8 @@ const ROLES = Object.freeze({
       'partners.view',
       'partners.manage',
       'orders.audit',
+      // Sales works the conversations, including the ones the AI gave up on.
+      'messages.send',
     ],
   },
 });

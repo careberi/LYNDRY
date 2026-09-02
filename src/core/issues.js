@@ -49,7 +49,7 @@ async function alertRecipients(permission = 'issues.manage') {
 // One open issue per customer, enforced by a unique index as well as this
 // check: three angry texts in three minutes is one problem, not three, and
 // creating three flags means three identical replies to the customer.
-async function raise({ customer, order, reason, customerSaid }) {
+async function raise({ customer, order, reason, customerSaid, aiHold = false }) {
   const { data: existing, error: findError } = await db
     .from('issues')
     .select('*')
@@ -66,6 +66,13 @@ async function raise({ customer, order, reason, customerSaid }) {
       await db.from('issues').update({ order_id: order.id }).eq('id', existing.id);
       existing.order_id = order.id;
     }
+    // An issue that was a question for a person can BECOME a hold - the AI was
+    // coping and then stopped coping. It never goes the other way here: only
+    // an actual exchange with the customer lifts a hold.
+    if (aiHold && !existing.ai_hold) {
+      await db.from('issues').update({ ai_hold: true }).eq('id', existing.id);
+      existing.ai_hold = true;
+    }
     return { issue: existing, isNew: false };
   }
 
@@ -76,6 +83,7 @@ async function raise({ customer, order, reason, customerSaid }) {
       order_id: order ? order.id : null,
       reason: String(reason || 'No reason given').slice(0, 500),
       customer_said: customerSaid ? String(customerSaid).slice(0, 500) : null,
+      ai_hold: Boolean(aiHold),
     })
     .select('*')
     .single();
@@ -183,4 +191,56 @@ async function resolve(issueId, opsUser, resolution) {
   return data;
 }
 
-module.exports = { raise, listOpen, listRecent, openCount, resolve, alertRecipients };
+// --- The hold ---------------------------------------------------------------
+//
+// Whether a person has taken this conversation over, and whether they are done.
+
+// The open hold for this customer, or null.
+async function holdFor(customerId) {
+  const { data, error } = await db
+    .from('issues')
+    .select('id, reason, created_at')
+    .eq('customer_id', customerId)
+    .eq('status', 'OPEN')
+    .eq('ai_hold', true)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) throw error;
+  return (data || [])[0] || null;
+}
+
+// HAS A PERSON ACTUALLY REPLIED SINCE THE HOLD WENT ON?
+//
+// Both halves matter and this only answers the first. A draft nobody sent is
+// not a reply, so we look for a real outbound row; and the caller only asks
+// this while handling an INBOUND message, which is the second half - the
+// customer has answered. Together that is a conversation that has resumed.
+//
+// Any outbound counts, not just one typed on the ops screen. If some other
+// part of the system has spoken to them since - a delivery text, a booking
+// confirmation - the silence is over either way, and leaving the AI muted
+// after that would strand somebody mid-thread.
+async function personHasReplied(customerId, since) {
+  const { data, error } = await db
+    .from('messages')
+    .select('id')
+    .eq('customer_id', customerId)
+    .eq('direction', 'OUTBOUND')
+    .gt('created_at', since)
+    .limit(1);
+
+  if (error) throw error;
+  return (data || []).length > 0;
+}
+
+module.exports = {
+  raise,
+  listOpen,
+  listRecent,
+  openCount,
+  resolve,
+  alertRecipients,
+  holdFor,
+  personHasReplied,
+};

@@ -10,6 +10,7 @@ const brain = require('../core/brain');
 const actions = require('../core/actions');
 const onboarding = require('../core/onboarding');
 const orders = require('../core/orders');
+const issues = require('../core/issues');
 const recurring = require('../core/recurring');
 const { site } = require('../web/site');
 
@@ -187,6 +188,42 @@ async function handleInbound(inbound) {
 }
 
 async function answerWithBrain(customer, text, from) {
+  // --- IS A PERSON HANDLING THIS CONVERSATION? -----------------------------
+  //
+  // NEIL'S CALL. When the AI repeats itself it has run out of road, and
+  // everything it says after that makes things worse: it says the same thing a
+  // third time, or it apologises, and either way the customer now knows
+  // something is broken. So it says NOTHING and a person writes the next
+  // message. To the customer that is a pause and then a reply from LYNDRY,
+  // which is what happens at any small business when somebody goes to check.
+  //
+  // The hold lifts on both halves and neither alone: a person has actually
+  // sent something, AND the customer has answered it - which is this message.
+  // A draft nobody sent is not a reply, and a reply nobody responded to is not
+  // a conversation that has resumed.
+  const hold = await issues.holdFor(customer.id).catch(() => null);
+
+  if (hold) {
+    const answered = await issues.personHasReplied(customer.id, hold.created_at).catch(() => false);
+
+    if (!answered) {
+      // Their message is already logged by the caller. Silence is the whole
+      // point - an auto-reply here would tell them a machine is still on it.
+      console.warn(
+        `HOLD    ${from}: a person owes them the next message. Saying nothing.`
+      );
+      return;
+    }
+
+    // A person spoke and the customer has come back. Pick the thread up.
+    // Resolved by nobody in particular - no ops user did this, the customer
+    // coming back did. The resolution line says so.
+    await issues
+      .resolve(hold.id, null, 'The customer replied after a person did, so the AI picked it back up.')
+      .catch((err) => console.error(`Could not lift the AI hold: ${err.message}`));
+    console.log(`HOLD    ${from}: lifted, the customer replied after a person did.`);
+  }
+
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
   const [order, recentMessages, recentOrders, openIssue] = await Promise.all([
@@ -311,14 +348,23 @@ async function answerWithBrain(customer, text, from) {
   const same = (a, b) => toPlainText(String(a || '')).trim() === toPlainText(String(b || '')).trim();
 
   if (lastFromUs && same(lastFromUs.body, message)) {
-    console.warn(`LOOP    ${from}: about to repeat the last reply. Handing over.`);
+    // SEND NOTHING. Not the repeat, and not a handoff line either - "let me
+    // get someone to help you with that" is still the machine announcing that
+    // it has failed. The customer sees a pause; a person writes the next
+    // message from the conversations screen.
+    console.warn(`LOOP    ${from}: about to repeat the last reply. Going quiet.`);
 
-    message = await actions.run(
-      'handoff_to_human',
-      { reason: 'The AI repeated itself and could not move the conversation on.' },
-      customer,
-      { ...helpers, customerSaid: text }
-    );
+    await issues
+      .raise({
+        customer,
+        order: null,
+        reason: 'The AI repeated itself and could not move the conversation on. It has stopped replying - send them a message yourself.',
+        customerSaid: text,
+        aiHold: true,
+      })
+      .catch((err) => console.error(`Could not raise the AI hold: ${err.message}`));
+
+    return;
   }
 
   await reply(from, message, customer.id);

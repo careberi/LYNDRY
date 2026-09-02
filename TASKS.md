@@ -164,3 +164,38 @@ only the first two had been taught about the exemption. Neil's number walked the
 whole setup, said "good to go", and got "we're not booking pickups just yet"
 from a tool result. Anything new reading `settings.takingOrders()` in a customer
 path has to call `booking.alwaysAllowed()` beside it.
+
+### 13. The AI goes quiet and waits for a person ✅
+
+Neil's call, after watching it happen. When the AI repeats itself it has run out
+of road, and everything it says after that makes things worse: it says the same
+thing a third time, or it apologises. Either way the customer now knows
+something is broken.
+
+So it says **nothing**. Not the repeat, and not a handoff line either - "let me
+get someone to help with that" is still the machine announcing it has failed. An
+issue is raised, both admin numbers are texted, and the conversation screen
+shows a red banner with a box to write the next message yourself. To the
+customer it is a pause and then a reply from LYNDRY, which is what happens at
+any small business when somebody goes to check.
+
+**The hold lifts on both halves and neither alone** - a person has actually sent
+something, AND the customer has replied to it. A draft nobody sent is not a
+reply, and a reply nobody responded to is not a conversation that has resumed.
+
+`messages.send` is its own permission (Admin and Sales, never Driver): reading a
+thread is looking something up, sending one reaches somebody's pocket and cannot
+be taken back. Same reason texting a laundromat sits behind `partners.manage`.
+
+---
+
+## Outstanding
+
+### 14. Clearing the notification when an unknown number texts
+
+A number that texts without signing up leaves a notification with no way to
+dismiss it.
+
+### 15. A historical view on the orders board
+
+Pick a date and see that day's board, rather than only today.

@@ -3710,6 +3710,13 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     if (error) throw error;
 
     const thread = messages || [];
+    const digits = phone.replace(/\D/g, '');
+    const canSend = roles.can(req.opsUser, 'messages.send');
+
+    // Is the AI waiting on a person for this conversation? Only asked when
+    // there is a customer - a number that never signed up has no issues row to
+    // hold anything against, and the AI was never talking to it either.
+    const hold = customer ? await issues.holdFor(customer.id).catch(() => null) : null;
 
     const heading = customer ? customer.name || 'Unnamed customer' : formatPhone(phone);
 
@@ -3717,8 +3724,22 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       ? `<a href="/ops/customers/${customer.id}" class="btn btn-outline btn-sm">Open profile</a>`
       : `<span class="badge" style="background:var(--sunbeam-500);">Never signed up</span>`;
 
+    // ?note= and ?problem= on the redirect, so refreshing after a send repeats
+    // the message and never the action - the same pattern as the order page.
+    const note = req.query.note ? String(req.query.note).slice(0, 200) : null;
+    const problem = req.query.problem ? String(req.query.problem).slice(0, 200) : null;
+
+    const strip = (text, background) => `
+      <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+
     const body = `
       <a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
+
+      <div style="margin-top:18px;">
+        ${note ? strip(note, 'var(--suds-300)') : ''}
+        ${problem ? strip(problem, 'var(--stain-100)') : ''}
+      </div>
 
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:18px 0 6px;">
         <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0;">
@@ -3738,11 +3759,60 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         ${customer && customer.address_line1 ? `&middot; ${escapeHtml(addressOf(customer))}` : ''}
       </p>
 
+      ${
+        // THE AI HAS STOPPED TALKING AND IS WAITING FOR YOU.
+        //
+        // Said at the top, in the red that means "act", because the whole point
+        // of the hold is that somebody is sitting there with no reply. A hold
+        // nobody notices is just a customer being ignored.
+        hold
+          ? `<div class="card card-xl" style="padding:22px;margin-bottom:20px;background:var(--stain-100);
+                        border-color:var(--stain-500);">
+               <p class="eyebrow" style="margin:0 0 8px;color:var(--stain-500);">The AI has stopped replying</p>
+               <p style="font-size:16px;line-height:1.6;margin:0;">
+                 ${escapeHtml(hold.reason)}
+               </p>
+               <p style="font-size:15px;line-height:1.6;margin:12px 0 0;color:var(--ink-700);">
+                 They have not been told anything is wrong. Write the next
+                 message yourself below - the AI picks the conversation back up
+                 as soon as they reply to it.
+               </p>
+             </div>`
+          : ''
+      }
+
       <div class="card card-xl" style="padding:28px;">
         ${
           thread.length
             ? `<div style="display:flex;flex-direction:column;gap:20px;">${thread.map(bubble).join('')}</div>`
             : `<p style="font-size:16px;color:var(--ink-500);margin:0;">Nothing has been sent to or from this number.</p>`
+        }
+
+        ${
+          // WRITING TO A REAL PHONE IS NOT READING A LIST, so it is behind its
+          // own permission - the same reason texting a laundromat the partner
+          // link sits behind partners.manage rather than partners.view.
+          //
+          // Absent entirely for an opted-out number. STOP is a legal
+          // instruction, not a preference, and a box that lets somebody type
+          // into it and then refuses is worse than no box.
+          canSend && !(customer && customer.status === 'UNSUBSCRIBED')
+            ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/send"
+                     style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-100);">
+                 <label class="field-label" for="msg">Send them a message</label>
+                 <p class="field-hint" style="margin:0 0 10px;">
+                   Goes straight to their phone from the LYNDRY number, and is
+                   logged in this thread like any other. Plain text - no dashes
+                   or curly quotes, they cost an extra segment.
+                 </p>
+                 <textarea class="field" id="msg" name="body" rows="3" maxlength="600" required
+                           style="width:100%;resize:vertical;"
+                           placeholder="Hi, sorry for the wait - just checking..."></textarea>
+                 <button class="btn btn-ink btn-lg" type="submit" style="margin-top:14px;">
+                   Send it
+                 </button>
+               </form>`
+            : ''
         }
       </div>`;
 
@@ -3751,6 +3821,55 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     );
   } catch (err) {
     next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/messages/:phone/send - a person writes to a customer
+//
+// The other half of the AI hold. When the AI has run out of road it stops
+// talking and says nothing at all, which only works if somebody can actually
+// pick the thread up - otherwise it is not a handover, it is a customer being
+// ignored.
+//
+// Nothing here lifts the hold. That happens in src/routes/sms.js when the
+// CUSTOMER replies, because a message going out is only half a conversation.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const phone = normalisePhone(req.params.phone);
+    if (!phone) return res.redirect(303, '/ops/messages');
+
+    const digits = phone.replace(/\D/g, '');
+    const back = `/ops/messages/${encodeURIComponent(digits)}`;
+    const body = String((req.body || {}).body || '').trim().slice(0, 600);
+
+    if (!body) return res.redirect(303, `${back}?problem=${encodeURIComponent('Nothing to send.')}`);
+
+    const { data: customer } = await db
+      .from('customers')
+      .select('id, status')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    // STOP is a legal instruction, not a preference. Checked here as well as
+    // hidden in the markup, because a form that is not rendered is not a guard.
+    if (customer && customer.status === 'UNSUBSCRIBED') {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('That number has opted out. We cannot text them.')}`
+      );
+    }
+
+    // Through notify, like every other outbound text: it strips the typographic
+    // characters that would double the segment count and it logs what was
+    // actually sent. Nothing may text somebody without recording it.
+    await notify.sendAndLog(phone, body, customer ? customer.id : null);
+
+    return res.redirect(303, `${back}?note=${encodeURIComponent('Sent.')}`);
+  } catch (err) {
+    return next(err);
   }
 });
 
