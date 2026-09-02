@@ -482,7 +482,147 @@ function table(headings, rows) {
 // rather than a spinner that lies.
 // ---------------------------------------------------------------------------
 
-function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true, labels: [] }, laundromats = [] }) {
+// ---------------------------------------------------------------------------
+// THE PICKUP SEQUENCE: one step, and nothing else on the page.
+//
+// NEIL'S RULE, in his words: "I should not be able to see or do any of these
+// processes without the previous step being completed."
+//
+//   1. Collect the bags       the screen says where and how many
+//   2. Tag each bag           one tag on it, scan the code
+//   3. Weigh each bag         on the scale, photograph the display
+//   4. Clips on, in the van   the numbers, then a confirmation
+//
+// WHY HIDING THE LATER STEPS IS THE WHOLE POINT. The card used to show the
+// Collected button and the weight box together, so a driver could weigh a bag
+// he had not tagged - and a weight with no tag behind it belongs to no
+// particular bag. Offering a control that is not yet valid is an invitation to
+// take the shortcut, and on a doorstep in the rain somebody will.
+//
+// WHAT IS NEXT COMES FROM src/core/run.js, the same function the guided run
+// uses. This renders it; it does not decide it. Two answers to "what now"
+// would drift the first time one of them learned something.
+// ---------------------------------------------------------------------------
+
+function pickupSequence(order, tasks, { notice, problem }) {
+  const step = tasks.find((t) => !t.done) || null;
+  const done = tasks.filter((t) => t.done).length;
+
+  const banner = (text, background) => `
+    <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+              background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+
+  // The form for whichever step this is. Each posts to the SAME route the
+  // buttons always posted to, so nothing here is a second way to change an
+  // order - it is the same doors, opened one at a time.
+  const control = (t) => {
+    if (t.key === 'collected') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/collected" style="margin:0;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">
+          ${order.bag_count ? `Got all ${order.bag_count}` : 'I have the bags'}
+        </button>
+      </form>`;
+    }
+
+    if (t.key === 'bag_count') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/bag-count" style="margin:0;">
+        <input class="input input-lg" type="number" name="bag_count" min="1" max="40"
+               inputmode="numeric" required autofocus placeholder="How many"
+               style="width:100%;margin-bottom:12px;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">That is how many</button>
+      </form>`;
+    }
+
+    if (t.key.startsWith('tag_')) {
+      return scanField({
+        action: `/ops/orders/${order.order_number}/label`,
+        label: `Code on the tag for bag ${t.position}`,
+        buttonLabel: 'Scan it',
+        autofocus: true,
+        hint: describeCodeFormat(),
+      });
+    }
+
+    if (t.key.startsWith('weigh_')) {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/bag-weight"
+            enctype="multipart/form-data" style="margin:0;">
+        <input type="hidden" name="code" value="${escapeHtml((t.label || {}).code || '')}">
+
+        <label class="field-label" for="bw">Pounds</label>
+        <input class="input input-lg" type="number" id="bw" name="weight_lb"
+               step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus
+               style="width:100%;" placeholder="Pounds">
+
+        <label class="field-label" for="bp" style="display:block;margin-top:18px;">
+          Photo of the scale
+        </label>
+        <input class="input input-lg" type="file" id="bp" name="photo"
+               accept="image/*" capture="environment" required style="width:100%;">
+
+        <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:16px;">
+          Save bag ${t.position}
+        </button>
+      </form>`;
+    }
+
+    if (t.key === 'van') {
+      return `
+      <form method="post" action="/ops/orders/${order.order_number}/in-van" style="margin:0;">
+        ${
+          (t.clips || []).length
+            ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
+                 ${t.clips
+                   .map(
+                     (n) => `<span style="min-width:54px;padding:10px 14px;border:2px solid var(--ink-900);
+                                          border-radius:12px;background:var(--sunbeam-500);text-align:center;
+                                          font-family:var(--font-mono);font-weight:700;font-size:22px;">${n}</span>`
+                   )
+                   .join('')}
+               </div>`
+            : ''
+        }
+        <button type="submit" class="btn btn-primary btn-lg btn-full">They are in the van</button>
+      </form>`;
+    }
+
+    return '';
+  };
+
+  return `
+  <div class="card card-xl" style="padding:28px;margin-bottom:28px;">
+    ${sectionHeading('Next', 'What happens now')}
+
+    ${problem ? banner(problem, 'var(--stain-500)') : ''}
+    ${notice ? banner(notice, 'var(--suds-300)') : ''}
+
+    ${
+      step
+        ? `
+      <p class="eyebrow" style="margin:0 0 6px;">Step ${done + 1} of ${tasks.length}</p>
+      <h3 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 8px;">
+        ${escapeHtml(step.title)}
+      </h3>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
+        ${escapeHtml(step.detail)}
+      </p>
+
+      ${control(step)}
+
+      <div style="height:12px;border:2px solid var(--ink-900);border-radius:999px;overflow:hidden;
+                  background:var(--paper-000);margin:24px 0 0;">
+        <div style="height:100%;width:${Math.round((done / tasks.length) * 100)}%;background:var(--suds-500);"></div>
+      </div>`
+        : `<p style="font-size:16px;color:var(--ink-500);margin:0;">
+             Everything is done at this door. The next thing is the laundromat.
+           </p>`
+    }
+  </div>`;
+}
+
+function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanned: 0, allScanned: true, labels: [] }, laundromats = [], mayOverride = false, refused = false }) {
   const weighed = order.weight_lb != null;
 
   // Weighing is an event rather than a step, so it is offered the whole time
@@ -497,7 +637,23 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
   // The rule is enforced in src/core/fulfilment.js as well; this just stops
   // the driver tapping something that cannot work.
   const mustWeighFirst = !weighed && order.status === 'IN_PROCESS';
-  const steps = mustWeighFirst ? [] : fulfilment.nextSteps(order);
+
+  // NOTHING GOES OUT UNTIL WE KNOW WHAT CAME BACK.
+  //
+  // Same shape as the rule above, at the other end of the day. An order that
+  // went to a laundromat cannot go out for delivery until somebody has recorded
+  // how many bags came off their shelf and what they weigh - fulfilment.js
+  // refuses it outright, so offering the button would only be a refusal in a
+  // second's time. A real order once went out, and its customer was told, while
+  // nobody had recorded what came back.
+  //
+  // This form used to live on the bags card below. It moved here because that
+  // card is the RECORD and this is where the work happens; two places to do one
+  // job is how they drift.
+  const mustRecordReturn =
+    order.status === 'READY' && order.partner_id && order.return_bag_count == null;
+
+  const steps = mustWeighFirst || mustRecordReturn ? [] : fulfilment.nextSteps(order);
 
   if (!canAct) return '';
 
@@ -628,7 +784,54 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
     }
 
     ${
-      canWeigh
+      mustRecordReturn
+        ? `
+      <p style="margin:0 0 18px;padding:14px 18px;border:2px solid var(--ink-900);border-radius:12px;
+                background:var(--sunbeam-500);font-size:16px;line-height:1.45;">
+        <strong>Weigh what came back before anything moves.</strong> It gets
+        checked against the ${escapeHtml(String(order.weight_lb || '?'))} lb we
+        collected, and only then do the clips go on. The customer is told
+        nothing until this is in.
+      </p>
+
+      <form method="post" action="/ops/orders/${order.order_number}/return"
+            style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1 1 150px;min-width:0;">
+          <label class="field-label" for="rc">Bags off their shelf</label>
+          <input class="field" id="rc" name="bag_count" type="number" min="1" max="40"
+                 inputmode="numeric" required autofocus>
+        </div>
+        <div style="flex:1 1 150px;min-width:0;">
+          <label class="field-label" for="rw">What they weigh</label>
+          <input class="field" id="rw" name="weight_lb" type="number" step="0.1" min="0" max="400"
+                 inputmode="decimal" required>
+        </div>
+        <button class="btn btn-primary btn-lg" type="submit">Save</button>
+
+        ${
+          // THE ESCAPE HATCH, only after the check has actually refused and
+          // only for somebody holding orders.override. Offering "take it
+          // anyway" beside a form nobody has submitted yet makes it the normal
+          // way through.
+          refused && mayOverride
+            ? `<div style="flex:1 1 100%;padding-top:16px;margin-top:4px;
+                           border-top:2px dashed var(--stain-500);">
+                 <label class="field-label" for="ovr">Take it anyway - why?</label>
+                 <p class="field-hint" style="margin:0 0 10px;">
+                   Only if you are sure. It goes on the order with your name on
+                   it and still opens an issue for the morning.
+                 </p>
+                 <input class="field" id="ovr" name="override_reason" type="text" maxlength="300"
+                        placeholder="counted them twice with the owner, all four are here">
+               </div>`
+            : ''
+        }
+      </form>`
+        : ''
+    }
+
+    ${
+      canWeigh && !mustRecordReturn
         ? `
       <form method="post" action="/ops/orders/${order.order_number}/weight"
             enctype="multipart/form-data"
@@ -1012,6 +1215,10 @@ const ORDER_FIELDS =
   // section from undefined and quietly shows nothing, which is exactly what
   // it did the first time somebody recorded what came back.
   'return_bag_count, return_weight_lb, partner_id, tag_code, ' +
+  // The pickup sequence reads its last step off these. collected_at is
+  // step 1 and van_confirmed_at is step 4; without them the card cannot
+  // tell a door that is finished from one that has not started.
+  'collected_at, van_confirmed_at, ' +
   'delivery_photo_url, notes, created_at, from_schedule, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
@@ -1682,61 +1889,17 @@ function bagsCard(order, labels, canAct, { mayOverride = false, refused = false 
     }
 
     ${
-      canAct && !done
-        ? `<div style="margin:20px 0 0;">
-             ${scanField({
-               action: `/ops/orders/${order.order_number}/label`,
-               label: 'Add a bag',
-               buttonLabel: 'Add',
-               hint: describeCodeFormat(),
-             })}
-
-             <!-- The return leg, recorded at the counter while the scale is
-                  still out rather than at a doorstep in the dark. -->
-             <form method="post" action="/ops/orders/${order.order_number}/return"
-                   style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:22px;
-                          padding-top:22px;border-top:2px solid var(--ink-100);">
-               <div style="flex:1 1 150px;min-width:0;">
-                 <label class="field-label" for="rc">Bags back from the laundromat</label>
-                 <input class="field" id="rc" name="bag_count" type="number" min="1" max="40"
-                        inputmode="numeric" value="${order.return_bag_count == null ? '' : order.return_bag_count}">
-               </div>
-               <div style="flex:1 1 150px;min-width:0;">
-                 <label class="field-label" for="rw">What they weigh</label>
-                 <input class="field" id="rw" name="weight_lb" type="number" step="0.1" min="0" max="400"
-                        inputmode="decimal" value="${order.return_weight_lb == null ? '' : order.return_weight_lb}">
-               </div>
-               <button class="btn btn-ink" type="submit">Save</button>
-
-               ${
-                 // THE ESCAPE HATCH. Only after the check has actually refused,
-                 // and only for somebody holding orders.override - a driver at
-                 // a counter is the person in a hurry, and the whole value of
-                 // the check is that somebody else agreed it was fine.
-                 //
-                 // Full width under the two number fields, because a reason is
-                 // a sentence and a sentence does not belong in a 150px box.
-                 refused && mayOverride
-                   ? `<div style="flex:1 1 100%;padding-top:16px;margin-top:4px;
-                                  border-top:2px dashed var(--stain-500);">
-                        <label class="field-label" for="ovr">
-                          Take it anyway - why?
-                        </label>
-                        <p class="field-hint" style="margin:0 0 10px;">
-                          Only if you are sure. It goes on the order with your
-                          name on it and still opens an issue for the morning,
-                          because going ahead tonight is not the same as the
-                          load being right.
-                        </p>
-                        <input class="field" id="ovr" name="override_reason" type="text"
-                               maxlength="300"
-                               placeholder="counted them twice with the owner, all four are here">
-                      </div>`
-                   : ''
-               }
-             </form>
-           </div>`
-        : ''
+      // NO CONTROLS HERE. THIS CARD IS THE RECORD, NOT A PLACE TO ACT.
+      //
+      // It used to carry a scan box and the return-leg form, which made it a
+      // second front door onto the same two jobs the sequence above already
+      // walks you through - and the whole point of the sequence is that you
+      // cannot skip ahead. A control here is exactly the shortcut it exists to
+      // close.
+      //
+      // Tagging a bag happens in the pickup sequence at the customer's door.
+      // Recording what came back happens at the laundromat, where the scale is.
+      ''
     }
   </div>`;
 }
@@ -1832,6 +1995,23 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     // Only fetched when the bag could actually be dropped somewhere, so every
     // other order page does not pay for a query it will not use.
     const laundromats = order.status === 'IN_PROCESS' ? await partners.activeLaundromats() : [];
+    // THE PICKUP SEQUENCE, or null once the bags are loaded.
+    //
+    // Only while the order is still at the customer's door: from booked until
+    // the driver confirms the bags are in the van. After that the page goes
+    // back to the ordinary card, because the rest of the day - laundromat,
+    // ready, delivery - is not a sequence at one address.
+    //
+    // The steps come from src/core/run.js, the same function the guided run
+    // uses, so there is one answer to "what now" rather than two.
+    const inPickupPhase =
+      ['REQUESTED', 'IN_PROCESS'].includes(order.status) && !order.van_confirmed_at;
+
+    const pickupTasks =
+      inPickupPhase && roles.can(req.opsUser, 'orders.act')
+        ? await runCore.tasksForCollect(order)
+        : null;
+
     const bagScan = {
       total: doorScan.total,
       scanned: doorScan.scanned,
@@ -1875,10 +2055,21 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         }
       </div>
 
-      ${workCard(order, {
+      ${pickupTasks
+        ? pickupSequence(order, pickupTasks, {
+            notice: req.query.note
+              ? String(req.query.note).slice(0, 200)
+              : req.query.done
+                ? DONE_MESSAGES[String(req.query.done)] || null
+                : null,
+            problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+          })
+        : workCard(order, {
         canAct: roles.can(req.opsUser, 'orders.act'),
         bagScan,
         laundromats,
+        mayOverride: roles.can(req.opsUser, 'orders.override'),
+        refused: /did not|short|heavier|lighter/i.test(String(req.query.problem || '')),
         // ?note= carries a sentence the action wrote itself, for steps where a
         // fixed banner cannot say enough. Sliced and escaped like any other
         // thing a person put in a URL.
@@ -1888,7 +2079,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             ? DONE_MESSAGES[String(req.query.done)] || null
             : null,
         problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
-      })}
+          })}
 
       ${bagsCard(order, labels, roles.can(req.opsUser, 'orders.act'), {
         mayOverride: roles.can(req.opsUser, 'orders.override'),
@@ -2594,6 +2785,46 @@ function orderAction(action, run, middleware = null) {
 orderAction('collected', (order, req) =>
   fulfilment.collect(order, { bagCount: (req.body || {}).bag_count, by: { opsUser: req.opsUser } })
 );
+// THE LAST STEP OF THE PICKUP, and the only one that is not a status change.
+//
+// The bags are already ours - collected did that - and they already have clips,
+// handed out when each went on the scale. What this records is the driver
+// saying they are physically in the van, which nothing else can tell us.
+//
+// It refuses until every bag is tagged and weighed. The screen does not offer
+// it before then either, but a form that is not rendered is not a guard.
+orderAction('in-van', async (order, req) => {
+  const labels = await bags.forOrder(order.id, 'PICKUP');
+  const expected = Number(order.bag_count || 0);
+
+  const weighed = labels.filter((l) => l.weight_lb != null).length;
+
+  if (!expected || weighed < expected) {
+    return {
+      ok: false,
+      detail: `${weighed} of ${expected || '?'} bags are weighed. Finish those before loading.`,
+    };
+  }
+
+  if (order.van_confirmed_at) return { ok: true };
+
+  const { error } = await db
+    .from('orders')
+    .update({ van_confirmed_at: new Date().toISOString() })
+    .eq('id', order.id);
+
+  if (error) throw error;
+
+  await orderEvents.record(order.id, {
+    kind: 'STATUS',
+    summary: `${expected} bag${expected === 1 ? '' : 's'} loaded into the van` +
+      (bags.clipsFor(labels).length ? ` on clip${bags.clipsFor(labels).length === 1 ? '' : 's'} ${bags.clipsFor(labels).join(', ')}` : ''),
+    by: { opsUser: req.opsUser },
+  });
+
+  return { ok: true };
+});
+
 orderAction('at-partner', (order, req) =>
   fulfilment.dropAtPartner(order, {
     partnerId: (req.body || {}).partner_id || null,

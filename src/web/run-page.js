@@ -189,28 +189,29 @@ function taskControl(stop, task, order) {
     </form>`;
   }
 
-  // ONE BAG: a sticker, then the scale and a photo of it. Two forms, one after
-  // the other, because the sticker has to exist before there is anything to
-  // hang a weight on.
-  if (task.key.startsWith('bag_')) {
-    if (task.needsLabel) {
-      return `
+  // ONE BAG, TWO STEPS: the tag, then the scale and a photo of it. Separate
+  // tasks rather than one, because the tag has to exist before there is
+  // anything to hang a weight on - and because a driver who has stuck one on
+  // deserves to see that step tick over rather than the same unfinished line.
+  if (task.key.startsWith('tag_')) {
+    return `
       ${scanField({
         action: `/ops/orders/${order.order_number}/label${back}`,
-        label: `Code off the sticker for bag ${task.position}`,
+        label: `Code off the tag for bag ${task.position}`,
         buttonLabel: `That's bag ${task.position}`,
         autofocus: true,
         hint: describeCodeFormat(),
       })}`;
-    }
+  }
 
+  if (task.key.startsWith('weigh_')) {
     return `
     <form method="post" action="/ops/orders/${order.order_number}/bag-weight${back}"
           enctype="multipart/form-data" style="margin:0;">
       <input type="hidden" name="code" value="${escapeHtml(task.label.code)}">
 
       <p style="margin:0 0 14px;font-size:15px;">
-        Sticker <code style="font-weight:700;">${escapeHtml(task.label.code)}</code> is on it.
+        Tag <code style="font-weight:700;">${escapeHtml((task.label || {}).code || '')}</code> is on it.
         A numbered clip goes on once you have weighed it - the screen will tell
         you which one.
       </p>
@@ -232,12 +233,45 @@ function taskControl(stop, task, order) {
     </form>`;
   }
 
+  // STEP ONE NOW, not the last thing. He is handed the bags and then deals with
+  // them, which is the real order of events at a door - and marking it
+  // collected is what texts the customer to say we have been, so making that
+  // wait until the last bag is on the scale would delay their message for
+  // nothing.
   if (task.key === 'collected') {
     return `
     <form method="post" action="/ops/orders/${order.order_number}/collected${back}" style="margin:0;">
-      <button type="submit" class="btn btn-primary btn-lg btn-full">In the van</button>
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        ${order.bag_count ? `Got all ${order.bag_count}` : 'I have the bags'}
+      </button>
       <span class="field-hint" style="display:block;margin-top:10px;">
-        All of them weighed and stickered. Tap this once they are actually loaded.
+        Take them from the customer, then tap this. It texts them to say we have been.
+      </span>
+    </form>`;
+  }
+
+  // THE LAST STEP, and it is not the same as the last bag being weighed. The
+  // clips were handed out at the scale; what nothing else can tell us is
+  // whether the bags actually made it into the van.
+  if (task.key === 'van') {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/in-van${back}" style="margin:0;">
+      ${
+        (task.clips || []).length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
+               ${task.clips
+                 .map(
+                   (n) => `<span style="min-width:54px;padding:10px 14px;border:2px solid var(--ink-900);
+                                        border-radius:12px;background:var(--sunbeam-500);text-align:center;
+                                        font-family:var(--font-mono);font-weight:700;font-size:22px;">${n}</span>`
+                 )
+                 .join('')}
+             </div>`
+          : ''
+      }
+      <button type="submit" class="btn btn-primary btn-lg btn-full">They are in the van</button>
+      <span class="field-hint" style="display:block;margin-top:10px;">
+        Put those clips on, load them, then tap this.
       </span>
     </form>`;
   }

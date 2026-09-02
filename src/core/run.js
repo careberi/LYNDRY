@@ -52,48 +52,105 @@ async function tasksForCollect(order) {
   const known = order.bag_count != null;
   const bagCount = Number(order.bag_count || 0);
 
+  // NEIL'S SEQUENCE, AND THE ORDER OF IT IS THE POINT.
+  //
+  //   1. take the bags       2. tag each one      3. weigh each one      4. load
+  //
+  // Collecting comes FIRST, before anything is tagged or weighed. That is the
+  // real order of events at a door: he is handed the bags and then deals with
+  // them. Marking it collected is also what tells the customer we have been,
+  // and making that wait until the last bag is on the scale would delay their
+  // text for no reason.
+  //
+  // The screen shows exactly one of these at a time and refuses to show the
+  // next until the one before it is done, which is what stops the doorstep
+  // shortcut: a driver who can see the weight box before he has tagged the bag
+  // will use it, and then nobody knows which bag weighed what.
   const tasks = [
+    {
+      key: 'collected',
+      title: order.collected_at
+        ? 'Collected'
+        : known
+          ? `Collect ${bagCount} bag${bagCount === 1 ? '' : 's'}`
+          : 'Collect the bags',
+      detail: 'Take them from the customer, then tap this. It texts them to say we have been.',
+      done: Boolean(order.collected_at),
+    },
     {
       key: 'bag_count',
       title: known
         ? `${bagCount} bag${bagCount === 1 ? '' : 's'}`
-        : 'How many bags are you picking up?',
+        : 'How many bags have you got?',
       detail: 'Count them before you start, so the screen knows how many to walk you through.',
       done: known,
     },
   ];
 
-  // One block of three steps per bag: sticker, scale, photo. The photo is part
-  // of weighing rather than a step of its own - it is one form, and splitting
-  // them would let a weight be recorded with no evidence behind it.
+  // TWO STEPS PER BAG, NOT ONE. Tag it, then weigh it.
+  //
+  // They used to be a single task that was only done once the bag was both
+  // labelled and weighed, which reads fine on a list and badly on a doorstep:
+  // it gave no separate instruction for the tag, and a driver who had stuck one
+  // on saw the same unfinished line as one who had not.
+  //
+  // The photo stays part of weighing rather than a step of its own, because it
+  // is one form - splitting them would let a weight be recorded with nothing
+  // behind it.
   for (let position = 1; position <= bagCount; position += 1) {
     const label = labels.find((l) => l.position === position) || null;
 
     tasks.push({
-      key: `bag_${position}`,
+      key: `tag_${position}`,
       position,
       label,
       title: label
-        ? label.weight_lb != null
-          ? `Bag ${position} - ${label.weight_lb} lb on clip ${label.clip_number}`
-          : `Weigh bag ${position}, photograph the scale`
-        : `Put a sticker on bag ${position}`,
-      detail: label
-        ? 'On the scale, then a photo of the display with the bag on it.'
-        : 'Peel one off the roll, stick it on this bag, type the six characters.',
-      // Done only when it is both labelled AND weighed. A stickered bag nobody
-      // put on the scale is not finished with.
-      done: Boolean(label && label.weight_lb != null),
+        ? `Bag ${position} tagged - ${label.code}`
+        : `Put a bag tag on bag ${position}`,
+      detail:
+        'One tag off the stack, on the bag, then type the six characters under the QR. Leave all four stickers on it.',
+      done: Boolean(label),
       needsLabel: !label,
+    });
+
+    tasks.push({
+      key: `weigh_${position}`,
+      position,
+      label,
+      title:
+        label && label.weight_lb != null
+          ? `Bag ${position} - ${label.weight_lb} lb`
+          : `Weigh bag ${position}`,
+      detail: 'On the scale, then a photo of the display with the bag on it.',
+      done: Boolean(label && label.weight_lb != null),
+      // Cannot weigh a bag that has nothing on it: the weight is recorded
+      // against the tag, so there is nowhere to put the number.
+      blockedBy: label ? null : 'tag',
     });
   }
 
+  // THE LAST STEP, AND IT IS NOT THE SAME AS THE LAST BAG BEING WEIGHED.
+  //
+  // Clips are handed out when a bag goes on the scale, so by here the system
+  // already knows the numbers - what it does not know is whether the bags are
+  // actually in the van. That gap is exactly where one gets left on a porch,
+  // which is the whole reason this step exists rather than being assumed.
+  const clips = bags.clipsFor(labels);
+  const everyBagDone = bagCount > 0 && tasks.slice(2).every((t) => t.done);
+
   tasks.push({
-    key: 'collected',
-    title: order.collected_at ? 'In the van' : 'Put them in the van',
-    detail: 'Tap this once all of them are actually in the van.',
-    done: Boolean(order.collected_at),
-    blockedBy: tasks.slice(1).every((t) => t.done) ? null : 'bags',
+    key: 'van',
+    title: order.van_confirmed_at
+      ? 'In the van'
+      : clips.length
+        ? `Clips ${clips.join(', ')} on, then load them`
+        : 'Put them in the van',
+    detail: clips.length
+      ? 'Put those numbered clips on the bags, load them, then tap this.'
+      : 'Tap this once all of them are actually in the van.',
+    done: Boolean(order.van_confirmed_at),
+    clips,
+    blockedBy: everyBagDone ? null : 'bags',
   });
 
   return tasks;
