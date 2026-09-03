@@ -30,6 +30,22 @@ const { site } = require('../web/site');
 // PDF works in points. 72 of them to an inch, always.
 const PT = 72;
 
+// THE PRINTER'S DOTS PER INCH, AND WHY THIS FILE KNOWS IT.
+//
+// A thermal head prints dots, not curves. If a QR module works out at 3.9 dots
+// across, every module lands on a different fraction of a dot and the head
+// rounds each one differently - so edges wander by a dot, black modules bleed
+// into white ones, and the whole code goes mushy. Neil saw it and said so:
+// "the quality deteriorates... is there any way the QR could be bigger or not
+// as fine."
+//
+// The fix is to make a module a WHOLE number of dots. Then every edge falls on
+// a dot boundary and the head has nothing to round.
+//
+// 203 is the CT221D and is what nearly every 2-inch thermal label printer runs
+// at. Overridable, because a 300 dpi one would want a different whole number.
+const DEFAULT_DPI = 203;
+
 // The label on the roll. Overridable, because the next roll may not be this
 // size and a wrong guess wastes a whole one.
 const DEFAULT_LABEL = Object.freeze({ widthIn: 2, heightIn: 1 });
@@ -55,7 +71,7 @@ function n(v) {
 // camera that will not focus in a badly lit basement is the normal case, not
 // the edge one.
 // ---------------------------------------------------------------------------
-function labelStream({ code, seq, matrix, size }, label) {
+function labelStream({ code, seq, matrix, size }, label, dpi) {
   // THE PAGE SIZE THAT WAS ASKED FOR, not the default. Laying the content out
   // for 2 x 1 and then declaring a 4 x 6 page would put a correct-looking label
   // in the corner of a mostly empty one, and a thermal printer would feed six
@@ -63,19 +79,27 @@ function labelStream({ code, seq, matrix, size }, label) {
   const W = label.widthIn * PT;
   const H = label.heightIn * PT;
 
-  const pad = 5;
-  const qrBox = H - pad * 2;
-  const qrX = pad;
-  const qrY = pad;
+  const pad = 3;
 
-  // The module grid, drawn as squares. QR needs a quiet zone, and the
-  // conventional four modules is a lot on a label this small - the border of
-  // the label itself is white and does the same job, so two is enough and buys
-  // roughly 15% more module size, which is what decides whether a phone locks
-  // on.
+  // QR needs a quiet zone. The conventional four modules is a lot on a label
+  // this small - the label's own white border does the same job - so two is
+  // enough and buys roughly 15% more module size, which is what decides
+  // whether a phone locks on.
   const quiet = 2;
   const cells = size + quiet * 2;
-  const cell = qrBox / cells;
+
+  // A MODULE IS A WHOLE NUMBER OF PRINTER DOTS, and this is the line that
+  // fixed the mush. The biggest whole dot count that still fits the label.
+  const dotPt = PT / dpi;
+  const dotsPerCell = Math.max(1, Math.floor((H - pad * 2) / cells / dotPt));
+  const cell = dotsPerCell * dotPt;
+  const qrBox = cell * cells;
+
+  // Centred vertically in whatever is left, and snapped to the dot grid too -
+  // starting half a dot in would put every module back across a boundary and
+  // undo the whole exercise.
+  const qrX = Math.round(pad / dotPt) * dotPt;
+  const qrY = Math.round((H - qrBox) / 2 / dotPt) * dotPt;
 
   const parts = [];
   parts.push('0 0 0 rg');
@@ -88,9 +112,11 @@ function labelStream({ code, seq, matrix, size }, label) {
       // is flipped. Getting this wrong produces a QR that looks right and
       // scans as a different code.
       const y = qrY + qrBox - (row + quiet + 1) * cell;
-      // A hair over one cell, so neighbouring modules meet rather than leaving
-      // white hairlines a thermal head will widen into gaps.
-      parts.push(`${n(x)} ${n(y)} ${n(cell + 0.35)} ${n(cell + 0.35)} re`);
+      // Exactly one cell. The old version drew a third of a point oversize to
+      // stop hairlines between modules - which was papering over the real
+      // problem, and on a dot grid it would push every module a fraction into
+      // its neighbour, which is the same mush by a different route.
+      parts.push(`${n(x)} ${n(y)} ${n(cell)} ${n(cell)} re`);
     }
   }
   parts.push('f');
@@ -132,7 +158,7 @@ function labelStream({ code, seq, matrix, size }, label) {
 // have to be exact, and counting characters is not the same as counting bytes
 // the moment anything is not ASCII.
 // ---------------------------------------------------------------------------
-function buildPdf(pages, label) {
+function buildPdf(pages, label, dpi = DEFAULT_DPI) {
   const W = label.widthIn * PT;
   const H = label.heightIn * PT;
 
@@ -153,7 +179,7 @@ function buildPdf(pages, label) {
   const pageIds = [];
 
   for (const page of pages) {
-    const stream = labelStream(page, label);
+    const stream = labelStream(page, label, dpi);
     const streamId = add(
       `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`
     );
@@ -216,7 +242,17 @@ async function pagesForCode(code, { stickers = bags.STICKERS_PER_TAG, includeTag
 
   const pages = [];
   for (const seq of wanted) {
-    const qr = QRCode.create(bags.labelUrl(code, seq), { errorCorrectionLevel: 'H' });
+    // Q, NOT H, AND IT IS THE OTHER HALF OF THE FIX.
+    //
+    // H fits our URL into 41x41 modules; Q does it in 33x33. On a one-inch
+    // label that is 4 dots a module against 5 - a 25% bigger module, which is
+    // the difference between a head that can resolve it and one that cannot.
+    //
+    // Q still tolerates about 25% of the code being damaged against H's 30%,
+    // which is a small price. A code with more redundancy that the printer
+    // cannot render finely enough is not more robust, it is just unreadable
+    // with a bigger margin for error nobody can use.
+    const qr = QRCode.create(bags.labelUrl(code, seq), { errorCorrectionLevel: 'Q' });
     pages.push({
       code,
       seq,
@@ -242,7 +278,8 @@ async function forCodes(codes, options = {}) {
     pages = pages.concat(await pagesForCode(code, options));
   }
 
-  return { pdf: buildPdf(pages, label), pages: pages.length, label };
+  const dpi = Number(options.dpi) > 0 ? Number(options.dpi) : DEFAULT_DPI;
+  return { pdf: buildPdf(pages, label, dpi), pages: pages.length, label, dpi };
 }
 
-module.exports = { forCodes, pagesForCode, buildPdf, DEFAULT_LABEL, PT };
+module.exports = { forCodes, pagesForCode, buildPdf, DEFAULT_LABEL, DEFAULT_DPI, PT };
