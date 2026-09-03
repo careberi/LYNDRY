@@ -445,9 +445,6 @@ const ES = Object.freeze({
   'Delivered': 'Entregada',
 
   // Weighing
-  'Weigh it to see the wash instructions': 'Pese la bolsa para ver las instrucciones',
-  'Weigh the bag and enter the weight to see the wash instructions.':
-    'Pese la bolsa y escriba el peso para ver las instrucciones de lavado.',
   'Pounds': 'Libras',
   'Save': 'Guardar',
   'That did not look like a weight. Pounds, as a number.':
@@ -457,31 +454,38 @@ const ES = Object.freeze({
   'How to wash it': 'Como lavarla',
   'How everything is sorted': 'Como se separa la ropa',
   'Time to turn it around': 'Tiempo para terminarla',
+  // The weight cards, which are the first thing an attendant does.
+  'What does this bag weigh?': 'Cuanto pesa esta bolsa?',
+  'On the scale, then type what it says.': 'En la bascula, y escriba lo que marque.',
+  'Weigh it': 'Pesela',
+  'The wash instructions appear once the weight is in.':
+    'Las instrucciones de lavado aparecen al ingresar el peso.',
+
+  // The card somebody sees when a label is not on a bag. It has its own toggle
+  // now, so every line of it has to exist in both languages.
+  'Nothing here': 'Nada aqui',
+  'Bag label': 'Etiqueta de bolsa',
+  "This label isn't in use yet.": 'Esta etiqueta aun no esta en uso.',
+  'If this label is on a bag, call us at': 'Si esta etiqueta esta en una bolsa, llamenos al',
+
   'Not picked up yet': 'Aun no recogida',
   'When a bag is finished': 'Cuando termine una bolsa',
   'Waiting for collection': 'Esperando recogida',
-  'Marked finished and our driver has been told.':
-    'Marcado como terminado y nuestro conductor ya lo sabe.',
+  'Our driver has been told.': 'Nuestro conductor ya lo sabe.',
   'Bags to hand over': 'Bolsas para entregar',
-  'Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.':
-    'Ponga una pegatina en cada bolsa que empaque. Toque su numero una vez para indicar que la esta usando, y otra vez cuando esa bolsa este terminada.',
-  'Tapped one by mistake? Keep tapping it and it goes back to not used.':
-    'Toco uno por error? Sigalo tocando y vuelve a sin usar.',
+  'One sticker per bag you pack. Tap it once when you use it, again when that bag is done.':
+    'Una pegatina por bolsa. Toquela al usarla, y otra vez cuando esa bolsa este lista.',
+  'Tapped one by mistake? Keep tapping to reset it.': 'Toco uno por error? Sigalo tocando.',
   'This order is done': 'Este pedido esta terminado',
   'Not yet - another bag from this order is still open.':
     'Todavia no - otra bolsa de este pedido sigue abierta.',
   'Still waiting on': 'Falta',
-  'Tap a sticker number first, so we know which bags are packed.':
-    'Toque primero el numero de una pegatina, para saber que bolsas estan empacadas.',
-  'Only when every bag for this order is packed and finished. We will come and collect it.':
-    'Solo cuando todas las bolsas de este pedido esten empacadas y terminadas. Pasaremos a recogerlo.',
+  'Tap a sticker number first.': 'Toque primero el numero de una pegatina.',
+  'Only when every bag is packed and done. We will come and collect it.':
+    'Solo cuando todas esten empacadas y listas. Pasaremos a recogerlo.',
   'Not used': 'Sin usar',
   'In use': 'En uso',
   'Done': 'Terminada',
-  'Put one sticker off this tag on each finished bag, then tap its number here. However many bags this became - one, or four.':
-    'Ponga una pegatina de esta etiqueta en cada bolsa terminada y toque su numero aqui. Sean las bolsas que sean, una o cuatro.',
-  'Tap a number once its sticker is on a finished bag. Tapping the same one twice changes nothing.':
-    'Toque un numero cuando su pegatina ya este en una bolsa terminada. Tocar el mismo dos veces no cambia nada.',
 
   // Wash fields, so the instructions themselves are readable
   'Detergent': 'Detergente',
@@ -538,6 +542,30 @@ function translator(lang) {
 }
 
 // The toggle. Keeps the signature on the URL - without ?t= the page refuses.
+// THE TOGGLE FOR A PAGE THAT HAS NO BAG. The "not in use" card is reached with
+// a code that is unbound, released or simply wrong, so there is no order to
+// build a link around - but somebody is still standing there reading it, and
+// they may not read English.
+//
+// It re-links to whatever URL they are already on with ?lang= swapped, so it
+// works for every route in this file without knowing what any of them look
+// like.
+function langToggleHere(req, lang) {
+  const base = String(req.originalUrl || req.url || '/').split('#')[0];
+  const link = (want) => {
+    const [path, query = ''] = base.split('?');
+    const params = new URLSearchParams(query);
+    params.set('lang', want);
+    return `${path}?${params.toString()}`;
+  };
+
+  return `
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px;">
+      <a class="btn btn-sm ${lang === 'en' ? '' : 'btn-outline'}" href="${escapeHtml(link('en'))}">English</a>
+      <a class="btn btn-sm ${lang === 'es' ? '' : 'btn-outline'}" href="${escapeHtml(link('es'))}">Espanol</a>
+    </div>`;
+}
+
 function langToggle(code, token, seq, lang) {
   const base = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(token || ''))}${
     seq ? `&s=${seq}` : ''
@@ -644,7 +672,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
       body: header + weightBox({
         code, token, error: bad, t: say,
         heading: 'What does this bag weigh?',
-        blurb: 'Put it on the scale and type what it says. This is the number that prices the order.',
+        blurb: 'On the scale, then type what it says.',
         action: `/o/${encodeURIComponent(code)}/weight`,
       }) + footer,
     });
@@ -656,12 +684,12 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
       title: `Bag ${code}`,
       body: header + weightBox({
         code, token, error: bad, t: say,
-        heading: 'Weigh it to see the wash instructions',
+        heading: 'Weigh it',
         // AN INSTRUCTION, NOT AN EXPLANATION. This said whose scale to use and
         // why we check it, which is our reasoning rather than their next move.
         // The person reading it is standing at a counter with a bag; they need
         // to know what to do, and the rest is ours to worry about.
-        blurb: 'Weigh the bag and enter the weight to see the wash instructions.',
+        blurb: 'The wash instructions appear once the weight is in.',
         action: `/o/${encodeURIComponent(code)}/weight`,
       }) + footer,
     });
@@ -726,14 +754,14 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
           : query.ready === 'none'
             ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);
                          border-radius:12px;background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
-                 ${escapeHtml(say('Tap a sticker number first, so we know which bags are packed.'))}
+                 ${escapeHtml(say('Tap a sticker number first.'))}
                </p>`
             : ''
       }
 
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
       <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
-        ${escapeHtml(say('Put one sticker on each bag you pack. Tap its number once to say you are using it, and again when that bag is finished.'))}
+        ${escapeHtml(say('One sticker per bag you pack. Tap it once when you use it, again when that bag is done.'))}
       </p>
 
       <!-- A TWO BY TWO GRID, not a wrapping row. Flex-wrap sized each button by
@@ -783,13 +811,13 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
                  ${escapeHtml(say('This order is done'))}
                </button>
                <p class="field-hint" style="margin-top:12px;">
-                 ${escapeHtml(say('Only when every bag for this order is packed and finished. We will come and collect it.'))}
+                 ${escapeHtml(say('Only when every bag is packed and done. We will come and collect it.'))}
                </p>
              </form>`
           : ''
       }
       <p class="field-hint" style="margin-top:14px;">
-        ${escapeHtml(say('Tapped one by mistake? Keep tapping it and it goes back to not used.'))}
+        ${escapeHtml(say('Tapped one by mistake? Keep tapping to reset it.'))}
       </p>
     </div>` + footer,
     });
@@ -805,7 +833,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
         ${escapeHtml(say('Waiting for collection'))}
       </div>
       <p style="font-size:16px;line-height:1.6;margin:0;">
-        ${escapeHtml(say('Marked finished and our driver has been told.'))}
+        ${escapeHtml(say('Our driver has been told.'))}
       </p>
 
       ${
@@ -886,17 +914,26 @@ function page({ title, body }) {
 // A scanned sticker that is blank, a sticker from a finished order, and a code
 // somebody invented all say the same thing. Telling them apart would turn this
 // page into a way of finding out which codes are real.
-function nothingHere() {
+// `req` is optional so the fifteen existing callers keep working; with it, the
+// page speaks Spanish too, which is the whole point of it being a page a
+// laundromat attendant reads.
+function nothingHere(req = null) {
+  const lang = req ? langOf(req) : 'en';
+  const say = translator(lang);
+
   return page({
-    title: 'Nothing here',
+    title: say('Nothing here'),
     body: `
+    ${req ? langToggleHere(req, lang) : ''}
     <div class="card" style="padding:28px;">
-      <p class="eyebrow" style="margin:0 0 8px;">Bag label</p>
-      <h1 style="font-size:30px;line-height:1.1;margin:0 0 14px;">This label isn't in use.</h1>
+      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('Bag label'))}</p>
+      <h1 style="font-size:30px;line-height:1.1;margin:0 0 14px;">${escapeHtml(
+        say("This label isn't in use yet.")
+      )}</h1>
       <p style="margin:0;color:var(--ink-700);line-height:1.6;">
-        It hasn't been put on a bag yet, or the order it was on is finished.
-        Either way there's nothing to show. If you're holding a bag that needs
-        collecting, call us on ${escapeHtml(site.opsPhoneDisplay)}.
+        ${escapeHtml(say('If this label is on a bag, call us at'))} ${escapeHtml(
+          site.opsPhoneDisplay
+        )}.
       </p>
     </div>`,
   });
@@ -913,7 +950,7 @@ router.get('/o/:code', async (req, res, next) => {
     // first time and refused every genuine scan.
     if (throttle.hit(`labelscan:${ip}`, SCAN_LIMIT, SCAN_WINDOW_MS)) {
       await bags.recordScan({ code: raw, outcome: 'THROTTLED', ip, userAgent });
-      return res.status(429).type('html').send(nothingHere());
+      return res.status(429).type('html').send(nothingHere(req));
     }
 
     const code = bags.normaliseCode(raw);
@@ -922,7 +959,7 @@ router.get('/o/:code', async (req, res, next) => {
     // and nothing else.
     if (!code || !bags.verifyCode(code, req.query.t)) {
       await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     // AN ORDER TAG FIRST, A BAG STICKER SECOND.
@@ -942,7 +979,7 @@ router.get('/o/:code', async (req, res, next) => {
 
     if (!label) {
       await bags.recordScan({ code, outcome: 'UNKNOWN', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     // released_at is what retires a sticker. order_id stays set after delivery
@@ -950,7 +987,7 @@ router.get('/o/:code', async (req, res, next) => {
     // no longer enough on its own to tell a live label from a finished one.
     if (!label.order_id || label.released_at) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     // Only the columns this page is allowed to show. Selecting the whole row
@@ -968,7 +1005,7 @@ router.get('/o/:code', async (req, res, next) => {
 
     if (!order) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
 
@@ -979,7 +1016,7 @@ router.get('/o/:code', async (req, res, next) => {
     // a page about it, and this is the half that cannot silently not happen.
     if (['DELIVERED', 'CANCELED'].includes(order.status)) {
       await bags.recordScan({ code, orderId: order.id, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
       await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
@@ -1041,13 +1078,13 @@ router.post('/o/:code/weight', async (req, res, next) => {
   try {
     if (throttle.hit(`labelweigh:${ip}`, WEIGH_LIMIT, SCAN_WINDOW_MS)) {
       await bags.recordScan({ code: raw, outcome: 'THROTTLED', ip, userAgent });
-      return res.status(429).type('html').send(nothingHere());
+      return res.status(429).type('html').send(nothingHere(req));
     }
 
     const code = bags.normaliseCode(raw);
     if (!code || !bags.verifyCode(code, req.query.t)) {
       await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     // AN ORDER TAG WEIGHS THE WHOLE LOAD IN ONE NUMBER.
@@ -1112,7 +1149,7 @@ router.post('/o/:code/weight', async (req, res, next) => {
     const label = await bags.findByCode(code);
     if (!label || !label.order_id || label.released_at) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     // The customer comes along only so an issue can be raised against them if
@@ -1127,7 +1164,7 @@ router.post('/o/:code/weight', async (req, res, next) => {
 
     if (!order || ['DELIVERED', 'CANCELED'].includes(order.status)) {
       await bags.recordScan({ code, orderId: order && order.id, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     const back = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
@@ -1273,13 +1310,13 @@ router.post('/o/:code/ready', async (req, res, next) => {
   try {
     if (throttle.hit(`labelready:${ip}`, WEIGH_LIMIT, SCAN_WINDOW_MS)) {
       await bags.recordScan({ code: raw, outcome: 'THROTTLED', ip, userAgent });
-      return res.status(429).type('html').send(nothingHere());
+      return res.status(429).type('html').send(nothingHere(req));
     }
 
     const code = bags.normaliseCode(raw);
     if (!code || !bags.verifyCode(code, req.query.t)) {
       await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     // An order tag marks the whole order ready, which is the only thing "ready"
@@ -1293,7 +1330,7 @@ router.post('/o/:code/ready', async (req, res, next) => {
       const label = await bags.findByCode(code);
       if (!label || !label.order_id || label.released_at) {
         await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
-        return res.status(404).type('html').send(nothingHere());
+        return res.status(404).type('html').send(nothingHere(req));
       }
 
       ({ data: order, error } = await db
@@ -1307,7 +1344,7 @@ router.post('/o/:code/ready', async (req, res, next) => {
 
     if (!order || ['DELIVERED', 'CANCELED'].includes(order.status)) {
       await bags.recordScan({ code, orderId: order && order.id, outcome: 'UNBOUND', ip, userAgent });
-      return res.status(404).type('html').send(nothingHere());
+      return res.status(404).type('html').send(nothingHere(req));
     }
 
     const back = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
