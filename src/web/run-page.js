@@ -64,7 +64,7 @@ const HEADLINE = {
 // are the customer's name, their thread and the money, none of which a driver
 // is shown. Sales never has orders.drive, so on this screen that is Admin and
 // nobody else.
-function taskLine(text, stop, user, lead = '') {
+function taskLine(text, stop, user, lead = '', tail = '') {
   const quiet = 'font-weight:400;color:var(--ink-500);';
   const order = stop.order || null;
 
@@ -85,9 +85,15 @@ function taskLine(text, stop, user, lead = '') {
   // "Pick up order #1940" already has the word in it; "Collect the bags" does
   // not, and "Collect the bags #1940" reads like a typo. So the caller says how
   // its own sentence joins up.
+  //
+  // AND SOME SENTENCES CARRY ON PAST THE NUMBER. "Put a bag tag on bag 1 for
+  // order #1940 & scan the QR code on the bag tag" - Neil's wording, and the
+  // order reference sits in the middle of it, so a tail is the only way to get
+  // it there without the number landing at the end of a clause it does not
+  // belong to.
   return `${escapeHtml(text)} <span style="${quiet}">${
     lead ? `${escapeHtml(lead)} ` : ''
-  }${inner}</span>`;
+  }${inner}</span>${tail ? ` ${escapeHtml(tail)}` : ''}`;
 }
 
 // "TASK: Pick up order #1940" - the label, a colon, then the value beside it.
@@ -241,7 +247,13 @@ function taskCard(run, user = null) {
   const header = `
     ${stopLine(
       'Task',
-      taskLine(task ? task.title : 'All done here', stop, user, 'for order'),
+      taskLine(
+        task ? task.title : 'All done here',
+        stop,
+        user,
+        'for order',
+        (task && task.titleTail) || ''
+      ),
       'stop-line-plain'
     )}
     ${where}
@@ -326,7 +338,6 @@ function taskControl(stop, task, order) {
         label: `Code off the tag for bag ${task.position}`,
         buttonLabel: `That's bag ${task.position}`,
         autofocus: true,
-        hint: describeCodeFormat(),
       })}`;
   }
 

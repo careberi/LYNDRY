@@ -119,7 +119,14 @@ async function tasksForCollect(order) {
       title: label
         ? `Bag ${position} tagged - ${label.code}`
         : `Put a bag tag on bag ${position}`,
-      detail: 'Type the six characters under the QR. Leave the stickers on it.',
+      // The rest of Neil's sentence, which sits after the order number. Only
+      // while there is nothing on the bag yet - once it is tagged the step is
+      // done and reads as a record of it, not an instruction.
+      titleTail: label ? null : '& scan the QR code on the bag tag',
+      // No supporting line, and no note about the code format under the box.
+      // Both deleted off the screen by Neil: the task already says to tag the
+      // bag and scan it, and the field is labelled.
+      detail: null,
       done: Boolean(label),
       needsLabel: !label,
     });

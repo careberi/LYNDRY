@@ -70,7 +70,12 @@ function scanField({ action, name = 'code', label, hint, buttonLabel = 'Add', au
       <button type="button" class="btn btn-outline btn-full scan-close" style="margin-top:10px;">Stop the camera</button>
     </div>
 
-    <p class="scan-note field-hint" style="margin-top:10px;">${hint}</p>
+    <!-- The note is always in the markup even when there is nothing to say,
+         because the script writes camera failures into it. Hidden rather than
+         absent, so querySelector still finds it; say() below unhides it. -->
+    <p class="scan-note field-hint" style="margin-top:10px;${hint ? '' : 'display:none;'}">${
+      hint || ''
+    }</p>
   </form>`;
 }
 
@@ -162,6 +167,11 @@ function scannerScript() {
     var video = form.querySelector('.scan-video');
     var input = form.querySelector('.scan-input');
     var note = form.querySelector('.scan-note');
+    function say(words) {
+      if (!note) return;
+      note.textContent = words;
+      note.style.display = '';
+    }
     if (!open || !video || !input) return;
 
     var stream = null;
@@ -196,7 +206,7 @@ function scannerScript() {
           timer = setTimeout(tick, native ? 220 : 320);
         })
         .catch(function () {
-          note.textContent = 'The scanner could not start, so type the code instead.';
+          say('The scanner could not start, so type the code instead.');
           stop();
         });
     }
@@ -216,7 +226,7 @@ function scannerScript() {
         .catch(function () {
           // Permission refused, or no camera. Say so once and get out of the
           // way - the field above still works.
-          note.textContent = 'No camera available, so type the code instead.';
+          say('No camera available, so type the code instead.');
           open.style.display = 'none';
         });
     });
