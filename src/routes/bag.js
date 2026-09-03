@@ -455,8 +455,11 @@ const ES = Object.freeze({
   'How everything is sorted': 'Como se separa la ropa',
   'Time to turn it around': 'Tiempo para terminarla',
   // The weight cards, which are the first thing an attendant does.
-  'What does this bag weigh?': 'Cuanto pesa esta bolsa?',
-  'On the scale, then type what it says.': 'En la bascula, y escriba lo que marque.',
+  'With our driver.': 'Con nuestro conductor.',
+  'In our van, on its way to be washed.': 'En nuestra camioneta, camino al lavado.',
+  'Back in our van, on its way to the customer.': 'De vuelta en nuestra camioneta, camino al cliente.',
+  'Delivered. This tag is finished with.': 'Entregada. Esta etiqueta ya termino.',
+  'Nothing to do with this one right now.': 'Nada que hacer con esta por ahora.',
   'Weigh it': 'Pesela',
   'The wash instructions appear once the weight is in.':
     'Las instrucciones de lavado aparecen al ingresar el peso.',
@@ -665,19 +668,6 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
       ${escapeHtml(say('Questions about this bag'))}: ${escapeHtml(site.opsPhoneDisplay)}.
     </p>`;
 
-  // --- at the customer's door: our own weight ------------------------------
-  if (stage === tags.STAGES.TO_WEIGH) {
-    return page({
-      title: `Bag ${code}`,
-      body: header + weightBox({
-        code, token, error: bad, t: say,
-        heading: 'What does this bag weigh?',
-        blurb: 'On the scale, then type what it says.',
-        action: `/o/${encodeURIComponent(code)}/weight`,
-      }) + footer,
-    });
-  }
-
   // --- just arrived at the laundromat: their weight unlocks the wash -------
   if (stage === tags.STAGES.TO_WEIGH_AT_PARTNER) {
     return page({
@@ -865,6 +855,16 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
 
   // --- everything else: say plainly where it is ----------------------------
   const said = {
+    // OUR OWN WEIGHT IS NOT ENTERED HERE. Neil's call, and the right one: this
+    // is the only page in the system with no login at all, so a weight box on
+    // it let anybody holding a code set the figure that prices the order. The
+    // driver weighs the bag in /ops/run, signed in, one bag at a time.
+    //
+    // The box was already dead: POST /o/:code/weight has refused anything that
+    // is not AT_PARTNER since it was written, so what was on screen was a form
+    // whose only possible answer was "not yet". The laundromat's own weight box
+    // is untouched - that one is the point of the page.
+    [tags.STAGES.TO_WEIGH]: 'With our driver.',
     [tags.STAGES.IN_VAN]: 'In our van, on its way to be washed.',
     [tags.STAGES.COLLECTED]: 'Back in our van, on its way to the customer.',
     [tags.STAGES.DONE]: 'Delivered. This tag is finished with.',
@@ -874,7 +874,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
     title: `Bag ${code}`,
     body: header + `
     <div class="card" style="padding:28px;">
-      <p style="font-size:16px;line-height:1.6;margin:0;">${escapeHtml(said)}</p>
+      <p style="font-size:16px;line-height:1.6;margin:0;">${escapeHtml(say(said))}</p>
     </div>` + footer,
   });
 }

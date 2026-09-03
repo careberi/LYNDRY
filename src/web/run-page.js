@@ -93,7 +93,7 @@ function taskLine(text, stop, user, lead = '', tail = '') {
   // belong to.
   return `${escapeHtml(text)} <span style="${quiet}">${
     lead ? `${escapeHtml(lead)} ` : ''
-  }${inner}</span>${tail ? ` ${escapeHtml(tail)}` : ''}`;
+  }${inner}</span>${tail ? ` ${tail}` : ''}`;
 }
 
 // "TASK: Pick up order #1940" - the label, a colon, then the value beside it.
@@ -217,6 +217,25 @@ function travelCard(run, user = null) {
   </div>`;
 }
 
+// WHAT THE TASK LINE SAYS AFTER THE ORDER NUMBER, as markup.
+//
+// The weigh step names the tag on the bag about to go on the scale, and the id
+// is a link to that sticker's own page - Neil asked for it by URL. run.js
+// supplies the words for the steps that only need words; a link is markup, so
+// it is assembled here rather than in core.
+function taskTail(task) {
+  if (!task) return '';
+
+  const code = task.key.startsWith('weigh_') && task.label ? task.label.code : null;
+
+  if (code) {
+    return `with Tag ID <a href="/ops/labels/${encodeURIComponent(code)}"
+      style="color:inherit;">${escapeHtml(code)}</a>.`;
+  }
+
+  return escapeHtml(task.titleTail || '');
+}
+
 // The one thing to do, now he is there.
 function taskCard(run, user = null) {
   const stop = run.current;
@@ -247,13 +266,7 @@ function taskCard(run, user = null) {
   const header = `
     ${stopLine(
       'Task',
-      taskLine(
-        task ? task.title : 'All done here',
-        stop,
-        user,
-        'for order',
-        (task && task.titleTail) || ''
-      ),
+      taskLine(task ? task.title : 'All done here', stop, user, 'for order', taskTail(task)),
       'stop-line-plain'
     )}
     ${where}

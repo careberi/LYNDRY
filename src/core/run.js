@@ -139,14 +139,9 @@ async function tasksForCollect(order) {
         label && label.weight_lb != null
           ? `Bag ${position} - ${label.weight_lb} lb`
           : `Weigh Bag ${position}`,
-      // WHICH TAG IS ON THE BAG HE IS ABOUT TO PUT ON THE SCALE. Neil's
-      // wording, and it replaces the separate "Tag 6ZP4DN is on it." line that
-      // used to sit under the heading saying the same thing twice.
-      //
-      // Only before it is weighed. Afterwards the title is the weight itself
-      // and the step is a record rather than an instruction.
-      titleTail:
-        label && label.weight_lb == null ? `with Tag ID ${label.code}.` : null,
+      // The "with Tag ID 6ZP4DN." half of the line is built in run-page.js,
+      // because the id is a link to that sticker's page and a link is markup.
+      // The label is already on this task, which is all it needs.
       // No supporting line - deleted off the screen by Neil. The step is
       // "weigh bag 1"; what the number then does is the system's business.
       detail: null,
