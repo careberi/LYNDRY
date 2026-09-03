@@ -380,7 +380,7 @@ function orderTagPage(order, code, token, query = {}) {
     ${readyCard(order, code, token)}
 
     <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
-      Questions about this order: ${escapeHtml(site.publicPhoneDisplay)}.
+      Questions about this order: ${escapeHtml(site.opsPhoneDisplay)}.
     </p>`,
   });
 }
@@ -634,7 +634,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
 
   const footer = `
     <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin-top:22px;">
-      ${escapeHtml(say('Questions about this bag'))}: ${escapeHtml(site.publicPhoneDisplay)}.
+      ${escapeHtml(say('Questions about this bag'))}: ${escapeHtml(site.opsPhoneDisplay)}.
     </p>`;
 
   // --- at the customer's door: our own weight ------------------------------
@@ -892,7 +892,7 @@ function nothingHere() {
       <p style="margin:0;color:var(--ink-700);line-height:1.6;">
         It hasn't been put on a bag yet, or the order it was on is finished.
         Either way there's nothing to show. If you're holding a bag that needs
-        collecting, call us on ${escapeHtml(site.publicPhoneDisplay)}.
+        collecting, call us on ${escapeHtml(site.opsPhoneDisplay)}.
       </p>
     </div>`,
   });

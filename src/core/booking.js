@@ -145,6 +145,28 @@ function hasAddress(customer) {
   return Boolean(customer.address_line1 && customer.city && customer.postal_code);
 }
 
+// DO WE KNOW WHAT TO CALL THEM.
+//
+// A real customer typed "Erica Perry, 25 Windham place, Glen rock" and her
+// address, town, zip and wash preferences were all saved. Her name was not.
+//
+// The cause was structure, not a typo. The prompt collects the name FIRST and
+// saves everything LAST, in one call after the recap - so the zip, the wash and
+// the spot were all asked moments before the save and survived, while the name
+// had to live in the model's context through the entire conversation. It did
+// not.
+//
+// AND NOTHING NOTICED, which is the real fault. hasAddress() checks the street,
+// the town and the zip; nothing anywhere required a name, so losing one was
+// invisible until somebody read the board and saw "Unnamed customer".
+//
+// So it is required, the same way the zip is. Onboarding asks for a name and an
+// address in one breath - if only half of that comes back, the booking waits.
+// The prompt asks; this refuses.
+function hasName(customer) {
+  return Boolean(String(customer.name || '').trim());
+}
+
 // Have they actually told us how to wash their clothes?
 //
 // There are NO default preferences. Washing somebody's clothes warm when they
@@ -638,6 +660,7 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 //   { ok: true, order }
 //   { ok: false, reason: 'not_taking_orders', detail }   detail is Neil's reason, or null
 //   { ok: false, reason: 'no_address' }
+//   { ok: false, reason: 'no_name' }
 //   { ok: false, reason: 'bad_date', detail }      detail is a full sentence
 //   { ok: false, reason: 'already_booked', order }
 //   { ok: false, reason: 'needs_card' }
@@ -658,6 +681,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   }
 
   if (!hasAddress(customer)) return { ok: false, reason: 'no_address' };
+  if (!hasName(customer)) return { ok: false, reason: 'no_name' };
 
   // Checked at booking rather than only at signup, because an address can be
   // edited later and the van's range is the van's range.
@@ -922,6 +946,7 @@ module.exports = {
   dateProblem,
   timeProblem,
   hasAddress,
+  hasName,
   hasPreferences,
   inServiceArea,
   alwaysAllowed,

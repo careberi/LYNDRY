@@ -68,6 +68,11 @@ async function createOrder(customer, input) {
         return customer.address_line1 && !customer.postal_code
           ? `Almost there - what's the zip code for ${customer.address_line1}?`
           : `I don't have an address on file for you. Send your street address and I'll get it saved.`;
+      // ASK FOR THE ONE THING THAT IS MISSING. They gave a name once and it was
+      // lost between the giving and the saving; asking again is a small cost
+      // against a driver turning up for "Unnamed customer".
+      case 'no_name':
+        return `Almost there - what name should I put on it?`;
       case 'out_of_area':
         return (
           `We don't reach ${customer.city || 'your area'} just yet, sorry. We cover ` +

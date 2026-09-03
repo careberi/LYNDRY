@@ -540,7 +540,8 @@ The moment they want a pickup, the setup is five short beats, IN THIS ORDER, and
   3. The wash, on its own, WORD FOR WORD: "${wash.QUESTION}" Send that sentence as it is written. Both $2 charges are named before they choose, which is the point - a surcharge somebody finds out about on their bill is a complaint. Do NOT put the bag location in the same breath; that is the next beat. There are NO default wash settings. Never tell somebody what they have been "set up with" — they choose, or it does not get washed.
   3b. If their wash answer left one of the three unanswered - "cold is fine" says nothing about softener - ask for THAT ONE and nothing else, and do it BEFORE moving on. Finish the wash, then move. Asking the spot and then coming back to softener makes it feel like the questions never end.
   4. The spot, as its OWN message, once the wash is fully answered: "And where should the driver pick the laundry up and drop it back off?" ASK IT BOTH WAYS ROUND like that — it is one spot that serves both legs, and asking only where to FIND the bag leaves them thinking they will be asked again about the delivery. Asking this alongside the wash makes one message carry four questions, which is the thing that reads like a form.
-  5. The recap, then their yes, then one save_details call carrying everything: name, address, preferences, pickup spot and the date.
+  5. The recap, then their yes, then a save_details call carrying the date and anything not yet saved.
+SAVE THE NAME THE MOMENT THEY GIVE IT. Do not hold it to the end. A real customer answered "Erica Perry, 25 Windham place, Glen rock" and her address, town, zip and wash all saved while her NAME did not - because everything else was asked moments before the save and the name had been sitting in the conversation for six messages. Call save_details as soon as you have a name, even if you have nothing else yet. Saving a name books nothing and costs nothing.
 READ THE THREAD BEFORE YOU ASK. Skip any beat they have already answered, and that includes things they said several messages ago: somebody who opened with "lets do tomorrow around 10" has answered WHEN, and asking them again three messages later tells them nobody was listening. Look back through the conversation for the answer before asking for it. If their first message was "pick up my laundry today", beat 2 is done and you go straight from the address to the wash question. Somebody who has already said where to leave it has answered beat 4.
 Call save_details along the way with whatever they have given so far; its reply tells you what is still missing.
 If their very first message is already a pickup request, say you'd love to and ask for the name and street address. That is ONE question - a name and the address it belongs to are one answer somebody types in one go - and it is the whole message.
@@ -711,10 +712,15 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     // likely to be repeated back at the person it describes. The rule in the
     // prompt is the real defence; this just removes the temptation.
     'NOTES ON WHO YOU ARE TEXTING (background for you, never quote it back)',
-    `Name: ${customer.name || 'not given'}`,
-    // The ZIP is called out separately because it is the one part that decides
+        // The ZIP is called out separately because it is the one part that decides
     // whether we serve them at all, and the one most often left out of "25
     // Windham Place, Glen Rock NJ".
+    // A MISSING NAME IS STATED, NOT LEFT TO BE NOTICED. It is required to book
+    // now, so the model has to know it is absent - the same reasoning as the
+    // zip line below.
+    customer.name && String(customer.name).trim()
+      ? `Name: ${customer.name}`
+      : 'Name: NOT SAVED. They cannot be booked without one - ask what name to put on it, and save it straight away.',
     `Address on file: ${address || 'NONE — they cannot book until this is set'}${
       address && !customer.postal_code
         ? ' — NO ZIP CODE, which means they CANNOT be booked. Ask for the zip and nothing else, before any recap.'

@@ -30,6 +30,28 @@ const BUSINESS_ADDRESS = '8 The Green, Dover, DE 19901';
 // is approved. Blank both of these out to hide the number everywhere on the
 // site — the pages fall back to "sign up and we'll text you" on their own.
 const PUBLIC_PHONE_DISPLAY = '(201) 554-1877';
+
+// WHO A LAUNDROMAT CALLS, WHICH IS NOT WHO A CUSTOMER CALLS.
+//
+// The pages a partner sees - the bag tag page, the "this label isn't in use"
+// page - said the public business number. That is the number customers text,
+// it cannot receive calls until registration lands, and it is not the number
+// somebody standing at a counter with a bag in their hand needs. They need a
+// person.
+//
+// READ FROM THE ENVIRONMENT, NEVER TYPED HERE. It is Neil's own number, and the
+// rule above holds: it lives in .env and does not go in the repo. Unset, these
+// pages fall back to the public number and behave exactly as they did.
+const OPS_PHONE = String(process.env.SUPPORT_PHONE || '').trim();
+
+// +14437452665 -> (443) 745-2665. A number a person reads aloud, not an E.164
+// string. Anything that is not a plain US number is shown as it was given.
+function displayPhone(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  if (ten.length !== 10) return String(raw || '');
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
 const PUBLIC_PHONE_LINK = '+12015541877';
 
 const site = Object.freeze({
@@ -42,6 +64,10 @@ const site = Object.freeze({
   email: 'info@lyndry.com',
 
   publicPhoneDisplay: PUBLIC_PHONE_DISPLAY,
+
+  // The number on partner-facing pages. Falls back to the public one so
+  // nothing shows a blank where a phone number should be.
+  opsPhoneDisplay: OPS_PHONE ? displayPhone(OPS_PHONE) : PUBLIC_PHONE_DISPLAY,
   publicPhoneLink: PUBLIC_PHONE_LINK,
   hasPublicPhone: Boolean(PUBLIC_PHONE_DISPLAY && PUBLIC_PHONE_LINK),
 
