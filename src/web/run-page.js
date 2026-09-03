@@ -97,6 +97,18 @@ function taskLine(text, stop, user) {
   return `${escapeHtml(text)} <span style="${quiet}">${inner}</span>`;
 }
 
+// "TASK: Pick up order #1940" - the label, a colon, then the value beside it.
+// Neil's format to the letter, given three times and finally spelled out. The
+// label does not shrink when the value wraps, so a long address stays lined up
+// under itself rather than under the word WHERE.
+function stopLine(label, value) {
+  return `
+    <p class="stop-line">
+      <span class="eyebrow">${escapeHtml(label)}:</span>
+      <span class="stop-value">${value}</span>
+    </p>`;
+}
+
 function progressBar(done, total) {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return `
@@ -123,22 +135,19 @@ function travelCard(run, user = null) {
 
   return `
   <div style="${CARD}">
-    <p class="eyebrow" style="margin:0 0 4px;">Task</p>
-    <h2 style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.05;
-               margin:0 0 18px;">
-      ${taskLine(HEADLINE[stop.kind] || 'Next stop', stop, user)}
-    </h2>
-
-    <p class="eyebrow" style="margin:0 0 4px;">Where</p>
-    ${
+    ${stopLine('Task', taskLine(HEADLINE[stop.kind] || 'Next stop', stop, user))}
+    ${stopLine(
+      'Where',
       place.length
-        ? `<p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 6px;">
-             ${place.map((line, i) => (i ? `<span style="font-weight:400;color:var(--ink-700);">${escapeHtml(line)}</span>` : escapeHtml(line))).join('<br>')}
-           </p>`
-        : `<p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 6px;">
-             Somewhere with no address
-           </p>`
-    }
+        ? place
+            .map((line, i) =>
+              i
+                ? `<span style="font-weight:400;color:var(--ink-700);">${escapeHtml(line)}</span>`
+                : escapeHtml(line)
+            )
+            .join('<br>')
+        : 'Somewhere with no address'
+    )}
     ${
       stop.eta
         ? // TWELVE HOUR, like every other time on this system. The ETA is stored
@@ -235,31 +244,22 @@ function taskCard(run, user = null) {
   // Only the two door steps carry it. On the tag, weigh, clip and load steps
   // the bag is already in his hands and repeating it would be furniture.
   const where =
-    task && task.spot
-      ? `<p class="eyebrow" style="margin:14px 0 4px;">${escapeHtml(task.spotLabel || 'Where')}</p>
-         <p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 20px;">
-           ${escapeHtml(task.spot)}
-         </p>`
-      : '<div style="height:16px;"></div>';
+    task && task.spot ? stopLine('Where', escapeHtml(task.spot)) : '<div style="height:6px;"></div>';
 
-  // THE EYEBROW NAMES THE THING, NOT THE JOB. It read "PICK UP ORDER - #1940"
-  // above a heading that said "Collect the bags", which is the same instruction
-  // twice in two different vocabularies. The heading is the job; this is only
-  // which order it belongs to.
+  // THE SAME TWO LABELLED LINES AS THE CARD BEFORE IT. He taps "I'm here" and
+  // this replaces the travel card, so TASK and WHERE stay in the same places
+  // and only their values change.
   const header = `
-    <p class="eyebrow" style="margin:0 0 4px;">Task</p>
+    ${stopLine('Task', taskLine(task ? task.title : 'All done here', stop, user))}
+    ${where}
     ${
       clips.length
-        ? `<p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
+        ? `<p style="margin:0 0 14px;font-size:16px;line-height:1.5;">
              clip${clips.length === 1 ? '' : 's'}
              <strong style="font-family:var(--font-mono);">${clips.join(', ')}</strong>
            </p>`
         : ''
-    }
-    <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 6px;">
-      ${taskLine(task ? task.title : 'All done here', stop, user)}
-    </h2>
-    ${where}`;
+    }`;
 
   // What is already ticked off at this stop, so he can see he has not skipped
   // anything - short enough not to be a list to read, long enough to reassure.

@@ -166,6 +166,18 @@
   margin: 0 0 18px;
 }
 .eyebrow-brand { color: var(--suds-700); }
+
+/* A labelled line on the driver's stop card - "TASK: Pick up order #1940".
+   Neil's format, to the colon. The label is the eyebrow inline rather than
+   sitting above the value, so the whole thing reads as one sentence; it does
+   not shrink when the value wraps, so a long address stays lined up under
+   itself rather than under the label. */
+.stop-line { display: flex; gap: 8px; align-items: baseline; margin: 0 0 12px; }
+.stop-line > .eyebrow { flex: none; margin: 0; }
+.stop-line > .stop-value { font-size: 20px; font-weight: 700; line-height: 1.35; }
+@media (max-width: 380px) {
+  .stop-line > .stop-value { font-size: 18px; }
+}
 .eyebrow-lilac { color: var(--lilac-600); }
 .eyebrow-paper { color: var(--ink-400); }
 
