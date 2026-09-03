@@ -12,11 +12,11 @@ const { site } = require('../web/site');
 // PDF page. So this is one label per page, at the exact page size of the label,
 // and the printer does no scaling.
 //
-// A ROLL CHANGES THE TAG. The sheet version is a hang tag with four peelable
+// A ROLL CHANGES THE TAG. The sheet version is a hang tag with peelable
 // stickers and dashed lines to cut down. On a roll every label is ALREADY
 // separate and already self-adhesive, so the cutting was solving a problem the
 // paper does not have. One bag's tag is five labels off the roll: the tag
-// itself, then -1 to -4.
+// itself, then one per sticker.
 //
 // WRITTEN BY HAND RATHER THAN WITH A PDF LIBRARY, and that is a deliberate
 // trade. Everything on a label is a filled rectangle or a line of text in a
@@ -115,7 +115,7 @@ function labelStream({ code, seq, matrix, size }, label) {
   // WHICH OF THE FIVE THIS IS, in words rather than a number on its own.
   // "1 of 4" on a label a driver is holding is meaningless without knowing 1 of
   // 4 WHAT, and the answer is different for the tag and the stickers.
-  const role = seq ? `STICKER ${seq} OF 4` : 'BAG TAG';
+  const role = seq ? `STICKER ${seq} OF ${bags.STICKERS_PER_TAG}` : 'BAG TAG';
   parts.push('BT');
   parts.push(`/F2 6 Tf ${n(textX)} ${n(pad + 4)} Td (${pdfText(role)}) Tj`);
   parts.push('ET');
@@ -205,11 +205,11 @@ function buildPdf(pages, label) {
   return Buffer.concat(chunks);
 }
 
-// One bag tag becomes five labels: the tag, then the four stickers. Every one
+// One bag tag becomes a tag label plus one per sticker. Every one
 // carries the same id and its own QR, exactly as the sheet does - so a bag
 // labelled from a roll and a bag labelled from a sheet are the same bag to
 // everything downstream.
-async function pagesForCode(code, { stickers = 4, includeTag = true } = {}) {
+async function pagesForCode(code, { stickers = bags.STICKERS_PER_TAG, includeTag = true } = {}) {
   const wanted = [];
   if (includeTag) wanted.push(null);
   for (let i = 1; i <= stickers; i += 1) wanted.push(i);

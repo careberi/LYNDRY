@@ -395,7 +395,7 @@ function orderTagPage(order, code, token, query = {}) {
 //   just arrived       the bag id, and a box for THEIRS - the instructions are
 //                      behind it, which is what makes the weight get entered
 //   being washed       the wash instructions, the sorting standard, the clock,
-//                      and the four stickers to mark bags ready with
+//                      and the stickers to mark bags ready with
 //   ready              a holding screen until the driver scans it into the van
 //   in the van / done  a plain statement of where it is
 //
@@ -608,7 +608,11 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
   // with. Everything else about the page is unchanged: findByCode() has always
   // resolved the intake bag whichever of the five QRs was scanned, which is why
   // the wrong-looking title was the only symptom.
-  const asked = query.s && /^[1-4]$/.test(String(query.s)) ? Number(query.s) : null;
+  const askedRaw = Number(query.s);
+  const asked =
+    Number.isInteger(askedRaw) && askedRaw >= 1 && askedRaw <= bags.STICKERS_PER_TAG
+      ? askedRaw
+      : null;
   //
   // stickersOn() always returns four entries, one per position, with `row` null
   // for a sticker nobody has used. So the test is whether that sticker is
@@ -1324,7 +1328,7 @@ router.post('/o/:code/ready', async (req, res, next) => {
     const seq = Number(body.seq);
     const parent = await bags.findByCode(code);
 
-    if (parent && Number.isInteger(seq) && seq >= 1 && seq <= 4) {
+    if (parent && Number.isInteger(seq) && seq >= 1 && seq <= bags.STICKERS_PER_TAG) {
       const moved = await tags.cycleSticker(parent, seq);
       if (!moved.ok) return res.redirect(303, back + '&ready=bad');
 

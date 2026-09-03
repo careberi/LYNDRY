@@ -100,7 +100,17 @@ function verifyCode(code, signature) {
 
 // The full URL that goes in the QR on the sticker.
 //
-// `seq` is which of the four peelable stickers on the tag this one is. It is
+// HOW MANY PEELABLE STICKERS ARE ON A TAG. Neil's number, and it changed from
+// four to three - so it is a constant rather than a 4 typed into six files.
+//
+// THE DATABASE STILL ALLOWS 1-4, deliberately. A tag printed under the old
+// design has a -4 on it and one is on a delivered order; tightening the CHECK
+// would either fail the migration or force renumbering a historical row, and a
+// record you have edited to fit today's rules is not a record. The column is a
+// sanity bound; THIS is the business rule.
+const STICKERS_PER_TAG = 3;
+
+// `seq` is which of the peelable stickers on the tag this one is. It is
 // NOT part of the signature and does not need to be: the signature proves you
 // are holding a tag we printed, and the sequence only chooses which sticker on
 // that same tag the page is talking about. Somebody who can change the 1 to a
@@ -600,6 +610,7 @@ function clipsFor(labels) {
 }
 
 module.exports = {
+  STICKERS_PER_TAG,
   clipsInUse,
   confirmClip,
   loadBag,

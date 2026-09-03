@@ -15,7 +15,7 @@ const { site } = require('./site');
 //
 // THE SEQUENCE IS WHY THERE ARE FOUR RATHER THAN ONE REPEATED FOUR TIMES.
 // All four say 7MQ5Y2, which is what a person says out loud, and each also
-// says -1 through -4, which is what makes them individually addressable. Four
+// says its own number, which is what makes them individually addressable. Four
 // identical stickers cannot tell a repeat scan from a second bag.
 //
 // --- The paper ------------------------------------------------------------
@@ -68,10 +68,10 @@ const SHEET = Object.freeze({
   holeFromTop: '0.26in',
 });
 
-// How many peelable stickers are on one tag. Four is the number the database
-// enforces too - bag_labels.sticker_seq is checked between 1 and 4 - so this
-// is not a display choice that can drift on its own.
-const STICKERS = [1, 2, 3, 4];
+// How many peelable stickers are on one tag. Read from bags rather than typed
+// here, so the sheet, the roll PDF and the page a laundromat sees cannot
+// disagree about how many a tag carries.
+const STICKERS = Array.from({ length: bags.STICKERS_PER_TAG }, (_, i) => i + 1);
 
 // One QR. Drawn as SVG so it stays sharp at any printer resolution - a raster
 // QR at this size is exactly the thing that will not scan.

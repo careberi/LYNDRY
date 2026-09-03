@@ -108,7 +108,7 @@ async function tasksForCollect(order) {
         ? `Bag ${position} tagged - ${label.code}`
         : `Put a bag tag on bag ${position}`,
       detail:
-        'One tag off the stack, on the bag, then type the six characters under the QR. Leave all four stickers on it.',
+        'One tag off the stack, on the bag, then type the six characters under the QR. Leave the stickers on it.',
       done: Boolean(label),
       needsLabel: !label,
     });

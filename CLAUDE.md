@@ -754,13 +754,24 @@ opens), EXPIRED (order delivered, link dead). `/ops/labels` counts, colours and
 filters by it, and warns when blank stock drops below ten, because a driver with
 no sticker cannot label a bag and an unlabelled bag cannot be scanned at a door.
 
-**ONE BAG TAG PER BAG, CARRYING FOUR NUMBERED PEELABLE STICKERS.** All five
-rows share the code — `7MQ5Y2` for the tag itself and `7MQ5Y2-1` through `-4`
-for the stickers. The id is what a person says out loud and is the same on all
-of them; `bag_labels.sticker_seq` is what makes them individually addressable,
-so a sticker tapped twice is not mistaken for a second bag.
+**ONE BAG TAG PER BAG, CARRYING NUMBERED PEELABLE STICKERS.** Every row shares
+the code — `7MQ5Y2` for the tag itself and `7MQ5Y2-1` upwards for the stickers.
+The id is what a person says out loud and is the same on all of them;
+`bag_labels.sticker_seq` is what makes them individually addressable, so a
+sticker tapped twice is not mistaken for a second bag.
 
-**The four stickers are the whole answer to the return leg.** One bag we
+**HOW MANY IS `bags.STICKERS_PER_TAG`, AND IT IS THREE.** It was four. Neil
+changed it, and the number is a constant rather than a `4` typed into six files
+precisely because it can change again — the sheet, the roll PDF, the QR page's
+sticker grid and the laundromat page all read it.
+
+**The database still allows 1-4 and that is deliberate.** A tag printed under
+the old design carries a `-4`, and one of them is on a delivered order.
+Tightening the CHECK would mean either a failed migration or renumbering a
+historical row, and a record edited to fit today's rules is not a record. The
+column is a sanity bound; the constant is the business rule.
+
+**The stickers are the whole answer to the return leg.** One bag we
 collect becomes however many bags the laundromat packs, and each of those gets
 one sticker off the tag it came out of — `bag_labels.parent_id` is the thread
 back. So a bag THEY packed carries our id without anybody binding a fresh code

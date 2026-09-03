@@ -2164,7 +2164,7 @@ function historyCard(events) {
 // TWO KINDS OF ROW, AND THEY DO NOT LOOK THE SAME.
 //
 // A bag we collected wears its own bag tag - 7MQ5Y2, the whole tag, and the
-// four stickers are still on it. A bag the laundromat packed wears ONE of
+// its stickers are still on it. A bag the laundromat packed wears ONE of
 // those stickers, and reads 7MQ5Y2-2. Same id, because it is the same order
 // and the order did not change when they repacked it; different number,
 // because that is what makes one finished bag tellable from another.
@@ -2310,7 +2310,7 @@ function bagsCard(order, labels, canAct, { mayOverride = false, refused = false 
 
     ${leg(
       'Collected from the customer',
-      'Picked up off the doorstep and weighed bag by bag. This is what priced the order. Every bag wears its own tag, and the four stickers on that tag are still on it.',
+      'Picked up off the doorstep and weighed bag by bag. This is what priced the order. Every bag wears its own tag, and the stickers on that tag are still on it.',
       inCount,
       inWeight,
       incoming.length
@@ -4647,7 +4647,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
           scans to see how the wash is meant to be done.
         </p>
         <p style="font-size:16px;line-height:1.65;color:var(--ink-700);">
-          Each tag carries <strong>four numbered stickers</strong>. They come
+          Each tag carries <strong>${bags.STICKERS_PER_TAG} numbered stickers</strong>. They come
           off it one at a time and go on whatever bags the laundromat packs the
           clean laundry into, so one bag in can be four bags out and still be
           one order. The stickers are not counted here - this is printed stock.

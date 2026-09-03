@@ -212,9 +212,9 @@ const STAGE_LABEL = Object.freeze({
 
 // --- Sub bags: one bag in, several out --------------------------------------
 
-// Mark one of the four stickers as a finished bag.
+// Mark one of the stickers as a finished bag.
 //
-// THE SEQUENCE IS WHY THIS WORKS. All four stickers print the same bag tag id,
+// THE SEQUENCE IS WHY THIS WORKS. Every sticker prints the same bag tag id,
 // so without it "sub bag 2 is ready" could only be inferred from the order the
 // scans happened to arrive in - and a sticker scanned twice would be
 // indistinguishable from a second bag. With the sequence in the URL, each
@@ -230,12 +230,14 @@ function stickerState(row) {
   return row.finished_at ? STICKER.DONE : STICKER.IN_USE;
 }
 
-// What each of the four stickers on a tag is doing right now.
+// What each of the stickers on a tag is doing right now.
 async function stickersOn(parent) {
   const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
   const mine = siblings.filter((b) => b.parent_id === parent.id);
 
-  return [1, 2, 3, 4].map((seq) => {
+  // One entry per sticker the tag actually carries. Reads the constant so a
+  // tag printed with three does not show a fourth slot nobody can peel.
+  return Array.from({ length: bags.STICKERS_PER_TAG }, (_, i) => i + 1).map((seq) => {
     const row = mine.find((b) => b.sticker_seq === seq) || null;
     return { seq, row, state: stickerState(row) };
   });
@@ -280,7 +282,7 @@ async function unfinishedBags(orderId) {
 async function cycleSticker(parent, seq) {
   const n = Number(seq);
   if (!Number.isInteger(n) || n < 1 || n > 4) {
-    return { ok: false, detail: 'That is not one of the four stickers on the tag.' };
+    return { ok: false, detail: `That is not one of the ${bags.STICKERS_PER_TAG} stickers on the tag.` };
   }
 
   const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
@@ -350,7 +352,7 @@ async function toggleCollected(labelId) {
 async function markSubBagReady(parent, seq, { weightLb = null } = {}) {
   const n = Number(seq);
   if (!Number.isInteger(n) || n < 1 || n > 4) {
-    return { ok: false, detail: 'That is not one of the four stickers on the tag.' };
+    return { ok: false, detail: `That is not one of the ${bags.STICKERS_PER_TAG} stickers on the tag.` };
   }
 
   const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
