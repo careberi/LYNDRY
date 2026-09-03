@@ -129,15 +129,21 @@ function travelCard(run, user = null) {
     ${stopLine('Where', place ? escapeHtml(place) : 'Somewhere with no address', 'stop-line-plain')}
     ${
       stop.eta
-        ? // TWELVE HOUR, like every other time on this system. The ETA is stored
-          // as 24-hour "18:10" and was printed raw, so the one screen a driver
-          // reads at a doorstep was the only one saying 18:10 while the window
-          // above it said 4-6pm. booking.readableTime is what the customer's
-          // confirmation uses, so there is one way a time is written.
-          `<p style="font-size:14px;color:var(--ink-500);margin:0 0 22px;">Due about ${escapeHtml(
-            booking.readableTime(stop.eta) || stop.eta
-          )}</p>`
-        : '<div style="height:18px;"></div>'
+        ? // THE THIRD LABELLED LINE, same as the two above it - Neil's format
+          // carried through rather than a sentence sitting under them.
+          //
+          // TWELVE HOUR, like every other time on this system. The ETA is
+          // stored as 24-hour "18:10" and was printed raw, so the one screen a
+          // driver reads at a doorstep was the only one saying 18:10 while the
+          // window above it said 4-6pm. booking.readableTime is what the
+          // customer's confirmation uses, so there is one way a time is
+          // written.
+          stopLine(
+            'Due',
+            escapeHtml(booking.readableTime(stop.eta) || stop.eta),
+            'stop-line-plain'
+          )
+        : ''
     }
 
     ${
