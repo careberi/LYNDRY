@@ -490,7 +490,7 @@ function addressOf(who) {
 // read "stop 1 of 4" all morning and never moved, and the page could not tell
 // that the visit he just finished was at the same address as the next one.
 //
-// Only today's, and only this driver's. Yesterday's round is not part of this
+// Only today's, and only this driver's. Yesterday's route is not part of this
 // morning's progress bar.
 async function doneToday(driverId, dateIso) {
   const from = `${dateIso}T00:00:00`;
@@ -537,17 +537,17 @@ async function forDriver(driverId, roundStart = null) {
   // answer of "none", and drew a drop-off stop for "a laundromat" with no
   // address and an "I'm here" button for a place it could not name.
   // ROUNDSTART IS THE CARD HE TAPPED. Null means "wherever I am", and board()
-  // then picks the earliest round that has started and still has work in it -
-  // which is what a driver means by "the round I am on", clock or no clock.
+  // then picks the earliest route that has started and still has work in it -
+  // which is what a driver means by "the route I am on", clock or no clock.
   const board = await dispatch.board(now.date, roundStart, driverId);
 
-  // WHICH ROUND HE IS IN, AND WHICH ONES HE HAS BEEN THROUGH.
+  // WHICH ROUTE HE IS IN, AND WHICH ONES HE HAS BEEN THROUGH.
   //
   // Worked out by board() alongside the filtering, so the cards and the stops
-  // below them can never describe two different rounds. Recomputing them here
+  // below them can never describe two different routes. Recomputing them here
   // was the first version and is exactly the drift this codebase keeps warning
   // about.
-  const rounds = board.rounds || [];
+  const routes = board.routes || [];
 
   const describe = (stop) => ({
     ...stop,
@@ -583,9 +583,9 @@ async function forDriver(driverId, roundStart = null) {
   // WHICH BAGS AM I HANDING OVER. The laundromat stop knows which orders are
   // going there; the driver needs the numbers clipped to them, because that is
   // what he and the counter assistant can actually say out loud.
-  // ONE QUERY FOR EVERY LABEL ON THE ROUND, rather than one per order inside
-  // two nested loops. That was seven bag_labels round trips on a three-stop
-  // round, and each one is a network hop - most of the delay between tapping a
+  // ONE QUERY FOR EVERY LABEL ON THE ROUTE, rather than one per order inside
+  // two nested loops. That was seven bag_labels route trips on a three-stop
+  // route, and each one is a network hop - most of the delay between tapping a
   // bag at a counter and watching it turn green.
   const everyOrderId = stops.flatMap((st) =>
     (st.orders || (st.order ? [st.order] : [])).map((o) => o.id)
@@ -661,7 +661,7 @@ async function forDriver(driverId, roundStart = null) {
     date: board.date,
     driver: board.driver,
     base: board.base,
-    rounds,
+    routes,
     stops,
     current,
     arrivalOrder,

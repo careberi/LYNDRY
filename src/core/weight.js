@@ -25,7 +25,7 @@
 const PLACES = 2;
 const FACTOR = 10 ** PLACES;
 
-// Round a weight UP to two decimals. Null and anything unparseable come back as
+// Route a weight UP to two decimals. Null and anything unparseable come back as
 // null rather than 0 - an unweighed bag has no weight, and a zero would put a
 // real-looking number into a total somebody is about to invoice against.
 function lb(value) {
@@ -47,7 +47,7 @@ function lb(value) {
   return nudged / FACTOR;
 }
 
-// Add up a list of weights and round once, at the end. Rounding each item and
+// Add up a list of weights and route once, at the end. Rounding each item and
 // then summing compounds the correction - four bags rounded up individually can
 // add a whole two hundredths that nobody weighed.
 function sum(values) {

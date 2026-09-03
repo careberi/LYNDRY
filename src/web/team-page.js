@@ -170,14 +170,14 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
       </div>
 
       <div class="field" style="margin-top:20px;">
-        <label class="field-label">On the round</label>
+        <label class="field-label">On the route</label>
         ${
           person.role === 'ADMIN'
             ? `<label style="display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.5;cursor:pointer;">
                  <input type="checkbox" name="drives" value="yes" ${person.drives ? 'checked' : ''}
                         style="width:22px;height:22px;margin-top:2px;flex:none;">
                  <span>
-                   <strong>Put them on the round.</strong>
+                   <strong>Put them on the route.</strong>
                    Orders get assigned to them, they get a home base and their own
                    day to drive. Off, they can still fix any order - they just are
                    not one of the people it goes to.
@@ -187,7 +187,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
               ? `<p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
                    <span class="badge" style="background:var(--suds-300);">Always</span>
                    &nbsp; A driver drives - that is the role. Change the role above if
-                   they should not be on the round.
+                   they should not be on the route.
                  </p>`
               : `<p style="font-size:15px;line-height:1.55;color:var(--ink-500);margin:0;">
                    Sales never drives.
@@ -196,7 +196,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
       </div>
 
       ${
-        // Only for somebody on the round: it feeds the margin on their day, and
+        // Only for somebody on the route: it feeds the margin on their day, and
         // a wage on a person who never drives changes nothing.
         drives
           ? `
@@ -208,7 +208,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
           type: 'number',
           attrs: 'step="0.25" min="1" max="200" placeholder="20.00"',
           hint:
-            'Feeds the margin on their round, which charges every paid minute - driving ' +
+            'Feeds the margin on their route, which charges every paid minute - driving ' +
             'and standing at a door. Left blank they cost whatever the system default is.',
         })}
       </div>`
@@ -238,7 +238,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
     </div>
 
     ${
-      // The rota, for anybody on the round. Somebody who never drives has no
+      // The rota, for anybody on the route. Somebody who never drives has no
       // work to be given, so a rota would change nothing.
       drives
         ? `
@@ -250,7 +250,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
     }
 
     ${
-      // Only somebody on the round has anywhere to start from. Sales has no
+      // Only somebody on the route has anywhere to start from. Sales has no
       // route; an admin who has not switched driving on has no route either,
       // and the field would change nothing.
       drives

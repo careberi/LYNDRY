@@ -259,7 +259,7 @@ function chooseLaundromat(
 
   const considered = candidates
     .map((p) => {
-      // Out to them and back onto the round. Measuring only the trip out would
+      // Out to them and back onto the route. Measuring only the trip out would
       // favour a partner in a dead end, because the miles home are real.
       const out = p.at ? milesBetween(from, p.at) : Infinity;
       const back = p.at ? milesBetween(p.at, onward || from) : Infinity;
@@ -394,7 +394,7 @@ function withEtas(stops, startMinutes, base, home = base) {
 
 // Sequence one leg, keeping anything already numbered in the van in its
 // existing order and solving the rest around it.
-// `end` is where the leg has to finish - the laundromat for the pickup round,
+// `end` is where the leg has to finish - the laundromat for the pickup route,
 // the depot for the way home. It is not decoration: a leg sequenced without it
 // is optimised as though the van stops at the last door, which sent a driver
 // from the base to Glen Rock, back east to Paramus and then west to Paterson.
@@ -489,7 +489,7 @@ async function currentPosition(driverId, dateIso) {
 //
 // Neil's call. The laundromat used to be worked out live, over and over, and
 // only written down once the bags had actually been handed over - so a driver
-// looking at tomorrow's round saw a stop called "a laundromat" with no address
+// looking at tomorrow's route saw a stop called "a laundromat" with no address
 // on it, and an "I'm here" button for a place the screen could not name.
 //
 // IT IS A PLAN, NOT A LOCK. It is chosen against the pickup day and the start
@@ -625,7 +625,7 @@ async function board(dateIso, fromTime, driverId = null) {
   // laundromat. Neil read it as exactly that.
   //
   // So a time outside the day's pickup windows falls forward to the first one.
-  // A round is not planned at midnight; the earliest anybody could actually
+  // A route is not planned at midnight; the earliest anybody could actually
   // set off is when the first window opens, and that is the honest default.
   const dayStart = booking.PICKUP_WINDOWS[0].start;
   const dayEnd = booking.PICKUP_WINDOWS[booking.PICKUP_WINDOWS.length - 1].end;
@@ -688,13 +688,13 @@ async function board(dateIso, fromTime, driverId = null) {
   const { data: inHand, error: handError } = await handQuery;
   if (handError) throw handError;
 
-  // A ROUND SHOWS ITS OWN STOPS AND NOBODY ELSE'S.
+  // A ROUTE SHOWS ITS OWN STOPS AND NOBODY ELSE'S.
   //
   // The query above asks for the whole DAY, which is right - the board has to
   // know what else is booked. It was then all handed to the router, so two
-  // customers promised 2 to 4pm appeared on the 12 to 2pm round with arrival
+  // customers promised 2 to 4pm appeared on the 12 to 2pm route with arrival
   // times of 12:27 and 12:39. Neil spotted it: those are not stops on this
-  // round, and a driver reading that sheet turns up two hours before he said
+  // route, and a driver reading that sheet turns up two hours before he said
   // he would.
   //
   // The window a customer was promised is on the ORDER - stored when they
@@ -703,13 +703,13 @@ async function board(dateIso, fromTime, driverId = null) {
   // Stored as "14:00:00", written in the config as "14:00".
   const sameWindow = (a, b) => String(a || '').slice(0, 5) === String(b || '').slice(0, 5);
 
-  // Every round of the day, with what is still outstanding in it. Empty rounds
+  // Every route of the day, with what is still outstanding in it. Empty routes
   // are kept: a slot with no pickups in it is a fact about the day, and hiding
   // it makes the day look shorter than it is.
   // A COLLECTED BAG THAT HAS NOT BEEN WEIGHED IS STILL A STOP AT THAT DOOR,
-  // and it belongs to the round its customer was promised. Counting only
-  // un-collected orders said "1 pickup" on a round with two doors still to
-  // deal with - and worse, would have called the round COMPLETE the moment the
+  // and it belongs to the route its customer was promised. Counting only
+  // un-collected orders said "1 pickup" on a route with two doors still to
+  // deal with - and worse, would have called the route COMPLETE the moment the
   // last bag went in the van, moving the driver on and leaving an unweighed
   // bag behind him. CLAUDE.md says this in as many words: leaving IN_PROCESS
   // orders out of the collect leg made the stop vanish the instant he tapped
@@ -718,7 +718,7 @@ async function board(dateIso, fromTime, driverId = null) {
     (o) => o.status === 'IN_PROCESS' && !o.van_confirmed_at
   );
 
-  const rounds = booking.PICKUP_WINDOWS.map((w) => {
+  const routes = booking.PICKUP_WINDOWS.map((w) => {
     const waiting = (allPickups || []).filter((o) => sameWindow(o.pickup_window_start, w.start));
     const unweighed = stillAtDoor.filter((o) => sameWindow(o.pickup_window_start, w.start));
     const orders = waiting;
@@ -728,44 +728,44 @@ async function board(dateIso, fromTime, driverId = null) {
       label: booking.describeWindow(w.start, w.end).replace('between ', ''),
       orders,
       unweighed,
-      // What the driver still has to do at a door in this round: bags to
+      // What the driver still has to do at a door in this route: bags to
       // collect, plus bags collected and not yet on a scale.
       count: orders.length + unweighed.length,
       // Started, by the clock. Separate from finished, because the two come
       // apart and that is the whole point below.
       begun: date < now.date || (date === now.date && now.time >= w.start),
-      // NOTHING LEFT TO DO IN IT. An empty round is trivially complete.
+      // NOTHING LEFT TO DO IN IT. An empty route is trivially complete.
       complete: orders.length + unweighed.length === 0,
     };
   });
 
-  // WHICH ROUND IS BEING DRIVEN, AND IT IS NOT SIMPLY THE CLOCK.
+  // WHICH ROUTE IS BEING DRIVEN, AND IT IS NOT SIMPLY THE CLOCK.
   //
-  // Neil: "a time slot appears until it's fully completed". A round with two
-  // uncollected bags in it at half past two is still the round he is on - the
-  // clock moving does not collect anybody's laundry. So the active round is the
+  // Neil: "a time slot appears until it's fully completed". A route with two
+  // uncollected bags in it at half past two is still the route he is on - the
+  // clock moving does not collect anybody's laundry. So the active route is the
   // earliest one that has started and still has work in it, and only when
   // everything behind is clear does it follow the clock forward.
   //
-  // An explicit round wins over both. The routing board asks for one by name,
+  // An explicit route wins over both. The routing board asks for one by name,
   // and answering a direct question with "actually you are on this other one"
   // would make the picker a suggestion.
   const clockRound =
-    rounds.find((r) => start >= r.start && start < r.end) || rounds[rounds.length - 1];
+    routes.find((r) => start >= r.start && start < r.end) || routes[routes.length - 1];
 
   const activeRound = fromTime
     ? clockRound
-    : // Catching up: a round that started and still has bags in it. This wins
+    : // Catching up: a route that started and still has bags in it. This wins
       // over everything, because that is somebody waiting right now.
-      rounds.find((r) => r.begun && !r.complete) ||
-      // Nothing outstanding behind him, so look FORWARD to the next round that
-      // actually has work. Landing on the clock's round when it is empty and
+      routes.find((r) => r.begun && !r.complete) ||
+      // Nothing outstanding behind him, so look FORWARD to the next route that
+      // actually has work. Landing on the clock's route when it is empty and
       // the day's two pickups are at 2pm told a driver "nothing on today" at
       // half past twelve, which was simply untrue.
-      rounds.find((r) => !r.complete) ||
+      routes.find((r) => !r.complete) ||
       clockRound;
 
-  for (const r of rounds) {
+  for (const r of routes) {
     r.state = r === activeRound ? 'now' : r.begun ? 'past' : 'ahead';
   }
 
@@ -775,20 +775,20 @@ async function board(dateIso, fromTime, driverId = null) {
   //
   // Filtering strictly is what Neil asked for and is right, but it has an edge
   // that would be worse than the bug it fixes: an order promised 8 to 10am and
-  // never collected belongs to a round that has gone, so at two in the
+  // never collected belongs to a route that has gone, so at two in the
   // afternoon it would appear on no board at all. That is the silent gap the
   // unassigned-order banner exists to close, arrived at a second way.
   //
-  // With the active round now following the WORK rather than the clock, this
-  // only catches what a hand-picked round leaves behind - which is exactly when
-  // somebody is looking at one round and needs telling about another.
-  const overdue = rounds
+  // With the active route now following the WORK rather than the clock, this
+  // only catches what a hand-picked route leaves behind - which is exactly when
+  // somebody is looking at one route and needs telling about another.
+  const overdue = routes
     .filter((r) => r !== activeRound && r.begun && !r.complete)
     .flatMap((r) => [...r.orders, ...r.unweighed]);
 
-  // What the rest of the day still holds, so the board can say the round is
+  // What the rest of the day still holds, so the board can say the route is
   // not the whole picture without putting those stops in the sequence.
-  const laterToday = rounds
+  const laterToday = routes
     .filter((r) => r !== activeRound && !r.begun)
     .flatMap((r) => r.orders);
 
@@ -888,11 +888,11 @@ async function board(dateIso, fromTime, driverId = null) {
 
   // TWO PASSES, AND THE REASON IS A CHICKEN AND EGG.
   //
-  // The best order for the pickups depends on which laundromat the round ends
+  // The best order for the pickups depends on which laundromat the route ends
   // at. Which laundromat is cheapest depends on where the van is when it sets
   // off for one - which is the last pickup, which depends on the order.
   //
-  // So: a rough pass to find roughly where the round finishes, choose the
+  // So: a rough pass to find roughly where the route finishes, choose the
   // laundromat from that, then sequence the pickups properly knowing where they
   // have to lead. The second pass is the one that gets driven.
   //
@@ -923,7 +923,7 @@ async function board(dateIso, fromTime, driverId = null) {
     promiseMinutes,
   });
 
-  // THE PASS THAT COUNTS. Now the laundromat is known, the pickup round is
+  // THE PASS THAT COUNTS. Now the laundromat is known, the pickup route is
   // solved as what it actually is: base to that laundromat, calling at these
   // doors on the way.
   const orderedCollect = sequenceLeg(
@@ -1036,7 +1036,7 @@ async function board(dateIso, fromTime, driverId = null) {
 
   // --- put the day together -------------------------------------------------
 
-  // The delivery round finishes back at the depot, so that drive counts too.
+  // The delivery route finishes back at the depot, so that drive counts too.
   // `home` is where the day ends; `base` is where the van is measured from now,
   // and on a day already underway those are different places.
   const stops = [
@@ -1141,7 +1141,7 @@ async function board(dateIso, fromTime, driverId = null) {
   // EVERY paid minute, not just the moving ones, at THIS driver's rate.
   //
   // Two drivers are rarely paid the same, and a margin is only worth reading if
-  // it uses what that particular round actually costs. Falls back to the
+  // it uses what that particular route actually costs. Falls back to the
   // configured rate when nobody has set one, which is what a business with a
   // single pay rate wants.
   const wagePerHour = driver && driver.wage_cents_hour ? driver.wage_cents_hour / 100 : r2.wagePerHour;
@@ -1191,21 +1191,21 @@ async function board(dateIso, fromTime, driverId = null) {
     (revenueCents * r2.cardFeePercent) / 100 + charges * r2.cardFeeFixedCents
   );
 
-  // WHAT THE ACTIVE ROUND'S CARD SAYS, once the run is actually known.
+  // WHAT THE ACTIVE ROUTE'S CARD SAYS, once the run is actually known.
   //
-  // The count was pickups only, which is right for a round nobody is driving
+  // The count was pickups only, which is right for a route nobody is driving
   // yet and wrong the moment one starts. Neil was standing at a laundromat
-  // handing over three bags and the card for the round he was in said
+  // handing over three bags and the card for the route he was in said
   // "nothing" - because both orders had been collected and loaded, so they had
   // left the pickup count, and the drop-off belongs to no window at all.
   //
-  // A round's card answers "what is on this round", and a laundromat visit is
-  // on it. So the active round counts the STOPS in the run below it, which is
+  // A route's card answers "what is on this route", and a laundromat visit is
+  // on it. So the active route counts the STOPS in the run below it, which is
   // the same list the driver is looking at and therefore cannot disagree with
-  // it. Rounds nobody is driving keep the pickup count, because that is all
+  // it. Routes nobody is driving keep the pickup count, because that is all
   // there is to know about them yet.
   //
-  // Only the display count. Which round is active was decided long before the
+  // Only the display count. Which route is active was decided long before the
   // stops existed, and re-deciding it here would be a second answer to a
   // question already answered.
   const outstanding = stops.filter((st) => !st.done).length || stops.length;
@@ -1219,8 +1219,8 @@ async function board(dateIso, fromTime, driverId = null) {
     base,
     home,
     serviceBase,
-    rounds,
-    round: activeRound,
+    routes,
+    route: activeRound,
     overdue,
     laterToday,
     vehicle,

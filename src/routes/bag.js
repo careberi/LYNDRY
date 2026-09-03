@@ -222,7 +222,7 @@ function weightCard(label, order, siblings, code, token, justSaved) {
 // The other thing a laundromat needs to be able to say: it is done.
 //
 // Without this there is no way for them to tell us, and the driver is left
-// ringing round or guessing - which is the whole reason a bag sits finished on
+// ringing route or guessing - which is the whole reason a bag sits finished on
 // a shelf for half a day. It is the second of the two events worth asking a
 // partner for, the first being the weight above. Everything else about how a
 // bag moves is ours to record.
@@ -905,7 +905,7 @@ router.get('/o/:code', async (req, res, next) => {
 
   try {
     // hit() returns TRUE when the caller has gone over the limit. Reads
-    // backwards, which is exactly how this got written the wrong way round the
+    // backwards, which is exactly how this got written the wrong way route the
     // first time and refused every genuine scan.
     if (throttle.hit(`labelscan:${ip}`, SCAN_LIMIT, SCAN_WINDOW_MS)) {
       await bags.recordScan({ code: raw, outcome: 'THROTTLED', ip, userAgent });

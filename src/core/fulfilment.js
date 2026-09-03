@@ -157,7 +157,7 @@ async function dropAtPartner(order, { partnerId, by = {} } = {}) {
   // Without it there is no way to answer "is one partner's scale consistently
   // heavier than ours", which is the whole reason for asking them to weigh it.
   // Optional, because a bag can be dropped somewhere we have not added yet and
-  // refusing the drop over a missing dropdown would stop the round.
+  // refusing the drop over a missing dropdown would stop the route.
   if (partnerId) {
     await db.from('orders').update({ partner_id: partnerId }).eq('id', order.id);
     result.order.partner_id = partnerId;
@@ -347,7 +347,7 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
     // customer's door, so this is the moment the driver leaves. Left set, the
     // guided run would tell him he is still standing at a stop he drove away
     // from - and would think he had already arrived at the delivery, months
-    // later, when the same order comes round again.
+    // later, when the same order comes route again.
     .update({
       weight_lb: weight,
       price_cents: priceCents,
@@ -541,7 +541,7 @@ async function outForDelivery(order, { by = {} } = {}) {
       reason: 'unconfirmed',
       detail:
         'Collect the bags from the laundromat first - tick each one off on your ' +
-        'round. The customer is told it is on the way as soon as this moves, so ' +
+        'route. The customer is told it is on the way as soon as this moves, so ' +
         'it needs to be right before that goes out.',
     };
   }
@@ -810,7 +810,7 @@ function nextSteps(order) {
 // It used to be a flat 24 hours from collection, and that is a different
 // promise wearing the same words. A bag collected at 9am was due back at 9am;
 // one collected at 5pm was due at 5pm the next day, which is after the van has
-// finished. Two customers on the same round had deadlines eight hours apart
+// finished. Two customers on the same route had deadlines eight hours apart
 // and neither matched what they were told.
 //
 // Now both are due by the end of the day after we collected - the end of the

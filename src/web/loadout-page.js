@@ -273,8 +273,8 @@ function loadWalkBody({ bags: outstanding, current, state, notice, problem, run,
 
   return `
 <div style="max-width:640px;">
-  <a href="/ops/run" style="font-size:15px;font-weight:600;">&larr; Your round</a>
-  <p class="eyebrow" style="margin:18px 0 6px;">Part of your round</p>
+  <a href="/ops/run" style="font-size:15px;font-weight:600;">&larr; Your route</a>
+  <p class="eyebrow" style="margin:18px 0 6px;">Part of your route</p>
   <h1 style="margin:0 0 20px;font-size:36px;line-height:1.08;">Load the van</h1>
 
   ${problem ? banner(problem, 'var(--stain-500)', 'var(--paper-050)') : ''}
@@ -341,11 +341,11 @@ function loadoutBody({ run, built, notice, problem }) {
 
   return `
 <div style="max-width:720px;">
-  <!-- A STEP OF THE ROUND, so it says where it sits and how to get back. This
+  <!-- A STEP OF THE ROUTE, so it says where it sits and how to get back. This
        is not a place you navigate to any more - you arrive from the
        collect-from-the-laundromat stop and go straight back when it is done. -->
-  <a href="/ops/run" style="font-size:15px;font-weight:600;">&larr; Your round</a>
-  <p class="eyebrow" style="margin:18px 0 8px;">Part of your round</p>
+  <a href="/ops/run" style="font-size:15px;font-weight:600;">&larr; Your route</a>
+  <p class="eyebrow" style="margin:18px 0 8px;">Part of your route</p>
   <h1 style="margin:0 0 14px;font-size:40px;line-height:1.05;">Scan every bag into the van</h1>
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 26px;">
     One pass, in whatever order they come to hand - you are touching each bag

@@ -226,23 +226,23 @@ const OPS_MENUS = Object.freeze([
     // message list and a problem queue under one word - and is now back.
     //
     // What makes it defensible this time is that the group actually is the
-    // live day: your round, the orders board, routing, loading the van, and
+    // live day: your route, the orders board, routing, loading the van, and
     // the issues blocking them. Everything in it is about right now. If a
     // screen goes in here that is not, it belongs in another menu.
     label: 'Dashboard',
     items: [
-      // First, because for somebody on the round it is the only screen that
+      // First, because for somebody on the route it is the only screen that
       // matters - everything else is looking something up. Behind orders.drive,
-      // so an admin who has not put themselves on the round is not offered one.
-      { href: '/ops/run', label: 'Your round', permission: 'orders.drive' },
+      // so an admin who has not put themselves on the route is not offered one.
+      { href: '/ops/run', label: 'Your route', permission: 'orders.drive' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
       { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
       // LOAD THE VAN IS NOT LISTED, at Neil's request: "it shouldn't be
-      // something I could select on my own". It is a step of the round, not a
+      // something I could select on my own". It is a step of the route, not a
       // destination - you reach it from the collect-from-the-laundromat stop on
-      // Your round, do it, and are put back where you were.
+      // Your route, do it, and are put back where you were.
       //
       // The route still exists and is still guarded. Removing it entirely would
       // mean folding the scanning into the run page, which is the one thing
@@ -333,7 +333,7 @@ const OPS_MENUS = Object.freeze([
       { href: '/ops/process', label: 'How it all works', permission: null },
       // The physical walkthrough. Same group and same no-permission rule as the
       // page above: it holds no customer detail and no wholesale figure, and it
-      // is the other thing you hand somebody before their first round.
+      // is the other thing you hand somebody before their first route.
       { href: '/ops/journey', label: 'What happens to a bag', permission: null },
       // THE ACTUAL PAGE WE SEND A LAUNDROMAT OWNER, not a copy of it. It is
       // public, so this is only a shortcut - but a shortcut worth having,
@@ -583,7 +583,7 @@ function table(headings, rows) {
 // The single most-used thing on this screen: what a driver taps, standing on a
 // doorstep with one hand full. Before this existed the only way to move an
 // order along was a terminal command, which is fine for testing and useless
-// for a round.
+// for a route.
 //
 // Buttons are 56px and full width on a phone deliberately. Every one of them
 // posts a form and reloads the page, with no JavaScript anywhere: a driver on
@@ -908,10 +908,10 @@ function pickupSequence(
 //
 // NEIL'S CALL: the order page no longer does the work. It used to carry the
 // legal next steps as full-width buttons, which made it a second place to
-// advance an order alongside the round - and two front doors onto one job is
-// how they drift. The round is where the work happens now; this is the record.
+// advance an order alongside the route - and two front doors onto one job is
+// how they drift. The route is where the work happens now; this is the record.
 //
-// IT IS FED FROM THE ROUND, not from a list written out again here.
+// IT IS FED FROM THE ROUTE, not from a list written out again here.
 // run.tasksForOrder() is the same call the driver's screen makes, so the step
 // this page names and the step he is asked to do cannot disagree. A summary
 // that is one deploy behind the thing it summarises is worse than none.
@@ -967,7 +967,7 @@ function progressCard(order, tasks) {
 
     <p style="margin:0;font-size:14px;line-height:1.55;color:var(--ink-700);">
       This page is a record. The work is done on
-      <a href="/ops/run" style="font-weight:700;color:inherit;">Your round</a>.
+      <a href="/ops/run" style="font-weight:700;color:inherit;">Your route</a>.
     </p>
   </div>`;
 }
@@ -1159,7 +1159,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
             : ''
         }
         <label class="field-label" for="photo">Photo at the door &mdash; required</label>
-        <!-- The required attribute stops the tap before it costs a round
+        <!-- The required attribute stops the tap before it costs a route
              trip. The real enforcement is in src/core/fulfilment.js, because
              the JSON API reaches the same code and a form attribute guards
              neither of them. -->
@@ -1585,7 +1585,7 @@ router.post('/ops/logout', (req, res) => {
 // Express puts an ETag on every rendered page and nothing set Cache-Control,
 // which lets a browser cache heuristically - it decides for itself how long a
 // page stays fresh and may serve it again without asking. On screens that
-// change every few minutes that is a driver looking at a round that has moved
+// change every few minutes that is a driver looking at a route that has moved
 // on, and it is indistinguishable from a deploy not having landed. Neil hit it
 // on the collect stop.
 //
@@ -1673,7 +1673,7 @@ const ORDER_FIELDS =
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
-    // A DRIVER SEES THEIR OWN ROUND AND NOBODY ELSE'S.
+    // A DRIVER SEES THEIR OWN ROUTE AND NOBODY ELSE'S.
     //
     // Filtered in the query rather than after it, so another driver's stops
     // never reach this process at all - the same reason prices are left out of
@@ -1757,7 +1757,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     // With us right now: collected and not yet back at their door.
     const withUs = [...g.van, ...g.partner, ...g.ready, ...g.out];
-    // Summed through weight.sum, which rounds once at the end. Adding these
+    // Summed through weight.sum, which routes once at the end. Adding these
     // raw is what put "52.599999999999994 lb" on the board: 25 + 27.6 in
     // binary floating point is not 52.6.
     const poundsWithUs = weight.sum(withUs.map((o) => o.weight_lb));
@@ -1778,7 +1778,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     );
     const owedTotal = owed.reduce((sum, o) => sum + (o.price_cents || 0), 0);
 
-    // A driver does the round; they have no business seeing the books. The
+    // A driver does the route; they have no business seeing the books. The
     // money columns are dropped from the markup entirely rather than hidden
     // with CSS — a value that never reaches the page cannot leak from it.
     const showMoney = roles.can(req.opsUser, 'money.view');
@@ -1799,7 +1799,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
         // A DRIVER PICKS A STOP OFF THIS BOARD BY WHERE IT IS, NOT BY WHO.
         // With the name gone the address moves up and carries the column on
-        // its own - it is the half a round is planned with anyway.
+        // its own - it is the half a route is planned with anyway.
         showNames
           ? `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
          <div style="font-size:13px;color:var(--ink-500);">${escapeHtml(addressOf(c))}</div>`
@@ -1807,7 +1807,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
               escapeHtml(addressOf(c)) || 'No address'
             }</a>`,
         // The window under the day, because "Wednesday" is not enough to plan a
-        // round with once customers start naming times.
+        // route with once customers start naming times.
         `${shortDate(o.pickup_date)}${
           o.pickup_window_start
             ? `<div style="font-size:13px;color:var(--ink-500);">${escapeHtml(booking.arrivalWindow(o))}</div>`
@@ -1850,7 +1850,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       const where = p.idle
         ? '<span style="color:var(--ink-500);">nothing on today</span>'
         : p.nextStop
-          ? `on the round &middot; next is stop ${p.nextStop.stop_number}, #${p.nextStop.order_number}`
+          ? `on the route &middot; next is stop ${p.nextStop.stop_number}, #${p.nextStop.order_number}`
           : p.toCollect
             ? `${p.toCollect} still to collect`
             : p.carrying
@@ -1886,7 +1886,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     const driverStrip = crew
       ? `
       <section style="margin-bottom:44px;">
-        ${sectionHeading('Where everybody is', 'The round', crew.rows.length)}
+        ${sectionHeading('Where everybody is', 'The route', crew.rows.length)}
         <div style="display:flex;flex-wrap:wrap;gap:16px;">
           ${
             crew.rows.length
@@ -1907,7 +1907,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
           // The picker only appears for somebody who may actually reassign -
           // customers.view, the same permission the route checks. A driver sees
           // the warning and no control, which is right: handing work to
-          // somebody else is a scheduling decision, not a step in the round.
+          // somebody else is a scheduling decision, not a step in the route.
           crew.orphans.length
             ? `<div style="margin:16px 0 0;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
                            background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
@@ -2420,7 +2420,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     if (error) throw error;
     if (!order) return notFoundPage(res, `No order ${byNumber ? `#${wanted}` : 'with that id'}.`);
 
-    // A DRIVER'S OWN ROUND, HERE TOO. The board already hides other people's
+    // A DRIVER'S OWN ROUTE, HERE TOO. The board already hides other people's
     // stops, but a board that hides something and a page that serves it anyway
     // is not access control - it is a missing link. Typing the number reaches
     // this route directly.
@@ -2433,7 +2433,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       order.driver_id &&
       order.driver_id !== req.opsUser.id
     ) {
-      return notFoundPage(res, 'That order is on somebody else\'s round.');
+      return notFoundPage(res, 'That order is on somebody else\'s route.');
     }
 
     const c = order.customers || {};
@@ -2508,7 +2508,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           <span style="font-variant-numeric:tabular-nums;">#${order.order_number}</span>
           ${
             // The order number identifies the stop; the name is the customer's,
-            // and a driver working the round is not shown one. Without this the
+            // and a driver working the route is not shown one. Without this the
             // whole page can be locked down and the heading still says who
             // lives there.
             roles.can(req.opsUser, 'customers.view')
@@ -2539,7 +2539,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       <!-- THE ACTION CARDS ARE GONE FROM THIS PAGE, at Neil's request.
            pickupSequence() and workCard() rendered the legal next steps as
            full-width buttons here, which made the order page a second way to
-           advance an order alongside the round. Two front doors onto one job is
+           advance an order alongside the route. Two front doors onto one job is
            how they drift, and CLAUDE.md warns about exactly this.
 
            progressCard() above replaces them with a read-only summary fed from
@@ -2564,7 +2564,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
       // WHAT A DRIVER IS SHOWN IS THE STOP, NOT THE CUSTOMER.
       //
-      // A round needs: where, when, how to get in, where the bag is, how many,
+      // A route needs: where, when, how to get in, where the bag is, how many,
       // what it weighed. It does not need a name, a phone number, the thread,
       // the change log or the money - those are a file on a person, and the
       // permissions below are what keep them off the page rather than a role
@@ -2798,7 +2798,7 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
     if (error) throw error;
 
     // One query for every order, counted in memory. At this size that beats a
-    // per-customer query, and it keeps the page to two round trips.
+    // per-customer query, and it keeps the page to two route trips.
     const { data: allOrders } = await db.from('orders').select('customer_id, status, price_cents');
 
     const byCustomer = new Map();
@@ -3046,7 +3046,7 @@ async function loadOrderForAction(idOrNumber) {
 //
 // Behind customers.view rather than orders.act: a driver can work an order but
 // cannot hand it to somebody else, which is a scheduling decision rather than a
-// step in the round. Logged like every other change, because "who was supposed
+// step in the route. Logged like every other change, because "who was supposed
 // to collect this" is exactly the question asked after one goes missing.
 router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, res, next) => {
   try {
@@ -3102,24 +3102,24 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
 // board is the day for somebody at a desk; this is the same day for somebody in
 // a van, and a driver should never have to work out what is next.
 //
-// Behind orders.act, and it is always the SIGNED-IN person's round. There is no
+// Behind orders.act, and it is always the SIGNED-IN person's route. There is no
 // ?driver= here on purpose - this is not a screen for looking at somebody
 // else's day, that is what the routing board is for.
 // ---------------------------------------------------------------------------
 
 router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
-    // ?round= is the card he tapped. Validated to HH:MM so nothing odd reaches
+    // ?route= is the card he tapped. Validated to HH:MM so nothing odd reaches
     // the window lookup; anything else falls back to "wherever I am".
-    const asked = /^\d{1,2}:\d{2}$/.test(String(req.query.round || ''))
-      ? String(req.query.round)
+    const asked = /^\d{1,2}:\d{2}$/.test(String(req.query.route || ''))
+      ? String(req.query.route)
       : null;
 
     const state = await runCore.forDriver(req.opsUser.id, asked);
 
     return res.type('html').send(
       adminPage({
-        title: 'Your round',
+        title: 'Your route',
         active: '/ops/run',
         body: runBody({
           run: state,
@@ -3160,7 +3160,7 @@ router.get('/ops/run/going/:id', guard, may('orders.drive'), async (req, res, ne
     const order = await loadOrderForAction(orderId);
     if (!order) return res.redirect(303, '/ops/run');
 
-    // The same round check every other action does. A driver must not be able
+    // The same route check every other action does. A driver must not be able
     // to set off for somebody else's stop.
     if (
       !roles.can(req.opsUser, 'customers.view') &&
@@ -3198,7 +3198,7 @@ router.post('/ops/run/here', guard, may('orders.drive'), async (req, res, next) 
     // A driver cannot mark himself present at somebody else's stop, for the
     // same reason he cannot open their order.
     if (!roles.can(req.opsUser, 'customers.view') && order.driver_id && order.driver_id !== req.opsUser.id) {
-      return notFoundPage(res, "That order is on somebody else's round.");
+      return notFoundPage(res, "That order is on somebody else's route.");
     }
 
     await runCore.arrive(orderId);
@@ -3397,7 +3397,7 @@ router.post('/ops/run/dropped', guard, may('orders.drive'), async (req, res, nex
 // The order page and the guided run post to the same routes - that is the whole
 // point, there is one implementation of "collected" and not two - so the only
 // difference is where you land afterwards. `?from=run` on the form action is
-// what carries that, and a driver stepping through his round never sees the
+// what carries that, and a driver stepping through his route never sees the
 // order page unless he asks for it.
 function backTo(req, order) {
   return String(req.query.from) === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
@@ -3410,7 +3410,7 @@ function orderAction(action, run, middleware = null) {
       const order = await loadOrderForAction(req.params.id);
       if (!order) return notFoundPage(res, 'No order with that number.');
 
-      // The same round check the page does. Hiding a button while the route
+      // The same route check the page does. Hiding a button while the route
       // behind it still fires is not access control, and every one of these is
       // a plain form post somebody could aim anywhere.
       if (
@@ -3418,7 +3418,7 @@ function orderAction(action, run, middleware = null) {
         order.driver_id &&
         order.driver_id !== req.opsUser.id
       ) {
-        return notFoundPage(res, "That order is on somebody else's round.");
+        return notFoundPage(res, "That order is on somebody else's route.");
       }
 
       const back = backTo(req, order);
@@ -3592,7 +3592,7 @@ const reportForm = (req) => ({
 // is still behind the sign-in.
 //
 // start_url is /ops/run rather than /ops, because the person who installs this
-// on a home screen is a driver and the round is what they open it for.
+// on a home screen is a driver and the route is what they open it for.
 // THE HOME SCREEN ICON. The same bag-and-bubble silhouette the favicon uses,
 // as a standalone SVG because a manifest cannot point at a data: URI.
 //
@@ -3604,10 +3604,10 @@ const APP_ICON =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
   `<rect width="64" height="64" rx="14" fill="#FFF8EC"/>` +
   `<g transform="translate(12.8 12.8) scale(1.2)">` +
-  `<path d="M9 22 L9.6 30.6 L16 24" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="round"/>` +
+  `<path d="M9 22 L9.6 30.6 L16 24" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="route"/>` +
   `<rect x="2.3" y="10" width="27.4" height="16" rx="7" fill="#0EA47A" stroke="#101210" stroke-width="2.3"/>` +
-  `<path d="M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="round"/>` +
-  `<path d="M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6" fill="none" stroke="#101210" stroke-width="2.1" stroke-linecap="round"/>` +
+  `<path d="M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="route"/>` +
+  `<path d="M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6" fill="none" stroke="#101210" stroke-width="2.1" stroke-linecap="route"/>` +
   `</g></svg>`;
 
 router.get('/ops/app-icon.svg', (req, res) => {
@@ -3768,7 +3768,7 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
           showNames: roles.can(req.opsUser, 'customers.view'),
           showMoney: roles.can(req.opsUser, 'money.view'),
           // MOVING THE BASE MOVES EVERY ROUTE FOR EVERYBODY, so it sits with
-          // the closed sign and the promotions rather than with the round. A
+          // the closed sign and the promotions rather than with the route. A
           // driver still SEES where it is - the route starts there and that is
           // worth being able to check - they just cannot move it.
           canSetBase: roles.can(req.opsUser, 'service.manage'),
@@ -3803,7 +3803,7 @@ router.post('/ops/routing/base', guard, may('service.manage'), async (req, res, 
       req.opsUser.id
     );
 
-    // Keep whatever day, round and driver they were looking at.
+    // Keep whatever day, route and driver they were looking at.
     const keep = ['date', 'from', 'driver']
       .filter((k) => req.query[k])
       .map((k) => `${k}=${encodeURIComponent(String(req.query[k]))}`);
@@ -3891,7 +3891,7 @@ async function renderLoadout(req, res, { built = false } = {}) {
   return res.type('html').send(
     adminPage({
       title: 'Load the van',
-      // Highlighted as the round, because that is what it is a step of. A nav
+      // Highlighted as the route, because that is what it is a step of. A nav
       // that lights up nothing while you are standing on a page reads as
       // having fallen out of the app.
       active: '/ops/run',
@@ -4020,7 +4020,7 @@ router.post('/ops/loadout/build', guard, may('orders.act'), async (req, res, nex
       `${sequenced.length} stop${sequenced.length === 1 ? '' : 's'}, about ${miles.toFixed(1)} miles.` +
       (lost ? ` ${lost} address could not be found and sorted last.` : '');
 
-    // BACK TO THE ROUND, not back to this page. Building the run is the last
+    // BACK TO THE ROUTE, not back to this page. Building the run is the last
     // thing that happens here; leaving the driver looking at a finished
     // scanning screen makes him find his own way onward, which is the opposite
     // of a screen that tells you the one next thing.
@@ -4124,7 +4124,7 @@ router.post('/ops/orders/:id/bag-count', guard, may('orders.act'), async (req, r
 //
 // The order-level van_confirmed_at is stamped HERE, by the last bag going
 // aboard, rather than by a separate tap. Everything downstream keys off that
-// column - the collect leg, the round count, what may go to a laundromat - so
+// column - the collect leg, the route count, what may go to a laundromat - so
 // it still has to be written; it simply is not a question anybody is asked
 // twice.
 router.post('/ops/orders/:id/bag-van', guard, may('orders.act'), async (req, res, next) => {
@@ -4734,7 +4734,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
           ? `<div class="card card-xl" style="padding:22px;margin-bottom:28px;background:var(--sunbeam-500);max-width:560px;">
                <p style="margin:0;font-size:16px;line-height:1.6;font-weight:600;">
                  ${blank === 0 ? 'No blank bag tags left.' : `Only ${blank} blank bag tag${blank === 1 ? '' : 's'} left.`}
-                 Print a sheet before the next round - a driver with no tag
+                 Print a sheet before the next route - a driver with no tag
                  cannot label a bag, an unlabelled bag cannot be scanned at the
                  door, and the laundromat has nothing to peel a sticker off.
                </p>
@@ -6564,10 +6564,10 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
           : '<span class="badge">DISABLED</span>',
-        // On the round, and when. The rota is what decides who gets a load, so
+        // On the route, and when. The rota is what decides who gets a load, so
         // it belongs next to the badge rather than only on their own page.
         roles.can(p, 'orders.drive')
-          ? '<span class="badge" style="background:var(--suds-300);">On the round</span>' +
+          ? '<span class="badge" style="background:var(--suds-300);">On the route</span>' +
             `<span style="display:block;margin-top:6px;font-size:13px;color:var(--ink-500);">${
               escapeHtml(drivers.describeHours(rota.get(p.id) || []))
             }</span>`
@@ -6867,7 +6867,7 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
     }
 
     // The base is saved separately because it re-pins from scratch and that
-    // costs a geocoder call. Only for somebody who is actually on the round -
+    // costs a geocoder call. Only for somebody who is actually on the route -
     // there is nothing for a route to start from otherwise.
     const willDrive = roles.can({ ...person, role, drives }, 'orders.drive');
     if (willDrive) {
@@ -6875,7 +6875,7 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
       await drivers.saveHours(person.id, body);
     }
 
-    // WORK DOES NOT FOLLOW SOMEBODY OFF THE ROUND. An order still pointing at
+    // WORK DOES NOT FOLLOW SOMEBODY OFF THE ROUTE. An order still pointing at
     // a person who no longer drives appears on no board and gets collected by
     // nobody, which is the exact gap driver_id exists to close.
     let moved = 0;

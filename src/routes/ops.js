@@ -312,7 +312,7 @@ router.get('/ops/today', async (req, res, next) => {
   try {
     // New Jersey's date, not the server's — see src/core/booking.js. A run
     // sheet that flips to tomorrow at 8pm is worse than useless to a driver
-    // still finishing today's round.
+    // still finishing today's route.
     const today = booking.today();
 
     const { data, error } = await db

@@ -24,9 +24,9 @@ const PERMISSIONS = Object.freeze({
   // the driver pool on orders.act meant it did.
   //
   // A DRIVER holds this by role. An ADMIN holds it while they have switched it
-  // on — see can(). Everything about rounds keys off it: the home base, the
-  // assignment pool, the round strip, and /ops/run.
-  'orders.drive': 'Be on the round: a home base, assigned orders, a day to drive',
+  // on — see can(). Everything about routes keys off it: the home base, the
+  // assignment pool, the route strip, and /ops/run.
+  'orders.drive': 'Be on the route: a home base, assigned orders, a day to drive',
   'customers.view': 'Browse customers and their history',
   // Every word anyone has ever texted us, including people who are not
   // customers. Kept separate from customers.view because a conversation holds
@@ -47,7 +47,7 @@ const PERMISSIONS = Object.freeze({
   // not given to drivers: a ruined shirt is not theirs to answer at 11pm.
   'issues.manage': 'See and resolve customer issues, and be alerted to them',
   // Prices, payment status, what is owed, lifetime billed. Kept separate from
-  // orders.view so a driver can do the round without seeing the books.
+  // orders.view so a driver can do the route without seeing the books.
   'money.view': 'See prices and payment status',
   // The change log on an order — who moved it, what a weight was corrected
   // from, when a card was charged. It is the record of how the business
@@ -84,7 +84,7 @@ const PERMISSIONS = Object.freeze({
 const ROLES = Object.freeze({
   ADMIN: {
     label: 'Admin',
-    description: 'Everything. Can put themselves on the round when they want to.',
+    description: 'Everything. Can put themselves on the route when they want to.',
     // Everything except orders.drive, which is not the role's to grant - see
     // can() below. It used to be a bare Object.keys(PERMISSIONS), which quietly
     // handed every admin a home base and a place in the assignment pool, so
@@ -100,7 +100,7 @@ const ROLES = Object.freeze({
     // weighed. Not the customer's name, not their phone, not the thread, not
     // the change log, not the money. The address is the one piece of somebody's
     // personal detail a driver gets, because you cannot drive to a stop without
-    // it. Everything else is a file on a person, and a round does not need one.
+    // it. Everything else is a file on a person, and a route does not need one.
     permissions: ['orders.view', 'orders.act', 'orders.drive'],
   },
 

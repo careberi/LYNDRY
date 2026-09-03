@@ -82,7 +82,7 @@ function adminDashboardBody({
 <p class="eyebrow" style="margin:0 0 8px;">The business</p>
 <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Admin dashboard</h1>
 <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
-  Everything you decide, in one place. The day itself - orders, the round,
+  Everything you decide, in one place. The day itself - orders, the route,
   routing - is under Dashboard.
 </p>
 
@@ -289,7 +289,7 @@ ${banner(problem, 'bad')}
       // is completely silent - everything keeps working and the one person who
       // is meant to be able to book anyway quietly cannot. He would find that
       // out by trying, on the one day it matters. So it is stated here, both
-      // ways round, on the screen where the closing actually happens.
+      // ways route, on the screen where the closing actually happens.
       !open
         ? config.alwaysBookNumbers.length
           ? `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;">
@@ -341,7 +341,7 @@ ${banner(problem, 'bad')}
     <li>The AI will not book, will not offer a date, and will not collect an
         address to "get you ready"</li>
     <li><code>bookPickup()</code> refuses, so the website form and the standing
-        order job are shut too. The AI being talked round changes nothing</li>
+        order job are shut too. The AI being talked route changes nothing</li>
     <li>Everything else still works: questions get answered, new numbers are
         still saved, and anyone on a promotion still holds it</li>
   </ul>

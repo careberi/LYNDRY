@@ -510,7 +510,7 @@ function routePlannerBody() {
     // CARTO used to serve these without a key. They now stamp API KEY REQUIRED
     // across every tile for unkeyed use, which is what put that watermark over
     // the whole map. OSM's own tiles are genuinely keyless and their usage
-    // policy is comfortable at the volume of one person planning a round.
+    // policy is comfortable at the volume of one person planning a route.
     //
     // No {s} subdomain: OSM asked people to stop using a.b.c prefixes, and a
     // single host is what they document now.
@@ -640,8 +640,8 @@ function routePlannerBody() {
     if (!RUN) return;
     var pts = geom && geom.length ? geom : orderedPoints().map(function (p) { return [p.lat, p.lng]; });
     if (pts.length < 2) return;
-    L.polyline(pts, { color: '#101210', weight: 7, opacity: 1, lineJoin: 'round' }).addTo(layerRoute);
-    L.polyline(pts, { color: '#0EA47A', weight: 3, opacity: 1, lineJoin: 'round' }).addTo(layerRoute);
+    L.polyline(pts, { color: '#101210', weight: 7, opacity: 1, lineJoin: 'route' }).addTo(layerRoute);
+    L.polyline(pts, { color: '#0EA47A', weight: 3, opacity: 1, lineJoin: 'route' }).addTo(layerRoute);
   }
 
   // The run in order: base, laundromats holding finished work, the customer

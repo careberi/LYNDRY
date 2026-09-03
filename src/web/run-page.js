@@ -30,13 +30,35 @@ const CARD =
   'border:2px solid var(--ink-900);border-radius:16px;background:var(--paper-050);' +
   'box-shadow:var(--shadow-pop-sm);padding:26px;';
 
-// What this stop is, in the words a driver would use.
+// WHAT THIS STOP IS, AND IT IS THE HEADING NOW.
+//
+// The address used to be the biggest thing on the card, which made the screen
+// read as "go to this address" when the driver's job is "PICK UP AN ORDER at
+// this address". He already knows he is driving somewhere; what he needs at a
+// glance is which of four quite different jobs this stop is.
+//
+// A CLOSED SET OF TASK NAMES, deliberately. Four kinds of stop, four verbs, and
+// they read the same every time - so the shape of the sentence is recognisable
+// before the words are, which is what makes it a one-second read rather than a
+// one-second parse.
 const HEADLINE = {
-  collect: 'Pick up',
-  deliver: 'Deliver',
-  dropoff: 'Drop the bags off',
-  pickup_partner: 'Collect the finished bags',
+  collect: 'Pick up order',
+  deliver: 'Deliver order',
+  dropoff: 'Drop at laundromat',
+  pickup_partner: 'Pick up from laundromat',
 };
+
+// The address in two lines: the street, then the town. One long wrapped line is
+// a paragraph the eye has to read; two short ones are a shape it recognises.
+// Splitting on the first comma is enough for every address we hold, and an
+// address without one simply stays as it is.
+function addressLines(address) {
+  const raw = String(address || '').trim();
+  if (!raw) return [];
+  const at = raw.indexOf(',');
+  if (at < 0) return [raw];
+  return [raw.slice(0, at).trim(), raw.slice(at + 1).trim()].filter(Boolean);
+}
 
 function progressBar(done, total) {
   const pct = total ? Math.round((done / total) * 100) : 0;
@@ -58,16 +80,25 @@ function progressBar(done, total) {
 function travelCard(run) {
   const stop = run.current;
 
+  // A laundromat has a name; a customer's door has only an address. Either way
+  // the TASK is the heading and the place is underneath it.
+  const place = stop.name ? [stop.name, ...addressLines(stop.address)] : addressLines(stop.address);
+
   return `
   <div style="${CARD}">
-    <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(HEADLINE[stop.kind] || 'Next')}</p>
-    <h2 style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;margin:0 0 6px;">
-      ${escapeHtml(stop.name || stop.address || 'Somewhere with no address')}
+    <h2 style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.05;
+               margin:0 0 14px;">
+      ${escapeHtml(HEADLINE[stop.kind] || 'Next stop')}
     </h2>
+
     ${
-      stop.name && stop.address
-        ? `<p style="font-size:16px;line-height:1.5;margin:0 0 4px;">${escapeHtml(stop.address)}</p>`
-        : ''
+      place.length
+        ? `<p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 6px;">
+             ${place.map((line, i) => (i ? `<span style="font-weight:400;color:var(--ink-700);">${escapeHtml(line)}</span>` : escapeHtml(line))).join('<br>')}
+           </p>`
+        : `<p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 6px;">
+             Somewhere with no address
+           </p>`
     }
     ${
       stop.eta
@@ -632,7 +663,7 @@ function partnerCard(run) {
             // here is the same rule the load-out link follows: two ways to do
             // one job is how they drift.
             // NO WEIGHING AT THIS STOP, and no order numbers either. Neil's
-            // call: he is picking bags off a counter for this round, and which
+            // call: he is picking bags off a counter for this route, and which
             // order each belongs to is the sticker's business, not his.
             //
             // WHAT REPLACED THE WEIGHT CHECK, because something had to. The old
@@ -716,7 +747,7 @@ function runBody({ run, notice = null, problem = null }) {
   <div style="max-width:560px;margin:0 auto;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
       <h1 style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;margin:0;">
-        Your round
+        Your route
       </h1>
       <a href="/ops" style="font-size:15px;font-weight:600;">All orders</a>
     </div>
@@ -732,20 +763,20 @@ function runBody({ run, notice = null, problem = null }) {
       <!-- IT SAYS WHAT IS EMPTY, AND THAT IS NOT THE SAME AS THE DAY BEING
            EMPTY. Neil had two pickups booked for 2pm and this page told him
            "nothing on today" at half past twelve, which was simply untrue - the
-           round he was standing in was empty, the day was not. A screen that
+           route he was standing in was empty, the day was not. A screen that
            tells a driver he has finished when he has not is the worst thing
            this page can do. -->
       <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 10px;">
         ${
-          (run.rounds || []).some((r) => r.count)
-            ? 'Nothing in this round'
+          (run.routes || []).some((r) => r.count)
+            ? 'Nothing in this route'
             : 'Nothing on today'
         }
       </h2>
       <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0;">
         ${
-          (run.rounds || []).some((r) => r.count)
-            ? `The rest of the day is up there - tap a round with pickups in it.`
+          (run.routes || []).some((r) => r.count)
+            ? `The rest of the day is up there - tap a route with pickups in it.`
             : `No pickups booked to you and nothing in the van. If that looks wrong,
                check the <a href="/ops">orders board</a> - an order with no driver on it
                will not appear here.`
@@ -760,7 +791,7 @@ function runBody({ run, notice = null, problem = null }) {
     ${progressBar(run.done, run.total)}
     <div style="${CARD}background:var(--suds-300);">
       <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.15;margin:0 0 10px;">
-        That's the round.
+        That's the route.
       </h2>
       <p style="font-size:16px;line-height:1.6;margin:0;">
         All ${run.total} stop${run.total === 1 ? '' : 's'} done. Anything that comes
@@ -803,15 +834,15 @@ function runBody({ run, notice = null, problem = null }) {
 // than it is - a driver counting three cards cannot tell whether that is the
 // shape of the day or the shape of what is left.
 //
-// A ROUND STAYS OPEN UNTIL ITS WORK IS DONE, not until its clock runs out.
+// A ROUTE STAYS OPEN UNTIL ITS WORK IS DONE, not until its clock runs out.
 // Neil: "a time slot appears until it's fully completed". Two uncollected bags
-// at half past two are still the 12 to 2 round - the clock moving collects
-// nobody's laundry - so a round with work left in it is still tappable and
+// at half past two are still the 12 to 2 route - the clock moving collects
+// nobody's laundry - so a route with work left in it is still tappable and
 // still says so.
 // ---------------------------------------------------------------------------
 function roundCards(run) {
-  const rounds = run.rounds || [];
-  if (!rounds.length) return '';
+  const routes = run.routes || [];
+  if (!routes.length) return '';
 
   const card = (r) => {
     // Done is not the same as past. A window whose time has gone with bags
@@ -821,7 +852,7 @@ function roundCards(run) {
     const worked = r.state === 'past' && r.complete;
 
     // Only the colours are inline. The box - five equal cells on one line, and
-    // the type sizes that keep them on it - is .run-round in lyndry.css, per
+    // the type sizes that keep them on it - is .run-route in lyndry.css, per
     // the rule about inline grid styles beating the media queries.
     const style = late
       ? 'background:var(--stain-500);color:var(--paper-050);border-color:var(--ink-900);box-shadow:var(--shadow-pop-xs);'
@@ -833,12 +864,12 @@ function roundCards(run) {
 
     // "10am-12pm", not "10am and 12pm". Five of these share one line on a
     // phone, so the words have to be as short as they can be while still
-    // naming the round.
+    // naming the route.
     const when = String(r.label).replace(' and ', '-');
 
-    // STOPS, NOT PICKUPS. A laundromat visit is a stop on the round and a
-    // delivery is a stop on the round; calling them all pickups made the word
-    // wrong on exactly the round somebody is standing in.
+    // STOPS, NOT PICKUPS. A laundromat visit is a stop on the route and a
+    // delivery is a stop on the route; calling them all pickups made the word
+    // wrong on exactly the route somebody is standing in.
     const note = late
       ? `${r.count} waiting`
       : r.count === 0
@@ -851,21 +882,21 @@ function roundCards(run) {
       `<div class="rr-when">${escapeHtml(when)}</div>` +
       `<div class="rr-what" style="font-weight:${r.state === 'now' || late ? '700' : '400'};">${escapeHtml(note)}</div>`;
 
-    // AN EMPTY ROUND IS NOT A LINK. There is nothing behind it, and a card that
+    // AN EMPTY ROUTE IS NOT A LINK. There is nothing behind it, and a card that
     // opens onto "nothing here" teaches you to stop tapping the cards.
     return r.count === 0
-      ? `<div class="run-round" style="${style}">${inner}</div>`
-      : `<a class="run-round" href="/ops/run?round=${encodeURIComponent(r.start)}" style="${style}">${inner}</a>`;
+      ? `<div class="run-route" style="${style}">${inner}</div>`
+      : `<a class="run-route" href="/ops/run?route=${encodeURIComponent(r.start)}" style="${style}">${inner}</a>`;
   };
 
-  const now = rounds.find((r) => r.state === 'now');
+  const now = routes.find((r) => r.state === 'now');
 
   return `
     <div style="margin:0 0 22px;">
       <div class="eyebrow" style="margin:0 0 9px;">
-        ${now ? `On the ${escapeHtml(now.label)} round` : "Today's rounds"}
+        ${now ? `On the ${escapeHtml(now.label)} route` : "Today's routes"}
       </div>
-      <div class="run-rounds">${rounds.map(card).join('')}</div>
+      <div class="run-routes">${routes.map(card).join('')}</div>
     </div>`;
 }
 

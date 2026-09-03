@@ -107,7 +107,7 @@ function describeAll(schedules) {
   return active.map(describe).filter(Boolean).join(', and ');
 }
 
-// When this schedule next comes round.
+// When this schedule next comes route.
 function nextDate(schedule, fromDate = booking.today()) {
   if (!schedule || schedule.status !== 'ACTIVE') return null;
 

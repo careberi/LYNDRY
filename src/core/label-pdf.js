@@ -35,13 +35,13 @@ const PT = 72;
 //
 // A thermal head prints dots, not curves. If a QR module works out at 3.9 dots
 // across, every module lands on a different fraction of a dot and the head
-// rounds each one differently - so edges wander by a dot, black modules bleed
+// routes each one differently - so edges wander by a dot, black modules bleed
 // into white ones, and the whole code goes mushy. Neil saw it and said so:
 // "the quality deteriorates... is there any way the QR could be bigger or not
 // as fine."
 //
 // The fix is to make a module a WHOLE number of dots. Then every edge falls on
-// a dot boundary and the head has nothing to round.
+// a dot boundary and the head has nothing to route.
 //
 // 203 is the CT221D and is what nearly every 2-inch thermal label printer runs
 // at. Overridable, because a 300 dpi one would want a different whole number.

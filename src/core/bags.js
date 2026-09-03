@@ -186,11 +186,11 @@ async function forOrder(orderId, leg = null) {
 }
 
 
-// EVERY LABEL FOR A SET OF ORDERS, IN ONE ROUND TRIP.
+// EVERY LABEL FOR A SET OF ORDERS, IN ONE ROUTE TRIP.
 //
 // forOrder() in a loop is one query per order, and the guided run walks every
 // order on every stop - which was seven separate bag_labels queries on a
-// three-stop round, each one a network hop to Supabase. On a phone over
+// three-stop route, each one a network hop to Supabase. On a phone over
 // cellular that is most of the wait between tapping a bag and seeing it turn
 // green.
 //

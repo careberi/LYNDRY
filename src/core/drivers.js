@@ -29,12 +29,12 @@ const DRIVER_FIELDS =
   'id, name, phone, role, status, drives, wage_cents_hour, base_address_line1, base_address_line2, ' +
   'base_city, base_state, base_postal_code, base_lat, base_lng, base_geocode_failed';
 
-// Anyone who actually drives a round.
+// Anyone who actually drives a route.
 //
 // orders.drive, not orders.act. An admin holds orders.act because fixing a
 // fat-fingered weight is admin work, and filtering on that put every admin in
 // the assignment pool - orders were being handed to whoever was at a desk. An
-// admin is an admin; they do not have a round.
+// admin is an admin; they do not have a route.
 async function active() {
   const { data, error } = await db
     .from('ops_users')
@@ -199,7 +199,7 @@ async function hoursFor(opsUserId) {
 }
 
 // Everybody's, in one query, as a Map. The assignment asks about the whole team
-// at once and a query each would be a round trip per driver.
+// at once and a query each would be a route trip per driver.
 async function hoursForAll() {
   const { data, error } = await db
     .from('ops_user_hours')

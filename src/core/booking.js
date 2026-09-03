@@ -585,7 +585,7 @@ function cannotDoThatTime(window) {
       `our ${describeWindow(theirs.start, theirs.end).replace('between ', '').replace(' and ', ' to ')} run is already out`
     : `${asked} has already gone for today`;
 
-  // The reason is built as a clause so it can be read either way round; this
+  // The reason is built as a clause so it can be read either way route; this
   // is the whole message, so it gets a capital.
   const opener = reason.charAt(0).toUpperCase() + reason.slice(1);
   return `${opener}, so we cannot get to you then. The next one we can do is ${when} ${offer}. Does that work?`;
@@ -670,7 +670,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   // NOT TAKING ORDERS. Checked first, before anything else, because when the
   // service is shut every other reason a booking might fail is beside the
   // point - and because this is the guard that has to hold when the AI is
-  // talked round. The prompt asks it not to book; this is what makes sure.
+  // talked route. The prompt asks it not to book; this is what makes sure.
   //
   // A STANDING ORDER IS NOT EXEMPT. The nightly job books tomorrow's recurring
   // pickups, and a van that is not running cannot collect them either.
@@ -712,7 +712,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
 
   // The order is written BEFORE the card is considered.
   //
-  // It used to be the other way round: no card meant no order, so somebody
+  // It used to be the other way route: no card meant no order, so somebody
   // arranging their first pickup got a payment link instead of a booking, and
   // once they had paid there was nothing to resume. They ended up with a saved
   // card and no pickup, which happened to a real customer.
@@ -782,7 +782,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   // WHERE IT IS GOING, DECIDED NOW. Neil's call: the system should have the
   // address the moment the order is placed, rather than working it out again
   // every time somebody draws a board - which meant a driver looking at
-  // tomorrow's round saw a stop called "a laundromat" with no address on it.
+  // tomorrow's route saw a stop called "a laundromat" with no address on it.
   //
   // Deliberately NOT awaited, and deliberately unable to fail the booking. It
   // may geocode, which is a rate-limited public service, and a customer waiting
@@ -892,11 +892,11 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
 
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 
-  // "Today's rounds are done" is a fact about the van, not a negotiation.
+  // "Today's routes are done" is a fact about the van, not a negotiation.
   // `opener` lets the payment webhook lead with "Card saved" without naming
   // the card twice in one text, which a real customer got.
   const lead = rolled
-    ? `${opener || 'Of course'}! Today's rounds are finished, so order #${order.order_number} is in for the earliest we can do:`
+    ? `${opener || 'Of course'}! Today's routes are finished, so order #${order.order_number} is in for the earliest we can do:`
     : `${opener || 'Of course'}! Order #${order.order_number} is booked:`;
 
   // THE CONFIRMATION IS THE ONE COMPLETE DOCUMENT of the order: number, day

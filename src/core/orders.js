@@ -30,7 +30,7 @@ const ALLOWED_NEXT = Object.freeze({
   DEPOSITED: ['IN_PROCESS', 'CANCELED'],
 
   // The partner leg is optional. A bag we wash ourselves goes straight from
-  // the van to the round; a bag a laundromat washes stops at AT_PARTNER and
+  // the van to the route; a bag a laundromat washes stops at AT_PARTNER and
   // READY on the way. Both are legal, so the machine does not force us to
   // invent a partner visit that never happened.
   IN_PROCESS: ['AT_PARTNER', 'OUT_FOR_DELIVERY'],

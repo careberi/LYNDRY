@@ -14,7 +14,7 @@
 //   /ops/journey  is one continuous PHYSICAL WALKTHROUGH of a single bag, in
 //                 the order the steps actually happen, with the reason each
 //                 guard exists. It is what you read to understand the work,
-//                 or hand to somebody before their first round.
+//                 or hand to somebody before their first route.
 //
 // So: a change to who does what goes in BOTH. A change to how the system is
 // built goes in process. A change to the physical sequence goes here first.
@@ -178,7 +178,7 @@ function journeyBody() {
     <p class="jn-lead" style="font-size:19px;max-width:60ch;">
       Every step from the customer's doorstep to the laundromat and back, in the
       order it happens, who does it, and why the awkward-looking rules are
-      there. Read this before your first round.
+      there. Read this before your first route.
     </p>
     <p style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);margin:0 0 22px;max-width:66ch;">
       Prose last checked against the code on ${esc(REVIEWED)}. Prices, the
@@ -204,7 +204,7 @@ function journeyBody() {
     `
     <ol class="jn-steps">
       ${step('Drive to the stop', 'Driver',
-        `His round shows <strong>one stop and one task at a time</strong>, never a
+        `His route shows <strong>one stop and one task at a time</strong>, never a
          list - reading ahead on a doorstep is how the wrong bag reaches the wrong
          house. A button opens the maps app, then he taps <strong>I'm here</strong>.`)}
 

@@ -12,7 +12,7 @@ const geocode = require('./geocode');
 // Three things come out of it:
 //
 //   1. CHAIN OF CUSTODY. A scan is the proof the bag left the partner with us.
-//   2. THE ROUND. Everything scanned becomes today's delivery run.
+//   2. THE ROUTE. Everything scanned becomes today's delivery run.
 //   3. A STOP NUMBER PER BAG, which he writes on a reusable tag and clips on.
 //
 // Then he loads in REVERSE - stop 12 deepest, stop 1 by the door - so every
@@ -438,7 +438,7 @@ async function currentRun() {
   return orders;
 }
 
-// Work out the order of the round and write a stop number onto each order.
+// Work out the order of the route and write a stop number onto each order.
 //
 // Called when the driver taps "Build the run", not on every scan: geocoding is
 // rate-limited to one address a second, and doing it per scan would make him
@@ -515,7 +515,7 @@ async function scanAtDoor(rawCode, order) {
 // Is every bag that is actually going to this door in the driver's hands?
 //
 // DELIVERY LABELS ONLY. This asked about every label on the order, which was
-// right only while a bag made the round trip. It does not: the laundromat
+// right only while a bag made the route trip. It does not: the laundromat
 // washes the contents and repacks into its own bags, so a three-bag collection
 // can come back as one. Counting the pickup labels here left two stickers that
 // could never be scanned - the camera never appeared and the order could not be

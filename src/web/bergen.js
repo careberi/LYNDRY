@@ -55,7 +55,7 @@ function pixel() {
 // The form.
 //
 // It is a real <form> that posts to a real endpoint, so it still works with
-// none of this running. The script upgrades it: it validates before the round
+// none of this running. The script upgrades it: it validates before the route
 // trip, swaps the confirmation in without a page load, and fires the pixel
 // event - which is the part that cannot survive a navigation.
 const script = `

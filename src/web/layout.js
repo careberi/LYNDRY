@@ -307,12 +307,12 @@ function renderPage({
        is the SHAPE, so the favicon is the shape with no type in it.
        The tail is drawn first and the body painted over it, so the body's
        outline closes across the top of the tail rather than showing through. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 22 L9.6 30.6 L16 24' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='round'/%3E%3Crect x='2.3' y='10' width='27.4' height='16' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.3'/%3E%3Cpath d='M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='round'/%3E%3Cpath d='M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6' fill='none' stroke='%23101210' stroke-width='2.1' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 22 L9.6 30.6 L16 24' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Crect x='2.3' y='10' width='27.4' height='16' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.3'/%3E%3Cpath d='M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Cpath d='M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6' fill='none' stroke='%23101210' stroke-width='2.1' stroke-linecap='route'/%3E%3C/svg%3E">
   <meta name="theme-color" content="#101210">
 
   <!-- The design system's font file @imports Google Fonts, and an @import
        inside a stylesheet does not start resolving until that stylesheet has
-       loaded. Opening the connections early takes a round trip off it. -->
+       loaded. Opening the connections early takes a route trip off it. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 

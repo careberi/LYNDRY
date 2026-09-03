@@ -161,7 +161,7 @@ async function total(orderId, leg = 'PICKUP', expected = null) {
 // DERIVED, NEVER STORED. It is read from the bag row and its order, both of
 // which already know. A stage column would be a second copy of the same fact
 // and would go stale the first time somebody used a different door - the same
-// reason the driver's position in his round is derived rather than kept.
+// reason the driver's position in his route is derived rather than kept.
 const STAGES = Object.freeze({
   BLANK:     'BLANK',      // printed, not on a bag yet
   TO_WEIGH:  'TO_WEIGH',   // on a bag at the customer's door, the driver must weigh it
@@ -275,9 +275,9 @@ async function unfinishedBags(orderId) {
 // one hand at a counter and three buttons per sticker is twelve buttons. The
 // colour says which state it is in, so the tap is "advance this", not "guess".
 //
-// AND IT COMES BACK ROUND TO UNUSED ON PURPOSE. A mis-tap is the most likely
+// AND IT COMES BACK ROUTE TO UNUSED ON PURPOSE. A mis-tap is the most likely
 // thing to happen on this page and there is nobody to undo it for them - going
-// round again is the escape. Deleting the row is safe: it carries nothing but
+// route again is the escape. Deleting the row is safe: it carries nothing but
 // its own existence and its sequence, both of which are printed on the tag.
 async function cycleSticker(parent, seq) {
   const n = Number(seq);

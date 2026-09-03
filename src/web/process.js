@@ -71,7 +71,7 @@ function section(id, eyebrow, heading, lead, body) {
 function processBody(user) {
   // WHAT SOMEBODY IS SHOWN DEPENDS ON WHAT THEY DO.
   //
-  // A driver needs the round: what he does, where a bag can be, what the
+  // A driver needs the route: what he does, where a bag can be, what the
   // laundromat does. He does not need the books, the AI's internals, the
   // vendor list or the permission matrix - and the point is that they are not
   // rendered for him at all, rather than hidden with styling. A page that
@@ -142,7 +142,7 @@ function processBody(user) {
     <p style="font-size:14px;color:var(--ink-500);line-height:1.6;margin:12px 0 0;">
       One exception to the table: <code>orders.drive</code> is the only
       permission a role does not decide on its own. A Driver has it always. An
-      Admin has it while they have switched themselves on to the round from the
+      Admin has it while they have switched themselves on to the route from the
       Team page - the owner drives some days and not others, and that is not a
       property of a job title.
     </p>`;
@@ -379,12 +379,12 @@ function processBody(user) {
     <ol class="pr-steps pr-driver">
       ${step(
         1,
-        'Open Your round',
+        'Open Your route',
         `Sign in at <code>/ops</code> with a mobile number and a six-digit code
          we text. No password, no app - save it to your home screen and it opens
          like one.
          <br><br>
-         <strong>Your round is the only screen you need.</strong> It shows one
+         <strong>Your route is the only screen you need.</strong> It shows one
          stop and one thing to do: where to go, a button that opens your maps
          app, and an <em>I'm here</em> button. Tap that when you pull up and it
          tells you what to do at this door. Finish it and it gives you the next
@@ -409,7 +409,7 @@ function processBody(user) {
          whichever driver's home base is nearest, the route starts and ends at
          yours, and you see your own stops and nobody else's.
          <br><br>
-         It also answers the question that comes up mid-round: an order has just
+         It also answers the question that comes up mid-route: an order has just
          come in, does it fit into what you are already doing, and what does
          taking it cost. Nothing on that page changes anything - it is a
          picture, not a button.`
@@ -417,7 +417,7 @@ function processBody(user) {
       ${step(
         3,
         'Tag every bag, and enter its id',
-        `Your round asks for this first at every pickup. A bag tag off the stack in
+        `Your route asks for this first at every pickup. A bag tag off the stack in
          the van goes on each bag, and the six characters printed under the QR go
          into the box. That is what binds a tag to a bag. Print more from the bag
          tags screen when you get low. A tag means nothing until it is entered -
@@ -438,7 +438,7 @@ function processBody(user) {
       ${step(
         5,
         'WEIGH IT BEFORE IT LEAVES YOUR HANDS',
-        `The most important step on the round. The weight sets the price and
+        `The most important step on the route. The weight sets the price and
          <strong>charges the customer's card</strong>, so it has to be our
          number on our scale - never the laundromat's figure taken on trust.
          Each bag is weighed on its own, so the order total is the sum of
@@ -461,7 +461,7 @@ function processBody(user) {
         'Scan every bag out of the laundromat, then load in reverse',
         `The load-out screen. One continuous pass - scan each bag as it goes in,
          you are touching it anyway. That records that it left the partner with
-         us, builds the round from everything scanned, and gives each bag a
+         us, builds the route from everything scanned, and gives each bag a
          stop number to write on a reusable tag. Then <strong>load
          backwards</strong>: highest number deepest, stop 1 by the door, so
          every bag is at the tailgate when you arrive. Numbered tags without

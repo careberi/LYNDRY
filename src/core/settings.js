@@ -92,7 +92,7 @@ async function setTakingOrders(taking, reason, opsUserId) {
 // exactly right - it was a point somebody had once typed, and there was no way
 // to move it without a code change and a deploy.
 //
-// It is load-bearing in a way that is easy to miss: every round is measured
+// It is load-bearing in a way that is easy to miss: every route is measured
 // from it, every driver with no base of their own falls back to it, and
 // nearest-driver assignment compares against it. Wrong by a mile and every
 // route is wrong from its first mile.

@@ -205,7 +205,7 @@ function whereTheyAre(run) {
   const pct = run.total ? Math.round((run.done / run.total) * 100) : 0;
 
   const doing = run.finished
-    ? 'Finished the round.'
+    ? 'Finished the route.'
     : run.current
       ? `${run.arrived ? 'At' : 'On the way to'} ${
           run.current.name
@@ -337,7 +337,7 @@ function routingBoardBody({
   <h1 style="margin:0 0 14px;font-size:40px;line-height:1.05;">The day, as it stands</h1>
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 22px;">
     Everything live in the queue for one day, put in the order it gets driven.
-    Pick a day and a round and it works out the route, which laundromat
+    Pick a day and a route and it works out the route, which laundromat
     the bags go to, and when the driver should be at each door. Nothing here
     changes anything - it is a picture, not a button.
   </p>
@@ -394,19 +394,19 @@ function routingBoardBody({
                value="${escapeHtml(board.date)}" style="width:100%;">
       </div>
       <div>
-        <!-- A ROUND, NOT A CLOCK TIME. Neil's change, and it matches how the
+        <!-- A ROUTE, NOT A CLOCK TIME. Neil's change, and it matches how the
              day is actually organised: the van goes out in the same two hour
-             windows customers are promised, so "which round" is a real
+             windows customers are promised, so "which route" is a real
              question and "leaving base at 11:17" was never one anybody asked.
              It also stops the board being planned from whatever minute the
              page happened to be opened.
 
              The value posted is still the window's START, so everything
              downstream is unchanged and an old ?from=HH:MM link still works. -->
-        <label class="field-label" for="from">Which round</label>
+        <label class="field-label" for="from">Which route</label>
         <select class="select input-lg" id="from" name="from" style="width:100%;">
           ${booking.PICKUP_WINDOWS.map((w) => {
-            // The round a given start time belongs to, so reopening the page
+            // The route a given start time belongs to, so reopening the page
             // lands on the one you were looking at.
             const chosen = board.start >= w.start && board.start < w.end;
             return `<option value="${w.start}"${chosen ? ' selected' : ''}>${escapeHtml(
@@ -511,7 +511,7 @@ function routingBoardBody({
              }
              <br>
              The wage is ${escapeHtml(money(board.money.wagePerHour * 100))} an hour for
-             ${board.driver ? escapeHtml(board.driver.name) : 'this round'} and counts
+             ${board.driver ? escapeHtml(board.driver.name) : 'this route'} and counts
              <strong>every paid minute</strong>, on the road and on the
              ground. Bags not yet weighed are billed at what that customer's laundry
              usually weighs.
@@ -727,7 +727,7 @@ function routingBoardBody({
     // CARTO used to serve these without a key. They now stamp API KEY REQUIRED
     // across every tile for unkeyed use, which is what put that watermark over
     // the whole map. OSM's own tiles are genuinely keyless and their usage
-    // policy is comfortable at the volume of one person planning a round.
+    // policy is comfortable at the volume of one person planning a route.
     //
     // No {s} subdomain: OSM asked people to stop using a.b.c prefixes, and a
     // single host is what they document now.
@@ -754,12 +754,12 @@ function routingBoardBody({
       pts.push([DATA.position.lat, DATA.position.lng]);
     }
 
-    // A LAUNDROMAT WE ARE NOT USING TODAY IS CONTEXT, NOT PART OF THE ROUND.
+    // A LAUNDROMAT WE ARE NOT USING TODAY IS CONTEXT, NOT PART OF THE ROUTE.
     //
     // It is still drawn - knowing where the others are is the point of having
     // them on a map at all - but it must not decide the zoom. Every partner
     // used to go into the bounds, so one in Paterson stretched the frame
-    // several miles west of a round that never leaves Glen Rock and Fair Lawn,
+    // several miles west of a route that never leaves Glen Rock and Fair Lawn,
     // and the actual stops ended up squeezed into a corner. The map looked
     // broken because it was framing somewhere nobody is going.
     //
@@ -922,7 +922,7 @@ function quoteAnswer(q, { showMoney }) {
 // in the same eyeful.
 //
 // ONLY AN ADMIN SEES THE FORM. Moving the base moves every route for everybody,
-// which is an owner's decision and not a step in anybody's round - the same
+// which is an owner's decision and not a step in anybody's route - the same
 // reasoning that puts the closed sign behind service.manage. A driver still
 // sees WHERE it is, because "the route starts here" is something they need to
 // be able to check.
@@ -1018,7 +1018,7 @@ function baseCard(board, canSetBase, saved) {
 
                  <button class="btn btn-primary btn-lg" type="submit">Save the base</button>
                  <p style="margin:0;font-size:13px;color:var(--ink-700);line-height:1.5;">
-                   This moves the start of every round, for everybody. It does not
+                   This moves the start of every route, for everybody. It does not
                    change any order that is already booked.
                  </p>
                </form>
@@ -1030,7 +1030,7 @@ function baseCard(board, canSetBase, saved) {
 
 
 // ---------------------------------------------------------------------------
-// WHAT IS NOT ON THIS ROUND.
+// WHAT IS NOT ON THIS ROUTE.
 //
 // The board used to hand every one of the day's pickups to the router whatever
 // window they were promised, so two customers booked for 2 to 4pm turned up on
@@ -1038,7 +1038,7 @@ function baseCard(board, canSetBase, saved) {
 // that knocks two hours before he said he would.
 //
 // They are filtered out of the sequence now. These two lists are what stops
-// that fix creating a worse problem: a stop that is on no round is a stop
+// that fix creating a worse problem: a stop that is on no route is a stop
 // nobody drives to, and it would go missing quietly.
 //
 // LATE IS LOUD AND LATER IS QUIET, because they are not the same news. A
@@ -1067,8 +1067,8 @@ function otherRounds(board, showNames) {
              <div class="eyebrow" style="margin:0 0 8px;color:var(--paper-050);">Missed</div>
              <p style="margin:0 0 10px;font-size:15px;line-height:1.5;font-weight:700;">
                ${late.length === 1 ? 'One pickup' : `${late.length} pickups`} whose window has
-               closed and that nobody has collected. They are not on this round -
-               pick the round they were promised, or move them.
+               closed and that nobody has collected. They are not on this route -
+               pick the route they were promised, or move them.
              </p>
              <ul style="margin:0;padding-left:20px;font-size:15px;">${late.map(line).join('')}</ul>
            </div>`
@@ -1078,14 +1078,14 @@ function otherRounds(board, showNames) {
       later.length
         ? `<p style="margin:0 0 20px;font-size:14px;line-height:1.55;color:var(--ink-700);">
              ${later.length === 1 ? 'One other pickup is' : `${later.length} other pickups are`}
-             booked today in a different round: ${later
+             booked today in a different route: ${later
                .map(
                  (o) =>
                    `<a href="/ops/orders/${escapeHtml(o.order_number)}" style="color:inherit;font-weight:700;">#${escapeHtml(
                      o.order_number
                    )}</a> ${escapeHtml(booking.describeWindow(o.pickup_window_start, o.pickup_window_end) || '')}`
                )
-               .join(', ')}. Switch rounds above to see them.
+               .join(', ')}. Switch routes above to see them.
            </p>`
         : ''
     }`;

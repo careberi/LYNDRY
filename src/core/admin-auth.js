@@ -29,7 +29,7 @@ const { normalisePhone } = require('./phone');
 
 const COOKIE_NAME = 'ly_ops';
 
-// Long enough that a driver isn't signing in mid-round, short enough that a
+// Long enough that a driver isn't signing in mid-route, short enough that a
 // lost phone stops working on its own.
 const SESSION_DAYS = 30;
 

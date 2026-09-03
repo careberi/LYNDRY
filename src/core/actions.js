@@ -684,7 +684,7 @@ async function setPickupSchedule(customer, input) {
       return `You haven't got a repeating pickup set up, so there's nothing to skip.`;
     }
 
-    // Whichever comes round first is the one they mean by "skip the next one".
+    // Whichever comes route first is the one they mean by "skip the next one".
     const soonest = active
       .map((s) => ({ s, on: recurring.nextDate(s) }))
       .filter((x) => x.on)

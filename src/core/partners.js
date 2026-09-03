@@ -371,7 +371,7 @@ async function hoursFor(partnerId) {
 }
 
 // Every partner's hours in one query, as a Map keyed by partner id. The board
-// needs all of them at once and a query each would be a round trip per
+// needs all of them at once and a query each would be a route trip per
 // laundromat for a table that will never be long.
 async function hoursForAll() {
   const { data, error } = await db

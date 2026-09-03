@@ -7,7 +7,7 @@ const { config } = require('../config');
 // ---------------------------------------------------------------------------
 // Turning an address into a point on the map.
 //
-// Needed for exactly one thing: putting a delivery round in a sensible order.
+// Needed for exactly one thing: putting a delivery route in a sensible order.
 // Without coordinates a "stop number" would be the order the driver happened
 // to scan bags in, which is worse than no number at all - a sequence you
 // cannot trust is one you have to re-check at every door.
@@ -23,10 +23,10 @@ const { config } = require('../config');
 //      why this runs on the server - a browser cannot set one.
 //   3. Cache the result. An address does not move, so a customer is looked up
 //      once, ever. A failure is cached too, so a bad address is not retried
-//      every single time a round is built.
+//      every single time a route is built.
 //
 // If it is down or slow, nothing breaks: a stop with no coordinates still gets
-// delivered, it just sorts to the end of the round and says so on screen.
+// delivered, it just sorts to the end of the route and says so on screen.
 // ---------------------------------------------------------------------------
 
 const ENDPOINT = 'https://nominatim.openstreetmap.org/search';
@@ -88,7 +88,7 @@ async function lookup(query) {
     return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
   } catch {
     // Timeout, network, malformed JSON. All the same answer: we do not know
-    // where this is, and the round carries on without it.
+    // where this is, and the route carries on without it.
     return null;
   } finally {
     clearTimeout(timer);
@@ -104,7 +104,7 @@ async function locate(customer) {
     return { lat: Number(customer.lat), lng: Number(customer.lng) };
   }
 
-  // Already tried and found nothing. Asking again on every round build would
+  // Already tried and found nothing. Asking again on every route build would
   // spend our whole rate budget on the one address that will never resolve.
   if (customer.geocode_failed) return null;
 
@@ -192,7 +192,7 @@ function milesBetween(a, b) {
 // arithmetic knew that.
 //
 // The fix is not a better heuristic. It is asking the right question: a pickup
-// round is not "visit these doors", it is "get from the base to the laundromat,
+// route is not "visit these doors", it is "get from the base to the laundromat,
 // calling at these doors" - an open path with BOTH ends pinned.
 //
 // EXACT FOR THE SIZES WE ACTUALLY SEE. Up to eight stops there are at most
@@ -288,7 +288,7 @@ function greedyThen2opt(known, base, end) {
   return { ordered, miles: best };
 }
 
-// `end` is where the leg has to finish - the laundromat for a pickup round, the
+// `end` is where the leg has to finish - the laundromat for a pickup route, the
 // depot for the way home. Omit it and the leg is open-ended, which is right for
 // a list that is not going anywhere afterwards.
 function sequence(points, base, { end = null } = {}) {
