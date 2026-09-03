@@ -338,7 +338,9 @@ async function openLocker(customer) {
 // something this will then refuse.
 
 const ADDRESS_FIELDS = ['address_line1', 'address_line2', 'city', 'state', 'postal_code'];
-const WASH_FIELDS = ['water_temp', 'detergent', 'fabric_softener'];
+// DETERGENT IS NOT HERE ANY MORE. It is standard for everybody, so there is
+// nothing to change and nothing to lock while we hold their laundry.
+const WASH_FIELDS = ['water_temp', 'fabric_softener'];
 
 // Returns a sentence if this change is not allowed right now, or null.
 async function lockedWhileWithUs(customer, fields) {
@@ -371,7 +373,6 @@ async function lockedWhileWithUs(customer, fields) {
 const PROFILE_COLUMNS = ['name', 'email', 'address_line1', 'address_line2', 'city', 'state', 'postal_code'];
 const PREFERENCE_KEYS = [
   'water_temp',
-  'detergent',
   'fabric_softener',
   // Structured on purpose: having this as a field is what stops it being typed
   // into free text, which is the one place a customer will also type an address

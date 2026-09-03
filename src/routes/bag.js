@@ -488,6 +488,9 @@ const ES = Object.freeze({
   'Softener': 'Suavizante',
   'Water': 'Agua',
   'Standard scented': 'Con aroma normal',
+  // The detergent line is a STANDARD now, not a choice, so its value is the
+  // bare word rather than one of the old option labels.
+  'Standard': 'Normal',
   'Free & clear, fragrance-free': 'Sin fragancia',
   'No softener': 'Sin suavizante',
   'Fragrance-free': 'Sin fragancia',

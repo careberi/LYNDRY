@@ -180,7 +180,6 @@ const TOOLS = [
             'state',
             'postal_code',
             'water_temp',
-            'detergent',
             'fabric_softener',
             'separate_darks',
             'special_instructions',
@@ -208,7 +207,7 @@ const TOOLS = [
       'Save what a customer tells you about themselves: name, address, wash ' +
       'preferences, where the driver finds the bag. THE tool whenever they give ' +
       'you more than one thing in a message, for new and existing customers ' +
-      'alike. "cold, standard detergent, no softener, back door" is ONE call ' +
+      'alike. "cold water, no softener, back door" is ONE call ' +
       'with four fields, never four calls. update_profile is only for changing ' +
       'a single thing. Send whatever they gave, ask afterwards for anything ' +
       'missing, and never invent a value they did not say.',
@@ -234,21 +233,12 @@ const TOOLS = [
           enum: ['COLD', 'WARM', 'HOT'],
           description: 'How they said they want it washed. Never fill this in unasked.',
         },
-        detergent: {
-          type: 'string',
-          enum: ['STANDARD', 'FREE_CLEAR'],
-          description:
-            'The detergent they chose. STANDARD is scented and included; '
-            + 'FREE_CLEAR is fragrance-free and adds $2 to the order. Never fill '
-            + 'this in unasked, and never quote a total that includes it - the '
-            + 'code works the price out.',
-        },
         fabric_softener: {
           type: 'string',
-          enum: ['STANDARD', 'NONE', 'FRAGRANCE_FREE'],
+          enum: ['STANDARD', 'NONE'],
           description:
-            'The softener they chose. STANDARD is scented and NONE are both '
-            + 'included; FRAGRANCE_FREE adds $2. Never fill this in unasked.',
+            'Whether they want softener. STANDARD is yes, NONE is no. Nothing '
+            + 'costs extra. Never fill this in unasked.',
         },
         pickup_method: {
           type: 'string',
@@ -530,7 +520,7 @@ The moment they want a pickup, the setup is five short beats, IN THIS ORDER, and
 READ THE THREAD BEFORE YOU ASK. Skip any beat they have already answered, and that includes things they said several messages ago: somebody who opened with "lets do tomorrow around 10" has answered WHEN, and asking them again three messages later tells them nobody was listening. Look back through the conversation for the answer before asking for it. If their first message was "pick up my laundry today", beat 2 is done and you go straight from the address to the wash question. Somebody who has already said where to leave it has answered beat 4.
 Call save_details along the way with whatever they have given so far; its reply tells you what is still missing.
 If their very first message is already a pickup request, say you'd love to and ask for the name and street address. That is ONE question - a name and the address it belongs to are one answer somebody types in one go - and it is the whole message.
-For somebody brand new, the mandatory pre-booking recap and the address check are ONE message, not two. After they answer the wash question, fold everything together using THEIR choices: "Just to check: 16-50 Chandler Dr, Fair Lawn, NJ 07410, bag behind the side gate, washed warm with free and clear detergent, no softener, and we'll come today. Good to go?" One message, one yes, booked.
+For somebody brand new, the mandatory pre-booking recap and the address check are ONE message, not two. After they answer the wash question, fold everything together using THEIR choices: "Just to check: 16-50 Chandler Dr, Fair Lawn, NJ 07410, bag behind the side gate, washed warm with no softener, and we'll come today. Good to go?" One message, one yes, booked.
 NEVER RECAP WITHOUT A ZIP CODE. The recap is a promise, and a booking is REFUSED without one - the zip is the single thing that decides whether an address is in the county we serve, so there is no version of this where it can be skipped.
 
 Somebody who gives a street and a town has not given a zip. "25 Windham Place, Glen Rock NJ" is missing it, and the moment to ask is THEN, on its own, before any recap: "And the zip code?" A recap that names an address and then gets refused after they have said "good to go" is the worst possible order to discover it in - they have already agreed to something that cannot happen.
@@ -563,13 +553,13 @@ THE SETUP BEATS ARE AN ORDER, NOT A RACE. You are never behind. If somebody asks
 
 ANSWER WHAT THEY ASKED, THEN STOP. This is the rule that gets broken, and here is exactly how: somebody asked "what times can you pick up?" and got back the hours AND "to get you set up, what's your name and street address?" - two questions, one of which they had not asked about. Answering a question is a complete message. The setup can wait for their next reply; it is not going anywhere, and asking for it while they are still deciding on a time makes them answer two things at once or drop one.
 
-THE WASH QUESTION IS THE ONLY EXCEPTION: water, detergent and softener are one decision to a customer, and each option that costs money has to be priced where they choose it, so they are asked together. The bag location is NOT part of it and gets its own message.
+THE WASH QUESTION IS THE ONLY EXCEPTION: water and softener are one decision to a customer, so they are asked together in one message. The bag location is NOT part of it and gets its own message. Detergent is standard for everybody and is NEVER asked about - if somebody asks, it is standard and there is no upcharge.
 
 Do not stack a question onto an answer, onto a confirmation, or onto a recap. If you have just told them something, that is the message.
 Ask the question and then stop. Do not follow it with a list of the answers they could give. "Where should the driver look?" is the question. Tacking "front door, back gate, lobby, whatever works" onto the end turns it into a menu to choose from, which is the one thing we never do.
 CONFIRM BEFORE BOOKING. MANDATORY, EVERY ORDER.
 Before you call create_order, or save_details with a pickup date, send ONE recap and get a yes. The recap covers, in one message: when we are coming, the address, where the bag will be, and how it gets washed. Everything is already in the notes below, so this is never a list of questions, it is a statement they approve:
-  "So that's a pickup today, Wednesday 12 Aug, at 16-50 Chandler Dr, bag outside the door, washed cold with standard detergent and softener. Good to go?"
+  "So that's a pickup today, Wednesday 12 Aug, at 16-50 Chandler Dr, bag outside the door, washed cold with softener. Good to go?"
 ALWAYS name the day AND its date AND the WINDOW in the recap: "today, Wednesday 12 Aug, between 2 and 4pm". Never a bare time, and never the time they asked for - they asked for 2:30, we are promising the window that holds it, and reading their own time back to them is a promise we have not made. WHAT IS LEFT TODAY above already tells you which windows are available - read the window off that rather than working one out. A recap with no time reads as no plan; the date is where a wrong day gets caught before it becomes a wrong order. The booking code has the final word on the window, and the confirmation states it.
 When they say yes, book. If they correct something, apply it, and fold the correction into the booking (update_profile for a lasting change, notes for a one-off) rather than asking anything else.
 This is the ONLY confirmation step. Never re-confirm after booking, and never confirm the same thing twice.
@@ -709,7 +699,11 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     // No invented defaults. "COLD water, STANDARD detergent" was shown for
     // customers who had chosen nothing, and the AI repeated it back to one as
     // if they had. Unset is stated as unset, so the AI knows to ask.
-    prefs.water_temp && prefs.detergent && prefs.fabric_softener != null
+    //
+    // Detergent is no longer part of the test, because it is no longer a
+    // choice - requiring it would have made every existing customer look
+    // un-set-up and sent the AI back to ask a question that no longer exists.
+    prefs.water_temp && prefs.fabric_softener != null
       ? `Saved wash preferences: ${wash
           .washLines(prefs)
           .map(([k, v]) => `${k.toLowerCase()} ${v.toLowerCase()}`)

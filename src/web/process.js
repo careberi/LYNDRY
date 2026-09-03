@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '2 September 2026';  // no scale photo, and the pickup sequence
+const REVIEWED = '3 September 2026';  // two wash questions, detergent is standard
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -326,7 +326,7 @@ function processBody(user) {
         `A stranger texts <strong>${esc(site.publicPhoneDisplay)}</strong> and gets a reply.
          If we do not recognise the number, the whole of signing up happens in
          that thread: we ask their name and where to collect from, and how they
-         like it washed - temperature, detergent, softener, and where the
+         like it washed - water temperature and whether they want softener, and where the
          driver finds the bag. Those four are asked once and never again. They
          can also start from the website, which just texts them first.`
       )}
@@ -581,7 +581,7 @@ function processBody(user) {
       </p>
       <p>
         The wash settings on that page come from a <strong>short allowlist of
-        structured fields</strong> - water, detergent, softener - plus the sorting
+        structured fields</strong> - water, softener, and the standard detergent - plus the sorting
         standard, which is the same for everybody and is not a choice. Drying is
         not a choice either: everything is tumble dried, so there is no field for
         it and nobody can be promised an exception. Anything a customer typed

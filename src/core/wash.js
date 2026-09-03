@@ -18,33 +18,38 @@
 //   asked of the customer.
 // ---------------------------------------------------------------------------
 
-// The surcharge is in whole cents, like every other amount in this system.
+// TWO QUESTIONS, AND NEITHER COSTS ANYTHING. Neil's simplification: the
+// customer picks the water temperature and says whether they want softener.
+// That is the whole of it.
+//
+// DETERGENT LEFT THIS LIST and became a standard, below. It was a choice
+// between standard and free & clear at +$2, which meant every new customer had
+// to be asked about detergent before we could book them - and the +$2 was
+// never actually billed, which the reconciliation report found. Neil's call:
+// "detergent is just gonna be standard across the board, there's not gonna be
+// an upcharge, we're not gonna ask about that."
+//
+// SO NOTHING HERE COSTS ANYTHING NOW. surchargeFor() is kept and returns zero,
+// because a paid option is a plausible thing to want again and the billing
+// path that reads it is already correct - see fulfilment.recordWeight(). What
+// is gone is any option that charges, not the ability to have one.
 const OPTIONS = Object.freeze({
-  detergent: Object.freeze({
-    label: 'Detergent',
-    default: 'STANDARD',
-    choices: Object.freeze([
-      Object.freeze({ value: 'STANDARD', label: 'Standard scented', short: 'Standard Scented', cents: 0 }),
-      Object.freeze({
-        value: 'FREE_CLEAR',
-        label: 'Free & clear, fragrance-free',
-        // SHORT NAMES EXIST FOR THE TEXT MESSAGE ONLY. The full label is what a
-        // laundromat reads off a tag, where there is room and precision
-        // matters; this is what a customer reads on a phone, where every
-        // character is billed by the segment.
-        short: 'Free & Clear',
-        cents: 200,
-      }),
-    ]),
-  }),
-
   fabric_softener: Object.freeze({
     label: 'Softener',
     default: 'STANDARD',
+    // A yes and a no, and the SHORT names say exactly that. "Softener:
+    // Softener or No Softener" is what building the question out of the full
+    // labels produced, and it reads like a machine. The full labels are what a
+    // laundromat sees on the ticket, where precision matters more than
+    // register.
+    //
+    // Fragrance-free was the third and went with the
+    // detergent: it was the other +$2, and asking somebody to choose between
+    // three kinds of softener on a phone is the form this product exists not
+    // to be.
     choices: Object.freeze([
-      Object.freeze({ value: 'STANDARD', label: 'Standard scented', short: 'Standard Scented', cents: 0 }),
-      Object.freeze({ value: 'NONE', label: 'No softener', short: 'No Softener', cents: 0 }),
-      Object.freeze({ value: 'FRAGRANCE_FREE', label: 'Fragrance-free', short: 'Fragrance-Free', cents: 200 }),
+      Object.freeze({ value: 'STANDARD', label: 'Standard scented', short: 'Yes', cents: 0 }),
+      Object.freeze({ value: 'NONE', label: 'No softener', short: 'No', cents: 0 }),
     ]),
   }),
 
@@ -58,6 +63,14 @@ const OPTIONS = Object.freeze({
     ]),
   }),
 });
+
+// WHAT IS FIXED AND THEREFORE NEVER ASKED.
+//
+// A laundromat still has to be TOLD these - they are instructions for the wash
+// - but a customer is never offered them, exactly like the sorting standard
+// below. Detergent moved here from OPTIONS; drying has always been here in
+// spirit and is stated in the prompt.
+const STANDARDS = Object.freeze([Object.freeze(['Detergent', 'Standard'])]);
 
 // HOW EVERY ORDER IS SORTED. Neil's words, and it is a standard rather than a
 // preference: it is printed on the laundromat's ticket and never asked of a
@@ -113,11 +126,20 @@ function surchargeFor(preferences) {
 // than trying to redact what it does not.
 function washLines(preferences) {
   const p = preferences || {};
-  return KEYS.map((key) => {
+
+  // Water first, then softener, then the fixed standards. The order is what
+  // somebody at a machine works through, not the order the object happens to
+  // have its keys in.
+  const chosen = ['water_temp', 'fabric_softener'].map((key) => {
     const option = OPTIONS[key];
     const choice = choiceFor(key, p[key]);
     return [option.label, choice.label];
   });
+
+  // STANDARDS ARE PRINTED, NOT ASKED. A laundromat needs to know the detergent
+  // even though nobody chose it - leaving it off the ticket would leave them
+  // guessing at the one thing we have decided for them.
+  return chosen.concat(STANDARDS.map((pair) => [...pair]));
 }
 
 // The same thing said to a customer, with the prices in it.
@@ -144,16 +166,16 @@ function describeSaved(prefs) {
   if (!lines.length) return '';
 
   const water = lines.find(([k]) => k === 'Water');
-  const detergent = lines.find(([k]) => k === 'Detergent');
   const softener = lines.find(([k]) => k === 'Softener');
 
+  // The detergent is not mentioned. It is the same for everybody, so reading it
+  // back as though they had chosen it is telling somebody what they have been
+  // "set up with" - the exact sentence Neil called unacceptable when it went to
+  // a real customer.
   const parts = [];
   if (water) parts.push(`Washed ${water[1].toLowerCase()}`);
-  if (detergent) parts.push(`with ${detergent[1].toLowerCase()} detergent`);
   if (softener) {
-    parts.push(
-      /^no /i.test(softener[1]) ? 'and no softener' : `and ${softener[1].toLowerCase()} softener`
-    );
+    parts.push(/^no /i.test(softener[1]) ? 'with no softener' : 'with softener');
   }
 
   return parts.join(' ');
@@ -213,14 +235,16 @@ const QUESTION = (() => {
     return `${parts.slice(0, -1).join(', ')}, or ${parts[parts.length - 1]}`;
   };
 
+  // TWO LINES NOW, NOT THREE. The detergent line went with the choice, which
+  // takes the question from 183 characters to about 100 - back inside a single
+  // SMS segment, where it was two. A shorter question is also one people answer
+  // in a single reply.
   return [
     'How would you like your laundry washed?',
     '',
     `Water: ${list(OPTIONS.water_temp.choices)}`,
     '',
-    `Detergent: ${list(OPTIONS.detergent.choices)}`,
-    '',
-    `Softener: ${list(OPTIONS.fabric_softener.choices)}`,
+        `Softener: ${list(OPTIONS.fabric_softener.choices)}`,
   ].join('\n');
 })();
 
@@ -228,6 +252,7 @@ module.exports = {
   OPTIONS,
   KEYS,
   SORTING,
+  STANDARDS,
   QUESTION,
   choiceFor,
   isValid,
