@@ -310,7 +310,7 @@ function taskControl(stop, task, order) {
     <form method="post" action="/ops/orders/${order.order_number}/bag-count${back}" style="margin:0;">
       <label class="field-label" for="bag_count">Bags</label>
       <input class="input input-lg" type="number" id="bag_count" name="bag_count" min="1" max="20"
-             inputmode="numeric" required autofocus placeholder="3" style="width:100%;margin-bottom:16px;">
+             inputmode="numeric" required autofocus placeholder="1" style="width:100%;margin-bottom:16px;">
       <button type="submit" class="btn btn-primary btn-lg btn-full">That's how many</button>
     </form>`;
   }
