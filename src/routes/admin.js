@@ -447,7 +447,8 @@ ${head}
     // The mark still goes back to /ops, so nothing is trapped here: it is one
     // tap to the board and every other screen from there.
     bare
-      ? `<div class="container" style="padding-top:22px;">
+      ? // Centred, to match the bag tag page this was modelled on.
+        `<div class="container" style="padding-top:22px;text-align:center;">
            ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
          </div>`
       : `<header class="site-header">

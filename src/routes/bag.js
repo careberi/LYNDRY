@@ -870,7 +870,11 @@ function page({ title, body }) {
 </head>
 <body>
   <main class="container" style="max-width:560px;padding-top:28px;padding-bottom:64px;">
-    <div style="margin-bottom:26px;">${logo('compact')}</div>
+    <!-- CENTRED. Neil's call. This page is one card on an otherwise empty
+         screen, and a mark tucked into the top-left corner of that reads as
+         the leftover of a header that is not there. Centred, it is the
+         letterhead of the card below it. -->
+    <div style="margin-bottom:26px;text-align:center;">${logo('compact')}</div>
     ${body}
   </main>
 </body>
