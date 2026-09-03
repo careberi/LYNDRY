@@ -25,6 +25,7 @@ const {
   labelDetailBody,
 } = require('../web/labels');
 const bags = require('../core/bags');
+const weight = require('../core/weight');
 const tags = require('../core/tags');
 const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
@@ -1756,7 +1757,10 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     // With us right now: collected and not yet back at their door.
     const withUs = [...g.van, ...g.partner, ...g.ready, ...g.out];
-    const poundsWithUs = withUs.reduce((sum, o) => sum + Number(o.weight_lb || 0), 0);
+    // Summed through weight.sum, which rounds once at the end. Adding these
+    // raw is what put "52.599999999999994 lb" on the board: 25 + 27.6 in
+    // binary floating point is not 52.6.
+    const poundsWithUs = weight.sum(withUs.map((o) => o.weight_lb));
     const late = withUs.filter((o) => {
       const t = fulfilment.turnaround(o);
       return t && t.overdue;
@@ -2026,7 +2030,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
           // is better than a zero that reads as "nothing in hand".
           statCard(
             'Pounds with us',
-            poundsWithUs ? `${poundsWithUs} lb` : withUs.length ? 'not weighed' : '0'
+            poundsWithUs ? weight.show(poundsWithUs, { unit: true }) : withUs.length ? 'not weighed' : '0'
           )
         }
         ${late.length ? statCard('Late', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}

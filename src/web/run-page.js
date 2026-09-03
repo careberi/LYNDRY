@@ -941,9 +941,19 @@ function quickTapScript() {
     var wasGot = btn.getAttribute('data-got') === '1';
     var left = counter ? Number(counter.getAttribute('data-left')) : null;
 
-    // The last one to collect: let the real submit happen, because what comes
-    // after it is the server's call.
-    if (!wasGot && left === 1) { form.submit(); return; }
+    // THE LAST BAG USED TO CALL form.submit() HERE, AND THAT IS WHY IT COULD
+    // NOT BE TAPPED.
+    //
+    // form.submit() does not send the submit button's name and value - only a
+    // real click does. So the last tap posted an empty body, the route found no
+    // label_id, redirected, and the page came back looking identical. Neil:
+    // "it's only letting us click one at a time."
+    //
+    // Everything goes through fetch now, carrying the value explicitly. What
+    // the last one still needs is a RELOAD afterwards, because collecting the
+    // final bag is what reveals the next control and that is the server's call
+    // to make, not a guess in the browser.
+    var isLast = !wasGot && left === 1;
 
     var paint = function (got) {
       btn.setAttribute('data-got', got ? '1' : '0');
@@ -971,14 +981,25 @@ function quickTapScript() {
       credentials: 'same-origin',
       redirect: 'follow',
     })
-      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('http ' + r.status);
+        // That was the last one, so ask the server what comes next rather than
+        // drawing it here.
+        if (isLast) window.location.replace(window.location.pathname + window.location.search);
+      })
       .catch(function () {
         // Put it back. A bag that looks collected and is not is how one gets
         // left on a counter.
         paint(wasGot);
+        btn.disabled = false;
         alert('That did not save. Check your signal and tap it again.');
       })
-      .then(function () { btn.disabled = false; });
+      .then(function () {
+        // Not re-enabled after the last one: the page is on its way to
+        // reloading, and a button that comes back alive for half a second
+        // invites a second tap that lands on a page about to be replaced.
+        if (!isLast) btn.disabled = false;
+      });
   });
 })();
 </script>`;

@@ -376,7 +376,7 @@ async function reconcileLoad(driverId = null) {
       continue;
     }
 
-    const total = weighed.reduce((t, b) => t + Number(b.weight_lb || 0), 0);
+    const total = require('./weight').sum(weighed.map((b) => b.weight_lb));
 
     const vsPartner =
       order.partner_weight_lb == null

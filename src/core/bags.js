@@ -466,7 +466,11 @@ async function totalWeight(orderId, leg = 'PICKUP') {
   if (!weighed.length) return null;
 
   return {
-    pounds: weighed.reduce((t, l) => t + Number(l.weight_lb), 0),
+    // Rounded once, at the end. This figure becomes orders.weight_lb, which
+    // prices the order and is what a laundromat's number is checked against -
+    // so the drift has to be taken out here rather than papered over on a
+    // screen further down.
+    pounds: require('./weight').sum(weighed.map((l) => l.weight_lb)),
     bags: weighed.length,
     total: labels.length,
     allWeighed: weighed.length === labels.length && labels.length > 0,
