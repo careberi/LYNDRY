@@ -33,6 +33,7 @@ const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
 const { runBody } = require('../web/run-page');
 const reports = require('../core/reports');
+const labelPdf = require('../core/label-pdf');
 const { reportsBody } = require('../web/reports-page');
 const { teamMemberBody, ROLE_TONE } = require('../web/team-page');
 const loadout = require('../core/loadout');
@@ -4692,6 +4693,15 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
                    min="1" max="50" step="1" value="30" required style="flex:1;">
             <button type="submit" class="btn btn-lg">Make them</button>
           </div>
+          <!-- TWO PRINTERS, TWO FILES. The sheet is for a laser printer and
+               Avery stock; the PDF is one tag per page for a thermal roll,
+               which is what the Clabel wants. Same tags either way. -->
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+            <a class="btn btn-sm btn-outline" href="/ops/labels/pdf?n=10">
+              PDF for the label printer
+            </a>
+          </div>
+
           <span class="field-hint" style="display:block;margin-top:10px;">
             One at a time, or up to fifty. They print six to a sheet on
             ${escapeHtml(LABEL_SHEET.stock)} shipping labels, ordinary stock
@@ -4742,6 +4752,70 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
     return res.type('html').send(
       adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/labels/pdf - the tags as a PDF, for a thermal roll printer
+//
+// Neil prints on a Clabel CT221D through its "PDF Print" mode, which takes one
+// tag per PDF page. The sheet at /ops/labels/sheet is for a laser printer and
+// Avery stock; this is the same tags for a roll.
+//
+// FIVE PAGES PER TAG: the tag itself, then stickers 1 to 4. On a roll every
+// label is already separate and already self-adhesive, so the dashed cut lines
+// the sheet needs are solving a problem the paper does not have.
+//
+// GENERATED ON THE SERVER, WHICH IS THE POINT. The QR carries config.baseUrl,
+// so a PDF built anywhere but production would print tags pointing at
+// localhost - scannable, and resolving to nothing, on a roll of labels nobody
+// notices until a laundromat has one in their hand.
+//
+// Size is overridable because the next roll may not be 2 x 1, and a wrong guess
+// wastes a whole one.
+router.get('/ops/labels/pdf', guard, may('orders.act'), async (req, res, next) => {
+  try {
+    const wanted = Math.max(1, Math.min(50, Math.floor(Number(req.query.n)) || 10));
+
+    // Blank stock only. A tag already on a bag must never be reprinted - two
+    // physical tags with one id is two bags the system thinks are one.
+    const { data, error } = await db
+      .from('bag_labels')
+      .select('code')
+      .is('order_id', null)
+      .is('sticker_seq', null)
+      .order('printed_at', { ascending: false })
+      .limit(wanted);
+
+    if (error) throw error;
+
+    const codes = (data || []).map((l) => l.code);
+
+    if (!codes.length) {
+      return res.redirect(
+        303,
+        '/ops/labels?problem=' +
+          encodeURIComponent('No blank tags to print. Make some first.')
+      );
+    }
+
+    const { pdf, pages, label } = await labelPdf.forCodes(codes, {
+      widthIn: Number(req.query.w) || undefined,
+      heightIn: Number(req.query.h) || undefined,
+    });
+
+    const name = `lyndry-tags-${codes.length}-${label.widthIn}x${label.heightIn}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    // Never cached: it is a specific set of codes and reprinting the wrong ones
+    // is how two bags end up sharing an id.
+    res.setHeader('Cache-Control', 'no-store, private');
+    res.setHeader('X-Label-Pages', String(pages));
+
+    return res.send(pdf);
   } catch (err) {
     return next(err);
   }
