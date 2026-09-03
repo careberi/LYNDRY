@@ -15,8 +15,9 @@ const { site } = require('../web/site');
 // A ROLL CHANGES THE TAG. The sheet version is a hang tag with peelable
 // stickers and dashed lines to cut down. On a roll every label is ALREADY
 // separate and already self-adhesive, so the cutting was solving a problem the
-// paper does not have. One bag's tag is five labels off the roll: the tag
-// itself, then one per sticker.
+// paper does not have - and the tag itself stopped being a separate object, so
+// there is no tag label either. One bag is three labels off the roll: -1, -2
+// and -3, all carrying the same id.
 //
 // WRITTEN BY HAND RATHER THAN WITH A PDF LIBRARY, and that is a deliberate
 // trade. Everything on a label is a filled rectangle or a line of text in a
@@ -235,7 +236,25 @@ function buildPdf(pages, label, dpi = DEFAULT_DPI) {
 // carries the same id and its own QR, exactly as the sheet does - so a bag
 // labelled from a roll and a bag labelled from a sheet are the same bag to
 // everything downstream.
-async function pagesForCode(code, { stickers = bags.STICKERS_PER_TAG, includeTag = true } = {}) {
+// NO SEPARATE BAG TAG LABEL, at Neil's request: three labels off the roll per
+// bag, numbered -1 to -3, and that is all.
+//
+// The sheet version prints a tag AND its stickers, because there the tag is a
+// physical object the stickers are attached to. A roll has no such object -
+// every label is the same kind of thing - so the tag label was a fourth sticker
+// with a different word on it, and Neil counted it as one. He was right to.
+//
+// NOTHING IN THE SYSTEM NEEDS IT. bag_labels still has its intake row with a
+// null sticker_seq, and findByCode() resolves that row whichever label is
+// scanned, so binding a bag by scanning -1 works exactly as binding it by
+// scanning the tag did. What changed is what comes out of the printer, not what
+// the database believes.
+//
+// THE COST, WRITTEN DOWN: three labels means the driver uses one on the bag he
+// collects, leaving two for bags the laundromat packs. An order that comes back
+// as three bags runs one short. Neil chose this knowing that; if it bites,
+// STICKERS_PER_TAG is the one number to change.
+async function pagesForCode(code, { stickers = bags.STICKERS_PER_TAG, includeTag = false } = {}) {
   const wanted = [];
   if (includeTag) wanted.push(null);
   for (let i = 1; i <= stickers; i += 1) wanted.push(i);
