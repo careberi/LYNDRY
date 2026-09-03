@@ -74,7 +74,12 @@ async function tasksForCollect(order) {
         : known
           ? `Collect ${bagCount} bag${bagCount === 1 ? '' : 's'}`
           : 'Collect the bags',
-      detail: 'Take them from the customer, then tap this. It texts them to say we have been.',
+      // NO SUPPORTING LINE. Neil deleted it off the screen himself: the button
+      // says "I have the bags", and that it also texts the customer is our
+      // plumbing, not his instruction.
+      detail: null,
+      spot: spotOf(order),
+      spotLabel: 'The bags are here',
       done: Boolean(order.collected_at),
     },
     {
@@ -82,7 +87,7 @@ async function tasksForCollect(order) {
       title: known
         ? `${bagCount} bag${bagCount === 1 ? '' : 's'}`
         : 'How many bags have you got?',
-      detail: 'Count them before you start, so the screen knows how many to walk you through.',
+      detail: 'Count them first. The screen walks you through one at a time.',
       done: known,
     },
   ];
@@ -107,8 +112,7 @@ async function tasksForCollect(order) {
       title: label
         ? `Bag ${position} tagged - ${label.code}`
         : `Put a bag tag on bag ${position}`,
-      detail:
-        'One tag off the stack, on the bag, then type the six characters under the QR. Leave the stickers on it.',
+      detail: 'Type the six characters under the QR. Leave the stickers on it.',
       done: Boolean(label),
       needsLabel: !label,
     });
@@ -121,7 +125,7 @@ async function tasksForCollect(order) {
         label && label.weight_lb != null
           ? `Bag ${position} - ${label.weight_lb} lb`
           : `Weigh bag ${position}`,
-      detail: 'On the scale, and type what it says. This is what prices the bag.',
+      detail: 'This is what prices the bag. The card is charged at delivery.',
       done: Boolean(label && label.weight_lb != null),
       // Cannot weigh a bag that has nothing on it: the weight is recorded
       // against the tag, so there is nowhere to put the number.
@@ -149,8 +153,7 @@ async function tasksForCollect(order) {
           : label && label.clip_number != null
             ? `Put van clip ${label.clip_number} on bag ${position}`
             : `Clip bag ${position}`,
-      detail:
-        'Take that numbered clip and put it on this bag, then confirm. It is how the bag is found in the van.',
+      detail: 'This is how the bag is found in the van.',
       done: Boolean(label && label.clipped_at),
       clip: label ? label.clip_number : null,
       // The clip is handed out by weighing, so there is nothing to put on until
@@ -177,7 +180,7 @@ async function tasksForCollect(order) {
         label && label.loaded_at
           ? `Bag ${position} in the van`
           : `Put bag ${position} in the van`,
-      detail: 'In it goes, then confirm. One bag finished before you pick up the next.',
+      detail: 'One bag finished before you pick up the next.',
       done: Boolean(label && label.loaded_at),
       clip: label ? label.clip_number : null,
       // Nothing goes in the van without its clip on, because the clip is the
@@ -320,9 +323,11 @@ async function tasksAfterPickup(order) {
   tasks.push({
     key: 'delivered',
     title: order.status === 'DELIVERED' ? 'Delivered' : 'Drop the bags off',
-    // Same words as the run's own delivery step. Two lists describing one act
-    // in two different ways is how a driver ends up trusting neither.
-    detail: `${dropoffSpot(order)} This charges the card.`,
+    // The spot is its own line on the card now, so saying it here too would be
+    // the same sentence twice on one screen.
+    detail: 'Photograph them where you leave them. This charges the card.',
+    spot: spotOf(order),
+    spotLabel: 'Leave them here',
     done: order.status === 'DELIVERED',
     blockedBy: scan.allScanned ? null : 'scan',
   });
@@ -381,16 +386,14 @@ async function tasksForDeliver(order) {
         : clips.length
           ? `Take clips ${clips.join(', ')} out`
           : 'Take the bags out',
-      detail:
-        'Find them by the clip numbers, set them apart from the rest of the load, and take the clips off - those numbers go back in the van.',
+      detail: 'Set them apart from the load. Those numbers go back in the van.',
       done: clipsOff,
       clips,
     },
     {
       key: 'strip',
       title: stripped ? 'Tags off' : 'Take the bag tags off',
-      detail:
-        "Ours and anything the laundromat put on. Nothing of theirs and nothing of ours goes into a customer's house.",
+      detail: "Ours and the laundromat's. Neither goes into a customer's house.",
       done: stripped,
       blockedBy: clipsOff ? null : 'clips',
     },
@@ -404,7 +407,9 @@ async function tasksForDeliver(order) {
       // saying what it was - the one piece of information he actually needed at
       // that door was the one thing the screen withheld.
       title: 'Drop the bags off',
-      detail: dropoffSpot(order),
+      detail: 'Photograph them where you leave them.',
+      spot: spotOf(order),
+      spotLabel: 'Leave them here',
       done: Boolean(order.delivered_at),
       blockedBy: stripped ? null : 'strip',
     },
@@ -418,22 +423,23 @@ async function tasksForDeliver(order) {
 // newest first, because a spot that exists and is not shown is worse than no
 // spot at all - the driver guesses, and the guess is a doorstep.
 //
+// ONE SPOT SERVES BOTH LEGS. The customer is asked "where should the driver
+// pick the laundry up and drop it back off?" - one answer, two visits. It was
+// only ever shown on the way back OUT, which left the driver standing at the
+// collection door with an address and nothing else, next to a bag sitting
+// exactly where the customer had said it would be.
+//
 // The order's own snapshot wins over the customer row for the same reason it
 // does everywhere else: this is what THIS order was booked with.
-function dropoffSpot(order) {
+function spotOf(order) {
   const own = order.preferences && Object.keys(order.preferences).length ? order.preferences : null;
   const prefs = own || (order.customers && order.customers.preferences) || {};
 
   const spot = String(prefs.dropoff_spot || prefs.special_instructions || '').trim();
+  if (!spot) return null;
 
-  if (!spot) return 'Photograph them where you leave them.';
-
-  // Customers type "front door", not "Front door", and this is the start of a
-  // sentence on a screen somebody reads at a run.
-  const said = spot.charAt(0).toUpperCase() + spot.slice(1);
-  const stop = /[.!?]$/.test(said) ? '' : '.';
-
-  return `${said}${stop} Photograph them where you leave them.`;
+  // Customers type "front door", not "Front door", and this is read at a run.
+  return spot.charAt(0).toUpperCase() + spot.slice(1);
 }
 
 // Is this stop finished?

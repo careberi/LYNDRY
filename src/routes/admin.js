@@ -3148,6 +3148,9 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
           run: state,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+          // WHO IS DRIVING, so the card can decide whether to offer the way off
+          // it. A driver gets the stop; the order behind it is not theirs.
+          user: req.opsUser,
         }),
         user: req.opsUser,
         openIssues: req.openIssues, serviceClosed: req.serviceClosed,

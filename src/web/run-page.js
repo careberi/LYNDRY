@@ -3,6 +3,7 @@
 const { escapeHtml, icon } = require('./layout');
 const { scanField, scannerScript, describeCodeFormat } = require('./scanner');
 const booking = require('../core/booking');
+const { can } = require('../core/roles');
 
 // ---------------------------------------------------------------------------
 // The driver's run: one stop, one thing to do.
@@ -177,7 +178,7 @@ function travelCard(run) {
 }
 
 // The one thing to do, now he is there.
-function taskCard(run) {
+function taskCard(run, user = null) {
   const stop = run.current;
   const task = run.task;
   const order = stop.order;
@@ -188,14 +189,49 @@ function taskCard(run) {
   // screen is about to tell him which ones to put on.
   const clips = stop.kind === 'deliver' ? stop.clips || [] : [];
 
+  // WHERE THE CUSTOMER SAID THE BAGS GO, in the slot the travel card uses for
+  // the address - large, bold, directly under the task. It is the one fact that
+  // decides what he does with his hands next, and it was not on this screen at
+  // all: he arrived at a door knowing only the number of the house.
+  //
+  // Only the two door steps carry it. On the tag, weigh, clip and load steps
+  // the bag is already in his hands and repeating it would be furniture.
+  const where =
+    task && task.spot
+      ? `<p class="eyebrow" style="margin:14px 0 4px;">${escapeHtml(task.spotLabel || 'Where')}</p>
+         <p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 20px;">
+           ${escapeHtml(task.spot)}
+         </p>`
+      : '<div style="height:16px;"></div>';
+
+  // THE EYEBROW NAMES THE THING, NOT THE JOB. It read "PICK UP ORDER - #1940"
+  // above a heading that said "Collect the bags", which is the same instruction
+  // twice in two different vocabularies. The heading is the job; this is only
+  // which order it belongs to.
   const header = `
     <p class="eyebrow" style="margin:0 0 6px;">
-      ${escapeHtml(HEADLINE[stop.kind] || '')}${order ? ` &middot; #${order.order_number}` : ''}
+      ${
+        order
+          ? // THE NUMBER IS THE LINK. "the full order" was a second piece of link
+            // text for a thing already named two lines away - the order number is
+            // what he would tap anyway, so it is what is tappable.
+            //
+            // ONLY FOR SOMEBODY WHO MAY SEE WHAT IS BEHIND IT. Neil: the admin
+            // should be the only one who can open the full order. The page holds
+            // the customer's name, their thread and the money, and a driver is
+            // shown none of that - so offering him the door to it is offering a
+            // door that opens onto refusals. Sales never has orders.drive, so on
+            // this screen customers.view is Admin and nobody else.
+            can(user, 'customers.view')
+            ? `<a href="/ops/orders/${escapeHtml(order.order_number)}"
+                  style="color:inherit;">Order #${escapeHtml(order.order_number)}</a>`
+            : `Order #${escapeHtml(order.order_number)}`
+          : escapeHtml(HEADLINE[stop.kind] || 'Stop')
+      }
     </p>
     ${
       clips.length
         ? `<p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
-             <strong>Order #${order.order_number}</strong> &mdash;
              clip${clips.length === 1 ? '' : 's'}
              <strong style="font-family:var(--font-mono);">${clips.join(', ')}</strong>
            </p>`
@@ -204,11 +240,7 @@ function taskCard(run) {
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 6px;">
       ${escapeHtml(task ? task.title : 'All done here')}
     </h2>
-    ${
-      task
-        ? `<p style="font-size:16px;line-height:1.5;color:var(--ink-700);margin:0 0 22px;">${escapeHtml(task.detail)}</p>`
-        : ''
-    }`;
+    ${where}`;
 
   // What is already ticked off at this stop, so he can see he has not skipped
   // anything - short enough not to be a list to read, long enough to reassure.
@@ -236,10 +268,19 @@ function taskCard(run) {
   <div style="${CARD}">
     ${header}
     ${task ? taskControl(stop, task, order) : ''}
+    ${
+      // ONE SUPPORTING LINE, IN ONE PLACE. Every step used to print this above
+      // the control AND again as a hint below it - on the collect step, the
+      // same sentence word for word, which is the line Neil deleted.
+      task && task.detail
+        ? `<p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
+             ${escapeHtml(task.detail)}
+           </p>`
+        : ''
+    }
     ${ticks}
     <p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:18px 0 0;">
       ${escapeHtml(stop.address || '')}
-      ${order ? ` &middot; <a href="/ops/orders/${order.order_number}">the full order</a>` : ''}
     </p>
   </div>`;
 }
@@ -259,9 +300,6 @@ function taskControl(stop, task, order) {
       <input class="input input-lg" type="number" id="bag_count" name="bag_count" min="1" max="20"
              inputmode="numeric" required autofocus placeholder="3" style="width:100%;margin-bottom:16px;">
       <button type="submit" class="btn btn-primary btn-lg btn-full">That's how many</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        Count them first. The screen then walks you through them one at a time.
-      </span>
     </form>`;
   }
 
@@ -288,8 +326,6 @@ function taskControl(stop, task, order) {
 
       <p style="margin:0 0 14px;font-size:15px;">
         Tag <code style="font-weight:700;">${escapeHtml((task.label || {}).code || '')}</code> is on it.
-        A numbered clip goes on once you have weighed it - the screen will tell
-        you which one.
       </p>
 
       <label class="field-label" for="weight_lb">What does bag ${task.position} weigh?</label>
@@ -298,10 +334,6 @@ function taskControl(stop, task, order) {
              placeholder="12.5" style="width:100%;margin-bottom:16px;">
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag ${task.position}</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        This is what prices the bag. The card is charged when you mark the order
-        delivered.
-      </span>
     </form>`;
   }
 
@@ -351,10 +383,6 @@ function taskControl(stop, task, order) {
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         Clip ${escapeHtml(task.clip)} is on it
       </button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        This is how the bag gets found in the van, and what you and the
-        laundromat counter say out loud.
-      </span>
     </form>`;
   }
 
@@ -369,9 +397,6 @@ function taskControl(stop, task, order) {
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         ${order.bag_count ? `Got all ${order.bag_count}` : 'I have the bags'}
       </button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        Take them from the customer, then tap this. It texts them to say we have been.
-      </span>
     </form>`;
   }
 
@@ -395,9 +420,6 @@ function taskControl(stop, task, order) {
           : ''
       }
       <button type="submit" class="btn btn-primary btn-lg btn-full">They are in the van</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        Put those clips on, load them, then tap this.
-      </span>
     </form>`;
   }
 
@@ -418,10 +440,6 @@ function taskControl(stop, task, order) {
           : ''
       }
       <button type="submit" class="btn btn-primary btn-lg btn-full">Out of the van, clips off</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        Set them apart from the rest of the load first. Those numbers go back in
-        the van for the next bags.
-      </span>
     </form>`;
   }
 
@@ -429,10 +447,6 @@ function taskControl(stop, task, order) {
     return `
     <form method="post" action="/ops/orders/${order.order_number}/strip${back}" style="margin:0;">
       <button type="submit" class="btn btn-primary btn-lg btn-full">Tags are off</button>
-      <span class="field-hint" style="display:block;margin-top:10px;">
-        Our bag tag and anything the laundromat stuck on. A customer should not
-        find somebody else's tracking on their laundry.
-      </span>
     </form>`;
   }
 
@@ -736,7 +750,7 @@ function partnerCard(run) {
 
 // --- the page ---------------------------------------------------------------
 
-function runBody({ run, notice = null, problem = null }) {
+function runBody({ run, notice = null, problem = null, user = null }) {
   const banner = (text, background, colour = 'var(--ink-900)') => `
     <p style="margin:0 0 20px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
               background:${background};color:${colour};font-size:15px;line-height:1.5;font-weight:600;">
@@ -815,7 +829,7 @@ function runBody({ run, notice = null, problem = null }) {
   // screen a driver actually works from, and it did not.
   return `${head}
     ${progressBar(run.done, run.total)}
-    ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run)) : travelCard(run)}
+    ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run, user)) : travelCard(run)}
   </div>
   ${scannerScript()}
   ${returnFromMapsScript()}

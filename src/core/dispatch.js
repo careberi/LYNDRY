@@ -188,7 +188,18 @@ const BOARD_FIELDS =
   // choice wins when it has one; this is what stops a stop being drawn as "a
   // laundromat" with no address when it does not.
   'intended_partner_id, ' +
-  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb)';
+  // WHERE THE CUSTOMER SAID TO LEAVE THE BAGS. Both copies: the order's own
+  // snapshot of what it was booked with, and the customer's current answer as
+  // the fallback - the same pair, in the same order of precedence, that
+  // run.spotOf() reads.
+  //
+  // Leaving these out is why the guided run has never shown a driver the spot.
+  // The delivery step has read it since the day it was written and has always
+  // got the "no spot given" fallback back, because the field it reads was not
+  // in this query. It looked exactly like a customer who had not answered
+  // rather than like a bug, which is why it survived this long.
+  'preferences, ' +
+  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, preferences)';
 
 // WHAT ONE BAG WEIGHS WHEN NOBODY HAS WEIGHED IT YET.
 //
