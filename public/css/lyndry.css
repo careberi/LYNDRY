@@ -178,6 +178,19 @@
 @media (max-width: 380px) {
   .stop-line > .stop-value { font-size: 18px; }
 }
+/* Neil's call on the pickup card: the LABEL is the bold half, set at least as
+   large as the value, and the value is plain. A modifier rather than a change
+   to .stop-line, because it is the one card he asked for - the card that
+   replaces it after "I'm here" keeps the weight on its value.
+
+   14px is the ceiling the design system sets for a mono label, so this is as
+   big as TASK: and WHERE: can go without breaking that rule; the value comes
+   down to meet it rather than the label going up past it. */
+.stop-line-plain > .eyebrow { color: var(--ink-900); font-size: 14px; }
+.stop-line-plain > .stop-value { font-weight: 400; font-size: 14px; }
+@media (max-width: 380px) {
+  .stop-line-plain > .stop-value { font-size: 14px; }
+}
 .eyebrow-lilac { color: var(--lilac-600); }
 .eyebrow-paper { color: var(--ink-400); }
 

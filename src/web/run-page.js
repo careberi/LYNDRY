@@ -49,18 +49,6 @@ const HEADLINE = {
   pickup_partner: 'Pick up from laundromat',
 };
 
-// The address in two lines: the street, then the town. One long wrapped line is
-// a paragraph the eye has to read; two short ones are a shape it recognises.
-// Splitting on the first comma is enough for every address we hold, and an
-// address without one simply stays as it is.
-function addressLines(address) {
-  const raw = String(address || '').trim();
-  if (!raw) return [];
-  const at = raw.indexOf(',');
-  if (at < 0) return [raw];
-  return [raw.slice(0, at).trim(), raw.slice(at + 1).trim()].filter(Boolean);
-}
-
 // THE TASK, WITH THE ORDER NUMBER INSIDE IT.
 //
 // Neil's layout, said twice: a section clearly marked TASK, and the task itself
@@ -101,9 +89,9 @@ function taskLine(text, stop, user) {
 // Neil's format to the letter, given three times and finally spelled out. The
 // label does not shrink when the value wraps, so a long address stays lined up
 // under itself rather than under the word WHERE.
-function stopLine(label, value) {
+function stopLine(label, value, extra = '') {
   return `
-    <p class="stop-line">
+    <p class="stop-line${extra ? ` ${extra}` : ''}">
       <span class="eyebrow">${escapeHtml(label)}:</span>
       <span class="stop-value">${value}</span>
     </p>`;
@@ -131,23 +119,14 @@ function travelCard(run, user = null) {
 
   // A laundromat has a name; a customer's door has only an address. Either way
   // the TASK is the heading and the place is underneath it.
-  const place = stop.name ? [stop.name, ...addressLines(stop.address)] : addressLines(stop.address);
+  // ONE LINE. Neil's call. It was split at the first comma so the town could sit
+  // under the street; he wants it read as an address, not as a shape.
+  const place = [stop.name, stop.address].filter(Boolean).join(', ');
 
   return `
   <div style="${CARD}">
-    ${stopLine('Task', taskLine(HEADLINE[stop.kind] || 'Next stop', stop, user))}
-    ${stopLine(
-      'Where',
-      place.length
-        ? place
-            .map((line, i) =>
-              i
-                ? `<span style="font-weight:400;color:var(--ink-700);">${escapeHtml(line)}</span>`
-                : escapeHtml(line)
-            )
-            .join('<br>')
-        : 'Somewhere with no address'
-    )}
+    ${stopLine('Task', taskLine(HEADLINE[stop.kind] || 'Next stop', stop, user), 'stop-line-plain')}
+    ${stopLine('Where', place ? escapeHtml(place) : 'Somewhere with no address', 'stop-line-plain')}
     ${
       stop.eta
         ? // TWELVE HOUR, like every other time on this system. The ETA is stored
