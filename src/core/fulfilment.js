@@ -343,17 +343,21 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // the other, so an order can never carry a charge no weight justifies.
   const { data: updated, error } = await db
     .from('orders')
-    // arrived_at goes with it: weighing is the last thing that happens at the
-    // customer's door, so this is the moment the driver leaves. Left set, the
-    // guided run would tell him he is still standing at a stop he drove away
-    // from - and would think he had already arrived at the delivery, months
-    // later, when the same order comes route again.
+    // ARRIVAL IS NOT CLEARED HERE ANY MORE, and the comment that used to sit
+    // in this spot said why it once was: "weighing is the last thing that
+    // happens at the customer's door". It stopped being true the day the clip
+    // and the load became steps of their own. Both happen at that same door,
+    // after the scale - so clearing arrival here threw the driver back to
+    // "Take me there" for the house he was standing in front of, with a clip
+    // in his hand.
+    //
+    // The moment he actually leaves is van_confirmed_at: the last bag aboard.
+    // That is where the two flags are cleared now, in both places that stamp
+    // it.
     .update({
       weight_lb: weight,
       price_cents: priceCents,
       weight_photo_path: photoPath,
-      arrived_at: null,
-      navigating_at: null,
     })
     .eq('id', order.id)
     .select('*')

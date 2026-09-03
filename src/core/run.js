@@ -172,7 +172,9 @@ async function tasksForCollect(order) {
           : label && label.clip_number != null
             ? `Put van clip ${label.clip_number} on bag ${position}`
             : `Clip bag ${position}`,
-      detail: 'This is how the bag is found in the van.',
+      // The task line says which clip on which bag; the number is on screen
+      // at 40px. There is nothing left for a line underneath to add.
+      detail: null,
       done: Boolean(label && label.clipped_at),
       clip: label ? label.clip_number : null,
       // The clip is handed out by weighing, so there is nothing to put on until
@@ -199,7 +201,7 @@ async function tasksForCollect(order) {
         label && label.loaded_at
           ? `Bag ${position} in the van`
           : `Put bag ${position} in the van`,
-      detail: 'One bag finished before you pick up the next.',
+      detail: null,
       done: Boolean(label && label.loaded_at),
       clip: label ? label.clip_number : null,
       // Nothing goes in the van without its clip on, because the clip is the

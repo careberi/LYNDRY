@@ -3498,7 +3498,10 @@ orderAction('in-van', async (order, req) => {
 
   const { error } = await db
     .from('orders')
-    .update({ van_confirmed_at: new Date().toISOString() })
+    // THIS is the moment he leaves the door - the last bag is aboard - so the
+    // arrival flags go here rather than at the scale. Left set, the run would
+    // think he had already arrived at the laundromat he has not driven to yet.
+    .update({ van_confirmed_at: new Date().toISOString(), arrived_at: null, navigating_at: null })
     .eq('id', order.id);
 
   if (error) throw error;
@@ -4181,7 +4184,8 @@ router.post('/ops/orders/:id/bag-van', guard, may('orders.act'), async (req, res
     if (expected && aboard >= expected && !order.van_confirmed_at) {
       const { error } = await db
         .from('orders')
-        .update({ van_confirmed_at: new Date().toISOString() })
+        // Same moment, same two flags - see the note on the other stamp.
+        .update({ van_confirmed_at: new Date().toISOString(), arrived_at: null, navigating_at: null })
         .eq('id', order.id);
       if (error) throw error;
 

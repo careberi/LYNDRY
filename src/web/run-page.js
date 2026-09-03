@@ -226,7 +226,10 @@ function travelCard(run, user = null) {
 function taskTail(task) {
   if (!task) return '';
 
-  const code = task.key.startsWith('weigh_') && task.label ? task.label.code : null;
+  // The three per-bag steps that happen with the bag in his hands. Each names
+  // the tag on it, so "bag 1" is never the only way to tell two bags apart.
+  const perBag = /^(weigh|clip|load)_/.test(task.key);
+  const code = perBag && task.label ? task.label.code : null;
 
   if (code) {
     return `with Tag ID <a href="/ops/labels/${encodeURIComponent(code)}"
@@ -401,15 +404,16 @@ function taskControl(stop, task, order) {
     <form method="post" action="/ops/orders/${order.order_number}/bag-clip${back}" style="margin:0;">
       <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
 
-      <div style="display:flex;align-items:center;gap:16px;margin:0 0 18px;">
-        <span style="min-width:88px;padding:16px 18px;border:2px solid var(--ink-900);
-                     border-radius:16px;background:var(--sunbeam-500);text-align:center;
+      <!-- THE NUMBER, AT THE SIZE OF THE THING HE ACTS ON. It is what he reads
+           off, picks out of the bag of clips, and says out loud at a laundromat
+           counter. The sentence that used to sit beside it repeated the task
+           line above word for word - which clip, on which bag, which tag. -->
+      <div style="margin:0 0 18px;">
+        <span style="display:inline-block;min-width:88px;padding:16px 18px;
+                     border:2px solid var(--ink-900);border-radius:16px;
+                     background:var(--sunbeam-500);text-align:center;
                      font-family:var(--font-mono);font-weight:700;font-size:40px;line-height:1;
                      box-shadow:var(--shadow-pop-xs);">${escapeHtml(task.clip)}</span>
-        <span style="font-size:16px;line-height:1.5;">
-          Clip <strong>${escapeHtml(task.clip)}</strong> goes on the bag tagged
-          <code style="font-weight:700;">${escapeHtml((task.label || {}).code || '')}</code>.
-        </span>
       </div>
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
