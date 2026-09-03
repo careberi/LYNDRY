@@ -64,7 +64,7 @@ const HEADLINE = {
 // are the customer's name, their thread and the money, none of which a driver
 // is shown. Sales never has orders.drive, so on this screen that is Admin and
 // nobody else.
-function taskLine(text, stop, user) {
+function taskLine(text, stop, user, lead = '') {
   const quiet = 'font-weight:400;color:var(--ink-500);';
   const order = stop.order || null;
 
@@ -82,7 +82,12 @@ function taskLine(text, stop, user) {
     ? `<a href="/ops/orders/${escapeHtml(order.order_number)}" style="color:inherit;">${num}</a>`
     : num;
 
-  return `${escapeHtml(text)} <span style="${quiet}">${inner}</span>`;
+  // "Pick up order #1940" already has the word in it; "Collect the bags" does
+  // not, and "Collect the bags #1940" reads like a typo. So the caller says how
+  // its own sentence joins up.
+  return `${escapeHtml(text)} <span style="${quiet}">${
+    lead ? `${escapeHtml(lead)} ` : ''
+  }${inner}</span>`;
 }
 
 // "TASK: Pick up order #1940" - the label, a colon, then the value beside it.
@@ -226,13 +231,19 @@ function taskCard(run, user = null) {
   // Only the two door steps carry it. On the tag, weigh, clip and load steps
   // the bag is already in his hands and repeating it would be furniture.
   const where =
-    task && task.spot ? stopLine('Where', escapeHtml(task.spot)) : '<div style="height:6px;"></div>';
+    task && task.spot
+      ? stopLine('Where', escapeHtml(task.spot), 'stop-line-plain')
+      : '<div style="height:6px;"></div>';
 
   // THE SAME TWO LABELLED LINES AS THE CARD BEFORE IT. He taps "I'm here" and
   // this replaces the travel card, so TASK and WHERE stay in the same places
   // and only their values change.
   const header = `
-    ${stopLine('Task', taskLine(task ? task.title : 'All done here', stop, user))}
+    ${stopLine(
+      'Task',
+      taskLine(task ? task.title : 'All done here', stop, user, 'for order'),
+      'stop-line-plain'
+    )}
     ${where}
     ${
       clips.length
