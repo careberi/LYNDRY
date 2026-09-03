@@ -19,10 +19,10 @@ const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const {
-  labelSheetBody,
+  // labelSheetBody is deliberately NOT imported any more - see the note where
+  // the sheet route used to be.
   labelListQr,
   labelDetailBody,
-  SHEET: LABEL_SHEET,
 } = require('../web/labels');
 const bags = require('../core/bags');
 const tags = require('../core/tags');
@@ -4822,13 +4822,31 @@ router.get('/ops/labels/pdf', guard, may('orders.act'), async (req, res, next) =
     const from = String(req.query.from || '');
     if (from) query = query.gte('printed_at', from);
 
-    const { data, error } = await query
-      .order('printed_at', { ascending: false })
-      .limit(wanted);
+    // ONE NAMED TAG. Inherited from the sheet's "print this one" button: a
+    // reprint of a tag somebody lost or damaged, which is otherwise only
+    // possible by making a whole fresh batch. It ignores the blank-stock filter
+    // on purpose - the tag being reprinted is usually already on an order, and
+    // that is the case this exists for.
+    const only = String(req.query.only || '').toUpperCase();
 
-    if (error) throw error;
+    let codes;
 
-    const codes = (data || []).map((l) => l.code);
+    if (only) {
+      const { data, error } = await db
+        .from('bag_labels')
+        .select('code')
+        .eq('code', only)
+        .is('sticker_seq', null)
+        .maybeSingle();
+      if (error) throw error;
+      codes = data ? [data.code] : [];
+    } else {
+      const { data, error } = await query
+        .order('printed_at', { ascending: false })
+        .limit(wanted);
+      if (error) throw error;
+      codes = (data || []).map((l) => l.code);
+    }
 
     if (!codes.length) {
       return res.redirect(
@@ -4896,7 +4914,7 @@ router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
 // The tag drawn the way it prints, a QR big enough to scan off the screen, the
 // URL, and which order it is on. Reached by tapping an id on the list.
 //
-// Declared BEFORE /ops/labels/sheet would otherwise catch it: Express takes the
+// Declared BEFORE /ops/labels/:code would otherwise catch it: Express takes the
 // first route that matches, not the most specific, so a bare :code parameter
 // would swallow "sheet". The code format is checked instead of relying on the
 // order the routes happen to be written in - the same guard the partner routes
@@ -4947,44 +4965,21 @@ router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req
   }
 });
 
-router.get('/ops/labels/sheet', guard, may('orders.act'), async (req, res, next) => {
-  try {
-    const n = Math.max(1, Math.min(300, Number(req.query.n) || 30));
-    const from = String(req.query.from || '');
-
-    // ONE NAMED TAG, from the "print this one" button on a tag's own page. A
-    // reprint of a tag somebody has lost or damaged, which is otherwise only
-    // possible by printing a whole fresh sheet.
-    const only = String(req.query.only || '').toUpperCase();
-
-    let query = db
-      .from('bag_labels')
-      .select('*')
-      // Intake rows only, the same filter the list uses: a sticker a laundromat
-      // has used is a bag that came back, not stock to print.
-      .is('sticker_seq', null)
-      .order('printed_at', { ascending: true })
-      .limit(only ? 1 : n);
-
-    if (only) query = query.eq('code', only);
-    else if (from) query = query.gte('printed_at', from);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    return res.type('html').send(
-      adminPage({
-        title: 'Print labels',
-        active: '',
-        body: await labelSheetBody(data || []),
-        user: req.opsUser,
-        openIssues: 0,
-      })
-    );
-  } catch (err) {
-    return next(err);
-  }
-});
+// THE PRINTABLE SHEET IS GONE, at Neil's request: "a PDF should be created
+// that I could save down. I shouldn't print directly from the website."
+//
+// It rendered an Avery sheet as a web page and relied on the browser's own
+// Print dialog, which meant every print depended on somebody's margins, scale
+// and headers being set right. A PDF is a file with the page size baked into
+// it - it prints the same from any machine, and it can be kept, re-sent and
+// printed again without regenerating anything.
+//
+// /ops/labels/pdf replaced it and covers the sheet's last job too: `only=CODE`
+// reprints a single tag somebody lost or damaged.
+//
+// src/web/labels.js still holds the sheet markup, called by nothing. It is the
+// whole Avery layout and a laser printer is a plausible thing to want again;
+// deleting it means writing it a second time.
 
 // ---------------------------------------------------------------------------
 // GET /ops/economics — what one route cycle actually earns

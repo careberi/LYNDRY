@@ -432,7 +432,7 @@ ${
 }
 
 <div class="lb-actions" style="margin-top:24px;">
-  <a class="btn" href="/ops/labels/sheet?n=1&only=${encodeURIComponent(label.code)}">Print this one</a>
+  <a class="btn" href="/ops/labels/pdf?only=${encodeURIComponent(label.code)}">Download this one</a>
 </div>`;
 }
 
