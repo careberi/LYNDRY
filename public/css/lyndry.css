@@ -1044,7 +1044,7 @@ button {
 
 .clip-tick input:active + span { transform: translate(1px, 1px); }
 
-/* THE DAY'S ROUNDS ON /ops/run. Five equal cards on one line, always.
+/* THE DAY'S ROUTES ON /ops/run. Five equal cards on one line, always.
 
    A class rather than an inline grid-template-columns for the reason stated
    above, and it matters more here than anywhere: this is the strip a driver
@@ -1055,13 +1055,13 @@ button {
    labels are written compactly - "10am-12pm" rather than "10am and 12pm" - so
    there is something to shrink. Below 380px the padding goes rather than the
    line breaking: a wrapped round strip is a worse answer than a tight one. */
-.run-rounds {
+.run-routes {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 9px;
 }
 
-.run-round {
+.run-route {
   padding: 13px 11px;
   border: 2px solid;
   border-radius: 14px;
@@ -1072,7 +1072,7 @@ button {
   min-width: 0;               /* let a grid cell actually shrink */
 }
 
-.run-round .rr-when {
+.run-route .rr-when {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
@@ -1082,20 +1082,20 @@ button {
   white-space: nowrap;
 }
 
-.run-round .rr-what { font-size: 13px; }
+.run-route .rr-what { font-size: 13px; }
 
 @media (max-width: 620px) {
-  .run-rounds { gap: 6px; }
-  .run-round { padding: 10px 7px; }
-  .run-round .rr-when { font-size: 9px; letter-spacing: 0.02em; }
-  .run-round .rr-what { font-size: 11px; }
+  .run-routes { gap: 6px; }
+  .run-route { padding: 10px 7px; }
+  .run-route .rr-when { font-size: 9px; letter-spacing: 0.02em; }
+  .run-route .rr-what { font-size: 11px; }
 }
 
 @media (max-width: 400px) {
-  .run-rounds { gap: 4px; }
-  .run-round { padding: 8px 5px; border-radius: 11px; }
-  .run-round .rr-when { font-size: 8px; letter-spacing: 0; }
-  .run-round .rr-what { font-size: 10px; }
+  .run-routes { gap: 4px; }
+  .run-route { padding: 8px 5px; border-radius: 11px; }
+  .run-route .rr-when { font-size: 8px; letter-spacing: 0; }
+  .run-route .rr-what { font-size: 10px; }
 }
 
 .stack > * + * { margin-top: 18px; }

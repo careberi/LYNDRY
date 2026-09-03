@@ -396,7 +396,7 @@ function opsNav(user, active) {
 // route planner's map library, and so far nothing else. Kept as a parameter
 // rather than letting pages write their own <head> so that every ops screen
 // still gets the same stylesheets, the same noindex and the same furniture.
-function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '', serviceClosed = false }) {
+function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '', serviceClosed = false, bare = false }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -434,7 +434,23 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0, head
 ${head}
 </head>
 <body>
-  <header class="site-header">
+  ${
+    // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
+    // should look like the bag tag page - the logo and nothing else.
+    //
+    // The reason is what that screen is for. It shows ONE stop and ONE thing to
+    // do, and a nav offering nine other places to be is an invitation to read
+    // ahead - which is the thing this screen was built not to allow. Four
+    // dropdowns, a name, a role and a Sign out button is also 130px of a phone
+    // spent on nothing he needs while standing at a door.
+    //
+    // The mark still goes back to /ops, so nothing is trapped here: it is one
+    // tap to the board and every other screen from there.
+    bare
+      ? `<div class="container" style="padding-top:22px;">
+           ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
+         </div>`
+      : `<header class="site-header">
     <div class="container site-header-bar ops-bar">
       ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
       <!-- Only the tabs this person may actually open. A driver never sees a
@@ -453,9 +469,13 @@ ${head}
         <button type="submit" class="btn btn-outline btn-sm">Sign out</button>
       </form>
     </div>
-  </header>
+  </header>`
+  }
 
-  <main class="container" style="padding-top:36px;padding-bottom:96px;">
+  <!-- Less air above the content on a bare page: the logo is already sitting
+       in its own padding, and 36px more pushes the first stop down the screen
+       for no reason. -->
+  <main class="container" style="padding-top:${bare ? '18px' : '36px'};padding-bottom:96px;">
 ${
     // SHUT. Sunbeam rather than Stain, because this is a state Neil chose
     // rather than a problem to fix - but it is on every page for the same
@@ -3121,6 +3141,8 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
       adminPage({
         title: 'Your route',
         active: '/ops/run',
+        // NO NAV ON THE ROUTE. One stop, one thing to do - see adminPage.
+        bare: true,
         body: runBody({
           run: state,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,

@@ -431,7 +431,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
                   <input type="radio" name="pickup_method" value="LEAVE_OUTSIDE"${
                     defaultMethod === 'LEAVE_OUTSIDE' ? ' checked' : ''
                   }>
-                  <span class="check-box check-box-route">{{ICON_CHECK}}</span>
+                  <span class="check-box check-box-round">{{ICON_CHECK}}</span>
                   <span>
                     <span style="font-size:16px;font-weight:600;color:var(--ink-900);">I'll leave it outside my door</span><br>
                     <span style="font-size:14px;color:var(--ink-500);">You don't need to be home.</span>
@@ -441,7 +441,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
                   <input type="radio" name="pickup_method" value="HAND_TO_DRIVER"${
                     defaultMethod === 'HAND_TO_DRIVER' ? ' checked' : ''
                   }>
-                  <span class="check-box check-box-route">{{ICON_CHECK}}</span>
+                  <span class="check-box check-box-round">{{ICON_CHECK}}</span>
                   <span>
                     <span style="font-size:16px;font-weight:600;color:var(--ink-900);">I'll hand it to the driver</span><br>
                     <span style="font-size:14px;color:var(--ink-500);">We'll knock when we arrive.</span>
