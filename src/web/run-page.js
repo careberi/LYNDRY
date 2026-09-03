@@ -412,20 +412,27 @@ function taskControl(stop, task, order) {
   // laundromat counter, so it is set at the size of the thing you act on.
   if (task.key.startsWith('clip_')) {
     return `
-    <form method="post" action="/ops/orders/${order.order_number}/bag-clip${back}" style="margin:0;">
+    <form method="post" action="/ops/orders/${order.order_number}/bag-clip${back}"
+          class="clip-form" style="margin:0;">
       <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
 
-      <!-- THE NUMBER, AT THE SIZE OF THE THING HE ACTS ON. It is what he reads
-           off, picks out of the bag of clips, and says out loud at a laundromat
-           counter. The sentence that used to sit beside it repeated the task
-           line above word for word - which clip, on which bag, which tag. -->
-      <div style="margin:0 0 18px;">
-        <span style="display:inline-block;min-width:88px;padding:16px 18px;
-                     border:2px solid var(--ink-900);border-radius:16px;
-                     background:var(--sunbeam-500);text-align:center;
-                     font-family:var(--font-mono);font-weight:700;font-size:40px;line-height:1;
-                     box-shadow:var(--shadow-pop-xs);">${escapeHtml(task.clip)}</span>
-      </div>
+      <!-- THE NUMBER IS THE THING HE ACTS ON, so it is the control. He taps it
+           to say that clip is out of the bag and in his hand - yellow to green,
+           NOT IN USE to IN USE - and the confirmation underneath does not work
+           until he has. Two deliberate acts, because the clip is the only thing
+           that finds this bag again.
+
+           A plain checkbox marked required: the browser refuses the submit on
+           its own, with no script, which is what a driver on two bars in a
+           stairwell needs. -->
+      <label class="clip-toggle" style="margin:0 0 18px;">
+        <input type="checkbox" name="clip_in_hand" required>
+        <span class="clip-number">Van Clip #${escapeHtml(task.clip)}</span>
+        <span class="clip-state">
+          <span class="clip-state-off">Not in use</span>
+          <span class="clip-state-on">In use</span>
+        </span>
+      </label>
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         Clip ${escapeHtml(task.clip)} is on it

@@ -186,6 +186,72 @@
    14px is the ceiling the design system sets for a mono label, so this is as
    big as TASK: and WHERE: can go without breaking that rule; the value comes
    down to meet it rather than the label going up past it. */
+/* THE CLIP TILE IS A SWITCH, NOT A LABEL.
+
+   Neil's step: the driver taps the number to say he has that clip in his hand,
+   it goes from yellow "not in use" to green "in use", and only then will the
+   form let him confirm it is on the bag. Two deliberate acts, because the clip
+   is the only thing that finds the bag again.
+
+   NO JAVASCRIPT. It is a real checkbox with `required`, so the browser itself
+   refuses the submit until it is ticked - that is the actual guard, and it
+   works on a phone with no signal and a half-loaded page. The colour and the
+   wording are CSS on :checked, and the button is dimmed through :has(). A
+   browser without :has() shows a normal-looking button and the native "please
+   tick this" prompt: worse looking, still correct. */
+/* ONE BOX, THE WIDTH OF THE BUTTON UNDER IT. Neil: the number and its state
+   belong inside the same box, and the two controls should be the same size -
+   they are the two taps of one action, so they read as a pair. */
+.clip-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 14px 18px;
+  border: 2px solid var(--ink-900);
+  border-radius: 16px;
+  background: var(--sunbeam-500);
+  box-shadow: var(--shadow-pop-xs);
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.clip-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.clip-toggle:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink-900); }
+.clip-toggle:focus-within { outline: 3px solid var(--lilac-500); outline-offset: 3px; }
+
+/* "VAN CLIP 1" over "NOT IN USE" - Neil's arrangement. The clip is named in
+   full because that is what he says out loud at a laundromat counter, and 26px
+   is as large as the whole phrase goes on a 375px screen. */
+.clip-toggle .clip-number {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.clip-toggle .clip-state {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.clip-toggle .clip-state-on { display: none; }
+
+.clip-toggle:has(input:checked) { background: var(--suds-500); }
+.clip-toggle:has(input:checked) .clip-state-off { display: none; }
+.clip-toggle:has(input:checked) .clip-state-on { display: inline; }
+
+/* Until the clip is in his hand there is nothing to confirm. */
+.clip-form:has(.clip-toggle input:not(:checked)) .btn-primary {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 .stop-line-plain > .eyebrow { color: var(--ink-900); font-size: 14px; }
 .stop-line-plain > .stop-value { font-weight: 400; font-size: 14px; }
 @media (max-width: 380px) {
