@@ -495,12 +495,19 @@ function partnerCard(run) {
             return `
            <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
                        background:var(--paper-200);">
+             <!-- HOW MANY, IN THE SIZE OF THE ANSWER. Neil: "it should be
+                  really apparent that you're collecting two bags here." The
+                  count was a word inside a sentence; it is the heading now. -->
              <p class="eyebrow" style="margin:0 0 4px;">Pick these up</p>
+             <p style="font-family:var(--font-display);font-weight:900;font-size:26px;
+                       line-height:1.1;margin:0 0 6px;">
+               ${bags.length} bag${bags.length === 1 ? '' : 's'} to collect
+             </p>
              <p style="font-size:15px;line-height:1.5;margin:0 0 14px;">
                ${
                  left
                    ? `Tap each one as they hand it to you. <strong data-left="${left}">${left} still to go.</strong>`
-                   : 'All of them are in the van.'
+                   : 'All of them are ticked.'
                }
              </p>
 
@@ -631,24 +638,43 @@ function partnerCard(run) {
             // total, not a weaker one - it does not just say something is
             // missing, it says which.
             const uncollected = (stop.finishedBags || []).filter((b) => !b.collected_at).length;
-            if (uncollected) return '';
 
             const orderIds = [...new Set((stop.orders || []).map((o) => o.id))];
             const unconfirmed = (stop.orders || []).filter((o) => o.return_bag_count == null);
 
             if (unconfirmed.length) {
+              // THE BUTTON IS THERE FROM THE MOMENT THE PAGE LOADS. Neil: "it
+              // should not be hidden when the page loads, it shouldn't have to
+              // wait for me to tap collected on both bags."
+              //
+              // It used to appear only once every bag was ticked, which meant a
+              // driver had no idea the step existed until he had done the one
+              // before it - and a screen that grows a new button underneath
+              // your thumb is worse than one that was always honest about what
+              // is coming.
+              //
+              // Tapping it early is refused BY THE SERVER, which names the bags
+              // that are not ticked. The check was always there; what was
+              // missing was somebody being told.
+              //
+              // THE LABEL IS STATIC. "All 2 bags are collected" changed under
+              // the driver as he tapped, so the thing he was reading and the
+              // thing he was about to press were not the same sentence twice
+              // running.
               return `
            <form method="post" action="/ops/run/collected-all" style="margin:0;">
              ${orderIds
                .map((id) => `<input type="hidden" name="order_id" value="${escapeHtml(id)}">`)
                .join('')}
              <button type="submit" class="btn btn-primary btn-lg btn-full">
-               All ${(stop.finishedBags || []).length} bag${
-                 (stop.finishedBags || []).length === 1 ? '' : 's'
-               } are collected
+               All bags are collected
              </button>
              <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
-               Tap that once they are all in the van. The van scan comes after.
+               ${
+                 uncollected
+                   ? `Tick all ${(stop.finishedBags || []).length} above first, then tap this.`
+                   : 'Tap that once they are all in the van. The van scan comes after.'
+               }
              </p>
            </form>`;
             }

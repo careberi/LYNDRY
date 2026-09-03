@@ -3259,23 +3259,58 @@ router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, re
         (b) => b.sticker_seq && b.collected_at
       );
 
-      if (!collected.length) continue;
+      // NOTHING TICKED AT ALL. Said out loud rather than skipped: the button is
+      // on the page from the moment it loads now, so this is a tap somebody
+      // will actually make, and a tap that appears to do nothing is worse at a
+      // counter than one that refuses.
+      if (!collected.length) {
+        problems.push(
+          `#${order.order_number}: tick the bags above as the laundromat hands them over.`
+        );
+        continue;
+      }
 
       // REFUSE A HALF-COLLECTION rather than recording one. A bag the
       // laundromat packed and nobody ticked is still on their shelf, and
       // writing a count now would tell the rest of the system the order is
       // complete when it is not.
+      //
+      // AND SAY SO. This used to `continue` in silence, which was fine while
+      // the button only appeared once every bag was ticked - it could not be
+      // reached early. Now that the button is there from page load, a silent
+      // refusal is a tap that looks like it worked, which is the worst outcome
+      // available at a counter.
       const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
         (b) => b.sticker_seq && b.finished_at
       );
 
-      if (collected.length < packed.length) continue;
+      if (collected.length < packed.length) {
+        const missing = packed
+          .filter((b) => !b.collected_at)
+          .map((b) => `${b.code}-${b.sticker_seq}`);
+
+        problems.push(
+          `#${order.order_number}: tick ${missing.join(', ')} first - ` +
+            `${collected.length} of ${packed.length} ticked.`
+        );
+        continue;
+      }
 
       await db
         .from('orders')
         .update({ return_bag_count: collected.length })
         .eq('id', order.id)
         .is('return_bag_count', null);
+
+      // AND ON THE COPY IN MEMORY, which is the line that was missing.
+      //
+      // outForDelivery() below refuses any order whose return_bag_count is
+      // null, and `order` was read before this update - so on the first tap it
+      // still said null, the move was refused, and the driver was told to
+      // collect bags he had just ticked. Tapping again worked, because the
+      // second request re-read the row. Neil's history has the same event
+      // logged twice, three seconds apart, for exactly that reason.
+      order.return_bag_count = collected.length;
 
       await orderEvents.record(order.id, {
         kind: 'LABEL',
