@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const db = require('../db');
 const { config } = require('../config');
+const weights = require('./weight');
 
 // ---------------------------------------------------------------------------
 // Bag labels.
@@ -412,10 +413,19 @@ async function recordBagWeight(code, weightLb, photo, { order } = {}) {
     return { ok: false, detail: `${label.code} is not on this order.` };
   }
 
-  const weight = Number(weightLb);
-  if (!Number.isFinite(weight) || weight <= 0 || weight > 200) {
+  const entered = Number(weightLb);
+  if (!Number.isFinite(entered) || entered <= 0 || entered > 200) {
     return { ok: false, detail: 'That weight does not look right. Pounds, as a number.' };
   }
+
+  // TWO DECIMALS, ROUNDED UP, THE ONE WAY. The order total already went
+  // through this; the bag itself did not, so a bag could sit on 12.555 while
+  // the sum of the bags said 12.56 - two numbers for one weight, and the one a
+  // laundromat is checked against is the rounded one.
+  //
+  // Zero cannot get here: the guard above refuses it, and rounding up means
+  // anything that survives is at least 0.01.
+  const weight = weights.lb(entered);
 
   // The photo goes up BEFORE the weight is written, the same way the
   // order-level weighing does it: we would rather refuse the step than record a
@@ -470,7 +480,7 @@ async function totalWeight(orderId, leg = 'PICKUP') {
     // prices the order and is what a laundromat's number is checked against -
     // so the drift has to be taken out here rather than papered over on a
     // screen further down.
-    pounds: require('./weight').sum(weighed.map((l) => l.weight_lb)),
+    pounds: weights.sum(weighed.map((l) => l.weight_lb)),
     bags: weighed.length,
     total: labels.length,
     allWeighed: weighed.length === labels.length && labels.length > 0,

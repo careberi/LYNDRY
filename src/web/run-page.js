@@ -349,7 +349,7 @@ function taskControl(stop, task, order) {
 
       <label class="field-label" for="weight_lb">What does bag ${task.position} weigh?</label>
       <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
-             step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus
+             step="0.01" min="0.01" max="200" inputmode="decimal" required autofocus
              placeholder="12.5" style="width:100%;margin-bottom:16px;">
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag ${task.position}</button>

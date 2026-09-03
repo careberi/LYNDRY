@@ -718,7 +718,7 @@ function pickupSequence(
 
         <label class="field-label" for="bw">Pounds</label>
         <input class="input input-lg" type="number" id="bw" name="weight_lb"
-               step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus
+               step="0.01" min="0.01" max="200" inputmode="decimal" required autofocus
                style="width:100%;" placeholder="Pounds">
 
         <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:16px;">
