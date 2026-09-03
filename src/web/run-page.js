@@ -347,10 +347,6 @@ function taskControl(stop, task, order) {
           enctype="multipart/form-data" style="margin:0;">
       <input type="hidden" name="code" value="${escapeHtml(task.label.code)}">
 
-      <p style="margin:0 0 14px;font-size:15px;">
-        Tag <code style="font-weight:700;">${escapeHtml((task.label || {}).code || '')}</code> is on it.
-      </p>
-
       <label class="field-label" for="weight_lb">What does bag ${task.position} weigh?</label>
       <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
              step="0.1" min="0.1" max="200" inputmode="decimal" required autofocus

@@ -138,7 +138,15 @@ async function tasksForCollect(order) {
       title:
         label && label.weight_lb != null
           ? `Bag ${position} - ${label.weight_lb} lb`
-          : `Weigh bag ${position}`,
+          : `Weigh Bag ${position}`,
+      // WHICH TAG IS ON THE BAG HE IS ABOUT TO PUT ON THE SCALE. Neil's
+      // wording, and it replaces the separate "Tag 6ZP4DN is on it." line that
+      // used to sit under the heading saying the same thing twice.
+      //
+      // Only before it is weighed. Afterwards the title is the weight itself
+      // and the step is a record rather than an instruction.
+      titleTail:
+        label && label.weight_lb == null ? `with Tag ID ${label.code}.` : null,
       // No supporting line - deleted off the screen by Neil. The step is
       // "weigh bag 1"; what the number then does is the system's business.
       detail: null,
