@@ -26,3 +26,7 @@ uploads/
 # Claude Code personal settings (machine-specific, not shared)
 .claude/settings.local.json
 backups/
+
+# Generated label PDFs. Built on demand from /ops/labels/pdf and specific to a
+# set of codes - a stale one in the repo is a set of tags somebody might reprint.
+*.pdf
