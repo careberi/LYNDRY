@@ -200,10 +200,7 @@ function travelCard(run, user = null) {
         ? `<form method="post" action="/ops/run/here" style="margin:0;">
              <input type="hidden" name="order_id" value="${escapeHtml(run.arrivalOrder.id)}">
              <button type="submit" class="btn btn-primary btn-lg btn-full">I'm here</button>
-           </form>
-           <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
-             Tap that when you pull up and it will tell you what to do.
-           </p>`
+           </form>`
         : ''
     }
   </div>`;

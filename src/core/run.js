@@ -5,6 +5,7 @@ const dispatch = require('./dispatch');
 const booking = require('./booking');
 const bags = require('./bags');
 const loadout = require('./loadout');
+const { sendAndLog } = require('./notify');
 
 // ---------------------------------------------------------------------------
 // The guided run: one stop at a time, and nothing else on the screen.
@@ -694,12 +695,58 @@ async function forDriver(driverId, roundStart = null) {
 // arrival button can appear. Best effort: failing to record this must never
 // stop somebody getting directions.
 async function setOff(orderId) {
-  const { error } = await db
+  // CLAIMED WITH THE UPDATE ITSELF. The row only comes back when navigating_at
+  // was still null, so the message below cannot go out twice - not on a double
+  // tap, and not on the "Directions again" button, which is the same link.
+  //
+  // Nothing reads the timestamp's value, only whether it is set, so not
+  // refreshing it on a second tap costs nothing.
+  const { data: claimed, error } = await db
     .from('orders')
     .update({ navigating_at: new Date().toISOString() })
-    .eq('id', orderId);
+    .eq('id', orderId)
+    .is('navigating_at', null)
+    .select('id, collected_at, preferences, customers(id, phone, status, preferences)')
+    .maybeSingle();
 
-  if (error) console.error(`Could not record setting off: ${error.message}`);
+  if (error) {
+    console.error(`Could not record setting off: ${error.message}`);
+    return;
+  }
+
+  if (!claimed) return;
+
+  // THE PICKUP LEG ONLY. Neil asked for the one at the start of the day: we
+  // are on our way for your laundry, and we will say when we have it. Once
+  // collected_at is set the same button is taking the driver to a laundromat
+  // or back to a door with clean laundry - the second of those is already
+  // covered by the out-for-delivery text, and the first is not the customer's
+  // business.
+  if (claimed.collected_at) return;
+
+  const customer = claimed.customers;
+  if (!customer || !customer.phone) return;
+
+  // STOP MEANS STOP, and a new message does not get to be the exception.
+  if (customer.status === 'UNSUBSCRIBED') return;
+
+  await sendAndLog(customer.phone, onTheWayMessage(claimed), customer.id);
+}
+
+// One segment of plain ASCII, and the spot in the customer's own words rather
+// than ours - "from where you said" so that whatever they typed reads as the
+// instruction it is. A real saved spot can be a sentence ("Deliver to 16-51
+// Chandler Dr"), so nothing is wrapped around it that assumes a short phrase.
+//
+// A COMMA, NOT A SPACED DASH. notify.toPlainText() rewrites " - " to ", " on
+// its way out - no dashes in a LYNDRY text - so writing the dash here would
+// mean the source said one thing and the customer read another.
+function onTheWayMessage(order) {
+  const spot = spotOf(order);
+
+  return spot
+    ? `We're on our way to pick up your laundry from where you said, ${spot}. We'll text you once we have it.`
+    : "We're on our way to pick up your laundry. We'll text you once we have it.";
 }
 
 // "I'm here." Sets the flag on whichever order carries this stop's arrival.
