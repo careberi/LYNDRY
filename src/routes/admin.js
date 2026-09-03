@@ -1761,7 +1761,16 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     const inGroup = {
       collect: (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= now,
       upcoming: (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date > now,
-      van: (o) => o.status === 'IN_PROCESS',
+      // COLLECTED IS NOT THE SAME AS LOADED, and the board used to say it was.
+      // IN_PROCESS starts the moment the driver taps "I have the bags" - he is
+      // still standing at the door with them, tagging, weighing and clipping.
+      // Counting that as "on the van" told Neil a bag was aboard while the
+      // screen in the driver's hand was still asking him to put a clip on it.
+      //
+      // van_confirmed_at is the last doorstep task: the last bag actually in
+      // the van. That is when it is on the van, and not before.
+      doorstep: (o) => o.status === 'IN_PROCESS' && !o.van_confirmed_at,
+      van: (o) => o.status === 'IN_PROCESS' && Boolean(o.van_confirmed_at),
       partner: (o) => o.status === 'AT_PARTNER',
       ready: (o) => o.status === 'READY',
       out: (o) => o.status === 'OUT_FOR_DELIVERY',
@@ -1777,7 +1786,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     g.stray = all.filter((o) => !grouped.has(o.id));
 
     // With us right now: collected and not yet back at their door.
-    const withUs = [...g.van, ...g.partner, ...g.ready, ...g.out];
+    const withUs = [...g.doorstep, ...g.van, ...g.partner, ...g.ready, ...g.out];
     // Summed through weight.sum, which routes once at the end. Adding these
     // raw is what put "52.599999999999994 lb" on the board: 25 + 27.6 in
     // binary floating point is not 52.6.
@@ -2035,6 +2044,15 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
         ${statCard('To collect', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
         ${
+          // Bags in his hands at a door: collected, not yet loaded. Same leg of
+          // the day as "to collect", so the same tint.
+          statCard(
+            'Being collected',
+            g.doorstep.length,
+            g.doorstep.length ? 'var(--suds-300)' : undefined
+          )
+        }
+        ${
           // ON THE VAN HAD NO CARD AT ALL, which is how a board with a bag
           // sitting in the van read as five zeroes. Every other stage the bag
           // can be in was counted; the one between the doorstep and the
@@ -2063,6 +2081,12 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       ${board('Not in a group', 'Unclassified', g.stray, 'These match no stage. That is a bug worth reporting.')}
       ${board('Ready', 'Ready to collect from the partner', g.ready, 'Washed and folded. Collect these and get them out.')}
       ${board('Today', 'To collect from customers', g.collect)}
+      ${board(
+        'At the door',
+        'Collected, not yet in the van',
+        g.doorstep,
+        'The driver has these in his hands. They are on the van once every bag is loaded.'
+      )}
       ${board('On the van', 'Collected, not yet dropped', g.van)}
       ${board('At the partner', 'Being washed', g.partner)}
       ${board('On the way back', 'Out for delivery', g.out)}
