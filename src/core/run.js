@@ -118,7 +118,7 @@ async function tasksForCollect(order) {
       label,
       title: label
         ? `Bag ${position} tagged - ${label.code}`
-        : `Put a bag tag on bag ${position}`,
+        : `Put a Bag Tag on Bag ${position}`,
       // The rest of Neil's sentence, which sits after the order number. Only
       // while there is nothing on the bag yet - once it is tagged the step is
       // done and reads as a record of it, not an instruction.
@@ -168,10 +168,10 @@ async function tasksForCollect(order) {
       label,
       title:
         label && label.clipped_at
-          ? `Clip ${label.clip_number} on bag ${position}`
+          ? `Clip ${label.clip_number} on Bag ${position}`
           : label && label.clip_number != null
-            ? `Put van clip ${label.clip_number} on bag ${position}`
-            : `Clip bag ${position}`,
+            ? `Put Van Clip ${label.clip_number} on Bag ${position}`
+            : `Clip Bag ${position}`,
       // The task line says which clip on which bag; the number is on screen
       // at 40px. There is nothing left for a line underneath to add.
       detail: null,
@@ -200,7 +200,7 @@ async function tasksForCollect(order) {
       title:
         label && label.loaded_at
           ? `Bag ${position} in the van`
-          : `Put bag ${position} in the van`,
+          : `Put Bag ${position} in the van`,
       detail: null,
       done: Boolean(label && label.loaded_at),
       clip: label ? label.clip_number : null,

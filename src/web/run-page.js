@@ -64,7 +64,7 @@ const HEADLINE = {
 // are the customer's name, their thread and the money, none of which a driver
 // is shown. Sales never has orders.drive, so on this screen that is Admin and
 // nobody else.
-function taskLine(text, stop, user, lead = '', tail = '') {
+function taskLine(text, stop, user, lead = '', tail = '', mid = '') {
   const quiet = 'font-weight:400;color:var(--ink-500);';
   const order = stop.order || null;
 
@@ -73,8 +73,8 @@ function taskLine(text, stop, user, lead = '', tail = '') {
     // would be picking a bag out of the load at random, so it says how many.
     const many = (stop.orders || []).length;
     return many
-      ? `${escapeHtml(text)} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>`
-      : escapeHtml(text);
+      ? `${escapeHtml(text)}${mid} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>`
+      : `${escapeHtml(text)}${mid}`;
   }
 
   const num = `#${escapeHtml(order.order_number)}`;
@@ -91,9 +91,9 @@ function taskLine(text, stop, user, lead = '', tail = '') {
   // order reference sits in the middle of it, so a tail is the only way to get
   // it there without the number landing at the end of a clause it does not
   // belong to.
-  return `${escapeHtml(text)} <span style="${quiet}">${
+  return `${escapeHtml(text)}${mid} <span style="${quiet}">${
     lead ? `${escapeHtml(lead)} ` : ''
-  }${inner}</span>${tail ? ` ${tail}` : ''}`;
+  }${inner}</span>${tail}`;
 }
 
 // "TASK: Pick up order #1940" - the label, a colon, then the value beside it.
@@ -223,20 +223,28 @@ function travelCard(run, user = null) {
 // is a link to that sticker's own page - Neil asked for it by URL. run.js
 // supplies the words for the steps that only need words; a link is markup, so
 // it is assembled here rather than in core.
-function taskTail(task) {
-  if (!task) return '';
+function taskParts(task) {
+  if (!task) return { mid: '', tail: '.' };
 
   // The three per-bag steps that happen with the bag in his hands. Each names
   // the tag on it, so "bag 1" is never the only way to tell two bags apart.
   const perBag = /^(weigh|clip|load)_/.test(task.key);
   const code = perBag && task.label ? task.label.code : null;
 
-  if (code) {
-    return `with Tag ID <a href="/ops/labels/${encodeURIComponent(code)}"
-      style="color:inherit;">${escapeHtml(code)}</a>.`;
-  }
+  // AN ASIDE, IN BRACKETS, BEFORE THE ORDER. Neil's arrangement: "Put Van Clip
+  // 1 on Bag 1 (Tag ID 6ZP4DN) for Order #1940." The sentence is about the bag
+  // in his hands, the tag says which bag it is, and the order is what all of it
+  // belongs to - so the order reference ends the sentence rather than sitting
+  // in the middle of it.
+  const mid = code
+    ? ` (Tag ID <a href="/ops/labels/${encodeURIComponent(code)}"
+        style="color:inherit;">${escapeHtml(code)}</a>)`
+    : '';
 
-  return escapeHtml(task.titleTail || '');
+  // A few steps carry on past the order instead of stopping there.
+  const tail = task.titleTail ? ` ${escapeHtml(task.titleTail)}` : '.';
+
+  return { mid, tail };
 }
 
 // The one thing to do, now he is there.
@@ -269,7 +277,10 @@ function taskCard(run, user = null) {
   const header = `
     ${stopLine(
       'Task',
-      taskLine(task ? task.title : 'All done here', stop, user, 'for order', taskTail(task)),
+      (() => {
+        const { mid, tail } = taskParts(task);
+        return taskLine(task ? task.title : 'All done here', stop, user, 'for Order', tail, mid);
+      })(),
       'stop-line-plain'
     )}
     ${where}
