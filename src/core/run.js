@@ -85,10 +85,16 @@ async function tasksForCollect(order) {
     },
     {
       key: 'bag_count',
+      // A STATEMENT, NOT A QUESTION. The card reads "TASK: ... for order #1940",
+      // and a question mark landing in the middle of that made a sentence out
+      // of two halves that do not join. Neil's wording.
       title: known
         ? `${bagCount} bag${bagCount === 1 ? '' : 's'}`
-        : 'How many bags have you got?',
-      detail: 'Count them first. The screen walks you through one at a time.',
+        : 'Enter the number of bags collected',
+      // No supporting line. Neil deleted it off the screen: the task says to
+      // enter the number of bags collected, and how the screen behaves next is
+      // ours to worry about.
+      detail: null,
       done: known,
     },
   ];
