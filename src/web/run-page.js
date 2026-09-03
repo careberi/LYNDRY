@@ -61,33 +61,40 @@ function addressLines(address) {
   return [raw.slice(0, at).trim(), raw.slice(at + 1).trim()].filter(Boolean);
 }
 
-// WHICH ORDER THIS STOP IS, written once and used by both cards.
+// THE TASK, WITH THE ORDER NUMBER INSIDE IT.
 //
-// The travel card and the task card are the same stop a minute apart - he taps
-// "I'm here" and one becomes the other. Two ways of writing the order number is
-// two things to keep in step, and they would drift the first time one of them
-// learned something.
+// Neil's layout, said twice: a section clearly marked TASK, and the task itself
+// reads "Pick up order #1940". The number is part of that sentence rather than
+// a separate label floating above it - a driver reading the card out loud says
+// "pick up order nineteen forty", which is one thought, not two.
+//
+// Written once and used by both cards, because the travel card and the task
+// card are the same stop a minute apart: he taps "I'm here" and one becomes the
+// other. Two ways of writing the order number is two things to keep in step.
 //
 // THE NUMBER IS THE LINK, and only for somebody who may follow it: behind it
 // are the customer's name, their thread and the money, none of which a driver
 // is shown. Sales never has orders.drive, so on this screen that is Admin and
 // nobody else.
-function orderEyebrow(stop, user) {
+function taskLine(text, stop, user) {
+  const quiet = 'font-weight:400;color:var(--ink-500);';
   const order = stop.order || null;
 
-  if (order) {
-    const label = `Order #${escapeHtml(order.order_number)}`;
-    return can(user, 'customers.view')
-      ? `<a href="/ops/orders/${escapeHtml(order.order_number)}" style="color:inherit;">${label}</a>`
-      : label;
+  if (!order) {
+    // A laundromat visit is several orders at one door. Naming one of them
+    // would be picking a bag out of the load at random, so it says how many.
+    const many = (stop.orders || []).length;
+    return many
+      ? `${escapeHtml(text)} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>`
+      : escapeHtml(text);
   }
 
-  // A laundromat visit is several orders at one door. Naming one of them would
-  // be picking a bag out of the load at random, so it says how many.
-  const many = (stop.orders || []).length;
-  if (many) return `${many} order${many === 1 ? '' : 's'}`;
+  const num = `#${escapeHtml(order.order_number)}`;
+  const inner = can(user, 'customers.view')
+    ? `<a href="/ops/orders/${escapeHtml(order.order_number)}" style="color:inherit;">${num}</a>`
+    : num;
 
-  return 'Stop';
+  return `${escapeHtml(text)} <span style="${quiet}">${inner}</span>`;
 }
 
 function progressBar(done, total) {
@@ -116,11 +123,10 @@ function travelCard(run, user = null) {
 
   return `
   <div style="${CARD}">
-    <p class="eyebrow" style="margin:0 0 6px;">${orderEyebrow(stop, user)}</p>
-
+    <p class="eyebrow" style="margin:0 0 4px;">Task</p>
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.05;
-               margin:0 0 14px;">
-      ${escapeHtml(HEADLINE[stop.kind] || 'Next stop')}
+               margin:0 0 18px;">
+      ${taskLine(HEADLINE[stop.kind] || 'Next stop', stop, user)}
     </h2>
 
     <p class="eyebrow" style="margin:0 0 4px;">Where</p>
@@ -241,7 +247,7 @@ function taskCard(run, user = null) {
   // twice in two different vocabularies. The heading is the job; this is only
   // which order it belongs to.
   const header = `
-    <p class="eyebrow" style="margin:0 0 6px;">${orderEyebrow(stop, user)}</p>
+    <p class="eyebrow" style="margin:0 0 4px;">Task</p>
     ${
       clips.length
         ? `<p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
@@ -251,7 +257,7 @@ function taskCard(run, user = null) {
         : ''
     }
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 6px;">
-      ${escapeHtml(task ? task.title : 'All done here')}
+      ${taskLine(task ? task.title : 'All done here', stop, user)}
     </h2>
     ${where}`;
 
