@@ -34,6 +34,7 @@ const { routingBoardBody } = require('../web/routing-board');
 const { runBody } = require('../web/run-page');
 const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
+const LABEL_LABEL = labelPdf.DEFAULT_LABEL;
 const { reportsBody } = require('../web/reports-page');
 const { teamMemberBody, ROLE_TONE } = require('../web/team-page');
 const loadout = require('../core/loadout');
@@ -4636,8 +4637,37 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
     // 30 is work nobody sees.
     const qrs = await Promise.all(showing.map((l) => labelListQr(l.code)));
 
+    // JUST MADE SOME? PULL THE FILE DOWN.
+    //
+    // An iframe rather than a script: the PDF is served as an attachment, so
+    // pointing anything at it starts a download without navigating away. That
+    // works with JavaScript off, which is the standing rule for these screens -
+    // and the visible link below it is what somebody uses if their browser
+    // blocked the frame.
+    const made = /^[\d\-:.TZ]{10,32}$/.test(String(req.query.made || ''))
+      ? String(req.query.made)
+      : null;
+    const madeCount = Math.max(1, Math.min(50, Math.floor(Number(req.query.n)) || 0));
+    const madeHref = made
+      ? `/ops/labels/pdf?from=${encodeURIComponent(made)}&n=${madeCount}`
+      : null;
+
     const body = `
       <div style="max-width:640px;">
+        ${
+          madeHref
+            ? `<div style="margin:0 0 22px;padding:16px 19px;border:2px solid var(--ink-900);
+                           border-radius:14px;background:var(--suds-500);box-shadow:var(--shadow-pop-xs);">
+                 <p style="margin:0 0 10px;font-size:16px;line-height:1.5;font-weight:700;">
+                   ${madeCount} tag${madeCount === 1 ? '' : 's'} made. The PDF is
+                   downloading - ${madeCount * bags.STICKERS_PER_TAG} labels, one to a page.
+                 </p>
+                 <a class="btn btn-sm" href="${escapeHtml(madeHref)}">Download it again</a>
+                 <iframe src="${escapeHtml(madeHref)}" title="" aria-hidden="true"
+                         style="display:none;width:0;height:0;border:0;"></iframe>
+               </div>`
+            : ''
+        }
         <p class="eyebrow" style="margin:0 0 8px;">Bag tags</p>
         <h1 style="margin:0 0 16px;font-size:40px;line-height:1.05;">Bag tags</h1>
         <p style="font-size:16px;line-height:1.65;color:var(--ink-700);">
@@ -4693,20 +4723,14 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
                    min="1" max="50" step="1" value="30" required style="flex:1;">
             <button type="submit" class="btn btn-lg">Make them</button>
           </div>
-          <!-- TWO PRINTERS, TWO FILES. The sheet is for a laser printer and
-               Avery stock; the PDF is one tag per page for a thermal roll,
-               which is what the Clabel wants. Same tags either way. -->
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
-            <a class="btn btn-sm btn-outline" href="/ops/labels/pdf?n=10">
-              PDF for the label printer
-            </a>
-          </div>
-
+          <!-- NO PDF BUTTON. Making tags and getting the file are one action -
+               Neil: "it should always create labels for as many bag tags as I
+               need when I make them." The PDF is what this form produces. -->
           <span class="field-hint" style="display:block;margin-top:10px;">
-            One at a time, or up to fifty. They print six to a sheet on
-            ${escapeHtml(LABEL_SHEET.stock)} shipping labels, ordinary stock
-            sold everywhere - ask for fewer than six and the rest of the sheet
-            comes out blank. Print at 100% scale, not "fit to page".
+            One at a time, or up to fifty. Making them downloads a PDF for the
+            label printer - ${bags.STICKERS_PER_TAG} labels per tag, one to a
+            page, at ${LABEL_LABEL.widthIn} x ${LABEL_LABEL.heightIn} inches.
+            Do not let the printer scale it: the page is the label.
           </span>
         </form>
       </div>
@@ -4779,13 +4803,26 @@ router.get('/ops/labels/pdf', guard, may('orders.act'), async (req, res, next) =
   try {
     const wanted = Math.max(1, Math.min(50, Math.floor(Number(req.query.n)) || 10));
 
-    // Blank stock only. A tag already on a bag must never be reprinted - two
-    // physical tags with one id is two bags the system thinks are one.
-    const { data, error } = await db
+    // EXACTLY THE BATCH THAT WAS JUST MADE, when `from` says which.
+    //
+    // Without it, asking for 3 after minting 3 would hand back the three most
+    // recent blanks - which is usually the same three and occasionally is not,
+    // the moment two people make tags a minute apart. The timestamp is stamped
+    // just before minting, so it names that batch and nothing else.
+    //
+    // Blank stock only either way. A tag already on a bag must never be
+    // reprinted - two physical tags with one id is two bags the system thinks
+    // are one.
+    let query = db
       .from('bag_labels')
       .select('code')
       .is('order_id', null)
-      .is('sticker_seq', null)
+      .is('sticker_seq', null);
+
+    const from = String(req.query.from || '');
+    if (from) query = query.gte('printed_at', from);
+
+    const { data, error } = await query
       .order('printed_at', { ascending: false })
       .limit(wanted);
 
@@ -4833,7 +4870,21 @@ router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
     const from = new Date(Date.now() - 1000).toISOString();
     await bags.mint(wanted);
 
-    return res.redirect(303, `/ops/labels/sheet?from=${encodeURIComponent(from)}&n=${wanted}`);
+    // BACK TO THE LABELS PAGE, WHICH THEN PULLS THE PDF DOWN.
+    //
+    // Neil: making tags and getting the file are one action, not two - "it
+    // should always create labels for as many bag tags as I need when I make
+    // them." So there is no PDF button any more; the PDF is what Make them
+    // produces.
+    //
+    // Redirecting straight AT the PDF would download it and leave the counts on
+    // screen stale, because the browser never re-renders the page it is
+    // standing on. Going back to the page and letting it fetch the file gives
+    // both: updated counts, and the download starting on its own.
+    return res.redirect(
+      303,
+      `/ops/labels?made=${encodeURIComponent(from)}&n=${wanted}`
+    );
   } catch (err) {
     return next(err);
   }
