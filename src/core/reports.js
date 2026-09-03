@@ -80,12 +80,30 @@ function rowFor(order) {
   const partner = order.partners || null;
   const wholesale = partner ? num(partner.wholesale_per_lb_cents) : null;
 
-  // WHAT THE LAUNDROMAT WILL INVOICE US, on THEIR weight - which is the whole
-  // reason we ask them to weigh it. Null when we lack their figure or their
-  // rate, rather than substituting ours: an invoice line invented from our own
-  // scale is not a check on anything.
+  // WE PAY ON THE LOWER OF THE TWO SCALES. Neil's rule, and it is the mirror of
+  // the one above: "we're always gonna bill the customer the highest of the
+  // two, but invoice the lowest of the two."
+  //
+  // It used to pay on THEIR figure whatever it was. That is the same answer
+  // whenever their scale reads light - which is every case we have seen - and
+  // the wrong one the first time a laundromat's scale reads heavy: we would
+  // bill the customer on their number AND pay them on it, taking the loss at
+  // both ends of the same bag.
+  //
+  // Both rules together mean a disagreement between two scales never costs us
+  // money, and that is the point of asking two scales.
+  const payWeightLb =
+    ours == null && theirs == null
+      ? null
+      : Math.min(ours == null ? Infinity : ours, theirs == null ? Infinity : theirs);
+
+  // Null when we lack their rate, or when they never weighed it - an invoice
+  // line invented from our own scale alone is not a check on anything, which is
+  // the whole reason we ask them to weigh it.
   const partnerOwedCents =
-    theirs != null && wholesale != null ? Math.round(theirs * wholesale) : null;
+    theirs != null && wholesale != null && payWeightLb != null
+      ? Math.round(payWeightLb * wholesale)
+      : null;
 
   const charged = order.price_cents == null ? null : Number(order.price_cents);
 
@@ -115,6 +133,7 @@ function rowFor(order) {
     paid: order.payment_status === 'PAID',
 
     partnerRateCents: wholesale,
+    payWeightLb: payWeightLb === Infinity ? null : payWeightLb,
     partnerOwedCents,
 
     // Charge minus the wash. NOT a margin - the routing board owns that, and it
@@ -172,6 +191,7 @@ function totals(list) {
     partnerWeightLb: Number(sum((r) => r.partnerWeightLb).toFixed(2)),
     returnWeightLb: Number(sum((r) => r.returnWeightLb).toFixed(2)),
     billedWeightLb: Number(sum((r) => r.billedWeightLb).toFixed(2)),
+    payWeightLb: Number(sum((r) => r.payWeightLb).toFixed(2)),
 
     additionsCents: sum((r) => r.additionsCents),
     chargedCents: sum((r) => r.chargedCents),
@@ -186,16 +206,17 @@ const CSV_COLUMNS = Object.freeze([
   ['Order', (r) => r.orderNumber],
   ['Pickup date', (r) => r.date || ''],
   ['Status', (r) => r.status],
-  ['Weight in ours lb', (r) => r.ourWeightLb],
-  ['Laundromat weight lb', (r) => r.partnerWeightLb],
+  ['LYNDRY weight lb', (r) => r.ourWeightLb],
+  ['Partner weight lb', (r) => r.partnerWeightLb],
   ['Weight back out lb', (r) => r.returnWeightLb],
   ['Drift lb', (r) => r.driftLb],
   ['Additions', (r) => money(r.additionsCents)],
-  ['Billed weight lb', (r) => r.billedWeightLb],
+  ['Billed on higher lb', (r) => r.billedWeightLb],
   ['Charged to customer', (r) => money(r.chargedCents)],
   ['Expected charge', (r) => money(r.expectedCents)],
+  ['We pay on lower lb', (r) => r.payWeightLb],
   ['Laundromat rate per lb', (r) => money(r.partnerRateCents)],
-  ['We are invoiced', (r) => money(r.partnerOwedCents)],
+  ['We pay partner', (r) => money(r.partnerOwedCents)],
   ['Charge minus wash', (r) => money(r.grossCents)],
 ]);
 

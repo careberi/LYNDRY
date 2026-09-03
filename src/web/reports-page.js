@@ -90,9 +90,10 @@ function reportsBody({ report, partners = [], form = {} }) {
 
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:70ch;margin:0 0 22px;">
     Every order that went to a laundromat, with all three weights side by side.
-    <strong>The customer is billed on the heavier of ours and theirs</strong>;
-    the laundromat invoices us on their own figure. Nothing here changes
-    anything - it is a reading of what happened.
+    <strong>The customer is billed on the heavier of the two scales, and we pay
+    the laundromat on the lighter</strong> - so a disagreement between two
+    scales never costs us money at either end. Nothing here changes anything;
+    it is a reading of what happened.
   </p>
 
   <form method="get" action="/ops/reports"
@@ -145,17 +146,22 @@ function reportsBody({ report, partners = [], form = {} }) {
                   font-variant-numeric:tabular-nums;">
       <thead>
         <tr>
+          <!-- NAMED BY WHO WEIGHED IT. "In, ours" and "They said" meant nothing
+               to anybody who had not written them - Neil: "don't say ours, have
+               the columns be descriptive." The two weight columns now say whose
+               scale, and the two billing columns say which rule picked them. -->
           ${th('Laundromat')}
           ${th('Order')}
-          ${th('In, ours', 'right')}
-          ${th('They said', 'right')}
+          ${th('LYNDRY weight', 'right')}
+          ${th('Partner weight', 'right')}
           ${th('Drift', 'right')}
-          ${th('Back out', 'right')}
+          ${th('Weight back out', 'right')}
           ${th('Add-ons', 'right')}
-          ${th('Billed on', 'right')}
+          ${th('Billed on&nbsp;&middot;&nbsp;higher', 'right')}
           ${th('Customer paid', 'right')}
           ${th('Should be', 'right')}
-          ${th('We are invoiced', 'right')}
+          ${th('We pay on&nbsp;&middot;&nbsp;lower', 'right')}
+          ${th('We pay partner', 'right')}
           ${th('Left over', 'right')}
         </tr>
       </thead>
@@ -183,6 +189,7 @@ function reportsBody({ report, partners = [], form = {} }) {
           ${td(`<strong>${lb(r.billedWeightLb)}</strong>`, 'right')}
           ${td(cash(r.chargedCents), 'right', short ? 'color:var(--stain-600, #B8321F);font-weight:700;' : '')}
           ${td(cash(r.expectedCents), 'right', 'color:var(--ink-500);')}
+          ${td(lb(r.payWeightLb), 'right')}
           ${td(cash(r.partnerOwedCents), 'right')}
           ${td(`<strong>${cash(r.grossCents)}</strong>`, 'right')}
         </tr>`;
@@ -201,6 +208,7 @@ function reportsBody({ report, partners = [], form = {} }) {
           ${td(`<strong>${totals.billedWeightLb.toFixed(1)}</strong>`, 'right')}
           ${td(`<strong>${cash(totals.chargedCents)}</strong>`, 'right')}
           ${td(`<strong>${cash(totals.expectedCents)}</strong>`, 'right', 'color:var(--ink-500);')}
+          ${td(`<strong>${totals.payWeightLb.toFixed(1)}</strong>`, 'right')}
           ${td(`<strong>${cash(totals.partnerOwedCents)}</strong>`, 'right')}
           ${td(`<strong>${cash(totals.grossCents)}</strong>`, 'right')}
         </tr>
@@ -212,7 +220,9 @@ function reportsBody({ report, partners = [], form = {} }) {
     <strong>Drift</strong> is their scale against ours, and the sign is kept on
     purpose: heavier than us costs money, lighter is the ordinary direction.
     <strong>Should be</strong> is the billed weight at this order's own stored
-    rate plus its add-ons - it is what the rules say, not what was taken.
+    rate plus its add-ons - what the rules say, not what was taken.
+    <strong>We pay on</strong> is the lighter of the two scales, which is the
+    mirror of billing on the heavier.
     <strong>Left over</strong> is what the customer paid minus what the
     laundromat is owed, before the van, the wage and the card fees.
   </p>`
