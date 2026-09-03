@@ -61,6 +61,35 @@ function addressLines(address) {
   return [raw.slice(0, at).trim(), raw.slice(at + 1).trim()].filter(Boolean);
 }
 
+// WHICH ORDER THIS STOP IS, written once and used by both cards.
+//
+// The travel card and the task card are the same stop a minute apart - he taps
+// "I'm here" and one becomes the other. Two ways of writing the order number is
+// two things to keep in step, and they would drift the first time one of them
+// learned something.
+//
+// THE NUMBER IS THE LINK, and only for somebody who may follow it: behind it
+// are the customer's name, their thread and the money, none of which a driver
+// is shown. Sales never has orders.drive, so on this screen that is Admin and
+// nobody else.
+function orderEyebrow(stop, user) {
+  const order = stop.order || null;
+
+  if (order) {
+    const label = `Order #${escapeHtml(order.order_number)}`;
+    return can(user, 'customers.view')
+      ? `<a href="/ops/orders/${escapeHtml(order.order_number)}" style="color:inherit;">${label}</a>`
+      : label;
+  }
+
+  // A laundromat visit is several orders at one door. Naming one of them would
+  // be picking a bag out of the load at random, so it says how many.
+  const many = (stop.orders || []).length;
+  if (many) return `${many} order${many === 1 ? '' : 's'}`;
+
+  return 'Stop';
+}
+
 function progressBar(done, total) {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return `
@@ -78,7 +107,7 @@ function progressBar(done, total) {
 // --- the two halves of a stop ----------------------------------------------
 
 // Before he is there: where to go, and a button that opens his maps app.
-function travelCard(run) {
+function travelCard(run, user = null) {
   const stop = run.current;
 
   // A laundromat has a name; a customer's door has only an address. Either way
@@ -87,11 +116,14 @@ function travelCard(run) {
 
   return `
   <div style="${CARD}">
+    <p class="eyebrow" style="margin:0 0 6px;">${orderEyebrow(stop, user)}</p>
+
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.05;
                margin:0 0 14px;">
       ${escapeHtml(HEADLINE[stop.kind] || 'Next stop')}
     </h2>
 
+    <p class="eyebrow" style="margin:0 0 4px;">Where</p>
     ${
       place.length
         ? `<p style="font-size:20px;font-weight:700;line-height:1.35;margin:0 0 6px;">
@@ -209,26 +241,7 @@ function taskCard(run, user = null) {
   // twice in two different vocabularies. The heading is the job; this is only
   // which order it belongs to.
   const header = `
-    <p class="eyebrow" style="margin:0 0 6px;">
-      ${
-        order
-          ? // THE NUMBER IS THE LINK. "the full order" was a second piece of link
-            // text for a thing already named two lines away - the order number is
-            // what he would tap anyway, so it is what is tappable.
-            //
-            // ONLY FOR SOMEBODY WHO MAY SEE WHAT IS BEHIND IT. Neil: the admin
-            // should be the only one who can open the full order. The page holds
-            // the customer's name, their thread and the money, and a driver is
-            // shown none of that - so offering him the door to it is offering a
-            // door that opens onto refusals. Sales never has orders.drive, so on
-            // this screen customers.view is Admin and nobody else.
-            can(user, 'customers.view')
-            ? `<a href="/ops/orders/${escapeHtml(order.order_number)}"
-                  style="color:inherit;">Order #${escapeHtml(order.order_number)}</a>`
-            : `Order #${escapeHtml(order.order_number)}`
-          : escapeHtml(HEADLINE[stop.kind] || 'Stop')
-      }
-    </p>
+    <p class="eyebrow" style="margin:0 0 6px;">${orderEyebrow(stop, user)}</p>
     ${
       clips.length
         ? `<p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
@@ -829,7 +842,7 @@ function runBody({ run, notice = null, problem = null, user = null }) {
   // screen a driver actually works from, and it did not.
   return `${head}
     ${progressBar(run.done, run.total)}
-    ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run, user)) : travelCard(run)}
+    ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run, user)) : travelCard(run, user)}
   </div>
   ${scannerScript()}
   ${returnFromMapsScript()}

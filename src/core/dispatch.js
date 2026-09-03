@@ -642,9 +642,29 @@ async function board(dateIso, fromTime, driverId = null) {
   const dayEnd = booking.PICKUP_WINDOWS[booking.PICKUP_WINDOWS.length - 1].end;
 
   const clockNow = date === now.date ? now.time : dayStart;
-  const withinDay = clockNow >= dayStart && clockNow < dayEnd;
 
-  const start = fromTime || (withinDay ? clockNow : dayStart);
+  // AN ETA IS NEVER IN THE PAST. Neil, in as many words: "this time should be
+  // whatever time it is plus how long it takes to get to that spot - even if
+  // that falls outside the route range."
+  //
+  // The old rule fell forward to the first window whenever the clock was
+  // outside the day, which is two opposite situations treated as one. Before
+  // the first window opens it is right: the earliest anybody could set off is
+  // when it opens. After the last one closes it is nonsense - at 6:07pm with
+  // two stops still to do, the board rewound to 8am and told the driver his
+  // next door was due at 8:07 THIS MORNING. A time in the past reads as broken
+  // data rather than as a stop running late, which is what it actually is.
+  //
+  // Tapping a route card had the same hole from the other end: at 6:32pm the
+  // 4-6PM card would start its walk at 16:00 and quote times an hour and a half
+  // gone. So the floor is NOW, and the window or the day's start only ever
+  // pushes it later - which is what makes "the 4-6PM route" still mean 4pm when
+  // you look at it over breakfast.
+  //
+  // A future date resolves clockNow to dayStart above, so today is the only day
+  // this can move.
+  const planned = fromTime || dayStart;
+  const start = clockNow > planned ? clockNow : planned;
 
   const [hh, mm] = String(start).split(':').map(Number);
   const startMinutes = (Number.isFinite(hh) ? hh : 9) * 60 + (Number.isFinite(mm) ? mm : 0);
