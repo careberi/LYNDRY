@@ -212,10 +212,15 @@
   padding: 14px 18px;
   border: 2px solid var(--ink-900);
   border-radius: 16px;
-  background: var(--sunbeam-500);
+  /* RED UNTIL IT IS TRUE. Neil's call, and it earns the exception to "stain is
+     for errors only": a clip not in the driver's hand, or a bag not in the van,
+     is the state this step exists to catch - a bag left on a doorstep. Paper on
+     stain rather than ink, the same pairing the map-failure notice uses. */
+  background: var(--stain-500);
+  color: var(--paper-050);
   box-shadow: var(--shadow-pop-xs);
   cursor: pointer;
-  transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
 }
 .clip-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
 .clip-toggle:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--ink-900); }
@@ -242,7 +247,7 @@
 }
 .clip-toggle .clip-state-on { display: none; }
 
-.clip-toggle:has(input:checked) { background: var(--suds-500); }
+.clip-toggle:has(input:checked) { background: var(--suds-500); color: var(--ink-900); }
 .clip-toggle:has(input:checked) .clip-state-off { display: none; }
 .clip-toggle:has(input:checked) .clip-state-on { display: inline; }
 

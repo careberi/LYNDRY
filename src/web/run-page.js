@@ -388,17 +388,40 @@ function taskControl(stop, task, order) {
   // his hands before picking up the next one.
   if (task.key.startsWith('load_')) {
     return `
-    <form method="post" action="/ops/orders/${order.order_number}/bag-van${back}" style="margin:0;">
+    <form method="post" action="/ops/orders/${order.order_number}/bag-van${back}"
+          class="clip-form" style="margin:0;">
       <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
 
-      <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
-        Bag ${escapeHtml(task.position)}${
-          task.clip != null ? `, on clip <strong>${escapeHtml(task.clip)}</strong>` : ''
-        }, into the van.
-      </p>
+      <!-- THE SAME SWITCH AS THE CLIP STEP, because it is the same kind of
+           claim: he is telling the system a thing is physically where it should
+           be. IN THE VAN reads FALSE in red until he throws it, then TRUE in
+           green, and only then will the confirmation under it work.
+
+           Red is the honest colour here. A bag that is not in the van is the
+           bag that gets left on a doorstep, which is the failure this whole
+           step exists to catch. -->
+      <label class="clip-toggle" style="margin:0 0 18px;">
+        <input type="checkbox" name="bag_in_van" required>
+        <span class="clip-number">
+          ${
+            task.clip != null
+              ? `Van Clip #${escapeHtml(task.clip)}`
+              : `Bag ${escapeHtml(task.position)}`
+          }
+        </span>
+        <span class="clip-state">
+          In the van:
+          <span class="clip-state-off">False</span>
+          <span class="clip-state-on">True</span>
+        </span>
+      </label>
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
-        Bag ${escapeHtml(task.position)} is in the van
+        ${
+          task.clip != null
+            ? `Van Clip #${escapeHtml(task.clip)} is on the van`
+            : `Bag ${escapeHtml(task.position)} is in the van`
+        }
       </button>
     </form>`;
   }

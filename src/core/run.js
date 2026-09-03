@@ -197,10 +197,23 @@ async function tasksForCollect(order) {
       key: `load_${position}`,
       position,
       label,
+      // BY ITS CLIP, NOT ITS BAG NUMBER. Neil's wording, and it is the right
+      // name at this moment: the clip went on a step ago and is now what the
+      // bag is called for the rest of the van leg - it is what he reads off the
+      // load and what he says at a laundromat counter. "Bag 1" is a position
+      // in a count nobody can see once the bag is in his arms.
+      //
+      // The bag number survives where there is no clip yet, which cannot
+      // normally happen - the step is blocked until it is clipped - but a
+      // heading that says "Van Clip #null" would be worse than a plain one.
       title:
         label && label.loaded_at
-          ? `Bag ${position} in the van`
-          : `Put Bag ${position} in the van`,
+          ? label.clip_number != null
+            ? `Van Clip #${label.clip_number} on the van`
+            : `Bag ${position} in the van`
+          : label && label.clip_number != null
+            ? `Put Van Clip #${label.clip_number} on the van`
+            : `Put Bag ${position} in the van`,
       detail: null,
       done: Boolean(label && label.loaded_at),
       clip: label ? label.clip_number : null,
