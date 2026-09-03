@@ -457,18 +457,32 @@ function partnerCard(run) {
   return `
   <div style="${CARD}">
     <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(HEADLINE[stop.kind])}</p>
-    <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 6px;">
+    <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 8px;">
       ${escapeHtml(stop.name || 'The laundromat')}
     </h2>
-    <p style="font-size:16px;line-height:1.5;margin:0 0 4px;">${escapeHtml(stop.address || '')}</p>
-    <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 16px;">
-      ${stop.bags} bag${stop.bags === 1 ? '' : 's'}${
+
+    <!-- THE TASK, NOT THE ADDRESS, IS THE SECOND LINE. Neil: "it should have
+         bold underneath instead of the address - pick up this number of bags,
+         and have the number highlighted, because that's the task."
+         He is already standing there. The address is how he got here; the
+         count is what he is about to do, so it takes the weight and the
+         address drops to a reference line under it. -->
+    <p style="font-family:var(--font-display);font-weight:900;font-size:22px;
+              line-height:1.2;margin:0 0 6px;">
+      ${dropping ? 'Hand over' : 'Pick up'}
+      <span style="background:var(--sunbeam-500);padding:1px 8px;border:2px solid var(--ink-900);
+                   border-radius:8px;">${stop.bags}</span>
+      bag${stop.bags === 1 ? '' : 's'}${
         // NO POUNDAGE ON A COLLECT STOP. That figure is what went IN - the
         // customer's dirty weight - and printing it beside bags he is picking
         // up invites him to check one against the other, which is the weighing
         // this stop deliberately no longer does.
         dropping && stop.pounds ? `, ${stop.pounds.toFixed(0)} lb` : ''
-      }.
+      }
+    </p>
+
+    <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 16px;">
+      ${escapeHtml(stop.address || '')}
     </p>
 
     ${
@@ -495,14 +509,10 @@ function partnerCard(run) {
             return `
            <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
                        background:var(--paper-200);">
-             <!-- HOW MANY, IN THE SIZE OF THE ANSWER. Neil: "it should be
-                  really apparent that you're collecting two bags here." The
-                  count was a word inside a sentence; it is the heading now. -->
+             <!-- The count moved UP to sit under the laundromat's name, where
+                  Neil wanted it. Repeating it here as well would be the same
+                  number twice on one card. -->
              <p class="eyebrow" style="margin:0 0 4px;">Pick these up</p>
-             <p style="font-family:var(--font-display);font-weight:900;font-size:26px;
-                       line-height:1.1;margin:0 0 6px;">
-               ${bags.length} bag${bags.length === 1 ? '' : 's'} to collect
-             </p>
              <p style="font-size:15px;line-height:1.5;margin:0 0 14px;">
                ${
                  left

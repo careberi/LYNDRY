@@ -845,9 +845,13 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
   // the one they actually picked. And fabric_softener is a string now, so
   // 'NONE' was truthy and read back as "softener on": the exact opposite of
   // what they asked for, in the one message that is the record of the order.
-  const wash = prefs.water_temp
-    ? ` ${wash.describeSaved(prefs)}.`
-    : '';
+  // NOT `const wash`. That shadowed the module-level require for the whole
+  // function and then referenced itself inside its own initialiser, so every
+  // confirmation for a customer WITH preferences threw before it could be sent
+  // - and only for those customers, because the ternary short-circuits when
+  // water_temp is unset. The people who got a confirmation were the ones who
+  // had not chosen anything.
+  const washLine = prefs.water_temp ? ` ${wash.describeSaved(prefs)}.` : '';
 
   // The price, and WHEN it gets taken. Stated as something that has not
   // happened yet, because it has not: no money moves until the bag is weighed.
@@ -876,8 +880,22 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
   // in the order's life says only the one new thing that just happened - a
   // real thread said "24 hours" three times and the total four, and Neil
   // called it out. This is the only message allowed to say everything.
+  // WHAT TO PUT IT IN, which nobody was telling them.
+  //
+  // Neil's point: it comes back in the laundromat's own plastic bag, so the bag
+  // they hand over does not have to be anything in particular - a trash bag is
+  // genuinely fine, and somebody who does not know that will go and buy one.
+  // Anything reusable comes back with the laundry; a disposable one does not,
+  // and that is worth saying before somebody sends out a bag they wanted.
+  //
+  // It fits. The confirmation is 345 characters and a segment is 153, so three
+  // segments hold 459 - this lands at 454. The two longer wordings I tried both
+  // spilled into a fourth, which is a third more cost on every booking to say
+  // the same thing.
+  const bag = ` Put it in any bag, even a trash bag - it comes back in a fresh plastic bag, and we return anything reusable.`;
+
   return (
-    `${lead} pickup ${whenLine(order)}${address}. ${handover}${wash}${money} ` +
+    `${lead} pickup ${whenLine(order)}${address}. ${handover}${washLine}${money}${bag} ` +
     `Back with you the ${site.turnaround}.`
   );
 }
