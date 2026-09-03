@@ -842,6 +842,10 @@ function runBody({ run, notice = null, problem = null }) {
 // ---------------------------------------------------------------------------
 function roundCards(run) {
   const routes = run.routes || [];
+
+  // How much of TODAY is finished, which is what decides whether a route's
+  // count reads as a total or as what is left.
+  const done = Number(run.done) || 0;
   if (!routes.length) return '';
 
   const card = (r) => {
@@ -870,13 +874,25 @@ function roundCards(run) {
     // STOPS, NOT PICKUPS. A laundromat visit is a stop on the route and a
     // delivery is a stop on the route; calling them all pickups made the word
     // wrong on exactly the route somebody is standing in.
+    // "2 STOPS" BESIDE "STOP 2 OF 3" READS AS A CONTRADICTION, and Neil asked
+    // what it meant. They answer different questions - the card is what is
+    // LEFT on this route, the bar is progress through everything today
+    // including what is already finished - and both are right, which is
+    // exactly why the words have to say which is which.
+    //
+    // So the card says "left" the moment anything on the day is done. Before
+    // that, "2 stops" and "stop 1 of 2" agree and the plainer word is better.
+    const started = r.state === 'now' && done > 0;
+
     const note = late
       ? `${r.count} waiting`
       : r.count === 0
         ? 'nothing'
         : worked
           ? `${r.count} done`
-          : `${r.count} ${r.count === 1 ? 'stop' : 'stops'}`;
+          : started
+            ? `${r.count} left`
+            : `${r.count} ${r.count === 1 ? 'stop' : 'stops'}`;
 
     const inner =
       `<div class="rr-when">${escapeHtml(when)}</div>` +
