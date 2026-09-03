@@ -118,7 +118,7 @@ async function tasksForCollect(order) {
       label,
       title: label
         ? `Bag ${position} tagged - ${label.code}`
-        : `Put a Bag Tag on Bag ${position}`,
+        : `Put a Bag Tag on Bag #${position}`,
       // The rest of Neil's sentence, which sits after the order number. Only
       // while there is nothing on the bag yet - once it is tagged the step is
       // done and reads as a record of it, not an instruction.
