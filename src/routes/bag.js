@@ -465,7 +465,7 @@ const ES = Object.freeze({
   // now, so every line of it has to exist in both languages.
   'Nothing here': 'Nada aqui',
   'Bag label': 'Etiqueta de bolsa',
-  "This label isn't in use yet.": 'Esta etiqueta aun no esta en uso.',
+  "This label isn't in use.": 'Esta etiqueta no esta en uso.',
   'If this label is on a bag, call us at': 'Si esta etiqueta esta en una bolsa, llamenos al',
 
   'Not picked up yet': 'Aun no recogida',
@@ -928,7 +928,7 @@ function nothingHere(req = null) {
     <div class="card" style="padding:28px;">
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('Bag label'))}</p>
       <h1 style="font-size:30px;line-height:1.1;margin:0 0 14px;">${escapeHtml(
-        say("This label isn't in use yet.")
+        say("This label isn't in use.")
       )}</h1>
       <p style="margin:0;color:var(--ink-700);line-height:1.6;">
         ${escapeHtml(say('If this label is on a bag, call us at'))} ${escapeHtml(
