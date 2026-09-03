@@ -435,7 +435,7 @@ function taskControl(stop, task, order) {
       </label>
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
-        Clip ${escapeHtml(task.clip)} is on it
+        Van Clip #${escapeHtml(task.clip)} is on the bag
       </button>
     </form>`;
   }
