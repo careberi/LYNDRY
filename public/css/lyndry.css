@@ -248,6 +248,14 @@
 .clip-toggle .clip-state-on { display: none; }
 
 .clip-toggle:has(input:checked) { background: var(--suds-500); color: var(--ink-900); }
+
+/* THE SAME SWITCH, DRIVEN BY THE SERVER RATHER THAN A CHECKBOX.
+   The collect-from-laundromat tiles each post on their own, so what is on or
+   off is a fact in the database rather than a box that is ticked - but a driver
+   should not be able to tell that apart by looking. is-on is what the page adds
+   when the bag has been collected. */
+button.clip-toggle { font: inherit; text-align: center; }
+.clip-toggle.is-on { background: var(--suds-500); color: var(--ink-900); }
 .clip-toggle:has(input:checked) .clip-state-off { display: none; }
 .clip-toggle:has(input:checked) .clip-state-on { display: inline; }
 

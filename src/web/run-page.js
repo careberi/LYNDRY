@@ -883,24 +883,28 @@ function partnerCard(run) {
                }
              </p>
 
+             <!-- THE SAME SWITCH AS THE VAN CLIPS, which Neil asked for by
+                  name: the bag's id big, COLLECTED: FALSE under it in red, the
+                  whole tile green when it is in his hands. One per row and full
+                  width, so a counter handing him bags one at a time is tapping
+                  the control he taps everywhere else on this screen.
+                  Each still posts on its own, so a tap survives a reload - these
+                  ticks are a record, not a form he has to finish in one go. -->
              <form method="post" action="/ops/run/collected" data-quick
-                   style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                   style="display:grid;gap:10px;">
                ${bags
                  .map((b) => {
                    const got = Boolean(b.collected_at);
                    return `
                <button type="submit" name="label_id" value="${escapeHtml(b.id)}"
-                       data-got="${got ? '1' : '0'}"
-                       style="width:100%;padding:14px 10px;border:2px solid var(--ink-900);
-                              border-radius:12px;box-shadow:var(--shadow-pop-xs);cursor:pointer;
-                              background:${got ? 'var(--suds-500)' : 'var(--paper-000)'};">
-                 <span style="display:block;font-family:var(--font-mono);font-weight:700;font-size:16px;">
-                   ${escapeHtml(b.code)}${b.sticker_seq ? `-${b.sticker_seq}` : ''}
-                 </span>
-                 <span data-state style="display:block;font-family:var(--font-mono);font-size:11px;letter-spacing:0.07em;
-                              text-transform:uppercase;margin-top:4px;">
-                   ${got ? 'Collected' : 'Not yet'}
-                 </span>
+                       class="clip-toggle${got ? ' is-on' : ''}"
+                       data-got="${got ? '1' : '0'}" style="margin:0;">
+                 <span class="clip-number">${escapeHtml(b.code)}${
+                   b.sticker_seq ? `-${b.sticker_seq}` : ''
+                 }</span>
+                 <span class="clip-state" data-state>${
+                   got ? 'Collected: true' : 'Collected: false'
+                 }</span>
                </button>`;
                  })
                  .join('')}
@@ -1010,7 +1014,8 @@ function partnerCard(run) {
              ${orderIds
                .map((id) => `<input type="hidden" name="order_id" value="${escapeHtml(id)}">`)
                .join('')}
-             <button type="submit" class="btn btn-primary btn-lg btn-full">
+             <button type="submit" class="btn btn-primary btn-lg btn-full"
+                     ${uncollected ? 'disabled style="opacity:0.35;"' : ''}>
                All bags are collected
              </button>
              <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
