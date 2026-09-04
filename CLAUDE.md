@@ -1678,6 +1678,13 @@ costs $25 and is billed in one go with the rest. `deposit_*` and
 rules and their money has to stay refundable; nothing writes a new one.
 
 **A booking is confirmed by having a card on file, not by a cleared payment.**
+
+**The board says BOOKED or AWAITING CARD, never bare REQUESTED.** Neil watched a
+customer save a card, get "Order #1973 is booked", and the board still read
+REQUESTED - which looks like the booking never finished. `REQUESTED` is two
+different situations and it was showing one word for both. **Derived, not a new
+status**: the fact lives on the customer and a fourth row in the state machine
+would be a second copy of it that could disagree.
 That is what keeps an unbillable order off the driver's run sheet. The order is
 still written *before* the card is asked for — a customer sent away to pay
 before their booking exists comes back to nothing, which happened to a real one.

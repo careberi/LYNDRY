@@ -12,6 +12,7 @@ const { normalisePhone, formatPhone } = require('../core/phone');
 const notify = require('../core/notify');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
+const billing = require('../core/billing');
 const recurring = require('../core/recurring');
 const issues = require('../core/issues');
 const { runEconomicsBody } = require('../web/run-economics');
@@ -165,7 +166,30 @@ const STATUS_TONE = {
   CANCELED: 'var(--ink-200)',
 };
 
-function statusBadge(status) {
+// REQUESTED IS TWO DIFFERENT THINGS AND THE BOARD SAID THE SAME WORD FOR BOTH.
+//
+// Neil, looking at #1973: the card had been saved and the customer had been
+// texted "Order #1973 is booked", and the board still said REQUESTED. It reads
+// as though the booking never completed.
+//
+// A booking is confirmed by having a card on file - CLAUDE.md's rule, and what
+// keeps an unbillable order off the run sheet - so an order still in REQUESTED
+// is either BOOKED (card saved, confirmation sent, waiting for its day) or
+// AWAITING CARD (real, resumable, not yet confirmed). Those are worth telling
+// apart at a glance and were indistinguishable.
+//
+// DERIVED, NOT A NEW STATUS. There is no BOOKED row in the state machine and
+// there does not need to be: the fact already exists on the customer, and a
+// fourth status would be a second copy of it that could disagree.
+function statusBadge(status, order = null) {
+  if (status === 'REQUESTED' && order) {
+    const confirmed = !billing.needsCardOnFile(order.customers || {});
+
+    return `<span class="badge" style="background:${
+      confirmed ? 'var(--stage-scheduled)' : 'var(--sunbeam-500)'
+    };">${confirmed ? 'BOOKED' : 'AWAITING CARD'}</span>`;
+  }
+
   const tone = STATUS_TONE[status] || 'var(--ink-200)';
   const onInk = status === 'DELIVERED';
   return `<span class="badge" style="background:${tone};${onInk ? 'color:var(--paper-050);' : ''}">${escapeHtml(
@@ -1877,7 +1901,12 @@ const ORDER_FIELDS =
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
   // which is the half the driver actually needs.
-  'customers(id, name, phone, address_line1, address_line2, city, postal_code, preferences)';
+  // THE CARD FIELDS, because the board now tells a confirmed booking from one
+  // still waiting on a card, and that answer comes off the customer. Same trap
+  // as the weigh-in page: a select list in one file quietly deciding what
+  // another file can know.
+  'customers(id, name, phone, address_line1, address_line2, city, postal_code, preferences, ' +
+  'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
@@ -2030,7 +2059,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
             ? `<div style="font-size:13px;color:var(--ink-500);">${escapeHtml(booking.arrivalWindow(o))}</div>`
             : ''
         }`,
-        statusBadge(o.status),
+        statusBadge(o.status, o),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
         ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
@@ -2753,7 +2782,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
               : ''
           }
         </h1>
-        ${statusBadge(order.status)}
+        ${statusBadge(order.status, order)}
         ${
           // PAID / UNPAID is the books, same as a price is.
           roles.can(req.opsUser, 'money.view') ? paymentBadge(order) : ''
@@ -3223,7 +3252,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           : ['Pickup', 'Status', 'Weight', ''],
         (history || []).map((o) => [
           shortDate(o.pickup_date),
-          statusBadge(o.status),
+          statusBadge(o.status, o),
           o.weight_lb ? `${o.weight_lb} lb` : '—',
           ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
           `<a href="/ops/orders/${o.id}" style="font-weight:600;">Open</a>`,
