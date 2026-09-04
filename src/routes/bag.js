@@ -477,8 +477,8 @@ const ES = Object.freeze({
   'Waiting for collection': 'Esperando recogida',
   'Our driver has been told.': 'Nuestro conductor ya lo sabe.',
   'Bags to hand over': 'Bolsas para entregar',
-  'One sticker per bag you pack. Tap it when you put it on a bag.':
-    'Una pegatina por bolsa. Toquela al usarla, y otra vez cuando esa bolsa este lista.',
+  'Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.':
+    'Mantenga la etiqueta de bolsa con la ropa durante el lavado y el doblado. Si divide la ropa en varias cargas o bolsas, pegue una pegatina de la etiqueta en el recibo interno de cada una.',
   'Tapped one by mistake? Tap it again to turn it off.': 'Toco uno por error? Sigalo tocando.',
   'This order is done': 'Este pedido esta terminado',
   'Not yet - another bag from this order is still open.':
@@ -786,7 +786,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
 
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
       <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
-        ${escapeHtml(say('One sticker per bag you pack. Tap it when you put it on a bag.'))}
+        ${escapeHtml(say('Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.'))}
       </p>
 
       <!-- A TWO BY TWO GRID, not a wrapping row. Flex-wrap sized each button by
