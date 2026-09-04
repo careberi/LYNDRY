@@ -383,7 +383,12 @@ function dropCards(stop) {
         .map((b) => clipSwitch('clip', b.clip, `Van Clip #${b.clip}`, 'Collected: false', 'Collected: true'))
         .join('')}
       <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:8px;">
-        ${bags.length === 1 ? 'That bag is out of the van' : `All ${bags.length} bags are out of the van`}
+        ${
+          // Neil wrote "Bag(s) are collected". The count is known here, so it
+          // says which rather than carrying the bracket - one switch is a bag,
+          // three are bags.
+          bags.length === 1 ? 'Bag is collected' : 'Bags are collected'
+        }
       </button>
     </form>`;
   }
