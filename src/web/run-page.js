@@ -932,7 +932,14 @@ function partnerCard(run) {
            ${
              stop.address
                ? `<p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
-                    ${escapeHtml(stop.address)}
+                    ${
+                      // The name is back on the card, but down here with the
+                      // address it belongs to rather than as a heading of its
+                      // own. Bold, because it is the half he is looking for.
+                      stop.name
+                        ? `<strong style="color:var(--ink-900);">${escapeHtml(stop.name)}:</strong> `
+                        : ''
+                    }${escapeHtml(stop.address)}
                   </p>`
                : ''
            }`
