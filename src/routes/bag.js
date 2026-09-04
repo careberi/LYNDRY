@@ -477,6 +477,8 @@ const ES = Object.freeze({
   'Waiting for collection': 'Esperando recogida',
   'Our driver has been told.': 'Nuestro conductor ya lo sabe.',
   'Bags to hand over': 'Bolsas para entregar',
+  'When the order is finished, tap the stickers you used. A button will then appear to tell us it is ready for collection.':
+    'Cuando termine el pedido, toque las pegatinas que uso. Luego aparecera un boton para avisarnos que esta lista para recoger.',
   'Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.':
     'Mantenga la etiqueta de bolsa con la ropa durante el lavado y el doblado. Si divide la ropa en varias cargas o bolsas, pegue una pegatina de la etiqueta en el recibo interno de cada una.',
   'Tapped one by mistake? Tap it again to turn it off.': 'Toco uno por error? Sigalo tocando.',
@@ -785,8 +787,16 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
       }
 
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
-      <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
+      <p style="font-size:15px;line-height:1.6;margin:0 0 12px;">
         ${escapeHtml(say('Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.'))}
+      </p>
+
+      <!-- WHAT TO DO AT THE END, and why the button is not there yet. It only
+           appears once a sticker is on, so an attendant who has not tapped one
+           has no way to know it is coming - the page has to say so, or the last
+           step looks like it is missing. -->
+      <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
+        ${escapeHtml(say('When the order is finished, tap the stickers you used. A button will then appear to tell us it is ready for collection.'))}
       </p>
 
       <!-- A TWO BY TWO GRID, not a wrapping row. Flex-wrap sized each button by
