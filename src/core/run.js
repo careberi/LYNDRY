@@ -742,7 +742,12 @@ async function forDriver(driverId, roundStart = null) {
         }))
         .sort((a, c) => (a.clip || 0) - (c.clip || 0));
 
-      stop.returnStage = packed.some((b) => !b.collected_at)
+      // NOTHING PACKED YET IS NOT "TIME TO WEIGH". With no bags on their shelf
+      // there is nothing to tick off and nothing to put on a scale - the stop is
+      // waiting on the laundromat. Without this the card asked a driver to weigh
+      // a load that did not exist, which is what surfaced when a rewind left an
+      // order with no packed bags at all.
+      stop.returnStage = !packed.length || packed.some((b) => !b.collected_at)
         ? 'collect'
         : !weighed
           ? 'weigh'
