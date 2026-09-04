@@ -797,6 +797,22 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     // Detergent is no longer part of the test, because it is no longer a
     // choice - requiring it would have made every existing customer look
     // un-set-up and sent the AI back to ask a question that no longer exists.
+    // WHAT THEY HAVE ALREADY ASKED FOR, STATED AS A FACT.
+    //
+    // "yeah lets do tuesday @ 10:30", a name, an address, and then "when would
+    // you like it picked up?". Corrected with "i said 10:30" it agreed - and
+    // asked again two messages later. The thread was in front of it every
+    // time, ten messages of it; re-reading the answer back out of prose is the
+    // thing that failed.
+    //
+    // So it is not in the prose any more. check_slot writes it down and this
+    // reads it back, the same way the pickup windows and the weekday are
+    // computed and handed over rather than left to be worked out.
+    customer.pending_pickup && customer.pending_pickup.date
+      ? `THEY HAVE ALREADY ASKED FOR: ${booking.readableDate(customer.pending_pickup.date)}` +
+        `${customer.pending_pickup.time ? ` at ${booking.readableTime(customer.pending_pickup.time)}` : ', with no time named'}` +
+        `. DO NOT ASK WHEN THEY WANT IT AGAIN - you have been told. Use this day and time in the recap and in create_order, unless they change it themselves.`
+      : null,
     prefs.water_temp && prefs.fabric_softener != null
       ? `Saved wash preferences: ${wash
           .washLines(prefs)

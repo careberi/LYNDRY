@@ -1,5 +1,6 @@
 'use strict';
 
+const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
 const events = require('./order-events');
@@ -876,6 +877,17 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   // failure and not worth arguing about, but worth one clause in the
   // confirmation: a customer who says "today" and silently gets tomorrow
   // writes back to ask why, which is a conversation nobody needed to have.
+  // THE ORDER IS THE RECORD NOW, so the note about what they asked for goes.
+  // Leaving it would have the prompt insisting on a day they have already been
+  // booked for, long after they moved it.
+  await db
+    .from('customers')
+    .update({ pending_pickup: null })
+    .eq('id', customer.id)
+    .then(({ error }) => {
+      if (error) console.error(`Could not clear the asked-for slot: ${error.message}`);
+    });
+
   return {
     ok: true,
     order,

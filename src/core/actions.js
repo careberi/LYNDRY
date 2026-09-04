@@ -158,6 +158,27 @@ async function checkSlot(customer, input = {}) {
     pickupTime: input.pickup_time,
   });
 
+  // WRITE DOWN WHAT THEY ASKED FOR. This function is the one place that knows
+  // it, and not writing it down is why the AI kept asking "when would you like
+  // it picked up?" to somebody who had already said 10:30. The thread was in
+  // front of it; re-deriving the answer from prose every turn is the thing that
+  // failed, so it stops being derived.
+  if (customer && customer.id && input.pickup_date) {
+    await db
+      .from('customers')
+      .update({
+        pending_pickup: {
+          date: input.pickup_date,
+          time: input.pickup_time || null,
+          bookable: Boolean(result.ok),
+        },
+      })
+      .eq('id', customer.id)
+      .then(({ error }) => {
+        if (error) console.error(`Could not remember the asked-for slot: ${error.message}`);
+      });
+  }
+
   if (result.ok) {
     return {
       ok: true,
