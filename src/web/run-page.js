@@ -1486,13 +1486,16 @@ function doorBagBody({ label, problem = null }) {
         : ''
     }`;
 
-  const switchCard = (task, action, offText, onText, buttonLabel) => `
+  // WHAT THE BAG IS CALLED CHANGES AS HE WORKS. Neil: by the clip screen the bag
+  // tag is already off it, so naming the bag 6ZP4DN-1 there points at something
+  // no longer attached to anything - the van clip is the last identifier on it.
+  const switchCard = (task, action, offText, onText, buttonLabel, calls = name) => `
     <div style="${CARD}">
       ${dropTask(task)}
       <form method="post" action="/ops/run/door/${label.id}/${action}" class="clip-form" style="margin:0;">
         <label class="clip-toggle" style="margin:0 0 18px;">
           <input type="checkbox" name="done" required>
-          <span class="clip-number">${escapeHtml(name)}</span>
+          <span class="clip-number">${escapeHtml(calls)}</span>
           <span class="clip-state">
             <span class="clip-state-off">${escapeHtml(offText)}</span>
             <span class="clip-state-on">${escapeHtml(onText)}</span>
@@ -1530,7 +1533,8 @@ function doorBagBody({ label, problem = null }) {
     'clip',
     'Take the van clip off',
     'Van clip is off',
-    `Van Clip #${label.clip_number} is off`
+    `Van Clip #${label.clip_number} is off`,
+    label.clip_number == null ? name : `Van Clip #${label.clip_number}`
   )}`;
 }
 
