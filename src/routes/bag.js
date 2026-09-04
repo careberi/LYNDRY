@@ -451,6 +451,7 @@ const ES = Object.freeze({
     'Eso no parece un peso. Libras, en numero.',
 
   // Washing
+  'Keep the tag with the laundry': 'Deje la etiqueta con la ropa',
   'How to wash it': 'Como lavarla',
   'How everything is sorted': 'Como se separa la ropa',
   'Time to turn it around': 'Tiempo para terminarla',
@@ -730,6 +731,17 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
     return page({
       title: `Bag ${code}`,
       body: header + `
+    <!-- FIRST, BEFORE ANYTHING ABOUT WASHING. Neil moved it here and it belongs
+         here: everything below is what to do to the laundry, and this is what
+         to do with the thing that says whose laundry it is. It is also the only
+         instruction on the page that matters before they start. -->
+    <div class="card" style="padding:28px;margin-bottom:20px;">
+      <p class="eyebrow" style="margin:0 0 12px;">${escapeHtml(say('Keep the tag with the laundry'))}</p>
+      <p style="font-size:15px;line-height:1.6;margin:0;">
+        ${escapeHtml(say('Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.'))}
+      </p>
+    </div>
+
     <div class="card" style="padding:28px;margin-bottom:20px;">
       <p class="eyebrow" style="margin:0 0 14px;">${escapeHtml(say('How to wash it'))}</p>
       <dl style="display:grid;grid-template-columns:auto 1fr;gap:10px 22px;margin:0;font-size:16px;">
@@ -787,10 +799,6 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
       }
 
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
-      <p style="font-size:15px;line-height:1.6;margin:0 0 12px;">
-        ${escapeHtml(say('Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.'))}
-      </p>
-
       <!-- WHAT TO DO AT THE END, and why the button is not there yet. It only
            appears once a sticker is on, so an attendant who has not tapped one
            has no way to know it is coming - the page has to say so, or the last
