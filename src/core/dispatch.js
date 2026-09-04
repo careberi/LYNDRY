@@ -179,6 +179,10 @@ const BOARD_FIELDS =
   // untagged: weight_lb is a SUM, so it stops being null the moment bag 1 is
   // weighed, and every test written against it read a half-done door as done.
   'collected_at, delivered_at, arrived_at, navigating_at, van_confirmed_at, ' +
+  // at_partner_at and ready_at say WHEN he dropped a load off and WHEN the
+  // laundromat finished it. The run compares the two to work out whether a
+  // laundromat pickup is the same visit as the drop-off or a second trip back.
+  'at_partner_at, ready_at, ' +
   // WHAT CAME BACK OFF THE LAUNDROMAT, which is how the collect stop knows
   // whether this order has been weighed back in yet. Without them the run has
   // no way to tell a bag still sitting on a shelf from one already in the van,

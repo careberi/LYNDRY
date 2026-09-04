@@ -976,9 +976,48 @@ async function forDriver(driverId, roundStart = null) {
   // stops at one door, and it happens for two customers in the same building.
   const index = current ? stops.indexOf(current) : -1;
   const previous = index > 0 ? stops[index - 1] : null;
-  const stillThere = Boolean(
+  const sameDoor = Boolean(
     previous && previous.done && current.address && previous.address === current.address
   );
+
+  // ONE VISIT, NOT ONE ADDRESS. Same door is not the same as still standing
+  // there, and the laundromat is where the two come apart.
+  //
+  // A pickup_partner stop does not exist until the laundromat says the work is
+  // finished, which is hours after the drop-off - the driver left long ago and
+  // has a whole round in between. Matching on the address alone handed him the
+  // collect card with no navigation and no "I'm here": the run went straight
+  // from "that's the route" to standing at a counter in Paterson. Neil watched
+  // it happen.
+  //
+  // The honest test is whether the work was ready WHILE HE WAS THERE. Collecting
+  // order B, finished this morning, at the same visit he drops order A off is a
+  // real thing and still needs no navigation - and in that case B was READY
+  // before he handed A over. Anything that became ready afterwards is a second
+  // trip.
+  //
+  // Every other same-address case is unaffected: two customers in one building,
+  // or two doorsteps on one drive, were both work he could already see.
+  let stillThere = sameDoor;
+
+  if (sameDoor && current.kind === 'pickup_partner') {
+    const time = (v) => (v ? Date.parse(v) : NaN);
+
+    // When he finished the previous stop at this address.
+    const left = Math.max(
+      ...(previous.orders || [previous.order])
+        .filter(Boolean)
+        .map((o) => time(o.at_partner_at) || time(o.delivered_at) || 0)
+    );
+
+    // The last of these bags to be declared finished. If any of them turned up
+    // after he left, he was not there for it.
+    const finished = Math.max(
+      ...(current.orders || [current.order]).filter(Boolean).map((o) => time(o.ready_at) || Infinity)
+    );
+
+    stillThere = Number.isFinite(finished) && Number.isFinite(left) && finished <= left;
+  }
 
   const arrived = stillThere || Boolean(arrivalOrder && arrivalOrder.arrived_at);
 
