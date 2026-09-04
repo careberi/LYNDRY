@@ -30,7 +30,9 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '2 September 2026';  // no scale photo, and the pickup sequence
+const REVIEWED = '3 September 2026';  // the drop-off is three steps: out of the
+                                      // van, over the counter, clips back
+// Previously: no scale photo, and the pickup sequence
 
 // A step in one of the three legs. `who` is who physically does it, which is
 // the thing a reader most often wants and the thing prose is worst at keeping
@@ -312,10 +314,21 @@ function journeyBody() {
      pointed at a sticker is the entire interface.`,
     `
     <ol class="jn-steps">
-      ${step('Hand the bags over', 'Driver',
-        `He taps <strong>dropped at partner</strong>. The clips come off and go back
-         into the van's pool for the next pickup, and the order is locked to this
-         laundromat so the answer cannot change afterwards.`)}
+      ${step('Take the bags out of the van', 'Driver',
+        `He confirms each one by its van clip before anything moves. One card, one
+         switch per clip, and the button underneath does nothing until every one
+         of them is on.`)}
+
+      ${step('Hand each bag over', 'Driver',
+        `One bag at a time across the counter, and its clip comes off as it goes.
+         A bag confirmed on its own is a bag somebody looked at.`)}
+
+      ${step('Put the clips back in the van', 'Driver',
+        `The step that closes the loop on a piece of stock we own a finite number
+         of. A clip taken off a bag is in his pocket, not in the van - until he
+         confirms it back, the system still counts it as out and will not put it
+         on another bag. Only now is the order locked to this laundromat, so the
+         drop stays on his route until the clips are home.`)}
 
       ${step('Scan a bag', 'Laundromat',
         `Any phone camera on the QR sticker opens a page with <strong>no sign-in at

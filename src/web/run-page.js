@@ -322,6 +322,115 @@ function linkIds(text, task, stop, user) {
   return out;
 }
 
+// --- the three cards of a drop-off -----------------------------------------
+//
+// NEIL'S FLOW, AND EACH CARD IS ONE PHYSICAL STATE:
+//
+//   1. the bags come out of the van, confirmed one clip at a time
+//   2. each bag goes over the counter and its clip comes off
+//   3. every clip is confirmed back in the van
+//
+// "Drop-off complete" as a single tap could be true while a clip was still on a
+// laundromat floor. The third card is the one that closes the loop on a piece
+// of stock we own a finite number of - until it runs, assignClip() still counts
+// those numbers as out.
+//
+// Which card shows is derived from the bags themselves, so a driver who does
+// half of this from the order page is still at the same point.
+
+// One switch: a name over its state, red until it is thrown. The same control
+// as the clip and load steps at a doorstep, and the same guard - a required
+// checkbox, so the browser itself refuses the submit until every one is on.
+function clipSwitch(name, value, label, offText, onText) {
+  return `
+    <label class="clip-toggle" style="margin:0 0 12px;">
+      <input type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(value)}" required>
+      <span class="clip-number">${escapeHtml(label)}</span>
+      <span class="clip-state">
+        <span class="clip-state-off">${escapeHtml(offText)}</span>
+        <span class="clip-state-on">${escapeHtml(onText)}</span>
+      </span>
+    </label>`;
+}
+
+function dropTask(task, detail) {
+  return `
+    ${stopLine('Task', escapeHtml(task), 'stop-line-plain')}
+    <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
+      ${escapeHtml(detail)}
+    </p>`;
+}
+
+function dropCards(stop) {
+  const where = stop.name || 'the laundromat';
+  const orderInputs = (stop.orders || [])
+    .map((o) => `<input type="hidden" name="order_id" value="${escapeHtml(o.id)}">`)
+    .join('');
+
+  // --- CARD 1: out of the van ----------------------------------------------
+  if (stop.dropStage === 'unload') {
+    const bags = stop.dropBags || [];
+    return `
+    <form method="post" action="/ops/run/unloaded" class="clip-form" style="margin:0;">
+      ${orderInputs}
+      ${dropTask(
+        `Collect bags for ${where}`,
+        'Collect the bags below and confirm each one by its van clip.'
+      )}
+      ${bags
+        .map((b) => clipSwitch('clip', b.clip, `Van Clip #${b.clip}`, 'Collected: false', 'Collected: true'))
+        .join('')}
+      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:8px;">
+        ${bags.length === 1 ? 'That bag is out of the van' : `All ${bags.length} bags are out of the van`}
+      </button>
+    </form>`;
+  }
+
+  // --- CARD 2: over the counter, one bag at a time -------------------------
+  if (stop.dropStage === 'handoff') {
+    const bags = stop.dropBags || [];
+    return `
+    ${dropTask(
+      `Drop off bags at ${where}`,
+      'Bring each bag to the counter. Take its van clip off as you hand the bag to the attendant.'
+    )}
+    ${bags
+      .map(
+        (b) => `
+      <form method="post" action="/ops/run/handed-off"
+            style="margin:0 0 14px;padding:16px 18px;border:2px solid var(--ink-900);
+                   border-radius:14px;background:var(--paper-200);">
+        <input type="hidden" name="code" value="${escapeHtml(b.code)}">
+        <p style="margin:0 0 12px;font-family:var(--font-mono);font-weight:700;font-size:16px;">
+          ${escapeHtml(b.code)}
+          <span style="color:var(--ink-500);">&middot; Van Clip #${escapeHtml(b.clip)}</span>
+        </p>
+        <button type="submit" class="btn btn-primary btn-full">Hand off bag</button>
+      </form>`
+      )
+      .join('')}`;
+  }
+
+  // --- CARD 3: the clips are back ------------------------------------------
+  const clips = stop.clipsToReturn || [];
+  return `
+    <form method="post" action="/ops/run/clips-back" class="clip-form" style="margin:0;">
+      ${orderInputs}
+      ${dropTask(
+        'Return van clips to the van',
+        clips.length === 1
+          ? 'Confirm the van clip from this drop-off is back in the van.'
+          : `Confirm that all ${clips.length} van clips from this drop-off are back in the van.`
+      )}
+      ${clips
+        .map((n) => clipSwitch('clip', n, `Van Clip #${n}`, 'In the van: false', 'In the van: true'))
+        .join('')}
+      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:8px;">
+        ${clips.length === 1 ? 'Clip is back in the van' : 'All clips back in the van'}
+      </button>
+    </form>`;
+}
+
 // The one thing to do, now he is there.
 function taskCard(run, user = null) {
   const stop = run.current;
@@ -800,52 +909,7 @@ function partnerCard(run) {
 
     ${
       dropping
-        ? // ONE FORM, so ticking the clips gates the button that ends the stop.
-          //
-          // NEIL'S CHANGE: the numbers used to be a poster - here are three
-          // clips, now tap "handed over all of them". He wanted each clip taken
-          // off deliberately, one at a time, and only then the button.
-          //
-          // IT IS CHECKBOXES AND CSS, NOT JAVASCRIPT. `required` on every box
-          // means the browser itself refuses to submit until all of them are
-          // ticked, and says which one is missing - no script, no disabled
-          // button that a driver taps and taps. This screen is used in a
-          // stairwell on two bars, and CLAUDE.md is explicit that a control
-          // which needs a script to work is a control that can fail to work.
-          `<form method="post" action="/ops/run/dropped" style="margin:0;">
-             <input type="hidden" name="partner_id" value="${escapeHtml((stop.partner || {}).id || '')}">
-             ${(stop.orders || [])
-               .map((o) => `<input type="hidden" name="order_id" value="${escapeHtml(o.id)}">`)
-               .join('')}
-
-             ${
-               (stop.clips || []).length
-                 ? `<div style="margin:0 0 22px;padding:16px 18px;border:2px solid var(--ink-900);
-                                border-radius:14px;background:var(--sunbeam-500);">
-                      <p class="eyebrow" style="margin:0 0 10px;">Hand over these van clips</p>
-                      <div style="display:flex;flex-wrap:wrap;gap:10px;">
-                        ${(stop.clips || [])
-                          .map(
-                            (n) => `
-                        <label class="clip-tick">
-                          <input type="checkbox" name="clip" value="${escapeHtml(n)}" required>
-                          <span>${escapeHtml(n)}</span>
-                        </label>`
-                          )
-                          .join('')}
-                      </div>
-                      <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
-                        Take each clip off as you hand the bag over and tap its
-                        number. Those numbers go back in the van for the next bags.
-                      </p>
-                    </div>`
-                 : ''
-             }
-
-             <button type="submit" class="btn btn-primary btn-lg btn-full">
-               Handed over ${stop.bags === 1 ? 'the bag' : `all ${stop.bags} bags`}
-             </button>
-           </form>`
+        ? dropCards(stop)
         : (() => {
             // WEIGH, CHECK, THEN CLIP - and this is the screen where the first
             // two happen. An order whose return leg has not been recorded has

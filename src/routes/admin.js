@@ -3400,6 +3400,123 @@ router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, re
   }
 });
 
+// --- the three steps of a drop-off ------------------------------------------
+//
+// One physical state each: out of the van, over the counter, clips back. They
+// all write through src/core/bags.js, the same as every other step on this
+// screen writes through fulfilment - this file decides what to show and where
+// to land afterwards, and nothing else.
+
+// The orders being dropped, from the hidden inputs. One input gives a string,
+// several give an array.
+function droppedOrderIds(req) {
+  return []
+    .concat((req.body || {}).order_id || [])
+    .map(String)
+    .filter((id) => UUID.test(id));
+}
+
+// Card 1: the bags are out of the van.
+router.post('/ops/run/unloaded', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const ids = droppedOrderIds(req);
+    if (!ids.length) return res.redirect(303, '/ops/run');
+
+    const result = await bags.unloadBags(ids);
+    const note = `${result.bags} bag${result.bags === 1 ? '' : 's'} out of the van`;
+
+    for (const id of ids) {
+      await orderEvents.record(id, {
+        kind: 'STATUS',
+        summary: 'Bags taken out of the van at the laundromat',
+        by: { opsUser: req.opsUser },
+      });
+    }
+
+    return res.redirect(303, `/ops/run?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Card 2: this bag is over the counter and its clip is off.
+router.post('/ops/run/handed-off', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const code = String((req.body || {}).code || '').trim();
+    if (!code) return res.redirect(303, '/ops/run');
+
+    const label = await bags.findByCode(code);
+    if (!label) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent('No bag with that code.')}`);
+    }
+
+    const result = await bags.handOffBag(label);
+    if (!result.ok) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    await orderEvents.record(label.order_id, {
+      kind: 'LABEL',
+      summary: `${label.code} handed to the laundromat, van clip ${label.clip_number} off`,
+      by: { opsUser: req.opsUser },
+    });
+
+    return res.redirect(303, `/ops/run?note=${encodeURIComponent(`${label.code} handed over`)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// Card 3: every clip is back in the van, and THAT is what ends the stop.
+//
+// The status move waits for this on purpose. Until the clips are confirmed the
+// drop is still on the driver's route, which is the only thing that will make
+// him walk back for one he left on a counter.
+router.post('/ops/run/clips-back', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const ids = droppedOrderIds(req);
+    if (!ids.length) return res.redirect(303, '/ops/run');
+
+    const returned = await bags.returnClips(ids);
+
+    const failures = [];
+    for (const id of ids) {
+      const order = await loadOrderForAction(id);
+      if (!order) continue;
+
+      await orderEvents.record(order.id, {
+        kind: 'STATUS',
+        summary: returned.clips.length
+          ? `Van clip${returned.clips.length === 1 ? '' : 's'} ${returned.clips.join(', ')} back in the van`
+          : 'Van clips back in the van',
+        by: { opsUser: req.opsUser },
+      });
+
+      const result = await fulfilment.dropAtPartner(order, {
+        partnerId: order.intended_partner_id || null,
+        by: { opsUser: req.opsUser },
+      });
+
+      if (!result.ok) failures.push(`#${order.order_number}: ${result.detail}`);
+    }
+
+    if (failures.length) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(failures.join(' '))}`);
+    }
+
+    return res.redirect(
+      303,
+      `/ops/run?note=${encodeURIComponent(
+        returned.clips.length
+          ? `Clips ${returned.clips.join(', ')} are free again`
+          : 'Dropped off'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/run/dropped', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const body = req.body || {};

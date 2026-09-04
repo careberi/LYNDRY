@@ -506,7 +506,11 @@ async function clipsInUse(driverId) {
     .from('bag_labels')
     .select('clip_number, orders!inner(driver_id)')
     .not('clip_number', 'is', null)
-    .is('unclipped_at', null)
+    // NOT unclipped_at. A clip taken off a bag at a laundromat counter is in
+    // the driver's pocket, not in the van - handing it to another bag before he
+    // has put it back is how two bags end up wearing the same number. It is out
+    // until the third card of the drop-off says it is back.
+    .is('clip_returned_at', null)
     .eq('orders.driver_id', driverId);
 
   if (error) throw error;
@@ -579,6 +583,72 @@ async function unclipOrder(orderId) {
 // What is on the van right now, as clip numbers, grouped by order. What the
 // laundromat stop reads off.
 
+// CARD 1: THE BAGS ARE OUT OF THE VAN.
+//
+// One stamp per bag across the whole drop. The driver ticks each clip on the
+// card as he lifts that bag out, but what is recorded is the moment the load
+// came out - the per-bag ticking is there to make him look at each one, and the
+// per-bag proof comes on the next card where each bag is handed over singly.
+async function unloadBags(orderIds) {
+  const ids = (orderIds || []).filter(Boolean);
+  if (!ids.length) return { ok: true, bags: 0 };
+
+  const { data, error } = await db
+    .from('bag_labels')
+    .update({ unloaded_at: new Date().toISOString() })
+    .in('order_id', ids)
+    .eq('leg', 'PICKUP')
+    .not('clip_number', 'is', null)
+    .is('unloaded_at', null)
+    .select('id');
+
+  if (error) throw error;
+  return { ok: true, bags: (data || []).length };
+}
+
+// CARD 2: THIS BAG IS OVER THE COUNTER, AND ITS CLIP IS OFF.
+//
+// One bag at a time, because that is how they are handed over - and because a
+// bag confirmed singly is a bag somebody looked at. The clip comes off here but
+// is NOT free yet: it is loose in his hand until the third card.
+async function handOffBag(label) {
+  if (!label) return { ok: false, detail: 'No such bag.' };
+  if (!label.unloaded_at) {
+    return { ok: false, detail: 'Take the bags out of the van first.' };
+  }
+  if (label.unclipped_at) return { ok: true, already: true };
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ unclipped_at: new Date().toISOString() })
+    .eq('id', label.id);
+
+  if (error) throw error;
+  return { ok: true, clip: label.clip_number == null ? null : Number(label.clip_number) };
+}
+
+// CARD 3: THE CLIPS ARE BACK IN THE VAN, so they can be used again.
+//
+// This is the one that closes the loop on a piece of physical stock. Until it
+// runs, assignClip() still counts these numbers as out - which is right, because
+// a clip nobody has confirmed is a clip that might be on a laundromat floor.
+async function returnClips(orderIds) {
+  const ids = (orderIds || []).filter(Boolean);
+  if (!ids.length) return { ok: true, clips: [] };
+
+  const { data, error } = await db
+    .from('bag_labels')
+    .update({ clip_returned_at: new Date().toISOString() })
+    .in('order_id', ids)
+    .not('clip_number', 'is', null)
+    .not('unclipped_at', 'is', null)
+    .is('clip_returned_at', null)
+    .select('clip_number');
+
+  if (error) throw error;
+  return { ok: true, clips: (data || []).map((l) => Number(l.clip_number)).sort((a, b) => a - b) };
+}
+
 // THE DRIVER SAYS THE CLIP IS ON. One bag, one confirmation - the step Neil
 // asked for and the one that was missing.
 async function confirmClip(label) {
@@ -627,6 +697,9 @@ module.exports = {
   STICKERS_PER_TAG,
   clipsInUse,
   confirmClip,
+  unloadBags,
+  handOffBag,
+  returnClips,
   loadBag,
   assignClip,
   unclipOrder,

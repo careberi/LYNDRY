@@ -696,6 +696,54 @@ async function forDriver(driverId, roundStart = null) {
     // already loaded; dispatch has the orders and would have to fetch them
     // again to answer the same question.
     if (stop.kind === 'dropoff' && aboard) stop.bags = aboard;
+
+    // THE THREE CARDS OF A DROP-OFF, and which one he is on.
+    //
+    // Neil's flow: get the bags out of the van, hand each one over taking its
+    // clip off, then confirm every clip is back in the van. Three physical
+    // states, so three cards - "drop-off complete" as one tap could be true
+    // while a clip was still on a laundromat floor.
+    //
+    // DERIVED, LIKE EVERYTHING ELSE ON THIS SCREEN. The stage is read off the
+    // bags rather than stored beside them, so a driver who uses the order page
+    // or a second phone is still at the same point.
+    if (stop.kind === 'dropoff') {
+      const dropBags = orders.flatMap((order) =>
+        (labelsByOrder.get(order.id) || [])
+          .filter((l) => l.leg === 'PICKUP' && l.clip_number != null && l.unclipped_at == null)
+          .map((l) => ({
+            id: l.id,
+            code: l.code,
+            clip: Number(l.clip_number),
+            unloaded: Boolean(l.unloaded_at),
+            orderNumber: order.order_number,
+          }))
+      );
+
+      // Handed over already, still holding their clips: what card 3 is about.
+      const returning = orders.flatMap((order) =>
+        (labelsByOrder.get(order.id) || [])
+          .filter(
+            (l) =>
+              l.leg === 'PICKUP' &&
+              l.clip_number != null &&
+              l.unclipped_at != null &&
+              l.clip_returned_at == null
+          )
+          .map((l) => Number(l.clip_number))
+      );
+
+      stop.dropBags = dropBags.sort((a, b) => a.clip - b.clip);
+      stop.clipsToReturn = returning.sort((a, b) => a - b);
+
+      // In order: out of the van, over the counter, clips back. A stage only
+      // opens when the one before it has nothing left in it.
+      stop.dropStage = dropBags.some((b) => !b.unloaded)
+        ? 'unload'
+        : dropBags.length
+          ? 'handoff'
+          : 'clips';
+    }
   }
 
   // The one he is on: the first that is not finished. Not "the next one after
