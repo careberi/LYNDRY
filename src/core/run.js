@@ -252,7 +252,7 @@ async function tasksForCollect(order) {
           : label && label.clip_number != null
             ? `Put Van Clip #${label.clip_number} on the van`
             : `Put Bag #${position} in the van`,
-      short: 'Put bag in van',
+      short: 'Deposit bag in van',
       detail: null,
       done: Boolean(label && label.loaded_at),
       clip: label ? label.clip_number : null,
