@@ -3,6 +3,7 @@
 const db = require('../db');
 const geocode = require('./geocode');
 const booking = require('./booking');
+const partnersCore = require('./partners');
 const { config } = require('../config');
 
 // ---------------------------------------------------------------------------
@@ -268,6 +269,8 @@ function assumedPounds(customer) {
 //
 // Returns the chosen partner plus every one passed over and why, and what each
 // would have cost, so the page can show its working rather than a name.
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 function chooseLaundromat(
   from,
   candidates,
@@ -301,6 +304,25 @@ function chooseLaundromat(
       const cutoff = p.dropoff_cutoff ? toMinutesOfDay(p.dropoff_cutoff) : null;
       const pastCutoff = cutoff != null && nowMinutes >= cutoff;
 
+      // AND CAN WE GET BACK IN TO COLLECT IT. Neil's rule.
+      //
+      // This asked whether they were open when the driver DROPS OFF and never
+      // whether they are open when he comes back for it. Fancy K is shut on
+      // Wednesdays, so a Tuesday pickup routed there sits on their floor until
+      // Thursday - and the customer was promised next day. It chose Fancy K
+      // anyway, because on cost it won.
+      //
+      // The day to ask about is the day the work is ready, which is the drop-off
+      // plus their turnaround. An unknown turnaround is treated as next day
+      // rather than as instant: a partner who has never said how long they take
+      // has not said they are fast, which is how tooSlow above reads it too.
+      const readyMinutes = readyBy == null ? nowMinutes + 24 * 60 : readyBy;
+      const daysAhead = Math.floor(readyMinutes / (24 * 60));
+      const collectWeekday = (Number(weekday) + daysAhead) % 7;
+      const collectAt = readyMinutes % (24 * 60);
+
+      const canCollect = partnersCore.canCollectOn(p.hours, collectWeekday, collectAt);
+
       return {
         partner: p,
         miles,
@@ -309,6 +331,8 @@ function chooseLaundromat(
         readyBy,
         tooSlow,
         pastCutoff,
+        canCollect,
+        collectWeekday,
         // Null when we cannot price the wash. Sorted last rather than treated
         // as zero, so a partner with no agreed rate never wins on a blank.
         totalCents: washCents == null || drivingCents == null ? null : washCents + drivingCents,
@@ -334,6 +358,13 @@ function chooseLaundromat(
     }
     if (c.room === false) {
       c.why = 'no room left today';
+      continue;
+    }
+    // Open to take it, shut when it would be ready. Named by the day, because
+    // "shut on Wednesday" is something Neil can act on and "cannot collect" is
+    // not.
+    if (!c.canCollect) {
+      c.why = `shut on ${DAY_NAMES[c.collectWeekday]}, so we could not collect it`;
       continue;
     }
     // PAST THE CUTOFF IS TOMORROW'S WASH, whatever their closing time says. A
@@ -539,7 +570,6 @@ function mergeLoad(here, coming) {
 
 async function planPartnerFor(order, customer) {
   try {
-    const partnersCore = require('./partners');
 
     const where = await geocode.locate(customer || {});
     if (!where) return null;

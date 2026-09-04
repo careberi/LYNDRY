@@ -395,6 +395,36 @@ async function hoursForAll() {
 //
 // Several rows on one weekday is a split shift - open for lunch, shut, open
 // again - so a time counts as open if it falls in ANY of them.
+// CAN WE GET BACK IN TO COLLECT IT.
+//
+// Neil's rule, and the hole it closes: the chooser asked whether a laundromat
+// was open when the driver DROPS OFF and never whether they are open when he
+// comes back. Fancy K is shut on Wednesdays, so a Tuesday pickup routed there
+// sits on their floor until Thursday - and the customer was promised next day.
+//
+// Different from isOpenAt() in one way that matters: it does not ask about a
+// single minute. Once the work is finished the driver can come at any point
+// they are still open that day, so this asks whether ANY of that weekday's
+// windows is still running after the work is ready.
+//
+// A laundromat with no hours on that weekday is closed, which is the same rule
+// the rest of this file follows: absence means closed, because a routing
+// decision resolves to yes or no and "we never filled it in" is not something a
+// van can act on.
+function canCollectOn(rows, weekday, readyAtMinutes) {
+  const ready = Number(readyAtMinutes);
+  if (!Number.isFinite(ready)) return false;
+
+  return (rows || [])
+    .filter((r) => Number(r.weekday) === Number(weekday))
+    .some((r) => {
+      const to = minutesOfDay(r.closes_at);
+      // End-exclusive, like isOpenAt: work that is ready at the closing minute
+      // is ready too late to be collected that day.
+      return to != null && to > ready;
+    });
+}
+
 function isOpenAt(rows, weekday, time) {
   const at = minutesOfDay(time);
   if (at == null) return false;
@@ -647,6 +677,7 @@ module.exports = {
   hoursFor,
   hoursForAll,
   isOpenAt,
+  canCollectOn,
   describeHours,
   saveHours,
   loadByPartner,

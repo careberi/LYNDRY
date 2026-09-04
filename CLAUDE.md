@@ -917,6 +917,22 @@ travelling-salesman problem gives a shorter route that cannot be driven, which
 is worse than a longer one that can — so each leg is solved on its own and the
 legs stay in order.
 
+**A LAUNDROMAT HAS TO BE OPEN WHEN THE WORK IS READY, not only when the bag is
+dropped off.** The chooser asked whether they were open at drop-off and never
+whether the driver could get back in. Fancy K is shut on Wednesdays, so a
+Tuesday pickup routed there sat on their floor until Thursday against a next-day
+promise — and it was chosen anyway, because on cost it won. `canCollectOn()`
+asks whether any of that weekday's windows is still running after the work is
+ready; a weekday with no rows is closed, the same rule the rest of the file
+follows. The day asked about is the drop-off plus their turnaround, and an
+unknown turnaround is treated as next day rather than as instant.
+
+**The choice is cheapest ALL IN, not nearest** — wash plus driving, where a mile
+is gas, wear and the driver's wage, and the wage is about 71% of it. That is why
+a $1.00/lb laundromat three miles further loses to a $1.25/lb one down the road.
+Distance alone only decides it when a partner has no agreed rate, and a partner
+with no rate is sorted last rather than treated as free.
+
 **Which laundromat a bag goes to is nearest-first, skipping anyone shut or
 full.** Neil's call: a partner at capacity is routed around rather than blocked
 at, because a driver holding a bag at a loading dock needs somewhere to put it,
