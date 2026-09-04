@@ -549,7 +549,12 @@ function taskControl(stop, task, order) {
       </label>
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
-        Van Clip #${escapeHtml(task.clip)} is on the bag
+        ${
+          // Names the bag the way the line above it does - by its sticker.
+          (task.label || {}).code
+            ? `Van Clip #${escapeHtml(task.clip)} is on bag ${escapeHtml(task.label.code)}`
+            : `Van Clip #${escapeHtml(task.clip)} is on the bag`
+        }
       </button>
     </form>`;
   }
