@@ -359,7 +359,7 @@ function clipSwitch(name, value, label, offText, onText) {
 function dropTask(task, detail) {
   return `
     ${stopLine('Task', escapeHtml(task), 'stop-line-plain')}
-    ${stopLine('Detail', escapeHtml(detail), 'stop-line-plain')}
+    ${detail ? stopLine('Detail', escapeHtml(detail), 'stop-line-plain') : ''}
     <div style="height:8px;"></div>`;
 }
 
@@ -1436,10 +1436,12 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
 
   if (step === 'scan') {
     return `${head}${card(`
-      ${dropTask(
-        `Scan bag ${name}`,
-        'Point the camera at the QR on its sticker. It moves on by itself as soon as it reads.'
-      )}
+      ${
+        // NO DETAIL LINE. Neil deleted it: the task says scan the bag and the
+        // only control on the card is a camera button. There is nothing left to
+        // explain that the screen is not already showing.
+        dropTask(`Scan bag ${name}`)
+      }
       ${scanField({
         action: `/ops/run/bag/${label.id}/scan`,
         label: 'Code on the sticker',
