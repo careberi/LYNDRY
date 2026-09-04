@@ -1438,14 +1438,18 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
     return `${head}${card(`
       ${dropTask(
         `Scan bag ${name}`,
-        'Point the camera at the QR on its sticker, or type the code underneath it.'
+        'Point the camera at the QR on its sticker. It moves on by itself as soon as it reads.'
       )}
       ${scanField({
         action: `/ops/run/bag/${label.id}/scan`,
         label: 'Code on the sticker',
         buttonLabel: "That's the bag",
-        autofocus: true,
-      })}`)}`;
+        // NO TYPING. Neil's call: typing a number is not proof he is holding
+        // that bag, and the sticker is in his hand. The box comes back only if
+        // the camera cannot run at all.
+        cameraOnly: true,
+      })}`)}
+      ${scannerScript()}`;
   }
 
   if (step === 'weigh') {

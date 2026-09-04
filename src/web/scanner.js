@@ -39,13 +39,38 @@ const { CSS_BASE } = require('./assets');
 //
 // `name` is the form field; `action` is where the form posts. `autofocus`
 // belongs on whichever field is the actual task on that screen.
-function scanField({ action, name = 'code', label, hint, buttonLabel = 'Add', autofocus = false, hidden = '' }) {
+// cameraOnly: the code cannot be typed, it has to be scanned.
+//
+// Neil's call on the bag coming back out of a laundromat: typing the number is
+// not proof he is holding that bag, and the sticker is right there. CLAUDE.md's
+// rule is that the camera is an accelerator and never the mechanism, and this is
+// the one deliberate exception to it.
+//
+// THE BOX IS NOT DELETED, IT IS HIDDEN - and the script reveals it if the camera
+// cannot start: permission refused, no camera, a browser that cannot decode. A
+// driver at a counter with a dead camera has to have a way through, and that is
+// the whole reason the rule exists. He cannot type INSTEAD of scanning; he can
+// type when there is nothing to scan with.
+function scanField({
+  action,
+  name = 'code',
+  label,
+  hint,
+  buttonLabel = 'Add',
+  autofocus = false,
+  hidden = '',
+  cameraOnly = false,
+}) {
   return `
-  <form method="post" action="${action}" class="scan-form" style="margin:0;">
+  <form method="post" action="${action}" class="scan-form${
+    cameraOnly ? ' scan-camera-only' : ''
+  }" style="margin:0;">
     ${hidden}
-    <label class="eyebrow" for="scan-${name}" style="display:block;margin-bottom:8px;">${label}</label>
+    <label class="eyebrow" for="scan-${name}" style="display:block;margin-bottom:8px;${
+      cameraOnly ? 'display:none;' : ''
+    }">${label}</label>
 
-    <div style="display:flex;gap:10px;align-items:flex-start;">
+    <div class="scan-typed" style="display:${cameraOnly ? 'none' : 'flex'};gap:10px;align-items:flex-start;">
       <input class="input input-lg scan-input" type="text" id="scan-${name}" name="${name}" required
              autocomplete="off" autocapitalize="characters" spellcheck="false"
              maxlength="12" placeholder="Code under the QR" ${autofocus ? 'autofocus' : ''}
@@ -62,7 +87,7 @@ function scanField({ action, name = 'code', label, hint, buttonLabel = 'Add', au
          and .btn sets display itself, which beats it - so the button rendered
          anyway and did nothing when tapped. -->
     <button type="button" class="btn btn-outline btn-lg btn-full scan-open"
-            style="margin-top:12px;display:none;">Scan with the camera</button>
+            style="margin-top:${cameraOnly ? '0' : '12'}px;display:none;">Scan with the camera</button>
 
     <div class="scan-stage" style="margin-top:12px;display:none;">
       <video class="scan-video" playsinline muted
@@ -160,6 +185,18 @@ function scannerScript() {
     return match ? match[1] : value;
   }
 
+  // NO CAMERA API IN THIS BROWSER AT ALL. Nothing below will run, so a
+  // camera-only form would show a driver an empty card. Give the box back
+  // before anything else happens.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.querySelectorAll('.scan-form.scan-camera-only').forEach(function (form) {
+      var typed = form.querySelector('.scan-typed');
+      var label = form.querySelector('label.eyebrow');
+      if (typed) typed.style.display = 'flex';
+      if (label) label.style.display = '';
+    });
+  }
+
   document.querySelectorAll('.scan-form').forEach(function (form) {
     var open = form.querySelector('.scan-open');
     var close = form.querySelector('.scan-close');
@@ -171,6 +208,18 @@ function scannerScript() {
       if (!note) return;
       note.textContent = words;
       note.style.display = '';
+    }
+
+    // THE WAY THROUGH WHEN THERE IS NOTHING TO SCAN WITH. A camera-only form
+    // hides the box so a code cannot simply be typed instead of scanned - but a
+    // refused permission or a dead camera must not strand a driver at a counter,
+    // so the box comes back the moment scanning turns out to be impossible.
+    function letHimType() {
+      if (!form.classList.contains('scan-camera-only')) return;
+      var typed = form.querySelector('.scan-typed');
+      var label = form.querySelector('label.eyebrow');
+      if (typed) typed.style.display = 'flex';
+      if (label) label.style.display = '';
     }
     if (!open || !video || !input) return;
 
@@ -207,6 +256,7 @@ function scannerScript() {
         })
         .catch(function () {
           say('The scanner could not start, so type the code instead.');
+          letHimType();
           stop();
         });
     }
@@ -227,6 +277,7 @@ function scannerScript() {
           // Permission refused, or no camera. Say so once and get out of the
           // way - the field above still works.
           say('No camera available, so type the code instead.');
+          letHimType();
           open.style.display = 'none';
         });
     });
