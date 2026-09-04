@@ -64,17 +64,18 @@ const HEADLINE = {
 // are the customer's name, their thread and the money, none of which a driver
 // is shown. Sales never has orders.drive, so on this screen that is Admin and
 // nobody else.
-function taskLine(text, stop, user, lead = '', tail = '', mid = '') {
+function taskLine(text, stop, user, lead = '', tail = '', mid = '', hideOrder = false) {
   const quiet = 'font-weight:400;color:var(--ink-500);';
-  const order = stop.order || null;
+  const order = hideOrder ? null : stop.order || null;
 
   if (!order) {
     // A laundromat visit is several orders at one door. Naming one of them
     // would be picking a bag out of the load at random, so it says how many.
-    const many = (stop.orders || []).length;
+    // Nothing to say when the caller asked for the order to be left out.
+    const many = hideOrder ? 0 : (stop.orders || []).length;
     return many
-      ? `${escapeHtml(text)}${mid} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>`
-      : `${escapeHtml(text)}${mid}`;
+      ? `${escapeHtml(text)}${mid} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>${tail}`
+      : `${escapeHtml(text)}${mid}${tail}`;
   }
 
   const num = `#${escapeHtml(order.order_number)}`;
@@ -244,7 +245,21 @@ function taskParts(task) {
   // A few steps carry on past the order instead of stopping there.
   const tail = task.titleTail ? ` ${escapeHtml(task.titleTail)}` : '.';
 
-  return { mid, tail };
+  // "Weigh Bag #1 (Tag ID 6ZP4DN)." - Neil's sentence, and the order is not in
+  // it. By the scale it has been named on the two cards before this one, and
+  // the subject is the bag in his hands; the tag is what says which bag that
+  // is. The order is still one tap away from either of those.
+  // THE TAG REPLACES THE ORDER ON A PER-BAG STEP. Neil's sentences, twice over:
+  // "Weigh Bag #1 (Tag ID 6ZP4DN)." and "Put Van Clip #1 on Bag #1 (Tag ID
+  // 6ZP4DN)." Once the bag is in his hands the subject is the bag, and the tag
+  // is what says which bag - the order has been named on the cards before this
+  // one and is still one tap away on either of them.
+  //
+  // Only when there IS a tag to take its place. A bag with no sticker yet would
+  // otherwise leave a bare "Weigh Bag #2." with nothing saying whose it is.
+  const hideOrder = Boolean(code);
+
+  return { mid, tail, hideOrder };
 }
 
 // The one thing to do, now he is there.
@@ -278,8 +293,11 @@ function taskCard(run, user = null) {
     ${stopLine(
       'Task',
       (() => {
-        const { mid, tail } = taskParts(task);
-        return taskLine(task ? task.title : 'All done here', stop, user, 'for Order', tail, mid);
+        const { mid, tail, hideOrder } = taskParts(task);
+        return taskLine(
+          task ? task.title : 'All done here',
+          stop, user, 'for Order', tail, mid, hideOrder
+        );
       })(),
       'stop-line-plain'
     )}
@@ -362,8 +380,8 @@ function taskControl(stop, task, order) {
     return `
       ${scanField({
         action: `/ops/orders/${order.order_number}/label${back}`,
-        label: `Code off the tag for bag ${task.position}`,
-        buttonLabel: `That's bag ${task.position}`,
+        label: `Code off the tag for bag #${task.position}`,
+        buttonLabel: `That's bag #${task.position}`,
         autofocus: true,
       })}`;
   }
@@ -372,14 +390,14 @@ function taskControl(stop, task, order) {
     return `
     <form method="post" action="/ops/orders/${order.order_number}/bag-weight${back}"
           enctype="multipart/form-data" style="margin:0;">
-      <input type="hidden" name="code" value="${escapeHtml(task.label.code)}">
+      <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
 
-      <label class="field-label" for="weight_lb">What does bag ${task.position} weigh?</label>
+      <label class="field-label" for="weight_lb">What does bag #${task.position} weigh?</label>
       <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
              step="0.01" min="0.01" max="200" inputmode="decimal" required autofocus
              placeholder="12.5" style="width:100%;margin-bottom:16px;">
 
-      <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag ${task.position}</button>
+      <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag #${task.position}</button>
     </form>`;
   }
 
@@ -406,7 +424,7 @@ function taskControl(stop, task, order) {
           ${
             task.clip != null
               ? `Van Clip #${escapeHtml(task.clip)}`
-              : `Bag ${escapeHtml(task.position)}`
+              : `Bag #${escapeHtml(task.position)}`
           }
         </span>
         <span class="clip-state">
@@ -420,7 +438,7 @@ function taskControl(stop, task, order) {
         ${
           task.clip != null
             ? `Van Clip #${escapeHtml(task.clip)} is on the van`
-            : `Bag ${escapeHtml(task.position)} is in the van`
+            : `Bag #${escapeHtml(task.position)} is in the van`
         }
       </button>
     </form>`;

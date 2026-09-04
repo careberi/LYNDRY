@@ -117,7 +117,7 @@ async function tasksForCollect(order) {
       position,
       label,
       title: label
-        ? `Bag ${position} tagged - ${label.code}`
+        ? `Bag #${position} tagged - ${label.code}`
         : `Put a Bag Tag on Bag #${position}`,
       // The rest of Neil's sentence, which sits after the order number. Only
       // while there is nothing on the bag yet - once it is tagged the step is
@@ -137,8 +137,8 @@ async function tasksForCollect(order) {
       label,
       title:
         label && label.weight_lb != null
-          ? `Bag ${position} - ${label.weight_lb} lb`
-          : `Weigh Bag ${position}`,
+          ? `Bag #${position} - ${label.weight_lb} lb`
+          : `Weigh Bag #${position}`,
       // The "with Tag ID 6ZP4DN." half of the line is built in run-page.js,
       // because the id is a link to that sticker's page and a link is markup.
       // The label is already on this task, which is all it needs.
@@ -168,10 +168,10 @@ async function tasksForCollect(order) {
       label,
       title:
         label && label.clipped_at
-          ? `Clip ${label.clip_number} on Bag ${position}`
+          ? `Van Clip #${label.clip_number} on Bag #${position}`
           : label && label.clip_number != null
-            ? `Put Van Clip ${label.clip_number} on Bag ${position}`
-            : `Clip Bag ${position}`,
+            ? `Put Van Clip #${label.clip_number} on Bag #${position}`
+            : `Clip Bag #${position}`,
       // The task line says which clip on which bag; the number is on screen
       // at 40px. There is nothing left for a line underneath to add.
       detail: null,
@@ -210,10 +210,10 @@ async function tasksForCollect(order) {
         label && label.loaded_at
           ? label.clip_number != null
             ? `Van Clip #${label.clip_number} on the van`
-            : `Bag ${position} in the van`
+            : `Bag #${position} in the van`
           : label && label.clip_number != null
             ? `Put Van Clip #${label.clip_number} on the van`
-            : `Put Bag ${position} in the van`,
+            : `Put Bag #${position} in the van`,
       detail: null,
       done: Boolean(label && label.loaded_at),
       clip: label ? label.clip_number : null,
