@@ -162,7 +162,7 @@ async function tasksForCollect(order) {
       // Only while it is outstanding. Once it is done the entry goes back to the
       // title, which by then is the record of what happened - "6ZP4DN - 30 lb",
       // "Van Clip #1 on 6ZP4DN" - and that is worth more than the step's name.
-      short: 'Weight',
+      short: 'Weigh the bag',
       // The "with Tag ID 6ZP4DN." half of the line is built in run-page.js,
       // because the id is a link to that sticker's page and a link is markup.
       // The label is already on this task, which is all it needs.
@@ -209,7 +209,7 @@ async function tasksForCollect(order) {
           : label && label.clip_number != null
             ? `Put Van Clip #${label.clip_number} on Tag ID ${label.code}`
             : `Clip Bag #${position}`,
-      short: 'Van Clip',
+      short: 'Put the van clip on',
       // The task line says which clip on which bag; the number is on screen
       // at 40px. There is nothing left for a line underneath to add.
       detail: null,
