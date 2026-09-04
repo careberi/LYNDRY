@@ -77,7 +77,11 @@ async function findByTag(rawCode) {
 
   const { data, error } = await db
     .from('orders')
-    .select('*, customers(id, name, phone, address_line1, city, preferences)')
+    // The card fields ride along: this order feeds settleWeight, which charges.
+    .select(
+      '*, customers(id, name, phone, address_line1, city, preferences, ' +
+        'stripe_customer_id, default_payment_method_id, card_brand, card_last4)'
+    )
     .eq('tag_code', code)
     .maybeSingle();
 

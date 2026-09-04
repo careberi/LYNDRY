@@ -1227,7 +1227,16 @@ router.post('/o/:code/weight', async (req, res, next) => {
     // the two scales disagree. Nothing about them is rendered on this page.
     const { data: order, error } = await db
       .from('orders')
-      .select('id, order_number, status, weight_lb, partner_weight_lb, customers(id, name, phone)')
+      // THE CARD FIELDS TRAVEL WITH THE CUSTOMER. This select fed a charge and
+      // carried no card: billing asks whether they have a saved payment method,
+      // got undefined for both columns, and told a customer with a Visa on file
+      // that we had no card for them. A charge that depends on a select list in
+      // another file is a charge that stops working when somebody trims it.
+      .select(
+        'id, order_number, status, weight_lb, partner_weight_lb, ' +
+          'customers(id, name, phone, stripe_customer_id, default_payment_method_id, ' +
+          'card_brand, card_last4)'
+      )
       .eq('id', label.order_id)
       .maybeSingle();
 
