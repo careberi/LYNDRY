@@ -33,7 +33,7 @@ const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
 const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
-const { runBody } = require('../web/run-page');
+const { runBody, returnBagBody } = require('../web/run-page');
 const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
 const LABEL_LABEL = labelPdf.DEFAULT_LABEL;
@@ -3285,80 +3285,213 @@ router.post('/ops/run/collected', guard, may('orders.drive'), async (req, res, n
 // bags came back is now a fact we hold per bag, named, rather than a number
 // somebody typed at a counter. Nothing is texted and nothing is charged here -
 // this only says the bags are in the van.
-// --- weigh the load coming back, and check it -------------------------------
+// --- ONE BAG COMING BACK, ON ITS OWN SCREEN ---------------------------------
 //
-// WEIGH, CHECK, THEN CLIP - Neil's sequence, restored. The named stickers say
-// WHICH bags he was handed; the scale is the only thing that says what is inside
-// them, and a laundromat can hand back every bag with a machine load still in a
-// dryer.
-//
-// A refusal is not a bypass: an admin may push past it with a reason, which goes
-// in the change log with a name against it.
-router.post('/ops/run/return-weight', guard, may('orders.drive'), async (req, res, next) => {
+// Neil's flow: the list card sends him here and he does this bag completely -
+// scan it, weigh it, take its clip, put it in the van - then lands back on the
+// list. Every step writes through src/core/bags.js, the same as a doorstep.
+
+async function returnBagFor(req) {
+  const id = String(req.params.id || '');
+  if (!UUID.test(id)) return null;
+
+  const { data: label } = await db.from('bag_labels').select('*').eq('id', id).maybeSingle();
+  if (!label) return null;
+
+  const order = await loadOrderForAction(label.order_id);
+  if (!order) return null;
+
+  // A driver may only touch his own stop, the rule every other action here
+  // follows. An unassigned order stays open to whoever is nearest.
+  if (
+    !roles.can(req.opsUser, 'customers.view') &&
+    order.driver_id &&
+    order.driver_id !== req.opsUser.id
+  ) {
+    return null;
+  }
+
+  return { label, order };
+}
+
+router.get('/ops/run/bag/:id', guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
-    const ids = droppedOrderIds(req);
-    if (!ids.length) return res.redirect(303, '/ops/run');
+    const found = await returnBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+
+    return res.type('html').send(
+      adminPage({
+        title: `${found.label.code}-${found.label.sticker_seq}`,
+        active: '/ops/run',
+        bare: true,
+        body: returnBagBody({
+          label: found.label,
+          order: found.order,
+          scanned: String(req.query.scanned || '') === '1',
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// THE SCAN IS A CONFIRMATION, NOT A SEARCH. He tapped this bag on the list; this
+// is the sticker in his hand agreeing. Held in the URL rather than a column,
+// because it is true for one visit and not for ever - reload and he scans again,
+// which is the right way round for a check whose whole job is to be current.
+router.post('/ops/run/bag/:id/scan', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const found = await returnBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+
+    const typed = String((req.body || {}).code || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    const want = String(found.label.code || '').toUpperCase();
+
+    // With or without the sticker number: 6ZP4DN and 6ZP4DN1 are both the bag in
+    // his hand, and one of them is what the QR carries.
+    const ok = typed === want || typed === `${want}${found.label.sticker_seq}`;
+
+    if (!ok) {
+      return res.redirect(
+        303,
+        `/ops/run/bag/${found.label.id}?problem=${encodeURIComponent(
+          `That is not ${found.label.code}-${found.label.sticker_seq}. Check the sticker.`
+        )}`
+      );
+    }
+
+    return res.redirect(303, `/ops/run/bag/${found.label.id}?scanned=1`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// The weight, and the clip it earns.
+router.post('/ops/run/bag/:id/weight', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const found = await returnBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+    const { label, order } = found;
 
     const weight = weights.lb((req.body || {}).weight_lb);
     if (weight == null || weight <= 0) {
       return res.redirect(
         303,
-        `/ops/run?problem=${encodeURIComponent('What do they weigh altogether? Pounds, as a number.')}`
+        `/ops/run/bag/${label.id}?scanned=1&problem=${encodeURIComponent(
+          'What does it weigh? Pounds, as a number.'
+        )}`
       );
     }
 
-    const reason = String((req.body || {}).override_reason || '').trim();
-    const mayOverride = roles.can(req.opsUser, 'orders.override');
-    const problems = [];
+    const { error } = await db
+      .from('bag_labels')
+      .update({ weight_lb: weight, weighed_at: new Date().toISOString() })
+      .eq('id', label.id);
+    if (error) throw error;
 
-    for (const id of ids) {
-      const order = await loadOrderForAction(id);
-      if (!order) continue;
+    // THE ORDER'S RETURN WEIGHT IS THE SUM OF ITS BAGS, recomputed here, exactly
+    // as the pickup leg's weight is. One number typed per bag, added up once.
+    const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+      (b) => b.sticker_seq && b.collected_at
+    );
+    const total = weights.sum(packed.map((b) => b.weight_lb));
 
-      // Dirty in against clean out, and deliberately not symmetric: lighter is
-      // ordinary, heavier means somebody else's laundry is in the pile.
-      const check = tags.checkHandover({ wentIn: order.weight_lb, cameBack: weight });
-      const overrode = Boolean(check && !check.ok && mayOverride && reason);
+    await db.from('orders').update({ return_weight_lb: total }).eq('id', order.id);
 
-      if (check && !check.ok && !overrode) {
-        problems.push(`#${order.order_number}: ${check.detail}`);
-        continue;
+    await orderEvents.record(order.id, {
+      kind: 'WEIGHT',
+      summary: `${label.code}-${label.sticker_seq} weighed back at ${weight} lb`,
+      became: `${total} lb across ${packed.length} bag${packed.length === 1 ? '' : 's'} so far`,
+      by: { opsUser: req.opsUser },
+    });
+
+    // THE CHECK IS TOTAL AGAINST TOTAL, AND ONLY WHEN EVERY BAG IS ON THE SCALE.
+    // A half-weighed load compared against a full one flags every laundromat as
+    // light, so it waits for the last bag.
+    if (packed.length && packed.every((b) => b.weight_lb != null)) {
+      const check = tags.checkHandover({ wentIn: order.weight_lb, cameBack: total });
+
+      if (check && !check.ok) {
+        await orderEvents.record(order.id, {
+          kind: 'WEIGHT',
+          summary: `Weight back does not match: ${check.detail}`,
+          was: `${order.weight_lb} lb in`,
+          became: `${total} lb out`,
+          by: { opsUser: req.opsUser },
+        });
       }
+    }
 
-      const { error } = await db
-        .from('orders')
-        .update({ return_weight_lb: weight })
-        .eq('id', order.id);
-      if (error) throw error;
-
-      await orderEvents.record(order.id, {
-        kind: 'WEIGHT',
-        summary: overrode
-          ? `Weighed back at ${weight} lb - did NOT match, taken anyway`
-          : `Weighed back at ${weight} lb`,
-        was: order.weight_lb == null ? null : `${order.weight_lb} lb in`,
-        became: `${weight} lb out`,
-        reason: overrode ? reason : null,
-        by: { opsUser: req.opsUser },
-      });
-
-      // THE CLIPS ARE EARNED HERE, which is the point of doing these in this
-      // order: a clipped bag is a bag whose load has been weighed and matched.
-      // They are reserved now so the next card can show the numbers he is about
-      // to put on, and he confirms each one as it goes in the van.
-      const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
-        (b) => b.sticker_seq && b.collected_at
+    const clipped = await bags.assignClip({ ...label, weight_lb: weight }, order.driver_id);
+    if (!clipped.ok) {
+      return res.redirect(
+        303,
+        `/ops/run/bag/${label.id}?scanned=1&problem=${encodeURIComponent(clipped.detail)}`
       );
-
-      for (const bag of packed) {
-        const got = await bags.assignClip(bag, order.driver_id);
-        if (!got.ok) problems.push(`#${order.order_number}: ${got.detail}`);
-      }
     }
 
-    if (problems.length) {
-      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(problems.join(' '))}`);
+    return res.redirect(303, `/ops/run/bag/${label.id}?scanned=1`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// The clip goes on.
+router.post('/ops/run/bag/:id/clip', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const found = await returnBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+
+    const on = await bags.confirmClip(found.label);
+    if (!on.ok) {
+      return res.redirect(
+        303,
+        `/ops/run/bag/${found.label.id}?scanned=1&problem=${encodeURIComponent(on.detail)}`
+      );
     }
+
+    await orderEvents.record(found.order.id, {
+      kind: 'LABEL',
+      summary: `Van clip ${found.label.clip_number} on ${found.label.code}-${found.label.sticker_seq}`,
+      by: { opsUser: req.opsUser },
+    });
+
+    return res.redirect(303, `/ops/run/bag/${found.label.id}?scanned=1`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// And into the van, which sends him back to the list.
+router.post('/ops/run/bag/:id/van', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const found = await returnBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+
+    const aboard = await bags.loadBag({
+      ...found.label,
+      clipped_at: found.label.clipped_at || new Date().toISOString(),
+    });
+    if (!aboard.ok) {
+      return res.redirect(
+        303,
+        `/ops/run/bag/${found.label.id}?scanned=1&problem=${encodeURIComponent(aboard.detail)}`
+      );
+    }
+
+    await orderEvents.record(found.order.id, {
+      kind: 'LABEL',
+      summary: `${found.label.code}-${found.label.sticker_seq} in the van on clip ${found.label.clip_number}`,
+      by: { opsUser: req.opsUser },
+    });
 
     return res.redirect(303, '/ops/run');
   } catch (err) {
@@ -3366,58 +3499,40 @@ router.post('/ops/run/return-weight', guard, may('orders.drive'), async (req, re
   }
 });
 
-// --- one bag, clipped and aboard --------------------------------------------
-//
-// The number was handed out when the weight passed, so this tap is him saying
-// that clip is on that bag and the bag is in the van. The last one is what sends
-// the order out for delivery, and what tells the customer.
-router.post('/ops/run/return-load', guard, may('orders.drive'), async (req, res, next) => {
+// EVERY BAG ABOARD, AND HE SAYS SO. The master button at the foot of the list,
+// the same rule as the collecting: the bags say which, the button says he is
+// finished here. This is what tells the customer it is on the way.
+router.post('/ops/run/return-done', guard, may('orders.drive'), async (req, res, next) => {
   try {
-    const labelId = String((req.body || {}).label_id || '');
-    if (!UUID.test(labelId)) return res.redirect(303, '/ops/run');
+    const ids = droppedOrderIds(req);
+    if (!ids.length) return res.redirect(303, '/ops/run');
 
-    const { data: label } = await db.from('bag_labels').select('*').eq('id', labelId).maybeSingle();
-    if (!label) return res.redirect(303, '/ops/run');
+    const problems = [];
 
-    const order = await loadOrderForAction(label.order_id);
-    if (!order) return res.redirect(303, '/ops/run');
+    for (const id of ids) {
+      const order = await loadOrderForAction(id);
+      if (!order) continue;
 
-    if (
-      !roles.can(req.opsUser, 'customers.view') &&
-      order.driver_id &&
-      order.driver_id !== req.opsUser.id
-    ) {
-      return res.redirect(303, '/ops/run');
-    }
+      const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+        (b) => b.sticker_seq && b.collected_at
+      );
 
-    if (!label.clipped_at) {
-      const on = await bags.confirmClip(label);
-      if (!on.ok) return res.redirect(303, `/ops/run?problem=${encodeURIComponent(on.detail)}`);
-      label.clipped_at = new Date().toISOString();
-    }
-
-    const aboard = await bags.loadBag(label);
-    if (!aboard.ok) {
-      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(aboard.detail)}`);
-    }
-
-    await orderEvents.record(order.id, {
-      kind: 'LABEL',
-      summary: `${label.code}-${label.sticker_seq} in the van on clip ${label.clip_number}`,
-      by: { opsUser: req.opsUser },
-    });
-
-    // Every bag aboard? Then it is on its way, and that is when the customer
-    // hears about it.
-    const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
-      (b) => b.sticker_seq && b.collected_at
-    );
-
-    if (packed.length && packed.every((b) => b.loaded_at)) {
-      const away = await fulfilment.outForDelivery(order, { by: { opsUser: req.opsUser } });
-      if (!away.ok && away.detail) {
-        return res.redirect(303, `/ops/run?problem=${encodeURIComponent(away.detail)}`);
+      const notAboard = packed.filter((b) => !b.loaded_at);
+      if (notAboard.length) {
+        problems.push(
+          `#${order.order_number}: ${notAboard
+            .map((b) => `${b.code}-${b.sticker_seq}`)
+            .join(', ')} not in the van yet.`
+        );
+        continue;
       }
+
+      const away = await fulfilment.outForDelivery(order, { by: { opsUser: req.opsUser } });
+      if (!away.ok && away.detail) problems.push(`#${order.order_number}: ${away.detail}`);
+    }
+
+    if (problems.length) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(problems.join(' '))}`);
     }
 
     return res.redirect(303, '/ops/run');
@@ -3518,8 +3633,8 @@ router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, re
       // real order - he ticked the bags off and the screen jumped straight to a
       // customer's door.
       //
-      // outForDelivery() fires when the last bag is confirmed into the van now,
-      // in /ops/run/return-load.
+      // outForDelivery() fires when he says every bag is aboard now, on the
+      // list card at the end of the per-bag screens.
     }
 
     if (problems.length) {

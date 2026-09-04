@@ -543,10 +543,18 @@ function stopDone(stop) {
     // stop counted itself finished the moment it appeared and the run skipped
     // the weigh, the check and the clips entirely. That is what Neil walked
     // into: bags collected, next card a customer's door.
+    // HE SAYS WHEN HE IS FINISHED HERE, not the bags. Loading the last one used
+    // to end the stop by itself, so "All the bags are on the van" was never
+    // reachable - the same fault the collecting had, one card further on.
+    //
+    // That button is what moves the order out for delivery, so the order's own
+    // status is the honest test: it has left this laundromat or it has not.
     const packed = (stop.finishedBags || []).filter((b) => b.finished_at);
     if (!packed.length) return (stop.orders || []).every((o) => o.loaded_at);
 
-    return packed.every((b) => b.collected_at && b.loaded_at);
+    return (stop.orders || []).every((o) =>
+      ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(o.status)
+    );
   }
   return false;
 }
@@ -730,7 +738,6 @@ async function forDriver(driverId, roundStart = null) {
     if (stop.kind === 'pickup_partner') {
       const packed = (stop.finishedBags || []).filter((b) => b.finished_at);
       const ticked = packed.filter((b) => b.collected_at);
-      const weighed = (orders || []).every((o) => o.return_weight_lb != null);
 
       stop.returnBags = ticked
         .map((b) => ({
@@ -738,9 +745,10 @@ async function forDriver(driverId, roundStart = null) {
           code: b.code,
           seq: b.sticker_seq,
           clip: b.clip_number == null ? null : Number(b.clip_number),
+          weight: b.weight_lb == null ? null : Number(b.weight_lb),
           aboard: Boolean(b.loaded_at),
         }))
-        .sort((a, c) => (a.clip || 0) - (c.clip || 0));
+        .sort((a, c) => (a.seq || 0) - (c.seq || 0));
 
       // NOTHING PACKED YET IS NOT "TIME TO WEIGH". With no bags on their shelf
       // there is nothing to tick off and nothing to put on a scale - the stop is
@@ -758,13 +766,15 @@ async function forDriver(driverId, roundStart = null) {
       // finished at that counter.
       const confirmed = (orders || []).every((o) => o.return_bag_count != null);
 
+      // TWO CARDS, NOT FOUR. Everything after the collecting happens per bag on
+      // its own screen - scan it, weigh it, take its clip, put it in the van -
+      // so this stop only has to know whether he is still being handed bags or
+      // is working through them.
       stop.returnStage = !packed.length || packed.some((b) => !b.collected_at) || !confirmed
         ? 'collect'
-        : !weighed
-          ? 'weigh'
-          : stop.returnBags.some((b) => !b.aboard)
-            ? 'load'
-            : 'done';
+        : stop.returnBags.some((b) => !b.aboard)
+          ? 'load'
+          : 'done';
     }
 
     if (stop.kind === 'dropoff') {

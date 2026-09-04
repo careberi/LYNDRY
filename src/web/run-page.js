@@ -997,32 +997,45 @@ function partnerCard(run) {
              </form>`;
               }
 
-              // --- clips on, bags in the van --------------------------------
+              // --- the list of bags, each its own screen --------------------
               //
-              // ONE TAP PER BAG, and it does both: the number was handed out
-              // when the weight passed, so tapping is him confirming that clip
-              // is on that bag and the bag is aboard. Same switch as everywhere
-              // else, red until it is true.
+              // NEIL'S SHAPE: the card lists what is coming back, and tapping one
+              // opens that bag on its own - scan it, weigh it, take its clip, put
+              // it in the van - then drops him back here. The master button at
+              // the foot is what ends the stop.
+              //
+              // These are LINKS, not submit buttons. Everything about one bag
+              // happens on its own screen, so there is nothing to post from here.
+              const allAboard = (stop.returnBags || []).every((b) => b.aboard);
+
               return `
              ${dropTask(
-               'Clip the bags and put them in the van',
-               'Put each van clip on its bag as you load it. The customer is told it is on the way once the last one is in.'
+               'Put the bags into the van',
+               'Open each bag to scan it, weigh it and take its van clip. They go in the van one at a time.'
              )}
-             <form method="post" action="/ops/run/return-load" class="clip-form" style="display:grid;gap:10px;">
+             <div style="display:grid;gap:10px;margin:0 0 18px;">
                ${(stop.returnBags || [])
                  .map(
                    (b) => `
-               <button type="submit" name="label_id" value="${escapeHtml(b.id)}"
-                       class="clip-toggle${b.aboard ? ' is-on' : ''}" style="margin:0;">
-                 <span class="clip-number">${
-                   b.clip == null ? 'No clip' : `Van Clip #${escapeHtml(b.clip)}`
+               <a class="clip-toggle${b.aboard ? ' is-on' : ''}" style="margin:0;text-decoration:none;"
+                  href="/ops/run/bag/${escapeHtml(b.id)}">
+                 <span class="clip-number">${escapeHtml(b.code)}-${escapeHtml(b.seq)}</span>
+                 <span class="clip-state">${
+                   b.aboard
+                     ? `In the van: true${b.clip == null ? '' : ` &middot; Van Clip #${escapeHtml(b.clip)}`}`
+                     : 'In the van: false'
                  }</span>
-                 <span class="clip-state">${escapeHtml(b.code)}-${escapeHtml(b.seq)} &middot; ${
-                     b.aboard ? 'In the van: true' : 'In the van: false'
-                   }</span>
-               </button>`
+               </a>`
                  )
                  .join('')}
+             </div>
+
+             <form method="post" action="/ops/run/return-done" style="margin:0;">
+               ${hidden}
+               <button type="submit" class="btn btn-primary btn-lg btn-full"
+                       ${allAboard ? '' : 'disabled style="opacity:0.35;"'}>
+                 All the bags are on the van
+               </button>
              </form>`;
           })()
     }
@@ -1396,4 +1409,116 @@ function quickTapScript() {
 }
 
 
-module.exports = { runBody };
+// --- ONE BAG, ON ITS OWN SCREEN ---------------------------------------------
+//
+// Neil's flow for the way back out of a laundromat: the list card sends him
+// here, and here he does one bag completely - scan it, weigh it, take its clip,
+// put it in the van - before going back for the next. The same sequence as a
+// doorstep, for the same reason: a driver with his hands full finishes what he
+// is holding.
+//
+// THE STEP IS DERIVED FROM THE BAG, not carried in a session. Reload it, come
+// back on another phone, and it is at the same point.
+function returnBagStep(label, scanned) {
+  if (!scanned) return 'scan';
+  if (label.weight_lb == null) return 'weigh';
+  if (!label.clipped_at) return 'clip';
+  if (!label.loaded_at) return 'van';
+  return 'done';
+}
+
+function returnBagBody({ label, order, scanned = false, problem = null }) {
+  const step = returnBagStep(label, scanned);
+  const name = `${label.code}-${label.sticker_seq}`;
+  const back = `/ops/run/bag/${label.id}${scanned ? '?scanned=1' : ''}`;
+
+  const head = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+      <h1 style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;margin:0;">
+        ${escapeHtml(name)}
+      </h1>
+      <a href="/ops/run" style="font-size:15px;font-weight:600;">Back to the list</a>
+    </div>
+    ${
+      problem
+        ? `<div style="margin:0 0 18px;padding:14px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+             ${escapeHtml(problem)}
+           </div>`
+        : ''
+    }`;
+
+  const card = (inner) => `<div style="${CARD}">${inner}</div>`;
+
+  if (step === 'scan') {
+    return `${head}${card(`
+      ${dropTask(
+        `Scan bag ${name}`,
+        'Point the camera at the QR on its sticker, or type the code underneath it.'
+      )}
+      ${scanField({
+        action: `/ops/run/bag/${label.id}/scan`,
+        label: 'Code on the sticker',
+        buttonLabel: "That's the bag",
+        autofocus: true,
+      })}`)}`;
+  }
+
+  if (step === 'weigh') {
+    return `${head}${card(`
+      ${dropTask(
+        `Weigh bag ${name}`,
+        'On the scale, then type what it says. Its van clip comes out once the weight is in.'
+      )}
+      <form method="post" action="/ops/run/bag/${label.id}/weight" style="margin:0;">
+        <label class="field-label" for="w">What does bag ${escapeHtml(name)} weigh?</label>
+        <input class="input input-lg" type="number" id="w" name="weight_lb"
+               step="0.01" min="0.01" max="200" inputmode="decimal" required autofocus
+               placeholder="12.5" style="width:100%;margin-bottom:16px;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag ${escapeHtml(name)} weight</button>
+      </form>`)}`;
+  }
+
+  if (step === 'clip') {
+    return `${head}${card(`
+      ${dropTask(
+        `Put Van Clip #${label.clip_number} on bag ${name}`,
+        'That number is how this bag is found in the van and what you say at a door.'
+      )}
+      <form method="post" action="/ops/run/bag/${label.id}/clip" class="clip-form" style="margin:0;">
+        <label class="clip-toggle" style="margin:0 0 18px;">
+          <input type="checkbox" name="in_hand" required>
+          <span class="clip-number">Van Clip #${escapeHtml(label.clip_number)}</span>
+          <span class="clip-state">
+            <span class="clip-state-off">Not in use</span>
+            <span class="clip-state-on">In use</span>
+          </span>
+        </label>
+        <button type="submit" class="btn btn-primary btn-lg btn-full">
+          Van Clip #${escapeHtml(label.clip_number)} is on bag ${escapeHtml(name)}
+        </button>
+      </form>`)}`;
+  }
+
+  return `${head}${card(`
+    ${dropTask(
+      `Put bag ${name} into the van`,
+      'Last step for this bag. The next one starts back on the list.'
+    )}
+    <form method="post" action="/ops/run/bag/${label.id}/van" class="clip-form" style="margin:0;">
+      <label class="clip-toggle" style="margin:0 0 18px;">
+        <input type="checkbox" name="aboard" required>
+        <span class="clip-number">Van Clip #${escapeHtml(label.clip_number)}</span>
+        <span class="clip-state">
+          <span class="clip-state-off">In the van: false</span>
+          <span class="clip-state-on">In the van: true</span>
+        </span>
+      </label>
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        Bag ${escapeHtml(name)} is on the van
+      </button>
+    </form>`)}
+    ${scannerScript()}`;
+}
+
+module.exports = { runBody, returnBagBody };
