@@ -1218,6 +1218,17 @@ arrived.** Every laundromat visit is two stops at one door — hand the dirty ov
 take the finished — and asking him to navigate to where he is standing is
 nonsense. It covers two customers in one building too.
 
+**BUT ONE VISIT IS NOT ONE ADDRESS, and the laundromat is where the two come
+apart.** A `pickup_partner` stop does not exist until the laundromat says the
+work is finished, which is hours after the drop-off — the driver left long ago.
+Matching on the address alone handed him the collect card with no navigation and
+no "I'm here": the run went from "that's the route" straight to standing at a
+counter in Paterson. **The test is whether the work was ready WHILE HE WAS
+THERE** — `ready_at` against the previous stop's `at_partner_at`. Collecting an
+order finished this morning on the same visit he drops another off is real and
+still needs no navigation; anything that became ready after he left is a second
+trip.
+
 **The run needs today's finished stops as well as the outstanding ones.** The
 routing board is built from live queries, so a stop disappears the moment it is
 done — right for "what is left", useless for "where am I". `doneToday()` is what
