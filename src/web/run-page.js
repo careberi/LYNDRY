@@ -345,7 +345,12 @@ function taskCard(run, user = null) {
                      display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">
           ${t.done ? '&check;' : ''}
         </span>
-        ${escapeHtml(t.title)}
+        ${
+          // The short name while it is outstanding, the title once it is done -
+          // by then the title says what actually happened, which is the more
+          // useful thing to have ticked.
+          escapeHtml(t.done ? t.title : t.short || t.title)
+        }
       </div>`
         )
         .join('')}
@@ -411,7 +416,13 @@ function taskControl(stop, task, order) {
           enctype="multipart/form-data" style="margin:0;">
       <input type="hidden" name="code" value="${escapeHtml((task.label || {}).code || '')}">
 
-      <label class="field-label" for="weight_lb">What does bag #${task.position} weigh?</label>
+      <label class="field-label" for="weight_lb">${
+        // By its sticker, like the heading and the button on this card. The
+        // position was the last thing here still calling the bag by a number.
+        (task.label || {}).code
+          ? `What does bag ${escapeHtml(task.label.code)} weigh?`
+          : `What does bag #${escapeHtml(task.position)} weigh?`
+      }</label>
       <input class="input input-lg" type="number" id="weight_lb" name="weight_lb"
              step="0.01" min="0.01" max="200" inputmode="decimal" required autofocus
              placeholder="12.5" style="width:100%;margin-bottom:16px;">
