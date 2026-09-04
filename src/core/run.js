@@ -207,7 +207,7 @@ async function tasksForCollect(order) {
           // which bag it went on.
           ? `Van Clip #${label.clip_number} on ${label.code}`
           : label && label.clip_number != null
-            ? `Put Van Clip #${label.clip_number} on Tag ID ${label.code}`
+            ? `Put Van Clip #${label.clip_number} on Bag ${label.code}`
             : `Clip Bag #${position}`,
       short: 'Put the van clip on',
       // The task line says which clip on which bag; the number is on screen
