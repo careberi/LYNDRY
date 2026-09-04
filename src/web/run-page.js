@@ -281,6 +281,39 @@ function taskParts(task) {
   return { mid, tail, hideOrder, linkCode: '' };
 }
 
+// AN ID INSIDE A SENTENCE BECOMES A LINK TO THE THING IT NAMES.
+//
+// The tick list is a record once a step is done - "1 bag with order #1940",
+// "Bag #1 tagged - 6ZP4DN" - and those are exactly the two ids a person wants
+// to follow when something looks wrong. Neil asked for both.
+//
+// Done after escaping, which is safe for both: an order number is digits and a
+// tag code is six characters of base32, so neither can be anything HTML cares
+// about. The order link is gated on customers.view the same way it is in the
+// heading - behind it are the customer's name, their thread and the money.
+function linkIds(text, task, stop, user) {
+  let out = escapeHtml(text);
+
+  const code = (task.label || {}).code;
+  if (code && out.includes(code)) {
+    out = out.replace(
+      code,
+      `<a href="/ops/labels/${encodeURIComponent(code)}" style="color:inherit;">${escapeHtml(code)}</a>`
+    );
+  }
+
+  const order = stop.order;
+  const num = order ? `#${order.order_number}` : null;
+  if (num && out.includes(num) && can(user, 'customers.view')) {
+    out = out.replace(
+      num,
+      `<a href="/ops/orders/${encodeURIComponent(order.order_number)}" style="color:inherit;">${escapeHtml(num)}</a>`
+    );
+  }
+
+  return out;
+}
+
 // The one thing to do, now he is there.
 function taskCard(run, user = null) {
   const stop = run.current;
@@ -348,8 +381,8 @@ function taskCard(run, user = null) {
         ${
           // The short name while it is outstanding, the title once it is done -
           // by then the title says what actually happened, which is the more
-          // useful thing to have ticked.
-          escapeHtml(t.done ? t.title : t.short || t.title)
+          // useful thing to have ticked. Any id in it is a link.
+          linkIds(t.done ? t.title : t.short || t.title, t, stop, user)
         }
       </div>`
         )
