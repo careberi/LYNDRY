@@ -455,6 +455,7 @@ const ES = Object.freeze({
   'How everything is sorted': 'Como se separa la ropa',
   'Time to turn it around': 'Tiempo para terminarla',
   // The weight cards, which are the first thing an attendant does.
+  'Van clip': 'Pinza de camioneta',
   'With our driver.': 'Con nuestro conductor.',
   'In our van, on its way to be washed.': 'En nuestra camioneta, camino al lavado.',
   'Back in our van, on its way to the customer.': 'De vuelta en nuestra camioneta, camino al cliente.',
@@ -870,11 +871,41 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
     [tags.STAGES.DONE]: 'Delivered. This tag is finished with.',
   }[stage] || 'Nothing to do with this one right now.';
 
+  // WHICH CLIP IS ON IT, WHILE IT IS ON THE VAN. Neil asked for it here, and
+  // this page is where it is worth having: the clip is how a bag is found in a
+  // loaded van, and a scan of the sticker is how somebody asks "which one is
+  // this" without unpacking anything.
+  //
+  // It comes off the moment the bag does. clipped_at with no unclipped_at IS
+  // "on the van" - unclipOrder() stamps unclipped_at and deliberately leaves
+  // clip_number alone, so the order page can still say which clip a bag
+  // travelled under. Reading clip_number on its own would leave a number on
+  // this page for a bag sitting on a laundromat floor, pointing at a clip that
+  // is by then on somebody else's laundry.
+  const onTheVan =
+    label.clip_number != null && label.clipped_at && !label.unclipped_at
+      ? label.clip_number
+      : null;
+
   return page({
     title: `Bag ${code}`,
     body: header + `
     <div class="card" style="padding:28px;">
       <p style="font-size:16px;line-height:1.6;margin:0;">${escapeHtml(say(said))}</p>
+      ${
+        onTheVan == null
+          ? ''
+          : `<div style="margin-top:22px;padding-top:20px;border-top:1px solid var(--ink-100);">
+               <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('Van clip'))}</p>
+               <span style="display:inline-block;min-width:76px;padding:12px 18px;
+                            border:2px solid var(--ink-900);border-radius:14px;
+                            background:var(--sunbeam-500);text-align:center;
+                            font-family:var(--font-mono);font-weight:700;font-size:34px;
+                            line-height:1;box-shadow:var(--shadow-pop-xs);">${escapeHtml(
+                              onTheVan
+                            )}</span>
+             </div>`
+      }
     </div>` + footer,
   });
 }
