@@ -3340,6 +3340,19 @@ router.get('/ops/run/bag/:id', guard, withIssues, may('orders.drive'), async (re
   }
 });
 
+// A GET ON ANY OF THE STEP URLS GOES BACK TO THE BAG.
+//
+// Those four are POST-only, so refreshing after one - or tapping back onto it -
+// asked for a page that does not exist and got the public 404, marketing nav and
+// all. Neil hit it mid-round. A driver should never be able to navigate himself
+// into a dead end on this screen; the bag's own page always knows which step he
+// is on, so that is where every one of them lands.
+router.get('/ops/run/bag/:id/:step', guard, may('orders.drive'), (req, res) => {
+  const id = String(req.params.id || '');
+  if (!UUID.test(id)) return res.redirect(303, '/ops/run');
+  return res.redirect(303, `/ops/run/bag/${id}`);
+});
+
 // THE SCAN IS A CONFIRMATION, NOT A SEARCH. He tapped this bag on the list; this
 // is the sticker in his hand agreeing. Held in the URL rather than a column,
 // because it is true for one visit and not for ever - reload and he scans again,
