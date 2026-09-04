@@ -477,7 +477,7 @@ const ES = Object.freeze({
   'When an order is finished': 'Cuando termine el pedido',
   'Waiting for collection': 'Esperando recogida',
   'Our driver has been told.': 'Nuestro conductor ya lo sabe.',
-  'Bags to hand over': 'Bolsas para entregar',
+  'Bags to hand over for this order': 'Bolsas para entregar de este pedido',
   'When the order is finished, tap the stickers you used. A button will then appear to tell us it is ready for collection.':
     'Cuando termine el pedido, toque las pegatinas que uso. Luego aparecera un boton para avisarnos que esta lista para recoger.',
   'Keep the Bag Tag with the laundry through wash and fold. If you split the laundry into multiple loads or bags, place a sticker from the Bag Tag on the in-house receipt for each one.':
@@ -891,7 +891,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
         // work it out at the counter.
         (stickers || []).filter((x) => x.state === 'IN_USE').length
           ? `<div style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
-               <p class="eyebrow" style="margin:0 0 12px;">${escapeHtml(say('Bags to hand over'))}</p>
+               <p class="eyebrow" style="margin:0 0 12px;">${escapeHtml(say('Bags to hand over for this order'))}</p>
                <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
                  ${stickers
                    .filter((x) => x.state === 'IN_USE')
