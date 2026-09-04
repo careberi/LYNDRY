@@ -509,6 +509,24 @@ When they say yes, call the tool AGAIN with a time inside the window you offered
 
 WHAT IS LEFT TODAY - this is worked out for you, do not recalculate it
 ${(() => {
+  // BEFORE WE OPEN, THERE IS NO "TODAY" TO OFFER.
+  //
+  // This block is the authoritative one - it says "worked out for you, do not
+  // recalculate it" - and it used to describe today's remaining windows whether
+  // or not a van was running yet. So the prompt contradicted itself: the
+  // opening-date block above said the earliest pickup is 8 September, and this
+  // one said "any day after today has all of them". The model followed this
+  // one, correctly, and offered a real customer tomorrow.
+  //
+  // Handing it the right facts is the fix. Telling it twice, harder, is not.
+  if (opensOn) {
+    return `NOTHING IS BOOKABLE TODAY OR TOMORROW. The first day we collect is ${opensOn}, a ${booking.readableDate(opensOn)}.
+Every window - 8 to 10, 10 to 12, 12 to 2, 2 to 4, 4 to 6 - is open on that day and on every day after it.
+A time they name lands in the window that contains it ON ${opensOn} OR LATER. Never today, never tomorrow, never any date before ${opensOn}, whatever they ask for.
+There is nothing here to work out: if they name a day earlier than ${opensOn}, the answer is ${opensOn}.
+IT IS A ${booking.readableDate(opensOn).split(' ')[0].toUpperCase()}. If they asked for a different weekday, do NOT repeat their weekday back at them - say ${booking.readableDate(opensOn)}. Asked for "monday", a customer was told "Monday the 8th is our first day out" and the 8th is a ${booking.readableDate(opensOn).split(' ')[0]}. Naming the wrong weekday for a real date is the mistake this prompt warns about twice already.`;
+  }
+
   const left = booking.windowsToday(now);
   if (left.dayIsDone) {
     return `Today is finished - every window has gone. ANY time they ask for today lands TOMORROW, in tomorrow's first available window. Say tomorrow's date in the recap, never today's.`;
