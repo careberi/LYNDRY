@@ -408,9 +408,12 @@ function dropCards(stop) {
             style="margin:0 0 14px;padding:16px 18px;border:2px solid var(--ink-900);
                    border-radius:14px;background:var(--paper-200);">
         <input type="hidden" name="code" value="${escapeHtml(b.code)}">
+        <!-- THE CLIP FIRST. Neil's order, and it is how he finds the bag: he is
+             looking down at a van full of them for a number, and the sticker is
+             what he reads once it is in his hand to check he took the right one. -->
         <p style="margin:0 0 12px;font-family:var(--font-mono);font-weight:700;font-size:16px;">
-          ${escapeHtml(b.code)}
-          <span style="color:var(--ink-500);">&middot; Van Clip #${escapeHtml(b.clip)}</span>
+          Van Clip #${escapeHtml(b.clip)}
+          <span style="color:var(--ink-500);">&middot; ${escapeHtml(b.code)}</span>
         </p>
         <button type="submit" class="btn btn-primary btn-full">Hand off bag</button>
       </form>`
