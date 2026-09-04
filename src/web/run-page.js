@@ -436,7 +436,11 @@ function dropCards(stop) {
         .map((n) => clipSwitch('clip', n, `Van Clip #${n}`, 'In the van: false', 'In the van: true'))
         .join('')}
       <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:8px;">
-        ${clips.length === 1 ? 'Clip is back in the van' : 'All clips back in the van'}
+        ${
+          // "on the van", the same preposition the load step uses. The count is
+          // known, so it says which rather than carrying Neil's bracket.
+          clips.length === 1 ? 'Clip is back on the van' : 'Clips are back on the van'
+        }
       </button>
     </form>`;
 }

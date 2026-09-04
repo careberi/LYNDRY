@@ -1220,7 +1220,12 @@ router.post('/o/:code/weight', async (req, res, next) => {
     // The form is hidden before hand-over, but a hidden form whose route still
     // fires is not a guard - and this one is on a page with no login at all, so
     // it is the only guard there is.
-    if (order.status !== 'AT_PARTNER') {
+    // PER BAG, matching what the page now shows. The rule has always been "not
+    // before it is handed over"; unclipped_at says that about THIS bag, where
+    // the order's status says it about the last of them. A bag on their counter
+    // with its clip off is theirs to weigh, and holding the box back until its
+    // neighbours catch up would be a page offering a form its own route refuses.
+    if (!label.unclipped_at && order.status !== 'AT_PARTNER') {
       return res.redirect(303, `${back}&weighed=early`);
     }
 

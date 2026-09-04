@@ -188,7 +188,21 @@ function stageOf(label, order) {
   // that stage needs has been given yet.
   if (label.weight_lb == null) return STAGES.TO_WEIGH;
 
-  if (order.status === 'AT_PARTNER') {
+  // HANDED OVER IS A FACT ABOUT THE BAG, NOT ABOUT THE ORDER.
+  //
+  // Neil, scanning a sticker seconds after handing that bag across a counter:
+  // it still said "in the van". It was reading the order's status, which does
+  // not move to AT_PARTNER until every bag is over and the clips are back - so
+  // between those two moments a bag sitting on a laundromat shelf claimed to be
+  // in a van three miles away.
+  //
+  // unclipped_at is stamped one bag at a time as it is handed over, so it is
+  // the earliest and the most precise thing we know. The order's status still
+  // answers for orders taken before the three-card drop-off existed, where
+  // there was no per-bag moment to record.
+  const handedOver = Boolean(label.unclipped_at) || order.status === 'AT_PARTNER';
+
+  if (handedOver) {
     return label.partner_weight_lb == null ? STAGES.TO_WEIGH_AT_PARTNER : STAGES.WASHING;
   }
 
