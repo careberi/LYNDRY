@@ -435,6 +435,29 @@ async function tasksForDeliver(order) {
   const mine = await bags.forOrder(order.id, 'DELIVERY');
   const aboard = mine.filter((b) => b.loaded_at);
 
+  // THE PREPPING IS DONE PER BAG NOW, on its own screen: the laundromat's
+  // stickers, our tag and the van clip all come off one bag at a time before the
+  // card gets here. So the three order-level steps that used to do it - take the
+  // clips out, take the tags off, scan every bag - would be a fourth
+  // confirmation of work already confirmed three times.
+  //
+  // They survive for an order with no per-bag labels, which is any order taken
+  // before the doorstep became a list.
+  const prepped = mine.some((b) => b.sticker_seq && b.collected_at);
+
+  if (prepped) {
+    return [
+      {
+        key: 'delivered',
+        title: order.status === 'DELIVERED' ? 'Delivered' : 'Drop the bags off',
+        detail: 'Photograph them where you leave them.',
+        spot: spotOf(order),
+        spotLabel: 'Leave them here',
+        done: Boolean(order.delivered_at),
+      },
+    ];
+  }
+
   const clips = bags.clipsFor(aboard);
   const clipsOff = aboard.length > 0 && clips.length === 0;
   const stripped = aboard.length > 0 && aboard.every((b) => b.released_at);
@@ -768,6 +791,36 @@ async function forDriver(driverId, roundStart = null) {
         : stop.returnBags.some((b) => !b.aboard)
           ? 'load'
           : 'done';
+    }
+
+    // --- THE DOORSTEP, PER BAG -----------------------------------------------
+    //
+    // Neil's flow, and the same shape as the laundromat pickup: the card lists
+    // the van clips, tapping one opens that bag on its own - the laundromat's
+    // stickers off, our tag off, the clip off - and drops him back on the list.
+    // The button at the foot is what takes him to the drop-off itself.
+    //
+    // Derived from the bags, so a driver who does half of it from another phone
+    // is at the same point.
+    if (stop.kind === 'deliver' && stop.order) {
+      const mine = (labelsByOrder.get(stop.order.id) || []).filter(
+        (l) => l.leg === 'DELIVERY' && l.sticker_seq && l.collected_at
+      );
+
+      stop.doorBags = mine
+        .map((l) => ({
+          id: l.id,
+          code: l.code,
+          seq: l.sticker_seq,
+          clip: l.clip_number == null ? null : Number(l.clip_number),
+          stickersOff: Boolean(l.stickers_off_at),
+          tagOff: Boolean(l.tag_off_at),
+          clipOff: Boolean(l.unclipped_at),
+          ready: Boolean(l.stickers_off_at && l.tag_off_at && l.unclipped_at),
+        }))
+        .sort((a, b) => (a.clip || 0) - (b.clip || 0));
+
+      stop.doorStage = stop.doorBags.some((b) => !b.ready) ? 'bags' : 'drop';
     }
 
     if (stop.kind === 'dropoff') {

@@ -1026,7 +1026,7 @@ async function board(dateIso, fromTime, driverId = null) {
   if (readyIds.length) {
     const { data: packed } = await db
       .from('bag_labels')
-      .select('id, order_id, sticker_seq, code, finished_at, collected_at, clip_number, clipped_at, loaded_at, weight_lb')
+      .select('id, order_id, sticker_seq, code, finished_at, collected_at, clip_number, clipped_at, unclipped_at, loaded_at, weight_lb, stickers_off_at, tag_off_at')
       .in('order_id', readyIds)
       .eq('leg', 'DELIVERY')
       .not('finished_at', 'is', null)

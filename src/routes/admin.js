@@ -33,7 +33,7 @@ const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
 const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
-const { runBody, returnBagBody } = require('../web/run-page');
+const { runBody, returnBagBody, doorBagBody } = require('../web/run-page');
 const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
 const LABEL_LABEL = labelPdf.DEFAULT_LABEL;
@@ -3285,6 +3285,149 @@ router.post('/ops/run/collected', guard, may('orders.drive'), async (req, res, n
 // bags came back is now a fact we hold per bag, named, rather than a number
 // somebody typed at a counter. Nothing is texted and nothing is charged here -
 // this only says the bags are in the van.
+// --- ONE BAG AT A CUSTOMER'S DOOR -------------------------------------------
+//
+// The delivery card lists the van clips and sends him here. Three things come
+// off each bag, in the order they physically can: the laundromat's own ticket,
+// our bag tag, then the clip that held it in the van.
+
+async function doorBagFor(req) {
+  const id = String(req.params.id || '');
+  if (!UUID.test(id)) return null;
+
+  const { data: label } = await db.from('bag_labels').select('*').eq('id', id).maybeSingle();
+  if (!label) return null;
+
+  const order = await loadOrderForAction(label.order_id);
+  if (!order) return null;
+
+  if (
+    !roles.can(req.opsUser, 'customers.view') &&
+    order.driver_id &&
+    order.driver_id !== req.opsUser.id
+  ) {
+    return null;
+  }
+
+  return { label, order };
+}
+
+router.get('/ops/run/door/:id', guard, withIssues, may('orders.drive'), async (req, res, next) => {
+  try {
+    const found = await doorBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+
+    return res.type('html').send(
+      adminPage({
+        title: `${found.label.code}-${found.label.sticker_seq}`,
+        active: '/ops/run',
+        bare: true,
+        body: doorBagBody({
+          label: found.label,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// A GET on a step goes back to the bag, never to a 404.
+router.get('/ops/run/door/:id/:step', guard, may('orders.drive'), (req, res) => {
+  const id = String(req.params.id || '');
+  if (!UUID.test(id)) return res.redirect(303, '/ops/run');
+  return res.redirect(303, `/ops/run/door/${id}`);
+});
+
+// The three things that come off, each its own tap.
+//
+// STAMPED IN ORDER, and the route enforces it rather than trusting the screen:
+// their ticket, then ours, then the clip. A hidden form whose route still fires
+// is not a guard, and this is the step where a bag with our tag still on it ends
+// up in somebody's house.
+const DOOR_STEPS = Object.freeze({
+  stickers: { column: 'stickers_off_at', needs: null, says: "laundromat stickers off" },
+  tag: { column: 'tag_off_at', needs: 'stickers_off_at', says: 'our bag tag off' },
+  clip: { column: 'unclipped_at', needs: 'tag_off_at', says: 'van clip off' },
+});
+
+router.post('/ops/run/door/:id/:step', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const step = DOOR_STEPS[String(req.params.step || '')];
+    if (!step) return res.redirect(303, '/ops/run');
+
+    const found = await doorBagFor(req);
+    if (!found) return res.redirect(303, '/ops/run');
+    const { label, order } = found;
+
+    if (step.needs && !label[step.needs]) {
+      return res.redirect(303, `/ops/run/door/${label.id}`);
+    }
+
+    if (!label[step.column]) {
+      const { error } = await db
+        .from('bag_labels')
+        .update({ [step.column]: new Date().toISOString() })
+        .eq('id', label.id);
+      if (error) throw error;
+
+      await orderEvents.record(order.id, {
+        kind: 'LABEL',
+        summary: `${label.code}-${label.sticker_seq}: ${step.says}`,
+        by: { opsUser: req.opsUser },
+      });
+    }
+
+    // The clip is the last of the three, so that is when he goes back to the
+    // list for the next bag.
+    if (String(req.params.step) === 'clip') return res.redirect(303, '/ops/run');
+    return res.redirect(303, `/ops/run/door/${label.id}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// EVERY BAG PREPPED, AND HE SAYS SO. The button at the foot of the list, the
+// same rule as everywhere else on this screen: the bags say which are ready, the
+// button says he is finished prepping and the drop-off can start.
+router.post('/ops/run/door-done', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const id = String((req.body || {}).order_id || '');
+    if (!UUID.test(id)) return res.redirect(303, '/ops/run');
+
+    const order = await loadOrderForAction(id);
+    if (!order) return res.redirect(303, '/ops/run');
+
+    const mine = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+      (b) => b.sticker_seq && b.collected_at
+    );
+
+    const notReady = mine.filter((b) => !b.stickers_off_at || !b.tag_off_at || !b.unclipped_at);
+    if (notReady.length) {
+      return res.redirect(
+        303,
+        `/ops/run?problem=${encodeURIComponent(
+          `${notReady.map((b) => `${b.code}-${b.sticker_seq}`).join(', ')} still needs prepping.`
+        )}`
+      );
+    }
+
+    await orderEvents.record(order.id, {
+      kind: 'LABEL',
+      summary: `${mine.length} bag${mine.length === 1 ? '' : 's'} prepped at the door`,
+      by: { opsUser: req.opsUser },
+    });
+
+    return res.redirect(303, '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // --- ONE BAG COMING BACK, ON ITS OWN SCREEN ---------------------------------
 //
 // Neil's flow: the list card sends him here and he does this bag completely -

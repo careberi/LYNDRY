@@ -1108,7 +1108,18 @@ function runBody({ run, notice = null, problem = null, user = null }) {
   // screen a driver actually works from, and it did not.
   return `${head}
     ${progressBar(run.done, run.total)}
-    ${run.arrived ? (partnerStop ? partnerCard(run) : taskCard(run, user)) : travelCard(run, user)}
+    ${
+      // AT A CUSTOMER'S DOOR THE BAGS COME FIRST. Each one has to be stripped of
+      // the laundromat's stickers, our tag and its van clip before anything is
+      // dropped, so the card is that list until every bag is prepped.
+      run.arrived
+        ? partnerStop
+          ? partnerCard(run)
+          : run.current.kind === 'deliver' && run.current.doorStage === 'bags'
+            ? doorList(run.current)
+            : taskCard(run, user)
+        : travelCard(run, user)
+    }
   </div>
   ${scannerScript()}
   ${returnFromMapsScript()}
@@ -1393,6 +1404,131 @@ function quickTapScript() {
 }
 
 
+// --- THE DOORSTEP: A LIST OF CLIPS, AND ONE BAG AT A TIME -------------------
+//
+// Neil's flow, and deliberately the same shape as the laundromat pickup: the
+// card lists the van clips, tapping one opens that bag on its own - the
+// laundromat's stickers off, our tag off, the clip off - and drops him back on
+// the list. The button at the foot takes him to the drop-off itself.
+//
+// "Take the bag tags off" used to be one tick for the whole load, so a three-bag
+// order was a single tap and nobody could say which bag had been stripped.
+function doorList(stop) {
+  const bags = stop.doorBags || [];
+  const ready = bags.every((b) => b.ready);
+
+  return `
+  <div style="${CARD}">
+    ${dropTask(
+      `Prep the bags for ${stop.order ? `Order #${escapeHtml(stop.order.order_number)}` : 'this order'}`,
+      'Open each van clip to take the laundromat stickers off, take our bag tag off, and take the clip off.'
+    )}
+
+    <div style="display:grid;gap:10px;margin:0 0 18px;">
+      ${bags
+        .map(
+          (b) => `
+      <a class="clip-toggle${b.ready ? ' is-on' : ''}" style="margin:0;text-decoration:none;"
+         href="/ops/run/door/${escapeHtml(b.id)}">
+        <span class="clip-number">${
+          b.clip == null ? `Bag ${escapeHtml(b.seq)}` : `Van Clip #${escapeHtml(b.clip)}`
+        }</span>
+        <span class="clip-state">${escapeHtml(b.code)}-${escapeHtml(b.seq)} &middot; ${
+            b.ready ? 'Prepped: true' : 'Prepped: false'
+          }</span>
+      </a>`
+        )
+        .join('')}
+    </div>
+
+    <form method="post" action="/ops/run/door-done" style="margin:0;">
+      <input type="hidden" name="order_id" value="${escapeHtml(stop.order ? stop.order.id : '')}">
+      <button type="submit" class="btn btn-primary btn-lg btn-full"
+              ${ready ? '' : 'disabled style="opacity:0.35;"'}>
+        Everything is prepped and ready for drop off
+      </button>
+    </form>
+
+    <p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
+      ${escapeHtml(stop.address || '')}
+    </p>
+  </div>`;
+}
+
+// One bag at the door. Three things come off it, in the order they physically
+// can: their ticket, our tag, then the clip that was holding it in the van.
+function doorBagStep(label) {
+  if (!label.stickers_off_at) return 'stickers';
+  if (!label.tag_off_at) return 'tag';
+  if (!label.unclipped_at) return 'clip';
+  return 'done';
+}
+
+function doorBagBody({ label, problem = null }) {
+  const step = doorBagStep(label);
+  const name = `${label.code}-${label.sticker_seq}`;
+
+  const head = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+      <h1 style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;margin:0;">
+        ${label.clip_number == null ? escapeHtml(name) : `Van Clip #${escapeHtml(label.clip_number)}`}
+      </h1>
+      <a href="/ops/run" style="font-size:15px;font-weight:600;">Back to the list</a>
+    </div>
+    ${
+      problem
+        ? `<div style="margin:0 0 18px;padding:14px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+             ${escapeHtml(problem)}
+           </div>`
+        : ''
+    }`;
+
+  const switchCard = (task, action, offText, onText, buttonLabel) => `
+    <div style="${CARD}">
+      ${dropTask(task)}
+      <form method="post" action="/ops/run/door/${label.id}/${action}" class="clip-form" style="margin:0;">
+        <label class="clip-toggle" style="margin:0 0 18px;">
+          <input type="checkbox" name="done" required>
+          <span class="clip-number">${escapeHtml(name)}</span>
+          <span class="clip-state">
+            <span class="clip-state-off">${escapeHtml(offText)}</span>
+            <span class="clip-state-on">${escapeHtml(onText)}</span>
+          </span>
+        </label>
+        <button type="submit" class="btn btn-primary btn-lg btn-full">${escapeHtml(buttonLabel)}</button>
+      </form>
+    </div>`;
+
+  if (step === 'stickers') {
+    return `${head}${switchCard(
+      `Take the laundromat's stickers off bag ${name}`,
+      'stickers',
+      'Their stickers: on',
+      'Their stickers: off',
+      'Their stickers are off'
+    )}`;
+  }
+
+  if (step === 'tag') {
+    return `${head}${switchCard(
+      `Take our bag tag off bag ${name}`,
+      'tag',
+      'Our tag: on',
+      'Our tag: off',
+      'Our tag is off'
+    )}`;
+  }
+
+  return `${head}${switchCard(
+    `Take Van Clip #${label.clip_number} off bag ${name}`,
+    'clip',
+    'Van clip: on',
+    'Van clip: off',
+    `Van Clip #${label.clip_number} is off`
+  )}`;
+}
+
 // --- ONE BAG, ON ITS OWN SCREEN ---------------------------------------------
 //
 // Neil's flow for the way back out of a laundromat: the list card sends him
@@ -1513,4 +1649,4 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
     ${scannerScript()}`;
 }
 
-module.exports = { runBody, returnBagBody };
+module.exports = { runBody, returnBagBody, doorBagBody };
