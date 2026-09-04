@@ -534,28 +534,21 @@ function stopDone(stop) {
     return (stop.orders || []).every((o) => o.status === 'AT_PARTNER');
   }
   if (stop.kind === 'pickup_partner') {
-    // Collecting finished bags back off a laundromat IS the load-out pass, and
-    // that screen already exists and already does it properly - scan every bag
-    // out, build the run, load in reverse. Rebuilding a worse version of it
-    // here would be two ways to do one job.
-    // EVERY BAG THEY PACKED, IN THE VAN. Not the order's own loaded_at, which
-    // belongs to the pickup leg - it was already set from the doorstep, so this
-    // stop counted itself finished the moment it appeared and the run skipped
-    // the weigh, the check and the clips entirely. That is what Neil walked
-    // into: bags collected, next card a customer's door.
-    // HE SAYS WHEN HE IS FINISHED HERE, not the bags. Loading the last one used
-    // to end the stop by itself, so "All the bags are on the van" was never
-    // reachable - the same fault the collecting had, one card further on.
+    // A STOP IS FINISHED WHEN THE DRIVER SAYS SO. Not when the last bag is
+    // ticked, not when the last one is loaded - those are things he does AT the
+    // stop, and each one used to end it early and take the steps after it with
+    // him. "All the bags are on the van" is what moves the order out for
+    // delivery, so the order's own status is the honest test.
     //
-    // That button is what moves the order out for delivery, so the order's own
-    // status is the honest test: it has left this laundromat or it has not.
-    const packed = (stop.finishedBags || []).filter((b) => b.finished_at);
-    if (!packed.length) return (stop.orders || []).every((o) => o.loaded_at);
-
+    // No packed bags means he is waiting on the laundromat, which is not done
+    // either. That case used to fall back to the order's loaded_at - a stamp
+    // from the PICKUP leg, set hours earlier at a doorstep - so a stop could
+    // report itself finished using a fact about a different leg entirely.
     return (stop.orders || []).every((o) =>
       ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(o.status)
     );
   }
+
   return false;
 }
 
