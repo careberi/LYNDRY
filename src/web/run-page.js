@@ -1440,7 +1440,7 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
         // NO DETAIL LINE. Neil deleted it: the task says scan the bag and the
         // only control on the card is a camera button. There is nothing left to
         // explain that the screen is not already showing.
-        dropTask(`Scan bag ${name}`)
+        dropTask(`Scan the QR code on bag ${name}`)
       }
       ${scanField({
         action: `/ops/run/bag/${label.id}/scan`,
