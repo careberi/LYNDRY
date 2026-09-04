@@ -353,12 +353,14 @@ function clipSwitch(name, value, label, offText, onText) {
     </label>`;
 }
 
+// TASK: and DETAIL:, both labelled, in the same shape as the rest of this
+// screen. Neil wrote the card out that way, and a paragraph hanging under a
+// labelled line reads as an afterthought rather than half of a pair.
 function dropTask(task, detail) {
   return `
     ${stopLine('Task', escapeHtml(task), 'stop-line-plain')}
-    <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      ${escapeHtml(detail)}
-    </p>`;
+    ${stopLine('Detail', escapeHtml(detail), 'stop-line-plain')}
+    <div style="height:8px;"></div>`;
 }
 
 function dropCards(stop) {
@@ -374,8 +376,8 @@ function dropCards(stop) {
     <form method="post" action="/ops/run/unloaded" class="clip-form" style="margin:0;">
       ${orderInputs}
       ${dropTask(
-        `Collect bags for ${where}`,
-        'Collect the bags below and confirm each one by its van clip.'
+        `Collect bags in the van for drop off at ${where}`,
+        'Collect the bags below and confirm each one by its Van Clip.'
       )}
       ${bags
         .map((b) => clipSwitch('clip', b.clip, `Van Clip #${b.clip}`, 'Collected: false', 'Collected: true'))
@@ -392,7 +394,7 @@ function dropCards(stop) {
     return `
     ${dropTask(
       `Drop off bags at ${where}`,
-      'Bring each bag to the counter. Take its van clip off as you hand the bag to the attendant.'
+      'Bring each bag to the counter. Remove its Van Clip as you hand the bag to the attendant.'
     )}
     ${bags
       .map(
@@ -417,10 +419,10 @@ function dropCards(stop) {
     <form method="post" action="/ops/run/clips-back" class="clip-form" style="margin:0;">
       ${orderInputs}
       ${dropTask(
-        'Return van clips to the van',
+        'Return Van Clips to the van',
         clips.length === 1
-          ? 'Confirm the van clip from this drop-off is back in the van.'
-          : `Confirm that all ${clips.length} van clips from this drop-off are back in the van.`
+          ? 'Confirm the Van Clip from this drop-off is back in the van.'
+          : `Confirm that all ${clips.length} Van Clips from this drop-off are back in the van.`
       )}
       ${clips
         .map((n) => clipSwitch('clip', n, `Van Clip #${n}`, 'In the van: false', 'In the van: true'))
@@ -790,6 +792,19 @@ function partnerCard(run) {
 
   return `
   <div style="${CARD}">
+    ${
+      // THE DROP CARD HAS NO HEADER. Neil deleted all four in turn - the
+      // eyebrow, the laundromat's name, the bag count and the address - and the
+      // reason is the same for each: he is standing at that counter with the
+      // bags in his arms. The card is what he does next and nothing else, which
+      // is what the TASK and DETAIL lines say. The address moves to the foot of
+      // the card, where a customer's address already sits on a doorstep card.
+      //
+      // The collect-from-laundromat card keeps the lot: it is the one where he
+      // still needs to know whose counter this is and how much to expect.
+      dropping
+        ? ''
+        : `
     <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(HEADLINE[stop.kind])}</p>
     <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 8px;">
       ${escapeHtml(stop.name || 'The laundromat')}
@@ -817,7 +832,8 @@ function partnerCard(run) {
 
     <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 16px;">
       ${escapeHtml(stop.address || '')}
-    </p>
+    </p>`
+    }
 
     ${
       // TICK EACH BAG OFF AS IT COMES INTO YOUR HANDS.
@@ -909,7 +925,17 @@ function partnerCard(run) {
 
     ${
       dropping
-        ? dropCards(stop)
+        ? `${dropCards(stop)}
+           <!-- WHERE HE IS, at the foot of the card - the same place and the
+                same weight a customer's address sits at on a doorstep card. He
+                drove here, so it is a reference rather than an instruction. -->
+           ${
+             stop.address
+               ? `<p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
+                    ${escapeHtml(stop.address)}
+                  </p>`
+               : ''
+           }`
         : (() => {
             // WEIGH, CHECK, THEN CLIP - and this is the screen where the first
             // two happen. An order whose return leg has not been recorded has
