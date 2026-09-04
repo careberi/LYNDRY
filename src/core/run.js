@@ -90,8 +90,11 @@ async function tasksForCollect(order) {
       // A STATEMENT, NOT A QUESTION. The card reads "TASK: ... for order #1940",
       // and a question mark landing in the middle of that made a sentence out
       // of two halves that do not join. Neil's wording.
+      // The ticked row names the order it counted for - Neil's wording. This
+      // title only ever shows in the list: the moment the count is known the
+      // step is done, so the card has already moved on to the first bag.
       title: known
-        ? `${bagCount} bag${bagCount === 1 ? '' : 's'}`
+        ? `${bagCount} bag${bagCount === 1 ? '' : 's'} with order #${order.order_number}`
         : 'Enter the number of bags collected',
       // No supporting line. Neil deleted it off the screen: the task says to
       // enter the number of bags collected, and how the screen behaves next is
