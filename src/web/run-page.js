@@ -1525,8 +1525,8 @@ function doorBagBody({ label, problem = null }) {
   return `${head}${switchCard(
     `Take Van Clip #${label.clip_number} off bag ${name}`,
     'clip',
-    'Van clip: on',
-    'Van clip: off',
+    'Take the van clip off',
+    'Van clip is off',
     `Van Clip #${label.clip_number} is off`
   )}`;
 }
