@@ -137,7 +137,10 @@ async function tasksForCollect(order) {
       label,
       title:
         label && label.weight_lb != null
-          ? `Bag #${position} - ${label.weight_lb} lb`
+          // THE TAG, NOT THE POSITION. Neil: "6ZP4DN - 30 lb". Once a bag has
+          // been weighed the useful record of it is the sticker it carries -
+          // that is what a laundromat reads back and what the report joins on.
+          ? `${label.code} - ${label.weight_lb} lb`
           : `Weigh Bag #${position}`,
       // The "with Tag ID 6ZP4DN." half of the line is built in run-page.js,
       // because the id is a link to that sticker's page and a link is markup.
@@ -166,11 +169,24 @@ async function tasksForCollect(order) {
       key: `clip_${position}`,
       position,
       label,
+      // ON THE TAG, NOT ON "BAG #1". Neil's sentence: "Put Van Clip #1 on Tag ID
+      // 6ZP4DN." The tag is the bag's identity - it is stuck to it - where the
+      // bag number is a position in a count that exists only on this screen.
+      // With two bags in his arms the sticker is the thing he can actually
+      // check against.
+      //
+      // The code is in the title rather than added by the page, so the
+      // checklist entry underneath is a whole sentence too; run-page.js turns
+      // that code into the link.
       title:
         label && label.clipped_at
-          ? `Van Clip #${label.clip_number} on Bag #${position}`
+          // The finished entry is a record, so it is shorter than the
+          // instruction: "Van Clip #1 on 6ZP4DN". The words "Tag ID" are there
+          // to tell him what to look for; once it is done, the code alone says
+          // which bag it went on.
+          ? `Van Clip #${label.clip_number} on ${label.code}`
           : label && label.clip_number != null
-            ? `Put Van Clip #${label.clip_number} on Bag #${position}`
+            ? `Put Van Clip #${label.clip_number} on Tag ID ${label.code}`
             : `Clip Bag #${position}`,
       // The task line says which clip on which bag; the number is on screen
       // at 40px. There is nothing left for a line underneath to add.

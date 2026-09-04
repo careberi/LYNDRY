@@ -64,9 +64,20 @@ const HEADLINE = {
 // are the customer's name, their thread and the money, none of which a driver
 // is shown. Sales never has orders.drive, so on this screen that is Admin and
 // nobody else.
-function taskLine(text, stop, user, lead = '', tail = '', mid = '', hideOrder = false) {
+function taskLine(text, stop, user, lead = '', tail = '', mid = '', hideOrder = false, linkCode = '') {
   const quiet = 'font-weight:400;color:var(--ink-500);';
   const order = hideOrder ? null : stop.order || null;
+
+  // A tag code standing inside the sentence becomes the link to its sticker
+  // page. Done after escaping, which is safe: a code is six characters of
+  // base32 and can never be anything HTML cares about.
+  let head = escapeHtml(text);
+  if (linkCode && head.includes(linkCode)) {
+    head = head.replace(
+      linkCode,
+      `<a href="/ops/labels/${encodeURIComponent(linkCode)}" style="color:inherit;">${escapeHtml(linkCode)}</a>`
+    );
+  }
 
   if (!order) {
     // A laundromat visit is several orders at one door. Naming one of them
@@ -74,8 +85,8 @@ function taskLine(text, stop, user, lead = '', tail = '', mid = '', hideOrder = 
     // Nothing to say when the caller asked for the order to be left out.
     const many = hideOrder ? 0 : (stop.orders || []).length;
     return many
-      ? `${escapeHtml(text)}${mid} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>${tail}`
-      : `${escapeHtml(text)}${mid}${tail}`;
+      ? `${head}${mid} <span style="${quiet}">${many} order${many === 1 ? '' : 's'}</span>${tail}`
+      : `${head}${mid}${tail}`;
   }
 
   const num = `#${escapeHtml(order.order_number)}`;
@@ -92,7 +103,7 @@ function taskLine(text, stop, user, lead = '', tail = '', mid = '', hideOrder = 
   // order reference sits in the middle of it, so a tail is the only way to get
   // it there without the number landing at the end of a clause it does not
   // belong to.
-  return `${escapeHtml(text)}${mid} <span style="${quiet}">${
+  return `${head}${mid} <span style="${quiet}">${
     lead ? `${escapeHtml(lead)} ` : ''
   }${inner}</span>${tail}`;
 }
@@ -259,7 +270,15 @@ function taskParts(task) {
   // otherwise leave a bare "Weigh Bag #2." with nothing saying whose it is.
   const hideOrder = Boolean(code);
 
-  return { mid, tail, hideOrder };
+  // A TITLE THAT ALREADY SAYS THE TAG DOES NOT WANT IT AGAIN IN BRACKETS. The
+  // clip step reads "Put Van Clip #1 on Tag ID 6ZP4DN", and a weighed bag reads
+  // "6ZP4DN - 30 lb" - adding the aside gave "6ZP4DN - 30 lb (Tag ID 6ZP4DN)".
+  // So the code is linked where it already stands instead.
+  if (code && String(task.title || '').includes(code)) {
+    return { mid: '', tail: '.', hideOrder: true, linkCode: code };
+  }
+
+  return { mid, tail, hideOrder, linkCode: '' };
 }
 
 // The one thing to do, now he is there.
@@ -293,10 +312,10 @@ function taskCard(run, user = null) {
     ${stopLine(
       'Task',
       (() => {
-        const { mid, tail, hideOrder } = taskParts(task);
+        const { mid, tail, hideOrder, linkCode } = taskParts(task);
         return taskLine(
           task ? task.title : 'All done here',
-          stop, user, 'for Order', tail, mid, hideOrder
+          stop, user, 'for Order', tail, mid, hideOrder, linkCode
         );
       })(),
       'stop-line-plain'
@@ -436,9 +455,13 @@ function taskControl(stop, task, order) {
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         ${
-          task.clip != null
-            ? `Van Clip #${escapeHtml(task.clip)} is on the van`
-            : `Bag #${escapeHtml(task.position)} is in the van`
+          // Named the way the task line names it. The switch above already says
+          // IN THE VAN: TRUE, so this confirms that rather than restating it.
+          task.clip != null && (task.label || {}).code
+            ? `Van Clip #${escapeHtml(task.clip)} on Tag ID ${escapeHtml(task.label.code)}.`
+            : task.clip != null
+              ? `Van Clip #${escapeHtml(task.clip)} is on the van`
+              : `Bag #${escapeHtml(task.position)} is in the van`
         }
       </button>
     </form>`;
