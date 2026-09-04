@@ -719,6 +719,27 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule } = {}
   // Saturday. The owner is exempt, exactly as he is from the closed sign and
   // from the county, because walking a real order through is how this gets
   // tested at all.
+  // WHAT THE EXEMPTION LET THROUGH, SAID OUT LOUD.
+  //
+  // Neil texted "pick up today at 2pm" from his own number to test the opening
+  // date and was told "I'd love to grab that for you today" - correct, because
+  // SUPPORT_PHONE bypasses it, and indistinguishable from the bug he was
+  // looking for. CLAUDE.md already says the exemption's ABSENCE is announced
+  // twice because it is otherwise invisible; its PRESENCE has exactly the same
+  // problem and cost an afternoon.
+  const waived = [];
+
+  if (owner) {
+    if (!(await settings.takingOrders())) waived.push('we are not taking orders');
+
+    const opensFor = await settings.opensOn();
+    if (opensFor && pickupDate < opensFor) {
+      waived.push(`a customer's earliest pickup is ${readableDate(opensFor)}`);
+    }
+
+    if (!inServiceArea(customer)) waived.push('that address is outside Bergen County');
+  }
+
   if (!owner) {
     const opens = await settings.opensOn();
 
@@ -778,7 +799,7 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule } = {}
     return { ok: false, reason: 'time_unavailable', window, say: cannotDoThatTime(window) };
   }
 
-  return { ok: true, window, pickupDate, pickupTime };
+  return { ok: true, window, pickupDate, pickupTime, waived };
 }
 
 async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes, fromSchedule } = {}) {
@@ -787,7 +808,7 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   const checked = await checkSlot(customer, { pickupDate, pickupTime, fromSchedule });
   if (!checked.ok) return checked;
 
-  const { window } = checked;
+  const { window, waived } = checked;
 
   const prefs = customer.preferences || {};
 
@@ -860,6 +881,10 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     order,
     rolled: window.date !== pickupDate,
     needsCard: billing.needsCardOnFile(customer),
+    // Empty unless somebody has deliberately set ALWAYS_BOOK_NUMBERS. It is
+    // kept because the day that list comes back, the silence comes back with
+    // it - and that is what made a working exemption look like a broken rule.
+    waived,
   };
 }
 

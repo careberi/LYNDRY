@@ -97,8 +97,21 @@ ${cannot}${good} Happy to answer anything about how it all works in the meantime
 }
 
 // Somebody we already know, who typed their number in again.
-function welcomeBackMessage(customer, { open = true } = {}) {
+function welcomeBackMessage(customer, { open = true, opensOn = null } = {}) {
   if (!open) return `Welcome back. We're not booking pickups yet, but we'll text you the moment we are.`;
+
+  // THE OPENING DATE BELONGS HERE TOO, AND IT WAS MISSED.
+  //
+  // welcomeMessage learned about it and this one did not. So somebody who put
+  // their number in twice was told "say when you'd like a pickup and I'll book
+  // it" one second after being told the first pickups are next Tuesday - the
+  // same system contradicting itself in consecutive texts. Every sentence that
+  // invites a booking has to know when a van can actually come.
+  if (opensOn) {
+    return booking.hasAddress(customer)
+      ? `Welcome back. First pickups ${booking.readableDate(opensOn)} - say the word and I'll book you in.`
+      : `Welcome back. First pickups ${booking.readableDate(opensOn)} - I just need your name and address.`;
+  }
 
   return booking.hasAddress(customer)
     ? `Welcome back. Say when you'd like a pickup and I'll book it.`
@@ -151,7 +164,12 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
       // greeted with a closed sign.
       const open =
         booking.alwaysAllowed(existing) || (await settings.takingOrders());
-      await sendAndLog(phone, welcomeBackMessage(existing, { open }), existing.id);
+
+      // Exempt numbers are not held to the opening date either, so they are not
+      // told about one - the same rule as the closed sign directly above.
+      const opensOn = booking.alwaysAllowed(existing) ? null : await settings.opensOn();
+
+      await sendAndLog(phone, welcomeBackMessage(existing, { open, opensOn }), existing.id);
     }
     return { ok: true, customer: existing, created: false };
   }
@@ -218,4 +236,4 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   return { ok: true, customer, created: true };
 }
 
-module.exports = { startConversation, welcomeMessage, CONSENT_SOURCES };
+module.exports = { startConversation, welcomeMessage, welcomeBackMessage, CONSENT_SOURCES };

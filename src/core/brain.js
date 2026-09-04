@@ -578,6 +578,7 @@ The moment a customer names a day, or a day and a time, call check_slot with it 
 It comes back with either bookable true and the exact window, or bookable false with the reason and often the earliest day we could do instead.
 You may only name a date, a day or a window that check_slot has just approved. If it says false, tell them what it gave you and offer the earliest day it named. NEVER work out for yourself whether a day is possible, and never confirm one on your own arithmetic - a customer was told "that's tomorrow's 8 to 10 window" four days before the van started running, because the answer was guessed instead of checked.
 This is a check, not a conversation: do not tell the customer you are checking, do not say "let me look", just call it and answer.
+AN APPROVAL IS NOT A PROPOSAL. When they say yes to a recap - "good", "yep", "sounds right", "go ahead" - the day was checked when you recapped it and nothing has changed. Call create_order. Do NOT call check_slot again: they are agreeing to something you already verified, and checking it a second time is how a customer said "good" and got told "let me check that and come straight back to you" with nothing booked.
 
 NEVER READ A REQUESTED TIME BACK TO THEM. They say "7am", you say the window - and if 7am has gone, the window is the next one still open, not the one they asked for. Recapping "today at 7am" at lunchtime is a promise nobody can keep and it happened to a real customer. The line above tells you exactly which windows are left, so there is nothing to work out and no excuse for naming one that has passed.
 NEVER ARGUE ABOUT TIME. Do not offer alternatives, do not ask them to pick something else, and do not ask them to confirm which day they meant. A short "7am's gone, so..." on the way to naming the window they DID get is fine and honest; what is not fine is stopping to make them choose. Whatever they say, the booking code works out the right window, rolling to the next one or to tomorrow on its own. Your job is to book it and say which window they got.
@@ -927,6 +928,26 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
 // exists because one message can carry two jobs — "good to go" at a recap
 // both saves a correction and books the pickup — and a single action per
 // message meant the model picked one and silently dropped the other.
+// DOES THIS MESSAGE NAME A DAY OR A TIME?
+//
+// Deliberately generous. A false positive costs one extra check that writes
+// nothing; a false negative is the model naming a window nobody verified, which
+// is the failure this exists to stop. "did you get my laundry today" is checked
+// too, and the answer simply ignored.
+function namesADayOrTime(text) {
+  const t = String(text || '').toLowerCase();
+
+  return (
+    /\b(today|tonight|tomorrow|tmrw|weekend|asap|now)\b/.test(t) ||
+    /\b(mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat|sun)(day|s)?\b/.test(t) ||
+    /\b\d{1,2}\s*(am|pm)\b/.test(t) ||
+    /\b\d{1,2}:\d{2}\b/.test(t) ||
+    /\b(morning|afternoon|evening|noon|midday)\b/.test(t) ||
+    /\b\d{1,2}(st|nd|rd|th)\b/.test(t) ||
+    /\b\d{4}-\d{2}-\d{2}\b/.test(t)
+  );
+}
+
 async function decide({ customer, order, recentMessages, recentOrders, openIssue, message, followUp }) {
   // New Jersey's date, not the server's. After 8pm ET the two disagree, and
   // telling Claude it is already tomorrow makes "pickup today" impossible.
@@ -994,8 +1015,39 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
 
     // Exactly one action per message. Without this, Claude could book an order
     // and cancel it in the same breath.
-    tool_choice: { type: 'auto', disable_parallel_tool_use: true },
-    tools: TOOLS,
+    //
+    // AND WHEN THEY NAME A DAY OR A TIME, THE CHECK IS FORCED.
+    //
+    // Asking the prompt to always call check_slot first was not enough, twice.
+    // Told "pick up today at 2pm" it answered without calling anything and said
+    // 2pm was the 12 to 2 window; the code says 2 to 4, because the bands are
+    // end-exclusive and a time that starts one belongs to that one. Before that
+    // it offered tomorrow, four days before the van runs.
+    //
+    // A forced tool_choice is not a request. The model cannot answer this turn
+    // without calling check_slot, so the day, the window and whether it is
+    // possible all come back from booking.checkSlot() - and the reply is written
+    // on the follow-up pass out of those facts.
+    //
+    // Never on a follow-up: that pass exists to turn the answer into a sentence,
+    // and forcing the tool there would loop.
+    tool_choice:
+      !followUp && namesADayOrTime(message)
+        ? { type: 'tool', name: 'check_slot', disable_parallel_tool_use: true }
+        : { type: 'auto', disable_parallel_tool_use: true },
+    // THE FOLLOW-UP AFTER A LOOKUP CANNOT SEE THE LOOKUP.
+    //
+    // A customer approved a recap with "good", the model called check_slot, and
+    // on the follow-up it called check_slot AGAIN. The router refuses to re-run
+    // a lookup, found no sentence, and sent a holding line - so the yes was
+    // lost and nothing was booked. He asked "what are you checking?" and there
+    // was no answer, because nothing was.
+    //
+    // Taking the tool off the table for that one call makes the loop impossible
+    // rather than discouraged. The model must either do something real or write
+    // the reply, which are the only two useful moves at that point.
+    tools:
+      followUp && followUp.lookup ? TOOLS.filter((t) => t.name !== 'check_slot') : TOOLS,
 
     messages: [{ role: 'user', content: message }],
   });

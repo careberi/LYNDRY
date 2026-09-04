@@ -1100,21 +1100,27 @@ that matters: the prompt asks, the code refuses. Same split as the service
 area, because a model asked nicely not to book will eventually book. It shuts
 the text thread, the website form and the standing-order job together.
 
-**`ALWAYS_BOOK_NUMBERS` is exempt from the switch, and from the county.** Neil
-has to be able to put an order through while the service is shut and from an
-address outside Bergen — that is how the thing gets tested end to end and how he
-takes a favour for somebody he knows. Blank falls back to `SUPPORT_PHONE`.
+**THERE IS NO BYPASS NUMBER ANY MORE. Neil's call, and it cost an afternoon to
+reach.** `ALWAYS_BOOK_NUMBERS` used to fall back to `SUPPORT_PHONE`, so his own
+phone was silently exempt from the closed sign, the opening date and the county.
 
-It waives exactly two rules, and both are decisions about *who we choose to
-serve* rather than facts a booking needs: the closed sign and the boundary. An
-address, wash preferences, a card and a real date are still required of him.
-**The AI is told the same thing**, so it cannot refuse in the thread something
-the code behind it would allow — the same sentence-versus-code gap that once
-read a passed pickup window straight back to a customer.
+He set the first pickup date to 8 September, texted "pick up today at 2pm" from
+that phone to check it, and was told "I'd love to grab that for you today". The
+reply was correct. It was also indistinguishable from the bug he was hunting,
+and he had already been shown one genuine version of that bug the same morning.
 
-**Its absence is completely silent, so it is said out loud twice** — a startup
-warning, and a line on `/ops/settings` where the closing actually happens. An
-exemption nobody can see is one you discover by trying, on the day it matters.
+**A bypass that announces itself nowhere looks exactly like a broken rule.** The
+fallback is gone, so the list is empty unless somebody sets
+`ALWAYS_BOOK_NUMBERS` deliberately, and the startup warning is inverted: it now
+fires when an exemption EXISTS, because that is the surprising state.
+
+**If one is ever set again, `checkSlot()` returns `waived`** — the rules that
+were skipped, in words — so the exemption can say so instead of being invisible.
+Nothing uses it while the list is empty; it is there because the day the list
+comes back, the silence comes back with it.
+
+The cost of having none: Neil cannot book while the service is shut, or outside
+Bergen. Turning orders on is now the way to test.
 
 **`app_settings.opens_on` IS THE FIRST DAY A VAN COMES, AND IT IS NOT THE CLOSED
 SIGN.** Closed means nobody can book at all. This means anybody can book and the

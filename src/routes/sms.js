@@ -338,11 +338,19 @@ async function answerWithBrain(customer, text, from) {
         },
       });
 
-      if (
-        followOn.type === 'tool' &&
-        !SETUP_ACTIONS.includes(followOn.name) &&
-        !LOOKUP_ACTIONS.includes(followOn.name)
-      ) {
+      // AFTER A LOOKUP, A SETUP ACTION IS A PERFECTLY GOOD NEXT STEP.
+      //
+      // SETUP_ACTIONS are excluded after a setup action, to stop setup looping
+      // into setup. After a LOOKUP there is no such loop to worry about, and
+      // excluding them cost a real one: told "cold and no softner" the model
+      // checked the slot and then reached for update_profile, which this refused
+      // to run and then treated as "no reply" - so the preference was dropped
+      // and the customer was told something had gone wrong.
+      const isSetup = SETUP_ACTIONS.includes(followOn.name);
+      const isLookup = LOOKUP_ACTIONS.includes(followOn.name);
+      const setupIsFine = LOOKUP_ACTIONS.includes(decision.name);
+
+      if (followOn.type === 'tool' && !isLookup && (!isSetup || setupIsFine)) {
         console.log(`ACTION+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
         message = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
       } else if (LOOKUP_ACTIONS.includes(decision.name)) {
@@ -367,7 +375,21 @@ async function answerWithBrain(customer, text, from) {
   // refusal that has one - and anything else gets an honest holding line rather
   // than silence on a customer's phone.
   if (lookupFacts && (typeof message !== 'string' || !message.trim())) {
-    message = lookupFacts.say || 'Let me check that and come straight back to you.';
+    // NEVER PROMISE TO COME BACK. The old line here was "Let me check that and
+    // come straight back to you", which is a promise nothing in this system
+    // keeps - a customer said "good" to a recap, got that, and asked "what are
+    // you checking?". Nothing was. The yes was lost and no order existed.
+    //
+    // A refusal has its own wording from the booking code. Anything else is a
+    // failure on our side, so it goes to a person rather than being papered
+    // over with a sentence that sounds like progress.
+    message =
+      lookupFacts.say ||
+      `Sorry - something went wrong my end. Text ${site.opsPhoneDisplay} or try that again and I'll sort it.`;
+
+    if (!lookupFacts.say) {
+      console.error(`Lookup produced no reply for ${from} - the customer was told we failed.`);
+    }
   }
 
   // SAYING THE SAME THING TWICE MEANS WE ARE STUCK.

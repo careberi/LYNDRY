@@ -84,10 +84,18 @@ const config = Object.freeze({
   // waives are the closed sign and the county boundary, which are business
   // rules about who we choose to serve rather than facts a booking needs.
   //
-  // Comma separated, and blank falls back to SUPPORT_PHONE, so setting the
-  // support number is usually all there is to do.
+  // THERE IS NO BYPASS UNLESS ONE IS ASKED FOR BY NAME. Neil's call, after an
+  // afternoon lost to it: this used to fall back to SUPPORT_PHONE, so his own
+  // phone was silently exempt from the closed sign, the opening date and the
+  // county. He tested the new opening date from it, was told "I'd love to grab
+  // that for you today", and could not tell a working exemption from a broken
+  // rule - because a bypass that announces itself nowhere looks exactly like a
+  // bug.
+  //
+  // Comma separated, and empty is now the ordinary state. Setting
+  // ALWAYS_BOOK_NUMBERS deliberately is the only way to get one back.
   alwaysBookNumbers: Object.freeze(
-    String(process.env.ALWAYS_BOOK_NUMBERS || process.env.SUPPORT_PHONE || '')
+    String(process.env.ALWAYS_BOOK_NUMBERS || '')
       .split(',')
       .map((n) => n.replace(/\D/g, ''))
       .filter(Boolean)
@@ -239,13 +247,16 @@ const UPCOMING_ENV_VARS = [
 // person who is supposed to be exempt from the closed sign is quietly not.
 // He would only find out by trying to book on a day the service is shut, which
 // is exactly the day it matters.
+// NOW THE OTHER WAY ROUND. No exemption is the ordinary state and needs no
+// warning; an exemption that EXISTS is the surprising thing, because it books
+// on days nobody else can and says nothing about it in the thread.
 function warnIfNobodyCanAlwaysBook() {
-  if (config.alwaysBookNumbers.length) return;
+  if (!config.alwaysBookNumbers.length) return;
 
   console.warn('');
-  console.warn('  No number is exempt from the closed sign.');
-  console.warn('    Set ALWAYS_BOOK_NUMBERS (or SUPPORT_PHONE) so the owner can');
-  console.warn('    still put an order through while the service is paused.');
+  console.warn(`  ${config.alwaysBookNumbers.length} number(s) can book past the closed sign,`);
+  console.warn('    the opening date and the service area. Set by ALWAYS_BOOK_NUMBERS.');
+  console.warn('    Testing from one of them will not show you the ordinary rules.');
   console.warn('');
 }
 
