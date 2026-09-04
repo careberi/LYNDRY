@@ -245,7 +245,7 @@ function legForStatus(status) {
 //
 // Returns a reason rather than throwing, because every caller is a person
 // standing next to a bag who needs a sentence, not a stack trace.
-async function bind(code, order, opsUserId, { leg = 'PICKUP' } = {}) {
+async function bind(code, order, opsUserId, { leg = 'PICKUP', position: wanted = null } = {}) {
   const label = await findByCode(code);
   if (!label) return { ok: false, reason: 'unknown', detail: 'No label with that code.' };
 
@@ -291,7 +291,35 @@ async function bind(code, order, opsUserId, { leg = 'PICKUP' } = {}) {
     };
   }
 
-  const position = existing.length + 1;
+  // THE POSITION THE DRIVER SAID, WHEN HE SAID ONE.
+  //
+  // The run's pickup list lets him open any bag - he taps "Bag #2" and tags the
+  // bag in his hand. Taking the next free slot instead would file that tag as
+  // bag #1, drop him back on a bag #2 that still says "put a tag on it", and he
+  // would tag the same bag twice. Only the list knows which one he meant, so
+  // only the list passes it.
+  //
+  // Without one it is the next free slot, which is right for the order page and
+  // the linear card, where the bags are worked through in order.
+  let position = existing.length + 1;
+
+  if (wanted != null) {
+    const at = Math.round(Number(wanted));
+
+    if (!Number.isFinite(at) || at < 1 || (limit != null && at > Number(limit))) {
+      return { ok: false, reason: 'no_such_bag', detail: 'That is not one of the bags on this order.' };
+    }
+
+    if (existing.some((l) => Number(l.position) === at)) {
+      return {
+        ok: false,
+        reason: 'taken',
+        detail: `Bag #${at} already has a tag on it.`,
+      };
+    }
+
+    position = at;
+  }
 
   const { data, error } = await db
     .from('bag_labels')

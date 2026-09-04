@@ -1229,6 +1229,48 @@ or `maps://` scheme. Those open a native app directly and do nothing at all on a
 phone without that app, and a dead button on a doorstep is worse than one extra
 tap.
 
+**A STOP WITH SEVERAL BAGS IS A LIST YOU TAP INTO, and there are three of
+them** — the doorstep pickup, collecting off a laundromat, and the doorstep
+delivery. All three have the same shape, because it is the same problem: a
+button per bag, tapping one opens that bag on its own screen, finishing it drops
+you back on the list, and a button at the foot ends the stop.
+
+It replaced a single line of tasks where bag 2 did not exist on screen until bag
+1 was finished. That is fine for a driver working straight through and wrong for
+one who puts a bag down, deals with another and comes back — and it gave him no
+way to see how many were left without counting taps.
+
+**On the pickup leg a bag is addressed by its POSITION, not by a row id.**
+Nothing exists in `bag_labels` until a tag is bound, so bag #2 of three has no id
+to link to until it has a sticker on it — and being able to open bag #2 before
+touching it is the whole point of the list. `bags.bind()` therefore takes an
+optional position: **without one it fills the next free slot**, which is right
+for the order page, and **with one it uses the slot the driver tapped**. Taking
+the next free slot regardless would file the tag he just stuck on bag #3 as bag
+#1, drop him back on a bag #3 that still says "put a tag on it", and he would
+tag the same bag twice.
+
+**The bag pages own no steps.** Their controls post to the same routes the order
+page posts to, through the same `taskControl()`; `?from=` is the only difference
+and it decides where he lands. `src/core/run.js` works out what is next and
+nothing else. A second implementation of "weigh a bag" is how the two drift.
+
+**THE LAST BAG GOING IN DOES NOT END THE STOP — the driver does.** Every one of
+these lists had the same bug and it was found twice: the final tick stamped the
+order and cleared his arrival, so the card changed under him and the button at
+the foot was never reachable. Neil, both times: he has to press that button to
+move on. The ticks say which bags; the button says he is finished there.
+
+**`doneToday()` must not call a doorstep finished because a bag has a weight.**
+`orders.weight_lb` is the SUM of the bag weights and is recomputed as each one
+goes on the scale, so on a three-bag order it stops being null after the first —
+and the same door then appeared twice in one run, once as done and once as the
+live stop, with the progress bar counting a door he had not left. `stopDone()`
+already carried a note about exactly this; the copy in `doneToday()` was missed.
+The test is `van_confirmed_at`, **or a status that is plainly past the door** —
+orders collected before that button existed have an empty column, and requiring
+it alone made a finished doorstep vanish off the run.
+
 **Collecting finished bags back off a laundromat is the load-out pass**, and the
 run links to `/ops/loadout` rather than reimplementing it. Two ways to do one job
 is how they drift.

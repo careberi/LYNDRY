@@ -562,8 +562,12 @@ function taskCard(run, user = null) {
 // Every one of these posts to the SAME route the order page posts to. Nothing
 // here is a second way to change an order - this file decides what to show, and
 // src/core/fulfilment.js decides what happens.
-function taskControl(stop, task, order) {
-  const back = '?from=run';
+// WHERE THE CONTROL COMES BACK TO is an argument, not a constant. Every one of
+// these posts to the same route the order page posts to, and `from` is the only
+// thing that decides where the driver lands afterwards - the run for the linear
+// card, one bag's own screen for the pickup list. Hardcoding it here meant a
+// bag page could only ever bounce him back to the top of the run.
+function taskControl(stop, task, order, back = '?from=run') {
 
   if (task.key === 'bag_count') {
     return `
@@ -1117,7 +1121,12 @@ function runBody({ run, notice = null, problem = null, user = null }) {
           ? partnerCard(run)
           : run.current.kind === 'deliver' && run.current.doorStage === 'bags'
             ? doorList(run.current)
-            : taskCard(run, user)
+            : // AND AT THE START OF THE DAY, THE SAME. Once he has said how many
+              // bags there are, the card is that list until every one of them is
+              // in the van.
+              run.current.kind === 'collect' && run.current.pickupStage === 'bags'
+              ? pickupList(run.current)
+              : taskCard(run, user)
         : travelCard(run, user)
     }
   </div>
@@ -1658,4 +1667,120 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
     ${scannerScript()}`;
 }
 
-module.exports = { runBody, returnBagBody, doorBagBody };
+// --- THE BAGS AT A CUSTOMER'S DOOR, AS A LIST ------------------------------
+//
+// Neil's flow, and the third screen in this shape: how many bags, then a button
+// per bag, then one bag at a time on its own screen, then a button that says
+// the van is loaded.
+//
+// A BAG IS ADDRESSED BY ITS POSITION, not by a row id. Nothing exists in
+// bag_labels until a tag is bound, so bag #2 of three has no id to link to
+// until it has a sticker on it - and the whole point of the list is that he can
+// open bag #2 before he has touched it.
+function pickupList(stop) {
+  const bags = stop.pickupBags || [];
+  const number = stop.order ? stop.order.order_number : '';
+  const all = bags.length > 0 && bags.every((b) => b.aboard);
+
+  return `
+  <div style="${CARD}">
+    ${dropTask(
+      `Pick the bags up for Order #${escapeHtml(number)}`,
+      'Open each bag to put a bag tag on it, weigh it, take its van clip and put it in the van.'
+    )}
+
+    <div style="display:grid;gap:10px;margin:0 0 18px;">
+      ${bags
+        .map(
+          (b) => `
+      <a class="clip-toggle${b.aboard ? ' is-on' : ''}" style="margin:0;text-decoration:none;"
+         href="/ops/run/pickup/${escapeHtml(number)}/${escapeHtml(b.position)}">
+        <!-- BY ITS POSITION, WHICH IS THE ONLY NAME IT HAS ALL THE WAY THROUGH.
+             The tag arrives at step one and the clip at step three, so anything
+             else on the left would rename the row under him halfway down the
+             list. What it has picked up so far goes on the right. -->
+        <span class="clip-number">Bag #${escapeHtml(b.position)}</span>
+        <span class="clip-state">${
+          b.aboard
+            ? `In the van: true${b.clip == null ? '' : ` &middot; Van Clip #${escapeHtml(b.clip)}`}`
+            : `In the van: false${b.code == null ? '' : ` &middot; ${escapeHtml(b.code)}`}`
+        }</span>
+      </a>`
+        )
+        .join('')}
+    </div>
+
+    <!-- THE SAME in-van STEP THE LINEAR CARD ALWAYS POSTED TO. There is one
+         implementation of "the van is loaded", and it is the one that clears
+         his arrival and writes the event. -->
+    <form method="post" action="/ops/orders/${escapeHtml(number)}/in-van?from=run" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full"
+              ${all ? '' : 'disabled style="opacity:0.35;"'}>
+        All the bags are on the van
+      </button>
+    </form>
+
+    <p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
+      ${escapeHtml(stop.address || '')}
+    </p>
+  </div>`;
+}
+
+// One bag at the door, on its own screen. Four steps in the order they
+// physically can happen: a tag on it, onto the scale, a clip on it, into the
+// van.
+//
+// IT RENDERS THE SAME TASKS AND THE SAME CONTROLS AS THE LINEAR CARD, because
+// they come from tasksForCollect() and taskControl() rather than from a copy
+// made here. The only difference is where the form comes back to. A second
+// implementation of "weigh a bag" is how the two would drift the first time one
+// of them learned something the other did not.
+function pickupBagBody({ order, position, tasks, problem = null }) {
+  const mine = (tasks || []).filter((t) => t.position === position);
+  const next = mine.find((t) => !t.done) || null;
+  // THE LAST STEP GOES BACK TO THE LIST, the other three stay on the bag.
+  //
+  // Putting it in the van is what finishes this bag, so landing him back on a
+  // screen with nothing left to do on it would make him tap "back to the list"
+  // every single time. The three before it come back here, because he is still
+  // holding the bag.
+  const back =
+    next && next.key.startsWith('load_') ? '?from=run' : `?from=pickup&pos=${position}`;
+
+  const head = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+      <h1 style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;margin:0;">
+        Bag #${escapeHtml(position)}
+      </h1>
+      <a href="/ops/run" style="font-size:15px;font-weight:600;">Back to the list</a>
+    </div>
+    ${
+      problem
+        ? `<div style="margin:0 0 18px;padding:14px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+             ${escapeHtml(problem)}
+           </div>`
+        : ''
+    }`;
+
+  // Nothing left to do on this bag. It can be reached by tapping a finished bag
+  // in the list, which is a reasonable thing to do to check on one.
+  if (!next) {
+    return `${head}
+      <div style="${CARD}">
+        ${dropTask(`Bag #${position} is in the van`)}
+        <a class="btn btn-primary btn-lg btn-full" href="/ops/run">Back to the list</a>
+      </div>`;
+  }
+
+  const title = `${next.title}${next.titleTail ? ` ${next.titleTail}` : ''}`;
+
+  return `${head}
+    <div style="${CARD}">
+      ${dropTask(title)}
+      ${taskControl(null, next, order, back)}
+    </div>
+    ${scannerScript()}`;
+}
+
+module.exports = { runBody, returnBagBody, doorBagBody, pickupBagBody };

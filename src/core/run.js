@@ -618,7 +618,8 @@ async function doneToday(driverId, dateIso) {
     .from('orders')
     .select(
       'id, order_number, status, bag_count, weight_lb, collected_at, at_partner_at, ' +
-        'delivered_at, partner_id, customers(name, address_line1, address_line2, city, state, postal_code)'
+        'van_confirmed_at, delivered_at, partner_id, ' +
+        'customers(name, address_line1, address_line2, city, state, postal_code)'
     )
     .or(`collected_at.gte.${from},delivered_at.gte.${from}`);
 
@@ -632,7 +633,29 @@ async function doneToday(driverId, dateIso) {
   for (const order of data || []) {
     // The same order is two different stops in a day - the door to collect it,
     // the door again to deliver it - so it can legitimately appear twice.
-    if (order.collected_at >= from && order.weight_lb != null) {
+    // NOT `weight_lb != null` - THE SAME MISTAKE stopDone() ALREADY CARRIES A
+    // NOTE ABOUT, and this copy of it was missed.
+    //
+    // That column is the SUM of the bag weights, recomputed as each one goes on
+    // the scale, so on a three-bag order it stops being null after bag 1. This
+    // then listed the door as finished while the driver was still standing at
+    // it: the same stop appeared twice in one run - once as done, once as the
+    // live one - and the progress bar counted a door he had not left.
+    //
+    // van_confirmed_at is the last thing that happens at a doorstep and it is
+    // written by the driver pressing a button, so it means what this needs it
+    // to mean.
+    //
+    // OR THE ORDER IS PLAINLY PAST THE DOOR. van_confirmed_at is a recent step
+    // and orders taken before it exists do not have one - #1939 was sitting at
+    // a laundromat with an empty column, and requiring it alone made a finished
+    // doorstep disappear off the run altogether. A bag at a laundromat left the
+    // door whatever the column says.
+    const leftTheDoor =
+      Boolean(order.van_confirmed_at) ||
+      ['AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status);
+
+    if (order.collected_at >= from && leftTheDoor) {
       stops.push({ kind: 'collect', order, leg: 1 });
     }
     if (order.at_partner_at && order.at_partner_at >= from) {
@@ -712,8 +735,69 @@ async function forDriver(driverId, roundStart = null) {
   const labelsByOrder = await bags.forOrders(everyOrderId);
 
   for (const stop of stops) {
+    // --- THE DOORSTEP AT THE START, PER BAG ---------------------------------
+    //
+    // Neil's flow, and the same shape as the laundromat pickup and the delivery
+    // door: once he has said how many bags there are, the card becomes a LIST
+    // with a button per bag. Tapping one opens that bag on its own - tag it,
+    // weigh it, clip it, put it in the van - and drops him back here. The
+    // button at the foot is what ends the stop.
+    //
+    // WHY A LIST AND NOT THE SEQUENCE IT WAS. The four steps already ran one
+    // bag at a time, but as one long line of tasks: bag 2 did not exist on the
+    // screen until bag 1 was finished. That is fine for a driver working
+    // straight through and wrong for one who puts a bag down, deals with
+    // another, and comes back - and it gave him no way to see how many were
+    // left without counting taps.
+    //
+    // THE POSITIONS ARE THE LIST, NOT THE ROWS. Nothing exists in bag_labels
+    // until a tag is bound, so an untagged bag has no id to link to. The list
+    // is 1..bag_count and a bag is addressed by its POSITION on the order,
+    // which is the only name it has before it has a sticker.
+    if (stop.kind === 'collect' && stop.order) {
+      const mine = (labelsByOrder.get(stop.order.id) || []).filter((l) => l.leg === 'PICKUP');
+      const count = Number(stop.order.bag_count || 0);
+
+      stop.pickupBags = [];
+      for (let position = 1; position <= count; position += 1) {
+        const label = mine.find((l) => l.position === position) || null;
+
+        stop.pickupBags.push({
+          position,
+          code: label ? label.code : null,
+          clip: label && label.clip_number != null ? Number(label.clip_number) : null,
+          weight: label && label.weight_lb != null ? Number(label.weight_lb) : null,
+          aboard: Boolean(label && label.loaded_at),
+        });
+      }
+
+      // A BAG COUNT IS NOT THE SAME AS HAVING THE BAGS. Collecting comes first
+      // - it is what texts the customer - then the count, then the walk. Only
+      // once both are behind him is there a list worth showing.
+      // THE BUTTON IS THE GATE, NOT THE LAST BAG. Ticking the final bag reloads
+      // the page - that is how the next control appears - and if the stage moved
+      // on by itself the card changed under him and "All the bags are on the
+      // van" was never reachable. Neil hit exactly this on the laundromat leg.
+      //
+      // van_confirmed_at is what that button writes, so it is what says the
+      // loading is over. The bags say which; the button says he is finished at
+      // this door.
+      stop.pickupStage = !stop.order.collected_at
+        ? 'collect'
+        : !count
+          ? 'count'
+          : !stop.order.van_confirmed_at
+            ? 'bags'
+            : 'done';
+    }
+
     const orders =
       stop.orders || (stop.kind === 'deliver' && stop.order ? [stop.order] : null);
+
+    // A COLLECT STOP FALLS OUT HERE, AND ITS BAGS ARE ALREADY DONE ABOVE.
+    // Everything below this line is about clips on a load and laundromat legs;
+    // a doorstep pickup has neither, and the guard used to skip the whole body
+    // before anything could look at it.
     if (!orders) continue;
 
     const numbers = [];

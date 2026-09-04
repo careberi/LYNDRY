@@ -33,7 +33,7 @@ const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
 const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
-const { runBody, returnBagBody, doorBagBody } = require('../web/run-page');
+const { runBody, returnBagBody, doorBagBody, pickupBagBody } = require('../web/run-page');
 const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
 const LABEL_LABEL = labelPdf.DEFAULT_LABEL;
@@ -3623,6 +3623,62 @@ async function returnBagFor(req) {
   return { label, order };
 }
 
+// --- ONE BAG AT A CUSTOMER'S DOOR, ON ITS OWN SCREEN -----------------------
+//
+// The list on the run sends him here and he does this bag completely - tag it,
+// weigh it, clip it, into the van - then lands back on the list.
+//
+// IT OWNS NO STEPS. The four controls on this page post to the same four routes
+// the order page posts to; all this does is work out which one is next and hand
+// it a `from` that comes back here. src/core/run.js decides what is next and
+// nothing else, exactly as it does for every other stop.
+//
+// ADDRESSED BY POSITION, NOT BY A ROW. An untagged bag has no row, and being
+// able to open one before it has a sticker is the whole point of the list.
+router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.drive'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.number);
+    if (!order) return res.redirect(303, '/ops/run');
+
+    // A driver may only touch his own stop, the rule every other action on this
+    // screen follows. An unassigned order stays open to whoever is nearest.
+    if (
+      !roles.can(req.opsUser, 'customers.view') &&
+      order.driver_id &&
+      order.driver_id !== req.opsUser.id
+    ) {
+      return res.redirect(303, '/ops/run');
+    }
+
+    const position = Math.round(Number(req.params.position));
+    const count = Number(order.bag_count || 0);
+    if (!Number.isFinite(position) || position < 1 || position > count) {
+      return res.redirect(303, '/ops/run');
+    }
+
+    const tasks = await runCore.tasksForCollect(order);
+
+    return res.type('html').send(
+      adminPage({
+        title: `Bag #${position}`,
+        active: '/ops/run',
+        bare: true,
+        body: pickupBagBody({
+          order,
+          position,
+          tasks,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/ops/run/bag/:id', guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
     const found = await returnBagFor(req);
@@ -4138,8 +4194,24 @@ router.post('/ops/run/dropped', guard, may('orders.drive'), async (req, res, nex
 // difference is where you land afterwards. `?from=run` on the form action is
 // what carries that, and a driver stepping through his route never sees the
 // order page unless he asks for it.
+// WHERE A CONTROL LANDS AFTER IT HAS DONE ITS WORK, decided in one place.
+//
+// Every step of a pickup posts to the same route whichever screen it was
+// pressed on - the order page, the run, or one bag's own screen on the run -
+// and this is the only thing that differs between them. `from=pickup` carries a
+// position because a bag being tagged has no row to name yet.
 function backTo(req, order) {
-  return String(req.query.from) === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
+  const from = String(req.query.from || '');
+
+  if (from === 'pickup') {
+    const position = Math.round(Number(req.query.pos));
+    if (Number.isFinite(position) && position >= 1) {
+      return `/ops/run/pickup/${order.order_number}/${position}`;
+    }
+    return '/ops/run';
+  }
+
+  return from === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
 }
 
 // Every button route is this shape, so they are built rather than repeated.
@@ -4204,6 +4276,19 @@ orderAction('in-van', async (order, req) => {
     return {
       ok: false,
       detail: `${weighed} of ${expected || '?'} bags are weighed. Finish those before loading.`,
+    };
+  }
+
+  // AND ACTUALLY IN THE VAN. This is the step that says the load is complete
+  // and clears the arrival, so it cannot be reached over a bag still on a
+  // porch. The button on the list is disabled until they are all aboard; a
+  // disabled button whose route still fires is not a guard.
+  const aboard = labels.filter((l) => l.loaded_at).length;
+
+  if (aboard < expected) {
+    return {
+      ok: false,
+      detail: `${expected - aboard} bag${expected - aboard === 1 ? ' is' : 's are'} not in the van yet.`,
     };
   }
 
@@ -4889,28 +4974,18 @@ router.post('/ops/orders/:id/bag-van', guard, may('orders.act'), async (req, res
       return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
     }
 
-    // Is that all of them? The stamp goes on once, when the last one is in.
+    // THE LAST BAG GOING IN DOES NOT END THE STOP. He does, with the button at
+    // the foot of the list.
+    //
+    // This used to stamp van_confirmed_at the moment the count was reached,
+    // which cleared his arrival and moved the run on under him - so the card
+    // changed by itself and "All the bags are on the van" was never reachable.
+    // Neil hit exactly this on the laundromat leg and said the same thing: he
+    // has to press that button to move on. The ticks say which bags; the button
+    // says he is finished at this door.
     const labels = await bags.forOrder(order.id, 'PICKUP');
     const expected = Number(order.bag_count || 0);
     const aboard = labels.filter((l) => l.loaded_at).length;
-
-    if (expected && aboard >= expected && !order.van_confirmed_at) {
-      const { error } = await db
-        .from('orders')
-        // Same moment, same two flags - see the note on the other stamp.
-        .update({ van_confirmed_at: new Date().toISOString(), arrived_at: null, navigating_at: null })
-        .eq('id', order.id);
-      if (error) throw error;
-
-      const clips = bags.clipsFor(labels);
-      await orderEvents.record(order.id, {
-        kind: 'STATUS',
-        summary:
-          `${expected} bag${expected === 1 ? '' : 's'} loaded into the van` +
-          (clips.length ? ` on clip${clips.length === 1 ? '' : 's'} ${clips.join(', ')}` : ''),
-        by: { opsUser: req.opsUser },
-      });
-    }
 
     const note =
       expected && aboard >= expected
@@ -5222,11 +5297,18 @@ router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, 
     // a bag THEY packed, and has nothing to do with how many we collected.
     const leg = bags.legForStatus(order.status);
 
+    // WHICH BAG HE TAPPED, when he came from the run's pickup list. Anywhere
+    // else there is no such thing - the order page and the linear card work
+    // through the bags in order - so the position is only passed on when the
+    // screen that sent him actually knows one.
+    const from = String(req.query.from || '');
+    const position = from === 'pickup' ? Math.round(Number(req.query.pos)) : null;
+
     const result = await bags.bind(
       (req.body || {}).code,
       order,
       req.opsUser && req.opsUser.id,
-      { leg }
+      { leg, position: Number.isFinite(position) ? position : null }
     );
 
     if (!result.ok) {
