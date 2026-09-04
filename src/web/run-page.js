@@ -270,6 +270,14 @@ function taskParts(task) {
   // otherwise leave a bare "Weigh Bag #2." with nothing saying whose it is.
   const hideOrder = Boolean(code);
 
+  // THE LOAD STEP IS ABOUT THE CLIP, NOT THE BAG. "Put Van Clip #1 on the van."
+  // - Neil's line. By here the clip IS the bag's name for the rest of the van
+  // leg, and it is already in the sentence; the sticker underneath it adds a
+  // second id to read at the moment he is lifting something.
+  if (task.key.startsWith('load_')) {
+    return { mid: '', tail: '.', hideOrder: true, linkCode: '' };
+  }
+
   // A TITLE THAT ALREADY SAYS THE TAG DOES NOT WANT IT AGAIN IN BRACKETS. The
   // clip step reads "Put Van Clip #1 on Tag ID 6ZP4DN", and a weighed bag reads
   // "6ZP4DN - 30 lb" - adding the aside gave "6ZP4DN - 30 lb (Tag ID 6ZP4DN)".
@@ -505,13 +513,12 @@ function taskControl(stop, task, order) {
 
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         ${
-          // Named the way the task line names it. The switch above already says
-          // IN THE VAN: TRUE, so this confirms that rather than restating it.
-          task.clip != null && (task.label || {}).code
-            ? `Van Clip #${escapeHtml(task.clip)} on Tag ID ${escapeHtml(task.label.code)}.`
-            : task.clip != null
-              ? `Van Clip #${escapeHtml(task.clip)} is on the van`
-              : `Bag #${escapeHtml(task.position)} is in the van`
+          // Named the way the task line names it, and it says what tapping it
+          // does. It read "Van Clip #1 on Tag ID 6ZP4DN." for a while - a noun
+          // phrase with no verb in it, on the one control that commits the step.
+          task.clip != null
+            ? `Van Clip #${escapeHtml(task.clip)} is on the van`
+            : `Bag #${escapeHtml(task.position)} is in the van`
         }
       </button>
     </form>`;
