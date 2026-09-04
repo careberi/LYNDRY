@@ -5,6 +5,7 @@ const dispatch = require('./dispatch');
 const booking = require('./booking');
 const bags = require('./bags');
 const loadout = require('./loadout');
+const tags = require('./tags');
 const { sendAndLog } = require('./notify');
 
 // ---------------------------------------------------------------------------
@@ -883,6 +884,42 @@ async function forDriver(driverId, roundStart = null) {
         : stop.returnBags.some((b) => !b.aboard)
           ? 'load'
           : 'done';
+
+      // DOES WHAT CAME BACK MATCH WHAT WENT IN.
+      //
+      // Checked here so the driver's screen can stop him, rather than only on
+      // the order page where nobody standing at a counter is looking. A load
+      // that does not reconcile is not his to decide about: 113.5 lb came back
+      // against 60.0 lb once, every named sticker present, and the run sent him
+      // on to the delivery.
+      //
+      // Only once every bag has a weight on it - a half-weighed load compared
+      // against a full one flags every laundromat.
+      stop.returnBlocked = [];
+
+      for (const order of orders) {
+        if (!order.partner_id || order.return_override_at) continue;
+
+        const mine = (labelsByOrder.get(order.id) || []).filter(
+          (l) => l.leg === 'DELIVERY' && l.sticker_seq && l.collected_at
+        );
+        if (!mine.length || mine.some((l) => l.weight_lb == null)) continue;
+
+        const check = tags.checkHandover({
+          wentIn: order.weight_lb,
+          cameBack: order.return_weight_lb,
+        });
+
+        if (check && !check.ok) {
+          stop.returnBlocked.push({
+            orderNumber: order.order_number,
+            orderId: order.id,
+            detail: check.detail,
+            wentIn: Number(order.weight_lb),
+            cameBack: Number(order.return_weight_lb),
+          });
+        }
+      }
     }
 
     // --- THE DOORSTEP, PER BAG -----------------------------------------------

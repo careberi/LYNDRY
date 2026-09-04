@@ -557,6 +557,31 @@ damp towels hold real water and dry shirts hold none, so record the drift and
 tighten it once the spread is visible rather than inventing a number that flags
 everything or nothing.
 
+**A LOAD THAT DOES NOT RECONCILE CANNOT GO OUT, AND THE DRIVER CANNOT RELEASE
+IT.** Six bags and 113.5 lb came back off a laundromat against 60.0 lb
+collected, every named sticker present and ticked. The order page said plainly
+that laundry does not get heavier in a dryer; the run sent the driver on to the
+delivery anyway, because the check was advisory and nothing was gated on it.
+
+`outForDelivery()` now runs `checkHandover()` and refuses. The driver's screen
+**replaces** the laundromat card with a red one — the two weights, and the
+office's number — with no control on it at all: not a disabled button, which
+invites somebody to find the way round it, but nothing. All three doors refuse
+together, the run, the order page and the JSON API, because a screen that hides
+a control while the route behind it still fires is not a guard.
+
+**Only an admin can release it**, through `orders.override` on the order page,
+with a reason, recorded in `order_events` with their name on it and kept in
+`orders.return_override_*`. **It releases, it does not correct**: no weight,
+price or charge is touched, the numbers stay wrong and on the record, and the
+issue stays OPEN — letting the van move is not the same as finding out where 53
+lb came from.
+
+**The named stickers do not replace this check, and the old comment saying they
+did was wrong.** They are better than a total at saying WHICH bag is missing.
+They say nothing about what is inside them: all six of those bags were ours, and
+the extra 53 lb was not.
+
 **Nothing goes out for delivery, and the customer is told nothing, until the
 return leg is recorded.** `outForDelivery()` refuses for any order that went to
 a laundromat until `return_bag_count` and `return_weight_lb` exist. A real order

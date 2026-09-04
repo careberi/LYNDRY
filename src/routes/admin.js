@@ -1034,6 +1034,74 @@ function progressCard(order, tasks) {
 // override: a reason is required, it goes in the change log with a name on it,
 // and it is Admin only - the value of a check is that somebody other than the
 // person in a hurry agreed to skip it.
+// --- THE LOAD THAT CAME BACK DOES NOT ADD UP -------------------------------
+//
+// A driver is standing at a laundromat with a round he cannot continue. This is
+// the only thing that unblocks him, and it is deliberately not a button on his
+// screen: the whole value of the check is that somebody other than the person
+// in a hurry agreed to skip it.
+//
+// It is a RELEASE, not a correction. It does not touch a weight, a price or a
+// charge - the numbers stay exactly as recorded, wrong and on the record, and
+// what changes is only that the order may travel. An issue stays open for the
+// morning either way.
+function returnCheckCard(order, mayRelease) {
+  if (!order.partner_id || order.return_override_at) return '';
+  if (order.weight_lb == null || order.return_weight_lb == null) return '';
+
+  const check = tags.checkHandover({
+    wentIn: order.weight_lb,
+    cameBack: order.return_weight_lb,
+  });
+  if (!check || check.ok) return '';
+
+  const wentIn = Number(order.weight_lb);
+  const cameBack = Number(order.return_weight_lb);
+
+  return `
+  <section class="card" style="background:var(--stain-500);color:var(--paper-050);margin-bottom:20px;">
+    <p class="eyebrow" style="margin:0 0 8px;color:var(--paper-050);">The driver is stopped</p>
+    <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 14px;">
+      What came back does not match
+    </h2>
+
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin:0 0 16px;
+                font-variant-numeric:tabular-nums;">
+      <div><p class="eyebrow" style="margin:0 0 2px;color:var(--paper-050);">We collected</p>
+           <p style="font-size:26px;font-weight:800;margin:0;">${wentIn.toFixed(1)} lb</p></div>
+      <div><p class="eyebrow" style="margin:0 0 2px;color:var(--paper-050);">Came back</p>
+           <p style="font-size:26px;font-weight:800;margin:0;">${cameBack.toFixed(1)} lb</p></div>
+      <div><p class="eyebrow" style="margin:0 0 2px;color:var(--paper-050);">Difference</p>
+           <p style="font-size:26px;font-weight:800;margin:0;">${
+             check.difference > 0 ? '+' : ''
+           }${Number(check.difference).toFixed(1)} lb</p></div>
+    </div>
+
+    <p style="font-size:15px;line-height:1.6;margin:0 0 18px;max-width:62ch;">
+      ${escapeHtml(check.detail)}
+    </p>
+
+    ${
+      mayRelease
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/release-return" style="margin:0;">
+             <label class="field-label" for="why" style="color:var(--paper-050);">Why is it safe to send</label>
+             <input class="input input-lg" type="text" id="why" name="reason" maxlength="200"
+                    required placeholder="What you checked and what you found">
+             <button class="btn btn-lg btn-full" type="submit" style="margin-top:16px;">
+               Release it for delivery
+             </button>
+           </form>
+           <p style="font-size:13px;line-height:1.5;margin:14px 0 0;opacity:0.85;">
+             This does not change any weight or price. It records that you looked,
+             and lets the driver carry on.
+           </p>`
+        : `<p style="font-size:15px;line-height:1.6;margin:0;font-weight:700;">
+             An admin has to release this one.
+           </p>`
+    }
+  </section>`;
+}
+
 function heldWeightCard(order, maySettle) {
   if (order.weight_settled_at) return '';
 
@@ -2702,6 +2770,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         }
       </div>
 
+      <!-- A STOPPED DRIVER COMES FIRST. This is somebody standing at a counter
+           right now, so it sits above the money and above the progress card. -->
+      ${returnCheckCard(order, roles.can(req.opsUser, 'orders.override'))}
       ${roles.can(req.opsUser, 'money.view') ? heldWeightCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
@@ -3210,6 +3281,77 @@ async function loadOrderForAction(idOrNumber) {
   if (error) throw error;
   return data;
 }
+
+// RELEASE A RETURN LOAD THAT DOES NOT RECONCILE.
+//
+// The only way a driver stopped at a laundromat gets moving again. Admin only,
+// through orders.override, exactly like every other push past a refusal here:
+// a driver may not decide this, because the check exists precisely so that
+// somebody who is not standing in a doorway with a van running agrees to it.
+//
+// IT RELEASES, IT DOES NOT CORRECT. No weight, price or charge is touched - the
+// numbers stay as recorded, wrong and on the record - and the issue raised
+// against the order stays open, because "we let it travel" is not "we found out
+// what happened". If the weight itself was wrong, that is a separate correction
+// with its own trail.
+router.post('/ops/orders/:id/release-return', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const reason = String((req.body || {}).reason || '').trim().slice(0, 200);
+
+    // The reason is the whole point. A release with nothing written against it
+    // is indistinguishable from the check never having run.
+    if (!reason) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('Say what you checked. It goes in the change log with your name on it.')}`
+      );
+    }
+
+    if (order.return_override_at) {
+      return res.redirect(303, `${back}?done=${encodeURIComponent('That one was already released.')}`);
+    }
+
+    const { error } = await db
+      .from('orders')
+      .update({
+        return_override_at: new Date().toISOString(),
+        return_override_by: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+        return_override_reason: reason,
+      })
+      .eq('id', order.id);
+    if (error) throw error;
+
+    const check = tags.checkHandover({
+      wentIn: order.weight_lb,
+      cameBack: order.return_weight_lb,
+    });
+
+    await orderEvents.record(order.id, {
+      kind: 'WEIGHT',
+      summary: 'Released for delivery despite the weights not matching',
+      was: `${order.weight_lb} lb collected, ${order.return_weight_lb} lb back`,
+      became: 'cleared to travel',
+      by: { opsUser: req.opsUser },
+      reason,
+    });
+
+    // The issue stays OPEN on purpose. Letting the van move is not the same as
+    // finding out where 53 lb came from, and closing it here would lose the one
+    // prompt to go and ask.
+    return res.redirect(
+      303,
+      `${back}?done=${encodeURIComponent(
+        `Released. The driver can carry on${check ? ` - ${check.direction === 'HEAVIER' ? 'still heavier than we collected' : 'still lighter than we collected'}` : ''}, and the issue stays open.`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // SETTLE A HELD WEIGHT. The only way out of the hold settleWeight() puts an
 // order into when the two scales are further apart than the tolerance allows.
@@ -3863,6 +4005,22 @@ router.post('/ops/run/bag/:id/weight', guard, may('orders.drive'), async (req, r
           became: `${total} lb out`,
           by: { opsUser: req.opsUser },
         });
+
+        // AND IT GOES ON THE ISSUES SCREEN, because the driver is now stopped
+        // and needs somebody to look. A log entry is a record; an issue is a
+        // request for a person, and this is the second kind. It also survives
+        // him closing the page, which a red card on his phone does not.
+        if (order.customers) {
+          await issues
+            .raise({
+              customer: order.customers,
+              order,
+              reason:
+                `${check.detail} The driver is STOPPED at the laundromat and cannot ` +
+                `deliver this order until an admin releases it on the order page.`,
+            })
+            .catch((err) => console.error(`Could not raise a return mismatch: ${err.message}`));
+        }
       }
     }
 

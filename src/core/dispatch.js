@@ -183,6 +183,10 @@ const BOARD_FIELDS =
   // laundromat finished it. The run compares the two to work out whether a
   // laundromat pickup is the same visit as the drop-off or a second trip back.
   'at_partner_at, ready_at, ' +
+  // return_override_at says whether an admin has released a load whose weight
+  // did not reconcile. Without it the run cannot tell a blocked stop from a
+  // released one and would keep the driver stopped after it had been settled.
+  'return_override_at, ' +
   // WHAT CAME BACK OFF THE LAUNDROMAT, which is how the collect stop knows
   // whether this order has been weighed back in yet. Without them the run has
   // no way to tell a bag still sitting on a shelf from one already in the van,

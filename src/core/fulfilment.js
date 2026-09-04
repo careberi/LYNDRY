@@ -11,6 +11,7 @@ const recurring = require('./recurring');
 const partners = require('./partners');
 const promotions = require('./promotions');
 const settings = require('./settings');
+const tags = require('./tags');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -549,6 +550,40 @@ async function outForDelivery(order, { by = {} } = {}) {
         'route. The customer is told it is on the way as soon as this moves, so ' +
         'it needs to be right before that goes out.',
     };
+  }
+
+  // AND THE WEIGHT HAS TO RECONCILE. A COUNT CANNOT CATCH THIS.
+  //
+  // Six bags and 113.5 lb came back off a laundromat against 60.0 lb collected
+  // from the customer, every named sticker present and ticked. The order page
+  // said plainly that laundry does not get heavier in a dryer and that somebody
+  // else's bag was probably in the pile - and the driver's screen sent him
+  // straight on to the delivery, because nothing was gated on the check.
+  //
+  // The comment above is right that named stickers beat a total at answering
+  // WHICH bag is missing. It is wrong that they replace the weight: they say
+  // nothing about what is inside them. All six of those bags were ours. The
+  // extra 53 lb was not.
+  //
+  // So the run stops here. Neil's rule: the driver is told to contact an admin
+  // and cannot move the order himself, and only an admin can release it - the
+  // same shape as every other override in this system, because the value of a
+  // check is that somebody other than the person in a hurry agreed to skip it.
+  if (order.partner_id && !order.return_override_at) {
+    const limits = await settings.weightLimits().catch(() => null);
+    const check = tags.checkHandover(
+      { wentIn: order.weight_lb, cameBack: order.return_weight_lb },
+      limits
+    );
+
+    if (check && !check.ok) {
+      return {
+        ok: false,
+        reason: 'weight_mismatch',
+        check,
+        detail: `${check.detail} This order cannot go out until an admin releases it.`,
+      };
+    }
   }
 
   // The one new fact: it is on the van. They already know the price from the

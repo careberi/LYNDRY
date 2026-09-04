@@ -4,6 +4,7 @@ const { escapeHtml, icon } = require('./layout');
 const { scanField, scannerScript, describeCodeFormat } = require('./scanner');
 const booking = require('../core/booking');
 const { can } = require('../core/roles');
+const { site } = require('./site');
 
 // ---------------------------------------------------------------------------
 // The driver's run: one stop, one thing to do.
@@ -821,6 +822,59 @@ function partnerCard(run) {
   const stop = run.current;
   const dropping = stop.kind === 'dropoff';
 
+  // THE LOAD DOES NOT ADD UP, SO THE ROUND STOPS HERE - BEFORE ANYTHING ELSE.
+  //
+  // Neil's rule, after six bags and 113.5 lb came back against 60.0 lb
+  // collected and the run waved the driver on to the delivery.
+  //
+  // It REPLACES the card rather than sitting above it. Leaving the normal
+  // controls underneath a warning is how a warning gets scrolled past, and
+  // there is deliberately nothing here he can tap: not a disabled button, which
+  // invites somebody to find the way round it, but no button at all. This is
+  // not his decision.
+  //
+  // Red, because every other warning on this screen is yellow and this one
+  // means stop.
+  const blocked = stop.returnBlocked || [];
+
+  if (blocked.length) {
+    return `
+    <div style="${CARD}">
+      <div style="padding:18px 20px;border:2px solid var(--ink-900);border-radius:14px;
+                  background:var(--stain-500);color:var(--paper-050);margin-bottom:18px;">
+        <p class="eyebrow" style="margin:0 0 8px;color:var(--paper-050);">Do not leave</p>
+        <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;
+                   line-height:1.1;margin:0 0 14px;">
+          The weights do not match
+        </h2>
+        ${blocked
+          .map(
+            (b) => `
+        <p style="font-size:16px;line-height:1.55;margin:0 0 12px;">
+          <strong>Order #${escapeHtml(b.orderNumber)}</strong><br>
+          ${escapeHtml(b.cameBack.toFixed(1))} lb came back against
+          ${escapeHtml(b.wentIn.toFixed(1))} lb we collected.
+        </p>`
+          )
+          .join('')}
+        <p style="font-size:16px;line-height:1.55;margin:0;font-weight:700;">
+          Call the office before you go anywhere:
+          <a href="tel:${escapeHtml(site.opsPhoneDisplay.replace(/[^0-9]/g, ''))}"
+             style="color:var(--paper-050);">${escapeHtml(site.opsPhoneDisplay)}</a>
+        </p>
+      </div>
+
+      <p style="font-size:14px;line-height:1.5;color:var(--ink-500);margin:0;">
+        This cannot go out for delivery until somebody in the office releases it.
+        Nothing you can tap here will move it.
+      </p>
+
+      <p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
+        ${escapeHtml(stop.address || '')}
+      </p>
+    </div>`;
+  }
+
   return `
   <div style="${CARD}">
     ${
@@ -1116,7 +1170,15 @@ function runBody({ run, notice = null, problem = null, user = null }) {
       // AT A CUSTOMER'S DOOR THE BAGS COME FIRST. Each one has to be stripped of
       // the laundromat's stickers, our tag and its van clip before anything is
       // dropped, so the card is that list until every bag is prepped.
-      run.arrived
+      // A BLOCKED LOAD STOPS HIM WHETHER OR NOT THE RUN THINKS HE HAS ARRIVED.
+      //
+      // Arrival decides between "drive there" and "do the work". Neither applies
+      // to a stop he is not allowed to leave: offering "Take me there" for a
+      // laundromat he is standing in, with 53 lb of somebody else's laundry in
+      // the van, would be the run failing at the one moment it matters.
+      (run.current && (run.current.returnBlocked || []).length)
+        ? partnerCard(run)
+        : run.arrived
         ? partnerStop
           ? partnerCard(run)
           : run.current.kind === 'deliver' && run.current.doorStage === 'bags'
