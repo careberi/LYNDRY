@@ -747,7 +747,18 @@ async function forDriver(driverId, roundStart = null) {
       // waiting on the laundromat. Without this the card asked a driver to weigh
       // a load that did not exist, which is what surfaced when a rewind left an
       // order with no packed bags at all.
-      stop.returnStage = !packed.length || packed.some((b) => !b.collected_at)
+      // THE MASTER BUTTON IS THE GATE, NOT THE LAST TICK. Ticking the final bag
+      // reloads the page - that is how the next control appears - and the stage
+      // moved on by itself, so the card changed under him and "All bags are
+      // collected" was never reachable. Neil: he has to press that button to
+      // move on.
+      //
+      // return_bag_count is what that button writes, so it is what says the
+      // collecting is over. The ticks say which bags; the button says he is
+      // finished at that counter.
+      const confirmed = (orders || []).every((o) => o.return_bag_count != null);
+
+      stop.returnStage = !packed.length || packed.some((b) => !b.collected_at) || !confirmed
         ? 'collect'
         : !weighed
           ? 'weigh'
