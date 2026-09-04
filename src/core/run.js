@@ -141,7 +141,14 @@ async function tasksForCollect(order) {
           // been weighed the useful record of it is the sticker it carries -
           // that is what a laundromat reads back and what the report joins on.
           ? `${label.code} - ${label.weight_lb} lb`
-          : `Weigh Bag #${position}`,
+          // NAMED BY ITS TAG, NOT ITS POSITION. Neil: "Weigh Bag with Tag ID
+          // 6ZP4DN." The sticker is on the bag in his hands; "#1" is a place
+          // in a count he has to keep in his head. The code is in the title so
+          // run-page.js can link it where it stands, and so the checklist
+          // entry underneath is the same sentence.
+          : label
+            ? `Weigh Bag with Tag ID ${label.code}`
+            : `Weigh Bag #${position}`,
       // The "with Tag ID 6ZP4DN." half of the line is built in run-page.js,
       // because the id is a link to that sticker's page and a link is markup.
       // The label is already on this task, which is all it needs.
