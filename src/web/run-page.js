@@ -896,28 +896,12 @@ function partnerCard(run) {
     }
 
     ${
-      // NOT DROPPING: just show what is coming back. There is nothing to tick
-      // off here - the collecting is done bag by bag on the panel above.
-      !dropping && (stop.clips || []).length
-        ? `<div style="margin:0 0 22px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
-                      background:var(--sunbeam-500);">
-             <p class="eyebrow" style="margin:0 0 10px;">Bringing back</p>
-             <div style="display:flex;flex-wrap:wrap;gap:10px;">
-               ${(stop.clips || [])
-                 .map(
-                   (n) => `<span style="min-width:46px;padding:8px 12px;border:2px solid var(--ink-900);
-                                        border-radius:10px;background:var(--paper-000);text-align:center;
-                                        font-family:var(--font-mono);font-weight:700;font-size:20px;">
-                             ${n}
-                           </span>`
-                 )
-                 .join('')}
-             </div>
-             <p style="margin:12px 0 0;font-size:14px;line-height:1.5;">
-               These are what you are collecting.
-             </p>
-           </div>`
-        : ''
+      // THE "BRINGING BACK" PANEL IS GONE. It listed the clip numbers he was
+      // carrying out of a laundromat, from the design where they came back as a
+      // set handed over in one go. They are handed out one at a time now, as
+      // each bag is weighed - so it was printing a number the list below it
+      // already had against the bag it belongs to, and printing it first.
+      ''
     }
 
     ${
