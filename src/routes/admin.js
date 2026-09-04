@@ -27,6 +27,7 @@ const {
 const bags = require('../core/bags');
 const weight = require('../core/weight');
 const tags = require('../core/tags');
+const weights = require('../core/weight');
 const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
@@ -3284,6 +3285,147 @@ router.post('/ops/run/collected', guard, may('orders.drive'), async (req, res, n
 // bags came back is now a fact we hold per bag, named, rather than a number
 // somebody typed at a counter. Nothing is texted and nothing is charged here -
 // this only says the bags are in the van.
+// --- weigh the load coming back, and check it -------------------------------
+//
+// WEIGH, CHECK, THEN CLIP - Neil's sequence, restored. The named stickers say
+// WHICH bags he was handed; the scale is the only thing that says what is inside
+// them, and a laundromat can hand back every bag with a machine load still in a
+// dryer.
+//
+// A refusal is not a bypass: an admin may push past it with a reason, which goes
+// in the change log with a name against it.
+router.post('/ops/run/return-weight', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const ids = droppedOrderIds(req);
+    if (!ids.length) return res.redirect(303, '/ops/run');
+
+    const weight = weights.lb((req.body || {}).weight_lb);
+    if (weight == null || weight <= 0) {
+      return res.redirect(
+        303,
+        `/ops/run?problem=${encodeURIComponent('What do they weigh altogether? Pounds, as a number.')}`
+      );
+    }
+
+    const reason = String((req.body || {}).override_reason || '').trim();
+    const mayOverride = roles.can(req.opsUser, 'orders.override');
+    const problems = [];
+
+    for (const id of ids) {
+      const order = await loadOrderForAction(id);
+      if (!order) continue;
+
+      // Dirty in against clean out, and deliberately not symmetric: lighter is
+      // ordinary, heavier means somebody else's laundry is in the pile.
+      const check = tags.checkHandover({ wentIn: order.weight_lb, cameBack: weight });
+      const overrode = Boolean(check && !check.ok && mayOverride && reason);
+
+      if (check && !check.ok && !overrode) {
+        problems.push(`#${order.order_number}: ${check.detail}`);
+        continue;
+      }
+
+      const { error } = await db
+        .from('orders')
+        .update({ return_weight_lb: weight })
+        .eq('id', order.id);
+      if (error) throw error;
+
+      await orderEvents.record(order.id, {
+        kind: 'WEIGHT',
+        summary: overrode
+          ? `Weighed back at ${weight} lb - did NOT match, taken anyway`
+          : `Weighed back at ${weight} lb`,
+        was: order.weight_lb == null ? null : `${order.weight_lb} lb in`,
+        became: `${weight} lb out`,
+        reason: overrode ? reason : null,
+        by: { opsUser: req.opsUser },
+      });
+
+      // THE CLIPS ARE EARNED HERE, which is the point of doing these in this
+      // order: a clipped bag is a bag whose load has been weighed and matched.
+      // They are reserved now so the next card can show the numbers he is about
+      // to put on, and he confirms each one as it goes in the van.
+      const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+        (b) => b.sticker_seq && b.collected_at
+      );
+
+      for (const bag of packed) {
+        const got = await bags.assignClip(bag, order.driver_id);
+        if (!got.ok) problems.push(`#${order.order_number}: ${got.detail}`);
+      }
+    }
+
+    if (problems.length) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(problems.join(' '))}`);
+    }
+
+    return res.redirect(303, '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// --- one bag, clipped and aboard --------------------------------------------
+//
+// The number was handed out when the weight passed, so this tap is him saying
+// that clip is on that bag and the bag is in the van. The last one is what sends
+// the order out for delivery, and what tells the customer.
+router.post('/ops/run/return-load', guard, may('orders.drive'), async (req, res, next) => {
+  try {
+    const labelId = String((req.body || {}).label_id || '');
+    if (!UUID.test(labelId)) return res.redirect(303, '/ops/run');
+
+    const { data: label } = await db.from('bag_labels').select('*').eq('id', labelId).maybeSingle();
+    if (!label) return res.redirect(303, '/ops/run');
+
+    const order = await loadOrderForAction(label.order_id);
+    if (!order) return res.redirect(303, '/ops/run');
+
+    if (
+      !roles.can(req.opsUser, 'customers.view') &&
+      order.driver_id &&
+      order.driver_id !== req.opsUser.id
+    ) {
+      return res.redirect(303, '/ops/run');
+    }
+
+    if (!label.clipped_at) {
+      const on = await bags.confirmClip(label);
+      if (!on.ok) return res.redirect(303, `/ops/run?problem=${encodeURIComponent(on.detail)}`);
+      label.clipped_at = new Date().toISOString();
+    }
+
+    const aboard = await bags.loadBag(label);
+    if (!aboard.ok) {
+      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(aboard.detail)}`);
+    }
+
+    await orderEvents.record(order.id, {
+      kind: 'LABEL',
+      summary: `${label.code}-${label.sticker_seq} in the van on clip ${label.clip_number}`,
+      by: { opsUser: req.opsUser },
+    });
+
+    // Every bag aboard? Then it is on its way, and that is when the customer
+    // hears about it.
+    const packed = (await bags.forOrder(order.id, 'DELIVERY')).filter(
+      (b) => b.sticker_seq && b.collected_at
+    );
+
+    if (packed.length && packed.every((b) => b.loaded_at)) {
+      const away = await fulfilment.outForDelivery(order, { by: { opsUser: req.opsUser } });
+      if (!away.ok && away.detail) {
+        return res.redirect(303, `/ops/run?problem=${encodeURIComponent(away.detail)}`);
+      }
+    }
+
+    return res.redirect(303, '/ops/run');
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, res, next) => {
   try {
     const raw = (req.body || {}).order_id;
@@ -3370,21 +3512,14 @@ router.post('/ops/run/collected-all', guard, may('orders.drive'), async (req, re
         by: { opsUser: req.opsUser },
       });
 
-      // AND THAT IS THE MOMENT IT GOES OUT FOR DELIVERY.
+      // AND IT STOPS HERE. It used to go out for delivery on this tap, which
+      // skipped the three steps that come next: weigh the load, check it against
+      // what we collected, and put the clips back on. Neil found it by walking a
+      // real order - he ticked the bags off and the screen jumped straight to a
+      // customer's door.
       //
-      // Every bag is off their counter and in the van, so the order is on its
-      // way and the customer should be told. Nothing else in the run did this:
-      // OUT_FOR_DELIVERY was only reachable from the order page's buttons, and
-      // those were removed when that page became a record. Two orders reached a
-      // doorstep still READY, and the delivery step failed against the state
-      // machine with "an order cannot go from READY to DELIVERED" - which was
-      // the machine doing its job and the screen having no way to satisfy it.
-      //
-      // Refusals are not swallowed silently: outForDelivery() will not move an
-      // order whose return leg is unrecorded, and that is worth seeing rather
-      // than discovering at a door.
-      const away = await fulfilment.outForDelivery(order, { by: { opsUser: req.opsUser } });
-      if (!away.ok && away.detail) problems.push(`#${order.order_number}: ${away.detail}`);
+      // outForDelivery() fires when the last bag is confirmed into the van now,
+      // in /ops/run/return-load.
     }
 
     if (problems.length) {

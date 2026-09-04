@@ -538,7 +538,15 @@ function stopDone(stop) {
     // that screen already exists and already does it properly - scan every bag
     // out, build the run, load in reverse. Rebuilding a worse version of it
     // here would be two ways to do one job.
-    return (stop.orders || []).every((o) => o.loaded_at);
+    // EVERY BAG THEY PACKED, IN THE VAN. Not the order's own loaded_at, which
+    // belongs to the pickup leg - it was already set from the doorstep, so this
+    // stop counted itself finished the moment it appeared and the run skipped
+    // the weigh, the check and the clips entirely. That is what Neil walked
+    // into: bags collected, next card a customer's door.
+    const packed = (stop.finishedBags || []).filter((b) => b.finished_at);
+    if (!packed.length) return (stop.orders || []).every((o) => o.loaded_at);
+
+    return packed.every((b) => b.collected_at && b.loaded_at);
   }
   return false;
 }
@@ -707,6 +715,42 @@ async function forDriver(driverId, roundStart = null) {
     // DERIVED, LIKE EVERYTHING ELSE ON THIS SCREEN. The stage is read off the
     // bags rather than stored beside them, so a driver who uses the order page
     // or a second phone is still at the same point.
+    // --- THE WAY BACK OUT OF A LAUNDROMAT, IN ORDER --------------------------
+    //
+    // WEIGH, CHECK, THEN CLIP. Neil's sequence, and it had gone missing: ticking
+    // the bags off went straight to out-for-delivery, so nobody was ever asked
+    // what the load weighed and no clip went back on. A comment in this codebase
+    // argued the named stickers had replaced the weight check - they had not.
+    // The stickers prove WHICH bags he was handed; they say nothing about what
+    // is inside them, and a laundromat can hand back all three with a machine
+    // load still in a dryer.
+    //
+    // Derived, like every other stage on this screen, so a driver who does half
+    // of it from another phone is still at the same point.
+    if (stop.kind === 'pickup_partner') {
+      const packed = (stop.finishedBags || []).filter((b) => b.finished_at);
+      const ticked = packed.filter((b) => b.collected_at);
+      const weighed = (orders || []).every((o) => o.return_weight_lb != null);
+
+      stop.returnBags = ticked
+        .map((b) => ({
+          id: b.id,
+          code: b.code,
+          seq: b.sticker_seq,
+          clip: b.clip_number == null ? null : Number(b.clip_number),
+          aboard: Boolean(b.loaded_at),
+        }))
+        .sort((a, c) => (a.clip || 0) - (c.clip || 0));
+
+      stop.returnStage = packed.some((b) => !b.collected_at)
+        ? 'collect'
+        : !weighed
+          ? 'weigh'
+          : stop.returnBags.some((b) => !b.aboard)
+            ? 'load'
+            : 'done';
+    }
+
     if (stop.kind === 'dropoff') {
       const dropBags = orders.flatMap((order) =>
         (labelsByOrder.get(order.id) || [])

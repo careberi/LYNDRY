@@ -844,15 +844,18 @@ function partnerCard(run) {
       // weigh the load, then the check against what we collected from the
       // customer, then the clips - which is the original sequence with the
       // picking-up separated out in front of it.
-      !dropping && (stop.finishedBags || []).length
+      // ONLY WHILE HE IS STILL BEING HANDED THEM. Once every bag is ticked the
+      // card moves on to the scale, and showing the tick list underneath the
+      // next step is two tasks on one card - which is the thing this screen is
+      // built not to do.
+      !dropping && (stop.finishedBags || []).length && stop.returnStage === 'collect'
         ? (() => {
             const bags = stop.finishedBags;
-            const left = bags.filter((b) => !b.collected_at).length;
 
             return `
            ${dropTask(
              `Pick up completed bags from ${stop.name || 'the laundromat'}`,
-             'Request the bags listed below by matching their Bag Tag IDs. Only collect the bags listed for this pickup.'
+             'Request the bags listed below by matching their Bag Tag IDs. Only collect the bags listed for this pickup. Tap each one as they hand it to you.'
            )}
 
            <!-- NO BOX ROUND THE SWITCHES. Neil: it should look like the clip
@@ -860,13 +863,6 @@ function partnerCard(run) {
                 inside a bordered card is two frames round one list, and the
                 switches carry their own outline anyway. -->
            <div style="margin:0 0 18px;">
-             <p style="font-size:15px;line-height:1.5;margin:0 0 14px;">
-               ${
-                 left
-                   ? `Tap each one as they hand it to you. <strong data-left="${left}">${left} still to go.</strong>`
-                   : 'All of them are ticked.'
-               }
-             </p>
 
              <!-- THE SAME SWITCH AS THE VAN CLIPS, which Neil asked for by
                   name: the bag's id big, COLLECTED: FALSE under it in red, the
@@ -954,57 +950,80 @@ function partnerCard(run) {
             // total, not a weaker one - it does not just say something is
             // missing, it says which.
             const uncollected = (stop.finishedBags || []).filter((b) => !b.collected_at).length;
+              const orderIds = [...new Set((stop.orders || []).map((o) => o.id))];
+              const hidden = orderIds
+                .map((id) => `<input type="hidden" name="order_id" value="${escapeHtml(id)}">`)
+                .join('');
 
-            const orderIds = [...new Set((stop.orders || []).map((o) => o.id))];
-            const unconfirmed = (stop.orders || []).filter((o) => o.return_bag_count == null);
+              // --- still being handed the bags ------------------------------
+              if (stop.returnStage === 'collect' || uncollected) {
+                // THE BUTTON IS THERE FROM THE MOMENT THE PAGE LOADS, and dead
+                // until every bag is ticked. Neil: it should not appear from
+                // under his thumb once he has done the step before it.
+                return `
+             <form method="post" action="/ops/run/collected-all" style="margin:0;">
+               ${hidden}
+               <button type="submit" class="btn btn-primary btn-lg btn-full"
+                       ${uncollected ? 'disabled style="opacity:0.35;"' : ''}>
+                 All bags are collected
+               </button>
+             </form>`;
+              }
 
-            if (unconfirmed.length) {
-              // THE BUTTON IS THERE FROM THE MOMENT THE PAGE LOADS. Neil: "it
-              // should not be hidden when the page loads, it shouldn't have to
-              // wait for me to tap collected on both bags."
+              // --- weigh it, and check it against what went in --------------
               //
-              // It used to appear only once every bag was ticked, which meant a
-              // driver had no idea the step existed until he had done the one
-              // before it - and a screen that grows a new button underneath
-              // your thumb is worse than one that was always honest about what
-              // is coming.
+              // WEIGH, CHECK, THEN CLIP. The stickers prove which bags he was
+              // handed; the scale is the only thing that says what is inside
+              // them. A laundromat can hand back every bag with a machine load
+              // still in a dryer, and every button on this screen would be green.
+              if (stop.returnStage === 'weigh') {
+                const wentIn = (stop.orders || []).reduce((t, o) => t + Number(o.weight_lb || 0), 0);
+
+                return `
+             ${dropTask(
+               'Weigh the bags before they go in the van',
+               `Put the whole load on the scale. It is checked against the ${wentIn.toFixed(
+                 1
+               )} lb we collected, and the clips go on once it passes.`
+             )}
+             <form method="post" action="/ops/run/return-weight" style="margin:0;">
+               ${hidden}
+               <label class="field-label" for="return_lb">Pounds back</label>
+               <input class="input input-lg" type="number" id="return_lb" name="weight_lb"
+                      step="0.01" min="0.01" max="400" inputmode="decimal" required autofocus
+                      placeholder="${wentIn ? wentIn.toFixed(1) : '25'}"
+                      style="width:100%;margin-bottom:16px;">
+               <button type="submit" class="btn btn-primary btn-lg btn-full">That is the weight</button>
+             </form>`;
+              }
+
+              // --- clips on, bags in the van --------------------------------
               //
-              // Tapping it early is refused BY THE SERVER, which names the bags
-              // that are not ticked. The check was always there; what was
-              // missing was somebody being told.
-              //
-              // THE LABEL IS STATIC. "All 2 bags are collected" changed under
-              // the driver as he tapped, so the thing he was reading and the
-              // thing he was about to press were not the same sentence twice
-              // running.
+              // ONE TAP PER BAG, and it does both: the number was handed out
+              // when the weight passed, so tapping is him confirming that clip
+              // is on that bag and the bag is aboard. Same switch as everywhere
+              // else, red until it is true.
               return `
-           <form method="post" action="/ops/run/collected-all" style="margin:0;">
-             ${orderIds
-               .map((id) => `<input type="hidden" name="order_id" value="${escapeHtml(id)}">`)
-               .join('')}
-             <button type="submit" class="btn btn-primary btn-lg btn-full"
-                     ${uncollected ? 'disabled style="opacity:0.35;"' : ''}>
-               All bags are collected
-             </button>
-             <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
-               ${
-                 uncollected
-                   ? `Tick all ${(stop.finishedBags || []).length} above first, then tap this.`
-                   : 'Tap that once they are all in the van. The van scan comes after.'
-               }
-             </p>
-           </form>`;
-            }
-
-            return `
-           <a class="btn btn-primary btn-lg btn-full" href="/ops/loadout">
-             Scan them into the van ${icon('arrow-right', '22')}
-           </a>
-           <p style="font-size:14px;color:var(--ink-500);line-height:1.5;margin:12px 0 0;">
-             All weighed and clipped. Every bag gets scanned out and the van is
-             loaded in reverse, so stop 1 is by the door. Come back here when
-             that is done.
-           </p>`;
+             ${dropTask(
+               'Clip the bags and put them in the van',
+               'Put each van clip on its bag as you load it. The customer is told it is on the way once the last one is in.'
+             )}
+             <form method="post" action="/ops/run/return-load" class="clip-form" style="display:grid;gap:10px;">
+               ${(stop.returnBags || [])
+                 .map(
+                   (b) => `
+               <button type="submit" name="label_id" value="${escapeHtml(b.id)}"
+                       class="clip-toggle${b.aboard ? ' is-on' : ''}" style="margin:0;">
+                 <span class="clip-number">${
+                   b.clip == null ? 'No clip' : `Van Clip #${escapeHtml(b.clip)}`
+                 }</span>
+                 <span class="clip-state">${escapeHtml(b.code)}-${escapeHtml(b.seq)} &middot; ${
+                     b.aboard ? 'In the van: true' : 'In the van: false'
+                   }</span>
+               </button>`
+                 )
+                 .join('')}
+             </form>`;
           })()
     }
     ${laundromatFoot(stop)}
@@ -1290,7 +1309,20 @@ function quickTapScript() {
   var form = document.querySelector('form[data-quick]');
   if (!form || !window.fetch) return;
 
-  var counter = document.querySelector('[data-left]');
+  // HOW MANY ARE LEFT, COUNTED OFF THE SWITCHES THEMSELVES.
+  //
+  // It used to read a "3 still to go" line, and Neil has deleted that line - the
+  // instruction moved up into DETAIL. Counting the switches is better anyway:
+  // there is no second copy of the number to keep in step, so the answer cannot
+  // drift from what is on the screen.
+  var remaining = function () {
+    var n = 0;
+    var all = form.querySelectorAll('button[name="label_id"]');
+    for (var i = 0; i < all.length; i += 1) {
+      if (all[i].getAttribute('data-got') !== '1') n += 1;
+    }
+    return n;
+  };
 
   form.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest && e.target.closest('button[name="label_id"]');
@@ -1299,7 +1331,7 @@ function quickTapScript() {
     e.preventDefault();
 
     var wasGot = btn.getAttribute('data-got') === '1';
-    var left = counter ? Number(counter.getAttribute('data-left')) : null;
+    var left = remaining();
 
     // THE LAST BAG USED TO CALL form.submit() HERE, AND THAT IS WHY IT COULD
     // NOT BE TAPPED.
@@ -1315,17 +1347,15 @@ function quickTapScript() {
     // to make, not a guess in the browser.
     var isLast = !wasGot && left === 1;
 
+    // PAINTED THE WAY THE SERVER WOULD PAINT IT. This set an inline background
+    // and the words "Collected" / "Not yet", which stopped matching the moment
+    // these became the same switch as the van clips: a tap turned a tile green
+    // and left it reading the old wording until the next reload.
     var paint = function (got) {
       btn.setAttribute('data-got', got ? '1' : '0');
-      btn.style.background = got ? 'var(--suds-500)' : 'var(--paper-000)';
+      btn.classList.toggle('is-on', got);
       var label = btn.querySelector('[data-state]');
-      if (label) label.textContent = got ? 'Collected' : 'Not yet';
-      if (counter && left !== null) {
-        var now = left + (got ? -1 : 1);
-        counter.setAttribute('data-left', now);
-        counter.textContent = now + ' still to go.';
-        left = now;
-      }
+      if (label) label.textContent = got ? 'Collected: true' : 'Collected: false';
     };
 
     paint(!wasGot);
