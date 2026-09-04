@@ -445,6 +445,21 @@ function dropCards(stop) {
     </form>`;
 }
 
+// WHERE HE IS, at the foot of the card - the same place and the same weight a
+// customer's address sits at on a doorstep card. He drove here, so it is a
+// reference rather than an instruction, and the name is bold because that is
+// the half he glances down for.
+function laundromatFoot(stop) {
+  if (!stop.address) return '';
+
+  return `
+    <p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
+      ${stop.name ? `<strong style="color:var(--ink-900);">${escapeHtml(stop.name)}:</strong> ` : ''}${escapeHtml(
+        stop.address
+      )}
+    </p>`;
+}
+
 // The one thing to do, now he is there.
 function taskCard(run, user = null) {
   const stop = run.current;
@@ -805,46 +820,12 @@ function partnerCard(run) {
   return `
   <div style="${CARD}">
     ${
-      // THE DROP CARD HAS NO HEADER. Neil deleted all four in turn - the
-      // eyebrow, the laundromat's name, the bag count and the address - and the
-      // reason is the same for each: he is standing at that counter with the
-      // bags in his arms. The card is what he does next and nothing else, which
-      // is what the TASK and DETAIL lines say. The address moves to the foot of
-      // the card, where a customer's address already sits on a doorstep card.
-      //
-      // The collect-from-laundromat card keeps the lot: it is the one where he
-      // still needs to know whose counter this is and how much to expect.
-      dropping
-        ? ''
-        : `
-    <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(HEADLINE[stop.kind])}</p>
-    <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;line-height:1.12;margin:0 0 8px;">
-      ${escapeHtml(stop.name || 'The laundromat')}
-    </h2>
-
-    <!-- THE TASK, NOT THE ADDRESS, IS THE SECOND LINE. Neil: "it should have
-         bold underneath instead of the address - pick up this number of bags,
-         and have the number highlighted, because that's the task."
-         He is already standing there. The address is how he got here; the
-         count is what he is about to do, so it takes the weight and the
-         address drops to a reference line under it. -->
-    <p style="font-family:var(--font-display);font-weight:900;font-size:22px;
-              line-height:1.2;margin:0 0 6px;">
-      ${dropping ? 'Hand over' : 'Pick up'}
-      <span style="background:var(--sunbeam-500);padding:1px 8px;border:2px solid var(--ink-900);
-                   border-radius:8px;">${stop.bags}</span>
-      bag${stop.bags === 1 ? '' : 's'}${
-        // NO POUNDAGE ON A COLLECT STOP. That figure is what went IN - the
-        // customer's dirty weight - and printing it beside bags he is picking
-        // up invites him to check one against the other, which is the weighing
-        // this stop deliberately no longer does.
-        dropping && stop.pounds ? `, ${stop.pounds.toFixed(0)} lb` : ''
-      }
-    </p>
-
-    <p style="font-size:15px;color:var(--ink-700);line-height:1.5;margin:0 0 16px;">
-      ${escapeHtml(stop.address || '')}
-    </p>`
+      // NEITHER LAUNDROMAT CARD HAS A HEADER. Both open with TASK: and DETAIL:,
+      // and the task names the laundromat - so an eyebrow, a heading, a bag
+      // count and an address above that were the same stop said four more times
+      // to somebody already standing in it. The address is at the foot of the
+      // card, where a customer's address sits on a doorstep card.
+      ''
     }
 
     ${
@@ -869,12 +850,16 @@ function partnerCard(run) {
             const left = bags.filter((b) => !b.collected_at).length;
 
             return `
-           <div style="margin:0 0 18px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:14px;
-                       background:var(--paper-200);">
-             <!-- The count moved UP to sit under the laundromat's name, where
-                  Neil wanted it. Repeating it here as well would be the same
-                  number twice on one card. -->
-             <p class="eyebrow" style="margin:0 0 4px;">Pick these up</p>
+           ${dropTask(
+             `Pick up completed bags from ${stop.name || 'the laundromat'}`,
+             'Request the bags listed below by matching their Bag Tag IDs. Only collect the bags listed for this pickup.'
+           )}
+
+           <!-- NO BOX ROUND THE SWITCHES. Neil: it should look like the clip
+                cards, where they sit straight on the card. A bordered panel
+                inside a bordered card is two frames round one list, and the
+                switches carry their own outline anyway. -->
+           <div style="margin:0 0 18px;">
              <p style="font-size:15px;line-height:1.5;margin:0 0 14px;">
                ${
                  left
@@ -941,24 +926,7 @@ function partnerCard(run) {
 
     ${
       dropping
-        ? `${dropCards(stop)}
-           <!-- WHERE HE IS, at the foot of the card - the same place and the
-                same weight a customer's address sits at on a doorstep card. He
-                drove here, so it is a reference rather than an instruction. -->
-           ${
-             stop.address
-               ? `<p style="font-size:13px;color:var(--ink-500);line-height:1.5;margin:22px 0 0;">
-                    ${
-                      // The name is back on the card, but down here with the
-                      // address it belongs to rather than as a heading of its
-                      // own. Bold, because it is the half he is looking for.
-                      stop.name
-                        ? `<strong style="color:var(--ink-900);">${escapeHtml(stop.name)}:</strong> `
-                        : ''
-                    }${escapeHtml(stop.address)}
-                  </p>`
-               : ''
-           }`
+        ? dropCards(stop)
         : (() => {
             // WEIGH, CHECK, THEN CLIP - and this is the screen where the first
             // two happen. An order whose return leg has not been recorded has
@@ -1039,6 +1007,7 @@ function partnerCard(run) {
            </p>`;
           })()
     }
+    ${laundromatFoot(stop)}
   </div>`;
 }
 
