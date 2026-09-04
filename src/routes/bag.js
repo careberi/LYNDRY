@@ -474,7 +474,7 @@ const ES = Object.freeze({
   'If this label is on a bag, call us at': 'Si esta etiqueta esta en una bolsa, llamenos al',
 
   'Not picked up yet': 'Aun no recogida',
-  'When a bag is finished': 'Cuando termine una bolsa',
+  'When an order is finished': 'Cuando termine el pedido',
   'Waiting for collection': 'Esperando recogida',
   'Our driver has been told.': 'Nuestro conductor ya lo sabe.',
   'Bags to hand over': 'Bolsas para entregar',
@@ -798,7 +798,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
             : ''
       }
 
-      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
+      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When an order is finished'))}</p>
       <!-- WHAT TO DO AT THE END, and why the button is not there yet. It only
            appears once a sticker is on, so an attendant who has not tapped one
            has no way to know it is coming - the page has to say so, or the last

@@ -200,13 +200,36 @@ function stageOf(label, order) {
   // the earliest and the most precise thing we know. The order's status still
   // answers for orders taken before the three-card drop-off existed, where
   // there was no per-bag moment to record.
-  const handedOver = Boolean(label.unclipped_at) || order.status === 'AT_PARTNER';
+  // THE ORDER'S OWN STATUS WINS ONCE IT HAS MOVED PAST THE LAUNDROMAT.
+  //
+  // This check has to come FIRST, and it did not: the per-bag shortcut below
+  // returned WASHING for any handed-over bag, so an attendant who tapped "this
+  // order is done" watched the page come back saying "being washed" with the
+  // same button on it. The order really had gone READY - the page was the only
+  // thing that did not know. A silent success looks exactly like a broken
+  // button, and teaches somebody to tap it again.
+  if (order.status === 'READY') return STAGES.READY;
 
-  if (handedOver) {
+  // HANDED OVER IS A FACT ABOUT THE BAG, NOT ABOUT THE ORDER.
+  //
+  // Neil, scanning a sticker seconds after handing that bag across a counter:
+  // it still said "in the van". The order's status does not move to AT_PARTNER
+  // until every bag is over and the clips are back, so between those two
+  // moments a bag on a laundromat shelf claimed to be in a van three miles
+  // away. unclipped_at is stamped one bag at a time, so it is the earliest and
+  // most precise thing we know.
+  //
+  // SCOPED TO THE LEGS WHERE IT CAN BE TRUE. A bag that is out for delivery has
+  // been unclipped for hours; without the status test it would read as sitting
+  // at a laundromat for the rest of its life.
+  const atLaundromat =
+    order.status === 'AT_PARTNER' ||
+    (order.status === 'IN_PROCESS' && Boolean(label.unclipped_at));
+
+  if (atLaundromat) {
     return label.partner_weight_lb == null ? STAGES.TO_WEIGH_AT_PARTNER : STAGES.WASHING;
   }
 
-  if (order.status === 'READY') return STAGES.READY;
   return STAGES.IN_VAN;
 }
 
