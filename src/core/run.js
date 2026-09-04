@@ -446,10 +446,18 @@ async function tasksForDeliver(order) {
   const prepped = mine.some((b) => b.sticker_seq && b.collected_at);
 
   if (prepped) {
+    // HOW MANY HE IS CARRYING TO THE DOOR. Neil asked for the count, and it is
+    // the bags THEY packed - not the number we collected, which can be
+    // different: one bag in can come back as two.
+    const carrying = mine.filter((b) => b.sticker_seq && b.collected_at).length;
+
     return [
       {
         key: 'delivered',
-        title: order.status === 'DELIVERED' ? 'Delivered' : 'Drop the bags off',
+        title:
+          order.status === 'DELIVERED'
+            ? 'Delivered'
+            : `Drop ${carrying} bag${carrying === 1 ? '' : 's'} off`,
         detail: 'Photograph them where you leave them.',
         spot: spotOf(order),
         spotLabel: 'Leave them here',
