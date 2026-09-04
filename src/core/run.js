@@ -70,8 +70,10 @@ async function tasksForCollect(order) {
   const tasks = [
     {
       key: 'collected',
+      // "Bags collected" once it is done - Neil's wording. The ticked row is a
+      // record of what happened, and a bare "Collected" does not say what was.
       title: order.collected_at
-        ? 'Collected'
+        ? 'Bags collected'
         : known
           ? `Collect ${bagCount} bag${bagCount === 1 ? '' : 's'}`
           : 'Collect the bags',
