@@ -695,6 +695,29 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   const detail = dateProblem(pickupDate);
   if (detail) return { ok: false, reason: 'bad_date', detail };
 
+  // BEFORE WE OPEN. Not the closed sign - bookings are welcome, the van is
+  // simply not running yet.
+  //
+  // Checked in code and not only in the prompt, for the same reason the closed
+  // sign is: a model asked nicely not to book a Saturday will eventually book a
+  // Saturday. The owner is exempt, exactly as he is from the closed sign and
+  // from the county, because walking a real order through is how this gets
+  // tested at all.
+  if (!owner) {
+    const opens = await settings.opensOn();
+
+    if (opens && pickupDate < opens) {
+      return {
+        ok: false,
+        reason: 'before_opening',
+        opensOn: opens,
+        detail:
+          `We start collecting on ${readableDate(opens)}. ` +
+          `Happy to get you booked in for then or any day after - which suits?`,
+      };
+    }
+  }
+
   const timeDetail = timeProblem(pickupTime);
   if (timeDetail) return { ok: false, reason: 'bad_time', detail: timeDetail };
 

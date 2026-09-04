@@ -335,6 +335,56 @@ ${banner(problem, 'bad')}
   </div>
 </div>
 
+<!-- OPEN FOR BOOKINGS, VAN NOT RUNNING YET. A different thing from the switch
+     above and it deserves its own card: closed means nobody can book at all,
+     this means everybody can book and the first van comes later. It is what a
+     launch actually needs - the pipeline fills while the round is still being
+     set up. -->
+<div class="card card-xl" style="padding:24px;margin-bottom:26px;">
+  <p class="eyebrow" style="margin:0 0 8px;">The first day we collect</p>
+  <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 10px;">
+    ${
+      settings.opens_on
+        ? `Booking now, collecting from ${escapeHtml(String(settings.opens_on).slice(0, 10))}`
+        : 'Collecting any day'
+    }
+  </h2>
+  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 18px;">
+    ${
+      settings.opens_on
+        ? `Customers can book today, and the earliest pickup anyone can choose is
+           that date. The AI offers it, the website picker starts there, and
+           <code>bookPickup()</code> refuses anything sooner.`
+        : `Nothing is holding pickups back. Set a date here if you want to take
+           bookings before the van starts running.`
+    }
+  </p>
+  <form method="post" action="/ops/settings/opens-on"
+        style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div>
+      <label class="field-label" for="opens_on">First collection day</label>
+      <input class="input input-lg" type="date" id="opens_on" name="opens_on"
+             value="${settings.opens_on ? escapeHtml(String(settings.opens_on).slice(0, 10)) : ''}">
+    </div>
+    <button class="btn btn-primary btn-lg" type="submit">Save it</button>
+    ${
+      settings.opens_on
+        ? // A DIFFERENT NAME FROM THE DATE FIELD. Sharing it meant a click sent
+          // both - the typed date AND this empty one - and Express turns two
+          // values of one name into an array, so clearing it would have been
+          // read as the malformed date "2026-09-08,".
+          `<button class="btn btn-lg" type="submit" name="clear" value="1">
+             Clear it - collect any day
+           </button>`
+        : ''
+    }
+  </form>
+  <p style="font-size:14px;line-height:1.55;color:var(--ink-500);margin:16px 0 0;">
+    A date that has passed counts as no date, so nobody has to remember to clear
+    it. Your own number is exempt, the same as it is from the closed sign.
+  </p>
+</div>
+
 <div class="card card-xl" style="padding:24px;background:var(--paper-200);">
   <p class="eyebrow" style="margin:0 0 10px;">What closed actually does</p>
   <ul style="margin:0;padding-left:20px;font-size:16px;line-height:1.7;color:var(--ink-700);">

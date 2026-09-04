@@ -367,13 +367,21 @@ const TOOLS = [
 // The system prompt
 // ---------------------------------------------------------------------------
 
-function systemPrompt(today, now, { paused = null, promo = null } = {}) {
+function systemPrompt(today, now, { paused = null, promo = null, opensOn = null } = {}) {
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
 
 Right now it is ${now.time} on ${today}, which is a ${booking.readableDate(today)}, in New Jersey.
 Tomorrow is ${booking.addDays(today, 1)}, a ${booking.readableDate(booking.addDays(today, 1))}.
 THOSE TWO LINES ARE THE ONLY DAY NAMES YOU MAY USE WITHOUT WORKING ONE OUT, and you must never guess a weekday from a date - it said "Wednesday August 13" to a real customer on a Thursday. If you name a day, it has to be one of the two above or one you counted forward from them. Work out any date the customer mentions from that, and always give dates as YYYY-MM-DD.
 You know what time it is, so never ask the customer. "Is 3pm still ahead of us?" is never a question you may ask; you can see the clock above.
+${
+  opensOn
+    ? `WE ARE TAKING BOOKINGS BUT THE VAN DOES NOT START UNTIL ${opensOn} (a ${booking.readableDate(opensOn)}).
+THE EARLIEST PICKUP YOU MAY BOOK OR OFFER IS ${opensOn}. Anything before it is refused by the booking code, so offering it only produces an error the customer never sees the point of.
+This is NOT the same as being shut. Book them in gladly for that day or any day after, take their address and their wash preferences as normal, and treat it as good news: they are early and they are getting a slot.
+If they ask for a sooner day, say when we start and offer that day - do not apologise at length and do not ask them to text back later.`
+    : ''
+}
 
 ${
   paused
@@ -880,6 +888,12 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
   // behind it would happily do, which is the same sentence-versus-code gap that
   // once read a passed pickup window straight back to a customer.
   const open = booking.alwaysAllowed(customer || {}) || (await settings.takingOrders());
+  // The opening date is a separate fact from the closed sign and both can be
+  // true. Worked out here rather than in the prompt, because asking a model to
+  // compare two dates is asking it to be wrong occasionally - the same reason
+  // the pickup windows are computed and handed over.
+  const opensOn = booking.alwaysAllowed(customer || {}) ? null : await settings.opensOn();
+
   const paused = open
     ? null
     : {
@@ -901,7 +915,7 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
     output_config: { effort: 'low' },
 
     system:
-      `${systemPrompt(today, now, { paused, promo })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
+      `${systemPrompt(today, now, { paused, promo, opensOn })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
       (followUp
         ? `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
           `The reply queued to send them is: "${followUp.reply}"\n` +

@@ -7029,6 +7029,46 @@ router.post('/ops/settings/close', guard, may('service.manage'), async (req, res
   }
 });
 
+// THE FIRST DAY WE COLLECT. Not the closed sign - see the card on that page.
+//
+// service.manage like the switch beside it, so a driver or a salesperson cannot
+// move the day the business opens.
+router.post('/ops/settings/opens-on', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const raw = String(body.opens_on || '').trim();
+
+    // Blank is a real answer and so is the Clear button: both mean collect any
+    // day, which is the ordinary state once the business is running. The button
+    // carries its own name so a click cannot submit two values for one field.
+    if (!raw || body.clear) {
+      await settings.setOpensOn(null, req.opsUser && req.opsUser.id);
+      return res.redirect(
+        303,
+        `/ops/settings?note=${encodeURIComponent('Cleared. Pickups can be booked for any day.')}`
+      );
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return res.redirect(
+        303,
+        `/ops/settings?problem=${encodeURIComponent('That is not a date. Use the picker.')}`
+      );
+    }
+
+    await settings.setOpensOn(raw, req.opsUser && req.opsUser.id);
+
+    return res.redirect(
+      303,
+      `/ops/settings?note=${encodeURIComponent(
+        `Saved. Bookings are open and the first pickup anyone can choose is ${raw}.`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/settings/open', guard, may('service.manage'), async (req, res, next) => {
   try {
     await settings.setTakingOrders(true, null, req.opsUser && req.opsUser.id);

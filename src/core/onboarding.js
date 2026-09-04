@@ -48,10 +48,25 @@ const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'WEB_BERGEN', 'INBOUND_TEXT']
 // sees the conversation, so it is the one reply that cannot work out for itself
 // that we are shut - and inviting somebody to book something that will then be
 // refused is a worse first impression than saying so plainly.
-function welcomeMessage({ open = true, promoBlurb = null } = {}) {
+function welcomeMessage({ open = true, promoBlurb = null, opensOn = null } = {}) {
   const what =
     `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
     `it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. `;
+
+  // OPEN FOR BOOKINGS, VAN NOT RUNNING YET. This is the fourth place the
+  // service's state is written in code rather than left to the AI, and it is
+  // here for the same reason the closed sign is: this reply goes out before the
+  // model ever sees the conversation, so it is the one message that cannot work
+  // anything out for itself. Inviting somebody to "schedule a pickup" when the
+  // earliest we can come is four days away sets up a refusal on their next text.
+  //
+  // KEPT TO ONE SEGMENT. The obvious wording ran to 183 characters, which is two
+  // segments on every single signup - a real bill, and this is the message that
+  // goes to everybody. The day and the invitation both survive; the words around
+  // them were the ones doing no work.
+  if (open && opensOn) {
+    return `${what}First pickups ${booking.readableDate(opensOn)}. Want a slot?`;
+  }
 
   if (open) return `${what}Want to schedule a pickup?`;
 
@@ -191,9 +206,11 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   // instead, which knows they are brand new and answers what they said.
   if (sendWelcome) {
     const open = booking.alwaysAllowed(customer) || (await settings.takingOrders());
+    const opensOn = booking.alwaysAllowed(customer) ? null : await settings.opensOn();
+
     await sendAndLog(
       phone,
-      welcomeMessage({ open, promoBlurb: open ? null : grantedBlurb }),
+      welcomeMessage({ open, opensOn, promoBlurb: open ? null : grantedBlurb }),
       customer.id
     );
   }

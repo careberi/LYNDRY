@@ -5,6 +5,7 @@ const express = require('express');
 const db = require('../db');
 const orders = require('../core/orders');
 const booking = require('../core/booking');
+const settings = require('../core/settings');
 const billing = require('../core/billing');
 const auth = require('../core/customer-auth');
 const payments = require('../providers/payments');
@@ -272,10 +273,21 @@ function money(cents) {
 
 // The soonest and latest days someone may pick. Today is allowed — a morning
 // booking for the same afternoon is a normal thing to want.
-function dateBounds() {
-  const from = new Date();
-  const to = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
-  return { min: from.toISOString().slice(0, 10), max: to.toISOString().slice(0, 10) };
+//
+// NEW JERSEY'S CLOCK, NOT UTC. This was `new Date().toISOString()`, which from
+// 8pm Eastern onward has already rolled to tomorrow — so the picker quietly
+// stopped offering today every evening, which is exactly when somebody sitting
+// at home decides to book one. CLAUDE.md carries the same warning about the
+// same mistake elsewhere in the codebase.
+//
+// `opensOn` raises the floor before we start running: no picker, no refusal.
+// It is still enforced in bookPickup(), because a form control is a courtesy
+// and not a guard.
+function dateBounds(opensOn = null) {
+  const from = booking.today();
+  const to = booking.addDays(from, 60);
+
+  return { min: opensOn && opensOn > from ? opensOn : from, max: to };
 }
 
 function currentOrderCard(order) {
@@ -380,7 +392,8 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
       .order('pickup_date', { ascending: false })
       .limit(8);
 
-    const { min, max } = dateBounds();
+    const opensOn = await settings.opensOn();
+    const { min, max } = dateBounds(opensOn);
     const prefs = customer.preferences || {};
     const defaultMethod = prefs.default_pickup_method || 'LEAVE_OUTSIDE';
 
@@ -561,6 +574,10 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
         no_preferences: 'Tell us how you like it washed first — text us and we’ll get you set up in a minute.',
         bad_date: result.detail,
         bad_time: result.detail,
+        // Booked before the van starts. The same sentence the text thread
+        // gives, from the same function, so the two doors cannot explain the
+        // same refusal two different ways.
+        before_opening: result.detail,
         already_booked: 'You already have a pickup booked. Move it rather than booking a second.',
         // Exactly what the text thread says, from the same function - the two
         // doors must not explain the same refusal two different ways.

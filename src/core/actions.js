@@ -85,6 +85,12 @@ async function createOrder(customer, input) {
       case 'bad_date':
       case 'bad_time':
         return result.detail;
+      // Booked before the van starts running. Its own case rather than falling
+      // in with bad_date, because nothing is wrong with what they asked for -
+      // we are simply not there yet, and the sentence has to read as an
+      // invitation rather than a correction.
+      case 'before_opening':
+        return result.detail;
       // The run they asked for has gone. The sentence explains which one and
       // offers the next; nothing has been booked, and nothing will be until
       // they say yes and the AI calls again with a time we can actually do.

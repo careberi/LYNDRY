@@ -1094,6 +1094,24 @@ read a passed pickup window straight back to a customer.
 warning, and a line on `/ops/settings` where the closing actually happens. An
 exemption nobody can see is one you discover by trying, on the day it matters.
 
+**`app_settings.opens_on` IS THE FIRST DAY A VAN COMES, AND IT IS NOT THE CLOSED
+SIGN.** Closed means nobody can book at all. This means anybody can book and the
+earliest pickup is on or after that date — which is what a launch actually
+needs, because the pipeline fills while the round is still being set up.
+Seventeen people had signed up and were waiting.
+
+It is checked in the same four places for the same reason, plus the two web
+doors: `bookPickup()` refuses `before_opening`, the prompt in `brain.js` states
+the date and tells the model it is not the same as being shut, `actions.js` has
+its own reply for it, and the canned welcome in `onboarding.js` says when the
+first pickups are instead of inviting somebody to book one that will be refused.
+`/account`'s date picker starts at it, and `/ops/settings` sets it.
+
+**A date that has passed counts as no date.** Nobody has to remember to clear
+it, which matters because the person who set it is the person who would forget.
+Neil's own number is exempt, exactly as it is from the closed sign and the
+county.
+
 **THE CLOSED SIGN IS CHECKED IN FOUR PLACES AND ALL FOUR HAVE TO KNOW** —
 `booking.bookPickup()`, the AI's prompt in `brain.js`, the tool replies in
 `actions.js`, and the canned welcome in `onboarding.js`. Only the first two

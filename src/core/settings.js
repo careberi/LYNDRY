@@ -54,6 +54,45 @@ async function takingOrders() {
   return s.taking_orders !== false;
 }
 
+// THE EARLIEST DAY A VAN WILL COME, or null once we are simply running.
+//
+// Not the same thing as the closed sign, and the difference is the point:
+// closed means nobody can book at all, this means anybody can book and the
+// first pickup is on or after this date. It exists for a launch, where taking
+// bookings a few days before the first round is worth real money - seventeen
+// people had signed up and were waiting.
+//
+// A date that has passed is the same as no date. Nobody has to remember to
+// clear it, which matters because the person who set it is the person who would
+// forget.
+async function opensOn() {
+  const s = await read();
+  const iso = s.opens_on ? String(s.opens_on).slice(0, 10) : null;
+  if (!iso) return null;
+
+  const booking = require('./booking');
+  return iso > booking.today() ? iso : null;
+}
+
+async function setOpensOn(iso, opsUserId) {
+  const value = iso ? String(iso).slice(0, 10) : null;
+
+  const { data, error } = await db
+    .from('app_settings')
+    .update({ opens_on: value, updated_at: new Date().toISOString(), updated_by: opsUserId || null })
+    .eq('id', true)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+
+  // Refreshed rather than merely invalidated, the same way setTakingOrders does
+  // it: the next inbound text must not be able to read a stale open date.
+  cached = data;
+  cachedAt = Date.now();
+  return value;
+}
+
 // Why we are not, as a sentence, or null.
 async function pausedReason() {
   const s = await read();
@@ -238,4 +277,5 @@ module.exports = {
   serviceBase,
   setServiceBase,
   weightLimits,
-  setWeightLimits, read, takingOrders, pausedReason, setTakingOrders, CACHE_MS };
+  setWeightLimits, read, takingOrders, pausedReason, setTakingOrders,
+  opensOn, setOpensOn, CACHE_MS };
