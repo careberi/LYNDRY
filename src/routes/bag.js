@@ -487,6 +487,7 @@ const ES = Object.freeze({
   'Not yet - another bag from this order is still open.':
     'Todavia no - otra bolsa de este pedido sigue abierta.',
   'Still waiting on': 'Falta',
+  'Weigh every bag first.': 'Pese cada bolsa primero.',
   'Tap a sticker number first.': 'Toque primero el numero de una pegatina.',
   'Only when every bag is packed and done. We will come and collect it.':
     'Solo cuando todas esten empacadas y listas. Pasaremos a recogerlo.',
@@ -790,6 +791,18 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
                    : ''
                }
              </p>`
+          : query.ready === 'unweighed'
+            ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);
+                         border-radius:12px;background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
+                 <strong>${escapeHtml(say('Weigh every bag first.'))}</strong>
+                 ${
+                   query.on
+                     ? `<br>${escapeHtml(say('Still waiting on'))}: <code style="font-weight:700;">${escapeHtml(
+                         String(query.on).slice(0, 120)
+                       )}</code>`
+                     : ''
+                 }
+               </p>`
           : query.ready === 'none'
             ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);
                          border-radius:12px;background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
@@ -1476,6 +1489,18 @@ router.post('/o/:code/ready', async (req, res, next) => {
       return res.redirect(
         303,
         back + `&ready=waiting&on=${encodeURIComponent(waiting.slice(0, 120))}`
+      );
+    }
+
+    // AND EVERY BAG HAS TO HAVE A WEIGHT ON IT. Their scale is what charges
+    // the customer's card now - we bill the higher of the two - so an order
+    // cannot be finished with a bag nobody weighed.
+    const unweighed = await tags.unweighedBags(order.id);
+    if (unweighed.length) {
+      const missing = unweighed.map((b) => b.code).join(',');
+      return res.redirect(
+        303,
+        back + `&ready=unweighed&on=${encodeURIComponent(missing.slice(0, 120))}`
       );
     }
 

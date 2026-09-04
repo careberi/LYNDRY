@@ -1019,6 +1019,88 @@ function progressCard(order, tasks) {
 // FOLDED SHUT BY DEFAULT. This is a record page; a row of weight boxes sitting
 // open on it invites the loose editing that was removed on purpose.
 // ---------------------------------------------------------------------------
+// --- THE TWO SCALES DISAGREED, AND SOMEBODY HAS TO DECIDE ------------------
+//
+// A held order is the one place in the system where money is deliberately
+// stuck. settleWeight() refuses to pick between two weights that are further
+// apart than the tolerance allows: nothing is charged, and - the part that
+// matters - the customer is told nothing, because a price we are still arguing
+// about internally is the wrong thing to send somebody.
+//
+// This is the way out of that, and it is the ONLY way out. The issue raised at
+// the laundromat says "settle it on the order page"; this is the page.
+//
+// IT IS A DECISION ON THE RECORD, NOT A BUTTON. Same rule as the handover
+// override: a reason is required, it goes in the change log with a name on it,
+// and it is Admin only - the value of a check is that somebody other than the
+// person in a hurry agreed to skip it.
+function heldWeightCard(order, maySettle) {
+  if (!order.weight_held_at || order.weight_settled_at) return '';
+
+  const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+  const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
+  if (ours == null || theirs == null) return '';
+
+  const gap = Math.abs(ours - theirs);
+  const higher = Math.max(ours, theirs);
+  const lower = Math.min(ours, theirs);
+
+  const number = (label, name, value, hint) => `
+    <div style="flex:1 1 150px;min-width:150px;">
+      <label class="field-label" for="${name}">${escapeHtml(label)}</label>
+      <input class="input input-lg" type="number" id="${name}" name="${name}"
+             value="${escapeHtml(String(value))}" step="0.01" min="0" max="400"
+             inputmode="decimal" required>
+      <p style="font-size:13px;color:var(--ink-500);margin:6px 0 0;line-height:1.45;">
+        ${escapeHtml(hint)}
+      </p>
+    </div>`;
+
+  return `
+  <section class="card" style="background:var(--sunbeam-500);margin-bottom:20px;">
+    <p class="eyebrow" style="margin:0 0 8px;">Nothing has been charged</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 12px;">
+      The two scales disagree
+    </h2>
+
+    <div style="display:flex;gap:22px;flex-wrap:wrap;margin:0 0 16px;
+                font-variant-numeric:tabular-nums;">
+      <div><p class="eyebrow" style="margin:0 0 2px;">We weighed</p>
+           <p style="font-size:26px;font-weight:800;margin:0;">${ours.toFixed(2)} lb</p></div>
+      <div><p class="eyebrow" style="margin:0 0 2px;">They weighed</p>
+           <p style="font-size:26px;font-weight:800;margin:0;">${theirs.toFixed(2)} lb</p></div>
+      <div><p class="eyebrow" style="margin:0 0 2px;">Apart</p>
+           <p style="font-size:26px;font-weight:800;margin:0;">${gap.toFixed(2)} lb</p></div>
+    </div>
+
+    <p style="font-size:15px;line-height:1.6;margin:0 0 18px;max-width:62ch;">
+      The customer has not been told a price and their card has not been
+      touched. Deciding here does both: it prices the order, charges the card
+      and texts them the total.
+    </p>
+
+    ${
+      maySettle
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/settle-weight">
+             <div style="display:flex;gap:16px;flex-wrap:wrap;margin:0 0 16px;">
+               ${number('Bill the customer on', 'chosen_lb', higher.toFixed(2), `The higher of the two is ${higher.toFixed(2)} lb.`)}
+               ${number('Pay the laundromat on', 'partner_lb', lower.toFixed(2), `The lower of the two is ${lower.toFixed(2)} lb.`)}
+             </div>
+             <label class="field-label" for="note">Why</label>
+             <input class="input input-lg" type="text" id="note" name="note" maxlength="200"
+                    required placeholder="What you checked and what you decided">
+             <button class="btn btn-primary btn-lg" type="submit"
+                     style="width:100%;margin-top:16px;">
+               Settle it and charge the card
+             </button>
+           </form>`
+        : `<p style="font-size:15px;line-height:1.6;margin:0;font-weight:700;">
+             An admin has to settle this one.
+           </p>`
+    }
+  </section>`;
+}
+
 function correctionsCard(order, labels, mayCorrect) {
   if (!mayCorrect) return '';
 
@@ -2458,7 +2540,11 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // query fail rather than just returning null.
       .select(
         `${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at, ` +
-          'weight_photo_path, partner_weight_lb, partner_weight_at, driver_id'
+          'weight_photo_path, partner_weight_lb, partner_weight_at, driver_id, ' +
+          // A held weight is money that is deliberately stuck. Without these
+          // two the page cannot tell a settled order from one waiting on a
+          // decision, and the card that offers the decision never appears.
+          'weight_held_at, weight_settled_at, billable_weight_lb'
       )
       .eq(byNumber ? 'order_number' : 'id', wanted)
       .maybeSingle();
@@ -2580,6 +2666,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         }
       </div>
 
+      ${roles.can(req.opsUser, 'money.view') ? heldWeightCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
       <!-- THE ACTION CARDS ARE GONE FROM THIS PAGE, at Neil's request.
@@ -3087,6 +3174,85 @@ async function loadOrderForAction(idOrNumber) {
   if (error) throw error;
   return data;
 }
+
+// SETTLE A HELD WEIGHT. The only way out of the hold settleWeight() puts an
+// order into when the two scales are further apart than the tolerance allows.
+//
+// It does not have its own copy of the pricing. It calls the same
+// settleWeight() the laundromat's weigh-in calls, handing it the weight a
+// person chose instead of leaving it to pick - so the price, the charge, the
+// text to the customer and the change log all happen exactly the one way they
+// already happen. Same rule as fulfilment.js having two front doors.
+//
+// orders.override, Admin only. A driver may not decide this: the whole value
+// of the check is that somebody other than the person in a hurry agreed.
+router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const body = req.body || {};
+
+    const chosen = weights.lb(body.chosen_lb);
+    const partner = weights.lb(body.partner_lb);
+    const note = String(body.note || '').trim().slice(0, 200);
+
+    if (chosen == null || chosen <= 0) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent('What weight are we billing on? Pounds, as a number.')}`);
+    }
+
+    // The reason is not optional. An override with no reason is a button, and
+    // a log that records a decision without recording why is not evidence of
+    // anything.
+    if (!note) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent('Say why. It goes in the change log with your name on it.')}`);
+    }
+
+    // Already dealt with, by somebody else or by a double tap. Not an error.
+    if (order.weight_settled_at) {
+      return res.redirect(303, `${back}?done=${encodeURIComponent('That one was already settled.')}`);
+    }
+
+    const settled = await fulfilment.settleWeight(order, {
+      by: { opsUser: req.opsUser },
+      chosenLb: chosen,
+      partnerLb: partner,
+      note: `settled by hand: ${note}`,
+    });
+
+    if (!settled || !settled.ok) {
+      return res.redirect(303, `${back}?problem=${encodeURIComponent(settled && settled.detail ? settled.detail : 'That could not be settled.')}`);
+    }
+
+    // The issue raised at the laundromat is what put this in front of somebody.
+    // Closing it here is the point - an issue that stays open after the thing
+    // it was about is fixed teaches people to ignore the queue.
+    const { data: open } = await db
+      .from('issues')
+      .select('id')
+      .eq('order_id', order.id)
+      .eq('status', 'OPEN');
+
+    for (const issue of open || []) {
+      await issues
+        .resolve(issue.id, req.opsUser, `Billed on ${chosen} lb. ${note}`)
+        .catch((err) => console.error(`Could not close issue ${issue.id}: ${err.message}`));
+    }
+
+    // Say what happened to the money, because that is the question the person
+    // pressing this button is actually asking.
+    const outcome = settled.charged
+      ? `Billed on ${chosen} lb and charged.`
+      : settled.declined
+        ? `Billed on ${chosen} lb. The card was declined and they have been told.`
+        : `Billed on ${chosen} lb. Nothing was charged - check the payment status.`;
+
+    return res.redirect(303, `${back}?done=${encodeURIComponent(outcome)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // Move an order to a different driver, or to nobody.
 //

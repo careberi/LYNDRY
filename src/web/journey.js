@@ -30,9 +30,9 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '3 September 2026';  // the drop-off is three steps: out of the
-                                      // van, over the counter, clips back
-// Previously: no scale photo, and the pickup sequence
+const REVIEWED = '3 September 2026';  // the laundromat's weight is required and
+                                      // the card is charged at their weigh-in
+// Previously: the drop-off in three steps; no scale photo; the pickup sequence
 
 // A step in one of the three legs. `who` is who physically does it, which is
 // the thing a reader most often wants and the thing prose is worst at keeping
@@ -406,14 +406,20 @@ function journeyBody() {
         by nothing whatever past it.
       </p>
       <p>
-        <strong>If they never enter a weight, ours settles it at delivery.</strong>
-        Entering it is voluntary, and an order that waited for ever would be
-        delivered and never billed.
+        <strong>They have to enter one.</strong> An order cannot be marked
+        finished while a bag has no weight against it, and the page says which
+        bag it is waiting on. Their number is half of what bills, so an order
+        settled on one scale is an order settled on half the evidence.
+      </p>
+      <p>
+        <strong>A bag we wash ourselves never gets here</strong>, so it has only
+        our scale - delivery settles and charges that one instead. That is the
+        backstop, not the normal route.
       </p>
     </div>`)}
 
   ${leg(3, 'back', "Back to the customer's door",
-    'The only leg where money moves.',
+    'Where the laundry lands, and where an unpaid order is caught.',
     `
     <ol class="jn-steps">
       ${step('Weigh what he is taking, before anything moves', 'Driver',

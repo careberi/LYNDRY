@@ -10,6 +10,7 @@ const events = require('./order-events');
 const recurring = require('./recurring');
 const partners = require('./partners');
 const promotions = require('./promotions');
+const settings = require('./settings');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -665,7 +666,9 @@ async function deliver(orderIn, file, { by = {} } = {}) {
         ? `Charged ${money(order.price_cents)}`
         : charge.needsCard
           ? `Could not charge ${money(order.price_cents)} - no card on file`
-          : `Card declined for ${money(order.price_cents)}`,
+          : charge.declined
+            ? `Card declined for ${money(order.price_cents)}`
+            : `Not charged: ${charge.reason || 'the charge could not be attempted'}`,
     became: charge.ok ? 'PAID' : 'unpaid',
     by,
     reason: charge.ok || charge.nothingDue ? null : 'Delivered anyway and chased by text',
@@ -1059,48 +1062,111 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
     by,
   });
 
+  // THE CARD IS CHARGED HERE, AT THE WEIGH-IN. Neil's call, and it reverses
+  // the earlier one that collected at the door.
+  //
+  // The reasoning that moved it: by the time both scales have spoken there is
+  // nothing left to find out. The laundromat's figure is mandatory now, so the
+  // amount cannot change between here and the doorstep, and the two rules
+  // above already decided what happens when the scales disagree - inside the
+  // tolerance we bill the higher of the two, outside it nothing is charged at
+  // all until a person has looked. Waiting until the doorstep to take money
+  // that was settled hours earlier only moves a decline to the worst possible
+  // moment: a driver standing on a step with an armful of clean laundry and no
+  // way to fix it.
+  //
+  // A DECLINE STILL DOES NOT STOP THE DELIVERY. It is a text, not a hold on
+  // somebody's clothes. The doorstep charge stays as a backstop for the orders
+  // that never reach here - the ones we wash ourselves, which have no
+  // laundromat weigh-in to trigger this.
   const customer = order.customers;
   const withCustomer = { ...settled, customers: customer };
 
-  // NOTHING IS CHARGED HERE. Settling decides the amount; the doorstep collects
-  // it.
-  //
-  // Neil's call, and it went back and forth for a reason worth recording. The
-  // charge sat here briefly because settling against two scales closes the
-  // window in which a weight could be disputed, which made charging early look
-  // safe. It moved back because safe is not the only question: the customer
-  // pays at the moment they have their laundry in their hands, which is what
-  // they were told would happen and the thing that makes a decline recoverable
-  // rather than a refund.
-  //
-  // So this function's job ends at deciding the amount and telling them.
-  const charge = { ok: false, notYet: true };
+  const minimumApplied = beforeDiscount > byWeight;
+
+  const opening = `Your laundry weighed ${billable} lb`;
+  const base = minimumApplied
+    ? `${opening}, which is under our ${money(floor)} minimum, so that is ${money(beforeDiscount)}.`
+    : `${opening}, so that is ${money(beforeDiscount)} at ${site.pricePerLb} a pound.`;
+
+  // SAY WHAT CAME OFF. A total that is lower than the arithmetic the customer
+  // can do themselves reads as a mistake unless the reason is in the same
+  // message.
+  const howPriced = deal
+    ? `${base} ${money(discountCents)} off for ${deal.promotion.name}, so the total is ${money(priceCents)}.`
+    : `${base.replace(/that is /, 'the total is ')}`;
+
+  // Nothing to take is not a failure. A waived order, an order somebody has
+  // already settled by hand, and a promotion that took the total to zero all
+  // land here and none of them should touch a card.
+  const charge =
+    priceCents > 0 &&
+    settled.payment_status !== 'PAID' &&
+    settled.payment_status !== 'WAIVED'
+      ? await billing.chargeOrder(withCustomer, customer).catch((err) => {
+          // Charging must never take the weigh-in down with it. The price is
+          // settled and recorded above; the money is a separate thing that can
+          // be retried from the order page.
+          console.error(`Could not charge ${order.id} at the weigh-in: ${err.message}`);
+          return { ok: false, failed: true };
+        })
+      : { ok: true, nothingDue: true };
+
+  await events.record(order.id, {
+    kind: 'PAYMENT',
+    // SAY WHICH FAILURE IT WAS. "Card declined" was written for every
+    // unsuccessful charge, including the one where no card was ever presented
+    // because payments are switched off - so an order that could not possibly
+    // have been charged read as a customer's card being refused, and the
+    // change log sent somebody looking at the wrong problem.
+    summary: charge.nothingDue
+      ? 'Nothing to charge'
+      : charge.ok
+        ? `Charged ${money(priceCents)} at the weigh-in`
+        : charge.needsCard
+          ? `Could not charge ${money(priceCents)} - no card on file`
+          : charge.declined
+            ? `Card declined for ${money(priceCents)}`
+            : `Not charged: ${charge.reason || 'the charge could not be attempted'}`,
+    became: charge.ok ? 'PAID' : 'unpaid',
+    by,
+    reason: charge.ok || charge.nothingDue ? null : 'Told them straight away and the delivery goes ahead',
+  });
 
   if (customer) {
-    const minimumApplied = beforeDiscount > byWeight;
-
-    const opening = `Your laundry weighed ${billable} lb`;
-    const base = minimumApplied
-      ? `${opening}, which is under our ${money(floor)} minimum, so that is ${money(beforeDiscount)}.`
-      : `${opening}, so that is ${money(beforeDiscount)} at ${site.pricePerLb} a pound.`;
-
-    // SAY WHAT CAME OFF. A total that is lower than the arithmetic the
-    // customer can do themselves reads as a mistake unless the reason is in
-    // the same message.
-    const howPriced = deal
-      ? `${base} ${money(discountCents)} off for ${deal.promotion.name}, so the total is ${money(priceCents)}.`
-      : `${base.replace(/that is /, 'the total is ')}`;
-
-    // Said as something still to come, because it is. Money moves at the door.
+    // ONE MESSAGE, NOT TWO. The price and what happened to the card are the
+    // same piece of news to the person reading it, and a decline arriving as a
+    // separate text a second later reads like something broke.
     const card = billing.describeCard(customer);
-    const paid = card
-      ? `We'll take it off your ${card} when we drop it back.`
-      : `We'll settle up when we drop it back.`;
 
-    await sendAndLog(customer.phone, `${howPriced} ${paid}`, customer.id);
+    let money_ = '';
+    if (charge.nothingDue) {
+      money_ = '';
+    } else if (charge.ok) {
+      money_ = ` Charged to your ${card || 'card'}.`;
+    } else if (charge.needsCard) {
+      money_ = ` We don't have a card on file. Add one here and we'll settle it: ${charge.setupUrl || ''}`;
+    } else if (charge.declined) {
+      money_ = ` Your card was declined. Please update your payment method here and we'll settle it: ${charge.setupUrl || ''}`;
+    } else {
+      // Payments switched off, or the charge threw. Say what they were always
+      // told rather than inventing a problem they cannot act on.
+      money_ = card
+        ? ` We'll take it off your ${card} when we drop it back.`
+        : ` We'll settle up when we drop it back.`;
+    }
+
+    await sendAndLog(customer.phone, `${howPriced}${money_}`, customer.id);
   }
 
-  return { ok: true, priceCents, billable, basis, charged: Boolean(charge && charge.ok) };
+  return {
+    ok: true,
+    priceCents,
+    billable,
+    basis,
+    charged: Boolean(charge && charge.ok && !charge.nothingDue),
+    declined: Boolean(charge && charge.declined),
+  };
 }
 
 // --- Did it all come back? --------------------------------------------------

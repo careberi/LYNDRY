@@ -863,10 +863,17 @@ the order is `AT_PARTNER`, and the route refuses it too. That second check is
 the only real one: this is the page with no login at all, so a hidden form whose
 route still fires is not a guard.
 
-**The partner's weight is a cross-check, and ours is the one that bills.** A
-laundromat may enter its own figure on the QR page; **`partner_weight_lb` is
-never read by the pricing code**. Ours bills. (The scale photo that used to be
-required alongside it is gone — see above.)
+**THE LAUNDROMAT'S WEIGHT IS MANDATORY, and it is half of what bills.** It was
+a voluntary cross-check that the pricing code never read. Neil changed both:
+every bag they were handed has to have a weight on it, and the customer is
+billed on the higher of the two scales. `tags.unweighedBags()` is the guard —
+"this order is done" is refused while any bag is unweighed, and the page says
+which. (The scale photo that used to be required alongside it is gone — see
+above.)
+
+**A bag cannot show its wash instructions until it has been weighed**, which is
+what makes the rule bite in practice rather than at the end. The guard on
+finishing is the backstop for anything that gets past that.
 
 **The tolerance is the larger of a fixed amount and a percentage** —
 `TOLERANCE_LB` or `TOLERANCE_PCT` of the bag, in `src/core/partners.js`. It has
@@ -1476,20 +1483,40 @@ Code works out whether they have a card, whether to send a link, and when to
 charge. This is the same rule as `open_locker()` taking no arguments — no
 amount of clever texting should move a charge.
 
-**The price is set at `/ops/weight` and the card is charged at `/ops/delivered`.**
-Two authorisations are on record by then: the consent given on the Stripe page,
-and the booking confirmation naming the card. There is no third "reply YES to
-pay" step, on purpose.
+**The price is provisional at `/ops/weight` and the card is charged when the
+laundromat weighs it.** Two authorisations are on record by then: the consent
+given on the Stripe page, and the booking confirmation naming the card. There is
+no third "reply YES to pay" step, on purpose.
 
-**The gap between the two is deliberate and load-bearing.** The scale is the
-first moment an amount exists, but the bag then goes to a laundromat that may
-read the weight differently. Charging at the scale — which it briefly did —
-meant the money had already moved by the time a disagreement surfaced, leaving
-only a refund or an awkward conversation. Charging at the door leaves the whole
-turnaround as a window to sort it out, and the customer pays when they have
-their laundry back.
+**`fulfilment.settleWeight()` owns all of it** — which weight bills, what it
+costs, whether the card moves, and what the customer is told. One function,
+because the four answers have to agree.
 
-**The card is charged exactly once per order, at the door, and booking takes
+**The charge point has moved twice and the reasoning is worth keeping.** It sat
+at our own scale first, which was too early: the bag then went to a laundromat
+that might read the weight differently, so the money had already moved by the
+time a disagreement surfaced. It moved to the doorstep, which was safe but late.
+It is now the laundromat's weigh-in — Neil's call — because their figure is
+mandatory, so by then nothing about the amount can still change, and waiting
+until the doorstep only moved a decline to the worst possible moment: a driver
+standing on a step with an armful of clean laundry and no way to fix it.
+
+**The customer is billed on the HIGHER of the two scales.** Inside the tolerance
+the two numbers are describing the same laundry and the gap is smaller than the
+amount either scale could be out by, so the higher one is taken and the card is
+charged there and then. Outside it, nothing is charged and nothing is said —
+see the hold below.
+
+**A decline is told to the customer immediately**, in the same text as the
+price, with a link to update the card. It does not hold up the delivery: the
+clothes still go back and we chase by text.
+
+**`/ops/delivered` is still a charge point and must stay one.** It is the
+backstop for orders that never reach a laundromat — anything we wash ourselves
+has no partner weigh-in to trigger the charge. It is a no-op for an order
+already paid.
+
+**The card is charged exactly once per order, and booking takes
 nothing.** For
 a while there was a $25 minimum collected at booking with the balance taken on
 delivery — two charges, two idempotency keys, two things to refund, and a

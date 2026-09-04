@@ -298,6 +298,21 @@ async function stickersOn(parent) {
 // bag packed against it. One intake bag can become any number of packed bags,
 // so the test is "at least one", not a count - but it has to be true of all of
 // them.
+// EVERY BAG THEY WERE HANDED HAS TO HAVE A WEIGHT ON IT.
+//
+// Neil's rule. Their figure used to be voluntary and it is what charges the
+// card now - the customer is billed on the higher of the two scales, so an
+// order with only one scale on it is an order billed on half the evidence.
+// Making it mandatory is also what lets the charge move to the weigh-in: the
+// amount can only be final once both numbers exist.
+//
+// A released bag is one that never reached them, so it is not theirs to weigh.
+async function unweighedBags(orderId) {
+  const intake = await bags.forOrder(orderId, 'PICKUP');
+
+  return intake.filter((bag) => !bag.released_at && bag.partner_weight_lb == null);
+}
+
 async function unfinishedBags(orderId) {
   const intake = await bags.forOrder(orderId, 'PICKUP');
 
@@ -638,6 +653,7 @@ module.exports = {
   toggleCollected,
   stickersOn,
   unfinishedBags,
+  unweighedBags,
   stickerState,
   STICKER,
   subBagsOf,

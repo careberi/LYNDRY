@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '3 September 2026';  // two wash questions, detergent is standard
+const REVIEWED = '3 September 2026';  // the card is charged at the laundromat's weigh-in
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -545,9 +545,11 @@ function processBody(user) {
       ${step(
         3,
         'They type in what their scale said',
-        `One number, on the same page. It is a <strong>cross-check, not a
-         price</strong> - our driver's weight is what charged the card, and the
-         laundromat's figure is never read by any pricing code. Two scales are
+        `One number per bag, on the same page, and it is
+         <strong>required</strong> - an order cannot be marked finished while a
+         bag has no weight on it, and the wash instructions do not appear until
+         it does. Their figure is <strong>half of what bills</strong>: the
+         customer pays on the higher of the two scales. Two scales are
          allowed to differ by <strong>${partners.TOLERANCE_LB} lb or
          ${(partners.TOLERANCE_PCT * 100).toFixed(0)}% of the bag, whichever is
          larger</strong>; past that an issue is raised and they are told so
@@ -652,7 +654,7 @@ function processBody(user) {
   ${sees(['ADMIN', 'SALES']) ? section(
     'money',
     'The money',
-    'One charge, at the door',
+    'One charge, when both scales agree',
     `The card is touched exactly once in an order's life, and it is not when they
      book.`,
     `
@@ -684,12 +686,12 @@ function processBody(user) {
          <br><br>
          The driver's number alone is provisional, which is why it is not texted:
          quoting ours and then billing theirs would be quoting a price we do not
-         honour. <strong>If the laundromat never enters a weight, ours settles it
-         at delivery</strong> - entering it is voluntary, and an order that waited
-         for ever would be delivered and never billed.
+         honour. <strong>A laundromat has to enter a weight</strong> - they
+         cannot mark an order finished without one.
          <br><br>
-         The driver still cannot save a weight without photographing the scale
-         that produced it.`
+         An order that never goes to a laundromat at all - anything we wash
+         ourselves - has only our scale, so <strong>delivery settles and charges
+         it instead</strong>. That is the backstop, not the normal route.`
       )}
       ${step(
         3,
