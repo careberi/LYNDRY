@@ -666,7 +666,23 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 //   { ok: false, reason: 'needs_card' }
 // ---------------------------------------------------------------------------
 
-async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes, fromSchedule } = {}) {
+// --- CAN WE ACTUALLY DO THIS DAY AND TIME -----------------------------------
+//
+// Neil's ask, and the right shape: when a customer names a day and a time, the
+// answer has to come from the code that knows the rules, not from a model
+// reading a prompt and doing date arithmetic.
+//
+// He was offered tomorrow, four days before the van starts, because the AI
+// worked it out for itself and got it wrong. Telling it the rules more firmly
+// is not a fix - it is the same gamble with better odds.
+//
+// THIS IS THE ONE IMPLEMENTATION OF "IS THAT SLOT POSSIBLE". bookPickup() calls
+// it and then writes; the AI calls it through check_slot and then speaks. There
+// is no second copy to drift, which is the same rule fulfilment.js and
+// booking.js already follow for their two front doors.
+//
+// It writes nothing and is safe to call as often as the conversation needs.
+async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule } = {}) {
   // NOT TAKING ORDERS. Checked first, before anything else, because when the
   // service is shut every other reason a booking might fail is beside the
   // point - and because this is the guard that has to hold when the AI is
@@ -745,10 +761,9 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   // exists, it can be resumed the moment a card is saved, and until then it
   // stays off the driver's run sheet, because nobody should drive to a door
   // for an order we have no way to bill.
-  const prefs = customer.preferences || {};
-
-  // The window is decided here and stored, never recomputed. If today is done
-  // it rolls to tomorrow rather than asking the customer to choose again.
+  // The window is decided here and stored by the caller, never recomputed. If
+  // today is done it rolls to tomorrow rather than asking the customer to
+  // choose again.
   const window = windowFor(pickupDate, pickupTime);
 
   // NOBODY IS BOOKED INTO A TIME THEY DID NOT AGREE TO. Same rule as moving an
@@ -762,6 +777,19 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
   if (window.substituted && !fromSchedule) {
     return { ok: false, reason: 'time_unavailable', window, say: cannotDoThatTime(window) };
   }
+
+  return { ok: true, window, pickupDate, pickupTime };
+}
+
+async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes, fromSchedule } = {}) {
+  // Every rule lives in checkSlot, so the thing the AI is told and the thing
+  // that writes the order can never disagree about what is possible.
+  const checked = await checkSlot(customer, { pickupDate, pickupTime, fromSchedule });
+  if (!checked.ok) return checked;
+
+  const { window } = checked;
+
+  const prefs = customer.preferences || {};
 
   const order = await orders.create({
     customerId: customer.id,
@@ -973,6 +1001,7 @@ module.exports = {
   hasPreferences,
   inServiceArea,
   alwaysAllowed,
+  checkSlot,
   readableDate,
   readableTime,
   arrivalWindow,

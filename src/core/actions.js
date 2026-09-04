@@ -138,6 +138,52 @@ async function createOrder(customer, input) {
   return booking.confirmationMessage(customer, result.order, { rolled: result.rolled });
 }
 
+// --- check_slot -------------------------------------------------------------
+//
+// The step that happens BEFORE the customer is told anything. Neil's ask, after
+// the AI offered a pickup four days before the van starts running.
+//
+// It answers from booking.checkSlot(), which is the same function bookPickup()
+// runs before it writes - so what the customer is told and what the code will
+// actually do cannot disagree. Nothing is written, so it is safe to call as
+// often as the conversation needs.
+//
+// IT RETURNS FACTS, NOT A SENTENCE. The reply is still the AI's to write in its
+// own voice; what it may not do is invent the answer. The one exception is a
+// refusal that already has wording - a passed window, a closed service - where
+// the sentence exists precisely so the two front doors say the same thing.
+async function checkSlot(customer, input = {}) {
+  const result = await booking.checkSlot(customer, {
+    pickupDate: input.pickup_date,
+    pickupTime: input.pickup_time,
+  });
+
+  if (result.ok) {
+    return {
+      ok: true,
+      bookable: true,
+      date: result.pickupDate,
+      day: booking.readableDate(result.pickupDate),
+      window: `${booking.readableTime(result.window.start)} to ${booking.readableTime(result.window.end)}`,
+      leave_it_out_by: booking.readableTime(result.window.start),
+      say: null,
+    };
+  }
+
+  // The earliest day we could do instead, when there is an obvious one. Given
+  // rather than left to be worked out, which is the whole point of this tool.
+  const opens = result.reason === 'before_opening' ? result.opensOn : null;
+
+  return {
+    ok: true,
+    bookable: false,
+    why: result.reason,
+    earliest_possible: opens,
+    earliest_possible_day: opens ? booking.readableDate(opens) : null,
+    say: result.detail || result.say || null,
+  };
+}
+
 // --- get_order_status -------------------------------------------------------
 
 async function getOrderStatus(customer) {
@@ -835,6 +881,8 @@ async function run(name, input, customer, helpers = {}) {
   switch (name) {
     case 'create_order':
       return createOrder(customer, input);
+    case 'check_slot':
+      return checkSlot(customer, input);
     case 'get_order_status':
       return getOrderStatus(customer);
     case 'reschedule_order':

@@ -85,6 +85,37 @@ const TOOLS = [
     },
   },
 
+  // THE CHECK THAT HAPPENS BEFORE ANYTHING IS PROMISED.
+  //
+  // Neil's ask, after being offered a pickup four days before the van starts:
+  // when a customer names a day and a time, the answer must come from the code
+  // that knows the rules rather than from a model reading a prompt.
+  //
+  // It runs booking.checkSlot(), which is the same function bookPickup() runs
+  // before it writes - the closed sign, the opening date, the service area, the
+  // wash preferences, whether that day is already booked, and which window the
+  // time falls in. It changes nothing, so it is safe to call as often as the
+  // conversation needs.
+  {
+    name: 'check_slot',
+    description:
+      'ALWAYS call this before you name a date, a day or a window back to the customer. ' +
+      'It answers whether that day and time are actually possible and, if they are, ' +
+      'which window they get. If they are not, it tells you why and what to say instead. ' +
+      'Never work a date out yourself and never confirm one this has not approved.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pickup_date: { type: 'string', description: 'YYYY-MM-DD, the day they asked for' },
+        pickup_time: {
+          type: 'string',
+          description: 'HH:MM 24-hour, the time they asked for. Leave out if they named no time.',
+        },
+      },
+      required: ['pickup_date'],
+    },
+  },
+
   {
     name: 'get_order_status',
     description:
@@ -542,6 +573,12 @@ IT IS A ${booking.readableDate(opensOn).split(' ')[0].toUpperCase()}. If they as
   );
 })()}
 
+CHECK BEFORE YOU CONFIRM. THIS IS NOT OPTIONAL.
+The moment a customer names a day, or a day and a time, call check_slot with it BEFORE you write a word back to them. It runs the real booking rules - whether we are open, whether the van has started running, whether that day is already booked, and which window their time falls in - and it changes nothing, so call it as often as you need.
+It comes back with either bookable true and the exact window, or bookable false with the reason and often the earliest day we could do instead.
+You may only name a date, a day or a window that check_slot has just approved. If it says false, tell them what it gave you and offer the earliest day it named. NEVER work out for yourself whether a day is possible, and never confirm one on your own arithmetic - a customer was told "that's tomorrow's 8 to 10 window" four days before the van started running, because the answer was guessed instead of checked.
+This is a check, not a conversation: do not tell the customer you are checking, do not say "let me look", just call it and answer.
+
 NEVER READ A REQUESTED TIME BACK TO THEM. They say "7am", you say the window - and if 7am has gone, the window is the next one still open, not the one they asked for. Recapping "today at 7am" at lunchtime is a promise nobody can keep and it happened to a real customer. The line above tells you exactly which windows are left, so there is nothing to work out and no excuse for naming one that has passed.
 NEVER ARGUE ABOUT TIME. Do not offer alternatives, do not ask them to pick something else, and do not ask them to confirm which day they meant. A short "7am's gone, so..." on the way to naming the window they DID get is fine and honest; what is not fine is stopping to make them choose. Whatever they say, the booking code works out the right window, rolling to the next one or to tomorrow on its own. Your job is to book it and say which window they got.
 If a time has gone by, or falls in a gap, or is after the last window, that is not a problem and not worth mentioning. They just get the next one, and the confirmation tells them which.
@@ -935,7 +972,19 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
     system:
       `${systemPrompt(today, now, { paused, promo, opensOn })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
       (followUp
-        ? `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
+        ? followUp.lookup
+          ? // A LOOKUP HAS NOTHING TO SAY ON ITS OWN. It answered US, with facts,
+            // and the customer has been told nothing at all yet - so "OK" is
+            // never right here, and there is no queued reply standing behind it.
+            `\n\nYOU CALLED ${followUp.name} AND HERE IS WHAT THE BOOKING CODE ANSWERED:\n` +
+            `${followUp.reply}\n\n` +
+            `THE CUSTOMER HAS NOT BEEN TOLD ANYTHING YET. Write their reply now, in your own voice, ` +
+            `using ONLY what is above - the day, the window and the wording came from the code and are ` +
+            `the truth. Do not recalculate any of it, and do not tell them you checked.\n` +
+            `If it says bookable false, tell them what it says and offer the earliest day it named. ` +
+            `If it says bookable true and they have already agreed to that day, call create_order now; ` +
+            `otherwise recap it and ask them to confirm.`
+          : `\n\nA TOOL ALREADY RAN for the customer's latest message: ${followUp.name}. ` +
           `The reply queued to send them is: "${followUp.reply}"\n` +
           `If their message also asked for something that tool did not do — they approved ` +
           `a booking recap, say, so the pickup itself still needs create_order — call that ` +

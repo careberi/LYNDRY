@@ -316,9 +316,10 @@ scripts/                seed.js  simulate-sms.js
 Claude's only job is to translate **one message into one structured action.** It
 holds no state, decides no prices, and never touches hardware.
 
-The eight tools:
+The tools:
 
 ```
+check_slot(pickup_date, pickup_time)
 create_order(pickup_date, pickup_time, pickup_method, bag_count, notes)
 get_order_status()
 reschedule_order(new_date, new_time)
@@ -330,6 +331,27 @@ handoff_to_human(reason)
 ```
 
 Rules:
+
+- **`check_slot()` RUNS BEFORE ANYTHING IS PROMISED, and it is not advice.** A
+  customer was told "that's tomorrow's 8 to 10 window" four days before the van
+  started running, because the model worked the date out itself. The prompt had
+  been taught the opening date; a block further down headed "worked out for you,
+  do not recalculate it" still described today's windows, and the model believed
+  that one — correctly, since it claimed to be authoritative.
+
+  So a day and a time now go through `booking.checkSlot()`, **the same function
+  `bookPickup()` runs before it writes**: the closed sign, the opening date, the
+  service area, the wash preferences, whether that day is already booked, and
+  which window the time falls in. It writes nothing. There is no second copy of
+  "is that possible" to drift, which is the rule the two front doors already
+  follow everywhere else.
+
+- **A LOOKUP ANSWERS US, NOT THE CUSTOMER.** `check_slot` returns facts rather
+  than a sentence, so it must be followed by a second pass that writes the
+  reply — `LOOKUP_ACTIONS` in `src/routes/sms.js`. Without that the customer
+  receives a JSON object, because every action's return value is otherwise sent
+  straight to the phone. If that second pass comes back empty, the facts carry
+  their own sentence for every refusal that has one.
 
 - `open_locker()` **takes no arguments — never change this.** The backend works
   out which compartment from the authenticated phone number's open order, and

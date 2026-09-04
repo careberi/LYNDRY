@@ -300,7 +300,21 @@ async function answerWithBrain(customer, text, from) {
   // message stands. One extra step, never more, so it cannot loop.
   const SETUP_ACTIONS = ['save_details', 'update_profile'];
 
-  if (SETUP_ACTIONS.includes(decision.name)) {
+  // A LOOKUP ANSWERS US, NOT THE CUSTOMER.
+  //
+  // check_slot returns facts - is that day possible, which window, what to say
+  // instead - so it has no reply of its own. It MUST be followed by a second
+  // pass that turns those facts into a sentence, or the customer receives a
+  // JSON object. Which is exactly what would have happened: the follow-up below
+  // was written for setup actions only, and every other action's return value
+  // goes straight to the phone.
+  const LOOKUP_ACTIONS = ['check_slot'];
+
+  // Kept because `message` is about to be replaced by the model's sentence, and
+  // if that second call fails we still have the facts to fall back on.
+  const lookupFacts = LOOKUP_ACTIONS.includes(decision.name) ? message : null;
+
+  if (SETUP_ACTIONS.includes(decision.name) || LOOKUP_ACTIONS.includes(decision.name)) {
     try {
       // Fresh rows: the setup action just changed them, and the follow-up
       // decision has to see the world it created.
@@ -317,12 +331,27 @@ async function answerWithBrain(customer, text, from) {
         order: freshOrder,
         recentMessages: await recentConversation(customer.id),
         message: text,
-        followUp: { name: decision.name, reply: message },
+        followUp: {
+          name: decision.name,
+          reply: typeof message === 'string' ? message : JSON.stringify(message),
+          lookup: LOOKUP_ACTIONS.includes(decision.name),
+        },
       });
 
-      if (followOn.type === 'tool' && !SETUP_ACTIONS.includes(followOn.name)) {
+      if (
+        followOn.type === 'tool' &&
+        !SETUP_ACTIONS.includes(followOn.name) &&
+        !LOOKUP_ACTIONS.includes(followOn.name)
+      ) {
         console.log(`ACTION+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
         message = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
+      } else if (LOOKUP_ACTIONS.includes(decision.name)) {
+        // The lookup had nothing to say on its own, so the model's sentence IS
+        // the reply. "OK" means it thought the previous action had already
+        // answered the customer - true for a setup action, never for a lookup -
+        // so that counts as nothing and the fallback below covers it.
+        const written = String(followOn.text || '').trim();
+        message = written && written !== 'OK' ? written : null;
       }
       // Any text answer — "OK" or otherwise — means nothing more to do, and
       // the setup action's own message is the reply.
@@ -331,6 +360,14 @@ async function answerWithBrain(customer, text, from) {
       // true, so that is what gets sent if deciding the next step fails.
       console.error('Follow-up decision failed:', err.message);
     }
+  }
+
+  // A LOOKUP MUST NEVER LEAVE US WITH NOTHING TO SEND. If that second pass
+  // failed or came back empty, the facts themselves carry a sentence for every
+  // refusal that has one - and anything else gets an honest holding line rather
+  // than silence on a customer's phone.
+  if (lookupFacts && (typeof message !== 'string' || !message.trim())) {
+    message = lookupFacts.say || 'Let me check that and come straight back to you.';
   }
 
   // SAYING THE SAME THING TWICE MEANS WE ARE STUCK.
