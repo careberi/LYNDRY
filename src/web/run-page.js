@@ -1523,7 +1523,10 @@ function doorBagBody({ label, problem = null }) {
   }
 
   return `${head}${switchCard(
-    `Take Van Clip #${label.clip_number} off bag ${name}`,
+    // The heading of the screen is already VAN CLIP #1 and the switch under it
+    // is already the bag. Naming both again in the task made it the longest
+    // sentence on the shortest card.
+    'Take the van clip off',
     'clip',
     'Take the van clip off',
     'Van clip is off',
