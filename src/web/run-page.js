@@ -1471,10 +1471,11 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
 
   if (step === 'clip') {
     return `${head}${card(`
-      ${dropTask(
-        `Put Van Clip #${label.clip_number} on bag ${name}`,
-        'That number is how this bag is found in the van and what you say at a door.'
-      )}
+      ${
+        // No detail. The switch below is the number, at 26px, and the button
+        // under it says what tapping does.
+        dropTask(`Put Van Clip #${label.clip_number} on bag ${name}`)
+      }
       <form method="post" action="/ops/run/bag/${label.id}/clip" class="clip-form" style="margin:0;">
         <label class="clip-toggle" style="margin:0 0 18px;">
           <input type="checkbox" name="in_hand" required>
