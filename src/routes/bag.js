@@ -582,20 +582,54 @@ function langToggle(code, token, seq, lang) {
     </div>`;
 }
 
+// WHICH CLIP IS ON IT, WHILE IT IS ON THE VAN. Neil asked for it beside the
+// code rather than under the sentence below: the two things a person wants off
+// a scan are what this bag is called and where to find it, and those belong to
+// each other.
+//
+// clipped_at with no unclipped_at IS "on the van". Not clip_number, which
+// unclipOrder() deliberately leaves in place so the order page can still say
+// which clip a bag travelled under - reading that alone would leave a number
+// here for a bag on a laundromat floor, pointing at a clip that is by then on
+// somebody else's laundry.
+function clipOnVan(label) {
+  return label.clip_number != null && label.clipped_at && !label.unclipped_at
+    ? label.clip_number
+    : null;
+}
+
 function stageHeader(label, order, stage, seq, t = (x) => x) {
+  const clip = clipOnVan(label);
+
   return `
     <div class="card" style="padding:28px;margin-bottom:20px;">
-      <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(t('Bag tag'))}</p>
-      <div style="font-family:var(--font-mono);font-size:38px;font-weight:700;letter-spacing:0.06em;line-height:1;">
-        ${escapeHtml(label.code)}${seq ? `<span style="color:var(--ink-400);">-${seq}</span>` : ''}
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;">
-        <span class="badge" style="background:var(--sunbeam-500);">
-          ${escapeHtml(t(tags.STAGE_LABEL[stage] || stage))}
-        </span>
-        <span style="font-family:var(--font-mono);font-size:13px;color:var(--ink-500);">
-          ${escapeHtml(t('Order'))} #${escapeHtml(String(order.order_number))}
-        </span>
+      <div style="display:flex;gap:20px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;">
+        <div style="flex:1 1 auto;min-width:0;">
+          <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(t('Bag tag'))}</p>
+          <div style="font-family:var(--font-mono);font-size:38px;font-weight:700;letter-spacing:0.06em;line-height:1;">
+            ${escapeHtml(label.code)}${seq ? `<span style="color:var(--ink-400);">-${seq}</span>` : ''}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;">
+            <span class="badge" style="background:var(--sunbeam-500);">
+              ${escapeHtml(t(tags.STAGE_LABEL[stage] || stage))}
+            </span>
+            <span style="font-family:var(--font-mono);font-size:13px;color:var(--ink-500);">
+              ${escapeHtml(t('Order'))} #${escapeHtml(String(order.order_number))}
+            </span>
+          </div>
+        </div>
+        ${
+          clip == null
+            ? ''
+            : `<div style="flex:none;text-align:right;">
+                 <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(t('Van clip'))}</p>
+                 <span style="display:inline-block;min-width:76px;padding:10px 16px;
+                              border:2px solid var(--ink-900);border-radius:14px;
+                              background:var(--sunbeam-500);text-align:center;
+                              font-family:var(--font-mono);font-weight:700;font-size:34px;
+                              line-height:1;box-shadow:var(--shadow-pop-xs);">${escapeHtml(clip)}</span>
+               </div>`
+        }
       </div>
     </div>`;
 }
@@ -871,41 +905,11 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
     [tags.STAGES.DONE]: 'Delivered. This tag is finished with.',
   }[stage] || 'Nothing to do with this one right now.';
 
-  // WHICH CLIP IS ON IT, WHILE IT IS ON THE VAN. Neil asked for it here, and
-  // this page is where it is worth having: the clip is how a bag is found in a
-  // loaded van, and a scan of the sticker is how somebody asks "which one is
-  // this" without unpacking anything.
-  //
-  // It comes off the moment the bag does. clipped_at with no unclipped_at IS
-  // "on the van" - unclipOrder() stamps unclipped_at and deliberately leaves
-  // clip_number alone, so the order page can still say which clip a bag
-  // travelled under. Reading clip_number on its own would leave a number on
-  // this page for a bag sitting on a laundromat floor, pointing at a clip that
-  // is by then on somebody else's laundry.
-  const onTheVan =
-    label.clip_number != null && label.clipped_at && !label.unclipped_at
-      ? label.clip_number
-      : null;
-
   return page({
     title: `Bag ${code}`,
     body: header + `
     <div class="card" style="padding:28px;">
       <p style="font-size:16px;line-height:1.6;margin:0;">${escapeHtml(say(said))}</p>
-      ${
-        onTheVan == null
-          ? ''
-          : `<div style="margin-top:22px;padding-top:20px;border-top:1px solid var(--ink-100);">
-               <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('Van clip'))}</p>
-               <span style="display:inline-block;min-width:76px;padding:12px 18px;
-                            border:2px solid var(--ink-900);border-radius:14px;
-                            background:var(--sunbeam-500);text-align:center;
-                            font-family:var(--font-mono);font-weight:700;font-size:34px;
-                            line-height:1;box-shadow:var(--shadow-pop-xs);">${escapeHtml(
-                              onTheVan
-                            )}</span>
-             </div>`
-      }
     </div>` + footer,
   });
 }
