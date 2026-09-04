@@ -477,9 +477,9 @@ const ES = Object.freeze({
   'Waiting for collection': 'Esperando recogida',
   'Our driver has been told.': 'Nuestro conductor ya lo sabe.',
   'Bags to hand over': 'Bolsas para entregar',
-  'One sticker per bag you pack. Tap it once when you use it, again when that bag is done.':
+  'One sticker per bag you pack. Tap it when you put it on a bag.':
     'Una pegatina por bolsa. Toquela al usarla, y otra vez cuando esa bolsa este lista.',
-  'Tapped one by mistake? Keep tapping to reset it.': 'Toco uno por error? Sigalo tocando.',
+  'Tapped one by mistake? Tap it again to turn it off.': 'Toco uno por error? Sigalo tocando.',
   'This order is done': 'Este pedido esta terminado',
   'Not yet - another bag from this order is still open.':
     'Todavia no - otra bolsa de este pedido sigue abierta.',
@@ -487,7 +487,7 @@ const ES = Object.freeze({
   'Tap a sticker number first.': 'Toque primero el numero de una pegatina.',
   'Only when every bag is packed and done. We will come and collect it.':
     'Solo cuando todas esten empacadas y listas. Pasaremos a recogerlo.',
-  'Not used': 'Sin usar',
+  'Not in use': 'Sin usar',
   'In use': 'En uso',
   'Done': 'Terminada',
 
@@ -786,7 +786,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
 
       <p class="eyebrow" style="margin:0 0 8px;">${escapeHtml(say('When a bag is finished'))}</p>
       <p style="font-size:15px;line-height:1.6;margin:0 0 18px;">
-        ${escapeHtml(say('One sticker per bag you pack. Tap it once when you use it, again when that bag is done.'))}
+        ${escapeHtml(say('One sticker per bag you pack. Tap it when you put it on a bag.'))}
       </p>
 
       <!-- A TWO BY TWO GRID, not a wrapping row. Flex-wrap sized each button by
@@ -799,13 +799,15 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
           .map(({ seq, state }) => {
             // COLOUR SAYS WHICH STATE, so one tap can mean "advance this" and
             // the attendant never has to guess what tapping will do.
+            // TWO STATES: white while the sticker is still on the tag, green
+            // once it is on a bag. Neil's colours, and green already means done
+            // everywhere else on this system.
             const look = {
               UNUSED: 'background:var(--paper-000);',
-              IN_USE: 'background:var(--sunbeam-500);',
-              DONE: 'background:var(--suds-500);',
+              IN_USE: 'background:var(--suds-500);',
             }[state];
 
-            const word = { UNUSED: 'Not used', IN_USE: 'In use', DONE: 'Done' }[state];
+            const word = { UNUSED: 'Not in use', IN_USE: 'In use' }[state];
 
             return `
         <button type="submit" name="seq" value="${seq}"
@@ -829,7 +831,10 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
         // every intake bag had one finished bag against it, which assumes one
         // bag in becomes one bag out and stops watching. Only the person
         // folding knows whether they are still folding.
-        stickers.some((x) => x.state === 'DONE')
+        // ONE STICKER ON IS ENOUGH TO OFFER THE BUTTON. The attendant still
+        // says when the order is finished - the stickers say which bags exist,
+        // not whether the folding is over.
+        stickers.some((x) => x.state === 'IN_USE')
           ? `<form method="post" action="/o/${encodeURIComponent(code)}/ready?t=${t}"
                    style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
                <button class="btn btn-primary btn-lg btn-full" type="submit" name="order" value="done">
@@ -842,7 +847,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
           : ''
       }
       <p class="field-hint" style="margin-top:14px;">
-        ${escapeHtml(say('Tapped one by mistake? Keep tapping to reset it.'))}
+        ${escapeHtml(say('Tapped one by mistake? Tap it again to turn it off.'))}
       </p>
     </div>` + footer,
     });
@@ -866,12 +871,12 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
         // page said only that the order was ready, so an attendant holding
         // four bags had nothing to check them against and the driver had to
         // work it out at the counter.
-        (stickers || []).filter((x) => x.state === 'DONE').length
+        (stickers || []).filter((x) => x.state === 'IN_USE').length
           ? `<div style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
                <p class="eyebrow" style="margin:0 0 12px;">${escapeHtml(say('Bags to hand over'))}</p>
                <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
                  ${stickers
-                   .filter((x) => x.state === 'DONE')
+                   .filter((x) => x.state === 'IN_USE')
                    .map(
                      (x) => `<span style="padding:9px 13px;border:2px solid var(--ink-900);border-radius:10px;
                                           background:var(--suds-500);font-family:var(--font-mono);
@@ -1416,7 +1421,7 @@ router.post('/o/:code/ready', async (req, res, next) => {
       const moved = await tags.cycleSticker(parent, seq);
       if (!moved.ok) return res.redirect(303, back + '&ready=bad');
 
-      const said = { UNUSED: 'is not being used', IN_USE: 'is in use', DONE: 'is finished' }[
+      const said = { UNUSED: 'is not being used', IN_USE: 'is in use' }[
         moved.state
       ];
 

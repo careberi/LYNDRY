@@ -236,12 +236,18 @@ const STAGE_LABEL = Object.freeze({
 //
 // Idempotent: scanning the same sticker again says so rather than inventing
 // another bag.
-// THE THREE STATES A STICKER CAN BE IN, from the laundromat's point of view.
-const STICKER = Object.freeze({ UNUSED: 'UNUSED', IN_USE: 'IN_USE', DONE: 'DONE' });
+// TWO STATES, from the laundromat's point of view: a sticker is on a bag or it
+// is not. Neil's call, and it removes a distinction that only ever existed in
+// our heads - an attendant putting a sticker on a bag of folded laundry has
+// finished that bag, so "in use" and "done" were the same tap described twice.
+//
+// It also fixes what that middle state cost: three taps to cycle back from a
+// mis-tap, on a page whose whole design brief is that a counter needs no
+// training.
+const STICKER = Object.freeze({ UNUSED: 'UNUSED', IN_USE: 'IN_USE' });
 
 function stickerState(row) {
-  if (!row) return STICKER.UNUSED;
-  return row.finished_at ? STICKER.DONE : STICKER.IN_USE;
+  return row ? STICKER.IN_USE : STICKER.UNUSED;
 }
 
 // What each of the stickers on a tag is doing right now.
@@ -277,13 +283,18 @@ async function unfinishedBags(orderId) {
     // A bag that never made it to the laundromat cannot be waiting on them.
     if (bag.released_at) continue;
     const stickers = await stickersOn(bag);
-    if (!stickers.some((x) => x.state === STICKER.DONE)) outstanding.push(bag);
+    if (!stickers.some((x) => x.state === STICKER.IN_USE)) outstanding.push(bag);
   }
 
   return outstanding;
 }
 
-// ONE TAP MOVES A STICKER ON: unused -> in use -> done -> unused.
+// ONE TAP TURNS A STICKER ON, another turns it off. Two states, one tap each
+// way, so a mis-tap is undone by doing the same thing again.
+//
+// A sticker going on stamps finished_at, because that is what it means: this
+// bag is packed. That stamp is also what puts the bag on the driver's collect
+// list, so a bag with a sticker on it is a bag he will be shown.
 //
 // A cycle rather than three separate controls, because this is a phone held in
 // one hand at a counter and three buttons per sticker is twelve buttons. The
@@ -302,24 +313,22 @@ async function cycleSticker(parent, seq) {
   const siblings = await bags.forOrder(parent.order_id, 'DELIVERY');
   const existing = siblings.find((b) => b.parent_id === parent.id && b.sticker_seq === n) || null;
 
-  // Not used yet -> in use.
+  // Off -> on. The bag is packed the moment the sticker goes on it, so the
+  // stamp that says so is written in the same step.
   if (!existing) {
     const made = await markSubBagReady(parent, n);
-    return made.ok ? { ok: true, state: STICKER.IN_USE } : made;
-  }
+    if (!made.ok) return made;
 
-  // In use -> done.
-  if (!existing.finished_at) {
     const { error } = await db
       .from('bag_labels')
       .update({ finished_at: new Date().toISOString() })
-      .eq('id', existing.id);
+      .eq('id', made.bag.id);
 
     if (error) throw error;
-    return { ok: true, state: STICKER.DONE };
+    return { ok: true, state: STICKER.IN_USE };
   }
 
-  // Done -> unused. The way back from a mis-tap.
+  // On -> off. The way back from a mis-tap, and it is the same tap.
   const { error } = await db.from('bag_labels').delete().eq('id', existing.id);
   if (error) throw error;
 
