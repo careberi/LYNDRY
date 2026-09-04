@@ -1456,10 +1456,10 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
 
   if (step === 'weigh') {
     return `${head}${card(`
-      ${dropTask(
-        `Weigh bag ${name}`,
-        'On the scale, then type what it says. Its van clip comes out once the weight is in.'
-      )}
+      ${
+        // No detail. The field underneath asks the question in as many words.
+        dropTask(`Weigh bag ${name}`)
+      }
       <form method="post" action="/ops/run/bag/${label.id}/weight" style="margin:0;">
         <label class="field-label" for="w">What does bag ${escapeHtml(name)} weigh?</label>
         <input class="input input-lg" type="number" id="w" name="weight_lb"
