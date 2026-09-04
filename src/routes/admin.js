@@ -1035,11 +1035,47 @@ function progressCard(order, tasks) {
 // and it is Admin only - the value of a check is that somebody other than the
 // person in a hurry agreed to skip it.
 function heldWeightCard(order, maySettle) {
-  if (!order.weight_held_at || order.weight_settled_at) return '';
+  if (order.weight_settled_at) return '';
 
   const ours = order.weight_lb == null ? null : Number(order.weight_lb);
   const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
   if (ours == null || theirs == null) return '';
+
+  // BOTH SCALES ARE IN AND NOTHING HAPPENED. Not a disagreement - the settle
+  // itself did not complete, which it can do for the dullest reasons: the
+  // database blinked, the process restarted mid-request.
+  //
+  // It used to leave no mark anywhere. An order sat unpriced and unpaid with a
+  // change log that stopped at the laundromat's weight, and the only way to
+  // find out was to query the database. This is the button that fixes it, and
+  // it is deliberately one button: the two numbers agree well enough that
+  // there is nothing for a person to decide, only something to re-run.
+  if (!order.weight_held_at) {
+    return `
+  <section class="card" style="background:var(--sunbeam-500);margin-bottom:20px;">
+    <p class="eyebrow" style="margin:0 0 8px;">Nothing has been charged</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 12px;">
+      The price never settled
+    </h2>
+    <p style="font-size:15px;line-height:1.6;margin:0 0 18px;max-width:62ch;">
+      We weighed it ${ours.toFixed(2)} lb and the laundromat ${theirs.toFixed(2)} lb,
+      which is close enough to bill - but the step that prices it did not finish,
+      so the customer has not been told a total and their card has not been
+      touched.
+    </p>
+    ${
+      maySettle
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/settle-weight" style="margin:0;">
+             <button class="btn btn-primary btn-lg btn-full" type="submit">
+               Settle it and charge the card
+             </button>
+           </form>`
+        : `<p style="font-size:15px;line-height:1.6;margin:0;font-weight:700;">
+             An admin has to settle this one.
+           </p>`
+    }
+  </section>`;
+  }
 
   const gap = Math.abs(ours - theirs);
   const higher = Math.max(ours, theirs);
@@ -3198,14 +3234,26 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
     const partner = weights.lb(body.partner_lb);
     const note = String(body.note || '').trim().slice(0, 200);
 
-    if (chosen == null || chosen <= 0) {
+    // TWO DIFFERENT JOBS THROUGH ONE DOOR, and which one it is depends on the
+    // order rather than on what was posted.
+    //
+    // A HELD order is a decision: two scales disagree past the tolerance and a
+    // person has to pick a number, with a reason, on the record.
+    //
+    // An order that is simply UNSETTLED is not a decision at all - the scales
+    // agree and the step that prices it did not finish. There is nothing to
+    // choose, so asking for a weight and a reason would be inventing a
+    // deliberation over a retry.
+    const held = Boolean(order.weight_held_at);
+
+    if (held && (chosen == null || chosen <= 0)) {
       return res.redirect(303, `${back}?problem=${encodeURIComponent('What weight are we billing on? Pounds, as a number.')}`);
     }
 
-    // The reason is not optional. An override with no reason is a button, and
-    // a log that records a decision without recording why is not evidence of
-    // anything.
-    if (!note) {
+    // The reason is not optional on a hold. An override with no reason is a
+    // button, and a log that records a decision without recording why is not
+    // evidence of anything.
+    if (held && !note) {
       return res.redirect(303, `${back}?problem=${encodeURIComponent('Say why. It goes in the change log with your name on it.')}`);
     }
 
@@ -3214,12 +3262,20 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
       return res.redirect(303, `${back}?done=${encodeURIComponent('That one was already settled.')}`);
     }
 
-    const settled = await fulfilment.settleWeight(order, {
-      by: { opsUser: req.opsUser },
-      chosenLb: chosen,
-      partnerLb: partner,
-      note: `settled by hand: ${note}`,
-    });
+    const settled = await fulfilment.settleWeight(
+      order,
+      held
+        ? {
+            by: { opsUser: req.opsUser },
+            chosenLb: chosen,
+            partnerLb: partner,
+            note: `settled by hand: ${note}`,
+          }
+        : // A retry runs the ordinary rules: the higher of the two scales, the
+          // promotion, the charge and the text, exactly as the laundromat's
+          // weigh-in would have.
+          { by: { opsUser: req.opsUser } }
+    );
 
     if (!settled || !settled.ok) {
       return res.redirect(303, `${back}?problem=${encodeURIComponent(settled && settled.detail ? settled.detail : 'That could not be settled.')}`);
@@ -3236,17 +3292,19 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
 
     for (const issue of open || []) {
       await issues
-        .resolve(issue.id, req.opsUser, `Billed on ${chosen} lb. ${note}`)
+        .resolve(issue.id, req.opsUser, `Billed on ${on} lb.${note ? ` ${note}` : ''}`)
         .catch((err) => console.error(`Could not close issue ${issue.id}: ${err.message}`));
     }
 
     // Say what happened to the money, because that is the question the person
     // pressing this button is actually asking.
+    const on = settled.billable != null ? settled.billable : chosen;
+
     const outcome = settled.charged
-      ? `Billed on ${chosen} lb and charged.`
+      ? `Billed on ${on} lb and charged.`
       : settled.declined
-        ? `Billed on ${chosen} lb. The card was declined and they have been told.`
-        : `Billed on ${chosen} lb. Nothing was charged - check the payment status.`;
+        ? `Billed on ${on} lb. The card was declined and they have been told.`
+        : `Billed on ${on} lb. Nothing was charged - check the payment status.`;
 
     return res.redirect(303, `${back}?done=${encodeURIComponent(outcome)}`);
   } catch (err) {

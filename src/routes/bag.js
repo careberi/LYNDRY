@@ -1339,8 +1339,43 @@ router.post('/o/:code/weight', async (req, res, next) => {
       .settleWeight({ ...order, partner_weight_lb: weight_ }, { by: { actor: 'partner' } })
       .catch((err) => {
         console.error(`Could not settle order ${order.id}: ${err.message}`);
-        return { ok: false };
+        return { ok: false, failed: err.message };
       });
+
+    // A SETTLE THAT DOES NOT HAPPEN MUST NOT BE SILENT.
+    //
+    // This is the step that prices the order, charges the card and texts the
+    // customer, and until now the only trace of it failing was a line in the
+    // server log. An order sat DELIVERED and unpaid three separate times with a
+    // change log that stopped dead at the laundromat's weight, and there was no
+    // way to tell from any screen whether the money had been decided or the
+    // step had simply fallen over. Neil asked "why has this not been charged"
+    // three times and the answer needed a database query every time.
+    //
+    // A hold is a different thing and has its own issue below - that one is a
+    // decision waiting for a person, not a failure.
+    if (!settled || (!settled.ok && !settled.held)) {
+      await orderEvents.record(order.id, {
+        kind: 'PRICE',
+        summary: 'Could not settle the price after the laundromat weighed it',
+        became: 'still unpriced and unpaid',
+        by: { actor: 'partner' },
+        reason: (settled && (settled.failed || settled.detail || settled.reason)) || 'unknown',
+      });
+
+      if (order.customers) {
+        await issues
+          .raise({
+            customer: order.customers,
+            order,
+            reason:
+              `Both weights are in - ours ${ours} lb, theirs ${weight_.toFixed(1)} lb - but ` +
+              `the price would not settle, so NOTHING HAS BEEN CHARGED and the customer ` +
+              `has not been told a total. Open the order and settle it there.`,
+          })
+          .catch((err) => console.error(`Could not raise a settle failure: ${err.message}`));
+      }
+    }
 
     if (settled && settled.held && order.customers) {
       await issues

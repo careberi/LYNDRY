@@ -1560,6 +1560,17 @@ amount either scale could be out by, so the higher one is taken and the card is
 charged there and then. Outside it, nothing is charged and nothing is said —
 see the hold below.
 
+**A SETTLE THAT DOES NOT HAPPEN MUST NOT BE SILENT.** Settling prices the
+order, charges the card and texts the customer, and a failure used to leave
+nothing but a line in the server log — an order sat unpaid with a change log
+that stopped dead at the laundromat's weight, three separate times, and the only
+way to find out was to query the database. A settle that returns neither a price
+nor a hold now writes a `PRICE` event saying so and raises an issue. **And the
+order page offers to run it again**: both scales in, nothing held, nothing
+settled gets one button, because there is nothing for a person to decide there —
+only something to re-run. A held order gets the two-scales card instead, which
+asks for a weight and a reason.
+
 **A decline is told to the customer immediately**, in the same text as the
 price, with a link to update the card. It does not hold up the delivery: the
 clothes still go back and we chase by text.
