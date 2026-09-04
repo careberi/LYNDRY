@@ -76,7 +76,20 @@ const TIMESTAMP_FOR = Object.freeze({
 // end of that stop - the scale comes after it, at the same door - and clearing
 // arrival there would bounce the driver back to "go to this location" while he
 // is standing in the hall holding the bag he just picked up.
-const LEAVES_THE_STOP = Object.freeze(['AT_PARTNER', 'DELIVERED', 'CANCELED']);
+// GOING OUT FOR DELIVERY IS LEAVING SOMEWHERE TOO, and it was missing.
+//
+// The flag means "the driver is at this order's next stop right now". Handing
+// the bags to a laundromat cleared it and delivering cleared it, but loading the
+// finished work and setting off did not - so the customer's door inherited an
+// arrival from the laundromat, and the run opened the doorstep task list instead
+// of the card that says where to drive. Neil: shouldn't the next screen be to
+// navigate to the next destination?
+const LEAVES_THE_STOP = Object.freeze([
+  'AT_PARTNER',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+  'CANCELED',
+]);
 
 function canTransition(from, to) {
   return (ALLOWED_NEXT[from] || []).includes(to);
