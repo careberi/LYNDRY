@@ -1492,10 +1492,11 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
   }
 
   return `${head}${card(`
-    ${dropTask(
-      `Put bag ${name} into the van`,
-      'Last step for this bag. The next one starts back on the list.'
-    )}
+    ${
+      // No detail on any of the four now. Each screen is a task, a control, and
+      // a button that says what tapping it does.
+      dropTask(`Put bag ${name} into the van`)
+    }
     <form method="post" action="/ops/run/bag/${label.id}/van" class="clip-form" style="margin:0;">
       <label class="clip-toggle" style="margin:0 0 18px;">
         <input type="checkbox" name="aboard" required>
