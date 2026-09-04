@@ -416,7 +416,13 @@ function taskControl(stop, task, order) {
              step="0.01" min="0.01" max="200" inputmode="decimal" required autofocus
              placeholder="12.5" style="width:100%;margin-bottom:16px;">
 
-      <button type="submit" class="btn btn-primary btn-lg btn-full">Save bag #${task.position}</button>
+      <button type="submit" class="btn btn-primary btn-lg btn-full">${
+        // Named by the sticker, like the line above it. Nothing on this card
+        // needs a bag number once the tag is on the bag.
+        (task.label || {}).code
+          ? `Save bag ${escapeHtml(task.label.code)} weight`
+          : `Save bag #${escapeHtml(task.position)}`
+      }</button>
     </form>`;
   }
 
