@@ -1423,7 +1423,7 @@ function doorList(stop) {
       `Prep the bags in ${
         stop.order ? `Order #${escapeHtml(stop.order.order_number)}` : 'this order'
       } for drop off`,
-      'Open each van clip to take the laundromat stickers off, take our bag tag off, and take the clip off.'
+      'Open each van clip to take the laundromat in-house receipt off, take our bag tag off, and take the van clip off.'
     )}
 
     <div style="display:grid;gap:10px;margin:0 0 18px;">
