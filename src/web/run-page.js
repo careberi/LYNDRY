@@ -1504,11 +1504,11 @@ function doorBagBody({ label, problem = null }) {
 
   if (step === 'stickers') {
     return `${head}${switchCard(
-      `Take the laundromat's stickers off bag ${name}`,
+      `Take the laundromat's in-house receipt off bag ${name}`,
       'stickers',
-      'Their stickers: on',
-      'Their stickers: off',
-      'Their stickers are off'
+      'Their receipt: on',
+      'Their receipt: off',
+      'Their receipt is off'
     )}`;
   }
 

@@ -3350,7 +3350,7 @@ router.get('/ops/run/door/:id/:step', guard, may('orders.drive'), (req, res) => 
 // is not a guard, and this is the step where a bag with our tag still on it ends
 // up in somebody's house.
 const DOOR_STEPS = Object.freeze({
-  stickers: { column: 'stickers_off_at', needs: null, says: "laundromat stickers off" },
+  stickers: { column: 'stickers_off_at', needs: null, says: "laundromat in-house receipt off" },
   tag: { column: 'tag_off_at', needs: 'stickers_off_at', says: 'our bag tag off' },
   clip: { column: 'unclipped_at', needs: 'tag_off_at', says: 'van clip off' },
 });
