@@ -79,26 +79,34 @@ function build() {
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    // THE NAME GOES IN THE FAMILY SLOT, NOT THE GIVEN ONE, and this is the bug
-    // that shipped first. N's fields are family;given;middle;prefix;suffix, so
-    // `N:;LYNDRY;;;` filed LYNDRY as a FIRST name with no surname. Combined
-    // with X-ABShowAs:COMPANY below - which tells iOS to display ORG rather
-    // than N - the card arrived on an iPhone with its name field empty and the
-    // save sheet offering "Add Name".
+    // FIRST NAME LYNDRY, LAST NAME BLANK. Neil's call. N's fields are
+    // family;given;middle;prefix;suffix, so the name sits in the second slot
+    // and the first stays empty.
     //
-    // Apple's own exported company cards put the name in the family slot, set
-    // FN, and give ORG a trailing semicolon for the empty department. All three
-    // carry the name now, so no client can end up with a blank: one that builds
-    // a display name from N gets it, one that reads FN gets it, and iOS reads
-    // ORG because of X-ABShowAs.
-    `N:${site.name};;;;`,
+    // X-ABShowAs:COMPANY IS GONE, AND THAT IS WHAT ACTUALLY FIXES IT. The card
+    // originally had the name in this exact slot and still arrived on an iPhone
+    // with an empty name field, because X-ABShowAs told iOS to ignore N and
+    // display ORG instead. Putting the name in the family slot worked around
+    // that; removing the property removes the cause, and lets the name sit
+    // where Neil wants it.
+    //
+    // ORG went with it. Without X-ABShowAs an ORG of "LYNDRY" would show as a
+    // company line under a contact already called LYNDRY - the same word twice
+    // on a card with four fields on it.
+    `N:;${site.name};;;`,
     `FN:${site.name}`,
-    `ORG:${site.name};`,
-    // Files it as a company, so iOS does not show it under a first name.
-    'X-ABShowAs:COMPANY',
     `TEL;TYPE=CELL,VOICE,PREF:${site.publicPhoneLink}`,
     'URL:https://lyndry.com',
-    `NOTE:Laundry pickup and delivery in ${site.serviceArea}. Text this number to book a pickup.`,
+    // TWO LINES, and the \n is an escaped newline INSIDE the value - vCard 3.0
+    // folds long lines with a leading space, which is a continuation of the
+    // same line, not a break. A raw newline here would end the property and
+    // make the second sentence look like an unknown one.
+    //
+    // The county has gone out of it at Neil's request. The line he sent read
+    // "Laundry pickup and delivery in." and the dangling "in" is dropped rather
+    // than shipped: a contact card that thousands of customers may save should
+    // not carry half a sentence. Say the word and it goes back either way.
+    'NOTE:Laundry pickup and delivery.\\nText this number to book a pickup.',
   ];
 
   if (jpeg) lines.push(`PHOTO;ENCODING=b;TYPE=JPEG:${jpeg}`);
