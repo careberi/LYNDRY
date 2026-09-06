@@ -1899,6 +1899,41 @@ Plus `OUT_OF_SERVICE`, set manually.
 - Check `provider_message_id` against the `messages` table and drop duplicates.
   Carriers retry; this is what stops a text being acted on twice.
 - Return HTTP 200 **immediately**, then call Claude and reply asynchronously.
+
+**THE AI WAITS BEFORE IT ANSWERS, and every new message restarts the wait.**
+Neil's call. People text a business the way they text a friend - "hey", then
+the question, then the time, three messages in fifteen seconds - and answering
+each as it lands gives them three replies of which the first two answer half a
+sentence. `src/core/burst.js` holds an inbound reply for
+`config.replies.burstSeconds` (**20**, `SMS_REPLY_WAIT_SECONDS`), restarting the
+clock on each new message, then hands the AI everything they said joined with
+newlines. That is what a person reading the thread would answer.
+
+**The cost falls on somebody who sends ONE message** and waits the full window,
+which is why it is 20 and not the 30 also considered. Set it to 0 to switch the
+whole thing off; that is what the tests run with.
+
+**There is a cap, `burstMaxSeconds` (90).** Measured from the FIRST message of
+the burst, because somebody texting every fifteen seconds would otherwise reset
+the clock for ever and never be answered at all - a worse failure than
+answering mid-thought.
+
+**STOP, START and HELP are never delayed, and they CANCEL what is waiting.**
+They are answered in code before any of this. Without the cancel, an AI reply
+lands after somebody has opted out, which is the one thing STOP exists to stop.
+
+**It is held in memory, which loses pending replies on a restart.** Three things
+make that a trade rather than a bug: the window is seconds; their message is
+already in `messages` before the timer starts, so the thread shows an inbound
+with no answer rather than losing anything; and `shutdown()` in `src/index.js`
+calls `burst.flushAll()` before exiting, so a deploy answers whoever is waiting
+on the way down. The forced-exit timer there was raised to 25s for the same
+reason - answering means a call to the AI and a call to the carrier. A database
+queue would be the alternative and CLAUDE.md rules out a job queue.
+
+**The pause is checked when the reply RUNS, not when the message arrives**, so
+an admin who switches the AI off during the window stops the reply that was
+already waiting. That falls out of where the check sits and is worth keeping.
 - `STOP` / `UNSTOP` / `START` / `HELP` are handled in code, before Claude sees
   them. These are legally required and must never depend on an AI reading them
   correctly.

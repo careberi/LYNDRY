@@ -21,6 +21,7 @@ const account = require('./routes/account');
 const bag = require('./routes/bag');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
+const burst = require('./core/burst');
 
 // ---------------------------------------------------------------------------
 // The server
@@ -201,9 +202,22 @@ const server = app.listen(config.port, () => {
 // requests already in flight, then exit, rather than dropping them.
 function shutdown(signal) {
   console.log(`${signal} received, shutting down.`);
-  server.close(() => process.exit(0));
-  // If something hangs, don't wait forever.
-  setTimeout(() => process.exit(1), 10_000).unref();
+
+  // ANSWER WHOEVER IS WAITING FIRST. Replies are held in memory for a few
+  // seconds in case the customer is still typing (src/core/burst.js), so a
+  // deploy landing inside that window would otherwise leave somebody with no
+  // reply at all. Best effort: if it does not finish inside the grace period
+  // below, the process goes anyway.
+  burst
+    .flushAll()
+    .catch((err) => console.error(`Could not flush pending replies: ${err.message}`))
+    .finally(() => server.close(() => process.exit(0)));
+  // If something hangs, don't wait forever. Raised from ten seconds when the
+  // flush above was added: answering a held message means a call to the AI and
+  // a call to the carrier, and cutting that off at ten would defeat the point
+  // of flushing at all. Still inside the host's grace period, and unref'd, so
+  // a clean shutdown still exits the moment it is actually done.
+  setTimeout(() => process.exit(1), 25_000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

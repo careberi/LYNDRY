@@ -12,6 +12,7 @@ const onboarding = require('../core/onboarding');
 const orders = require('../core/orders');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
+const burst = require('../core/burst');
 const recurring = require('../core/recurring');
 const { site } = require('../web/site');
 
@@ -118,6 +119,13 @@ async function handleInbound(inbound) {
   const keyword = compliance.classify(text, customer);
 
   if (keyword) {
+    // A PENDING REPLY IS DROPPED. They asked us to stop between sending a
+    // question and us getting round to answering it, and an AI reply landing
+    // after STOP is exactly the thing STOP exists to prevent. HELP and START
+    // cancel too: whatever they said a moment ago, this is the message to
+    // answer now.
+    burst.cancel(from);
+
     const newStatus = compliance.statusFor(keyword);
 
     if (customer && newStatus && newStatus !== customer.status) {
@@ -176,7 +184,7 @@ async function handleInbound(inbound) {
       return;
     }
 
-    await answerWithBrain(started.customer, text, from);
+    await burst.collect(from, text, (said) => answerWithBrain(started.customer, said, from));
     return;
   }
 
@@ -185,7 +193,10 @@ async function handleInbound(inbound) {
   // Claude reads the message and picks ONE action. Our code then carries it
   // out and writes the reply, so the price and the dates in a confirmation are
   // always real values from the database rather than something a model wrote.
-  await answerWithBrain(customer, text, from);
+  // NOT ANSWERED YET - held for a few seconds in case they are still typing.
+  // See src/core/burst.js. Everything downstream of this is unchanged; the AI
+  // is simply handed what they said as one message instead of three.
+  await burst.collect(from, text, (said) => answerWithBrain(customer, said, from));
 }
 
 async function answerWithBrain(customer, text, from) {

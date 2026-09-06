@@ -68,6 +68,30 @@ const config = Object.freeze({
     codeNumber: process.env.LYNDRY_CODE_NUMBER || '',
   }),
 
+  // HOW LONG THE AI WAITS BEFORE ANSWERING.
+  //
+  // Neil's call. People text a business the way they text a friend: "hey",
+  // then the actual question, then the time, three messages in fifteen
+  // seconds. Answering each as it lands gives them three replies and the first
+  // two answer half a sentence. So a reply waits, every new message restarts
+  // the wait, and the AI is then handed the lot as one message.
+  //
+  // The cost is felt by somebody who sends ONE message and waits the full
+  // window for an answer, which is why this is the shorter of the two numbers
+  // he named rather than the longer one.
+  //
+  // Set SMS_REPLY_WAIT_SECONDS to 0 to switch it off entirely - which is what
+  // the tests run with, so they are not twenty seconds a message.
+  replies: Object.freeze({
+    burstSeconds: Number(process.env.SMS_REPLY_WAIT_SECONDS ?? 20),
+
+    // The longest a reply can be put off, measured from the FIRST message of
+    // the burst. Without it somebody texting every fifteen seconds resets the
+    // clock for ever and is never answered at all, which is a worse failure
+    // than answering mid-thought.
+    burstMaxSeconds: Number(process.env.SMS_REPLY_MAX_SECONDS || 90),
+  }),
+
   // Where handoff_to_human reaches Neil. His personal number, never published.
   supportPhone: process.env.SUPPORT_PHONE || '',
 

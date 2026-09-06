@@ -830,6 +830,15 @@ function processBody(user) {
         stays where you put it is forgetting you put it there.
       </p>
       <p>
+        <strong>It waits about twenty seconds before answering.</strong> People
+        text a business the way they text a friend - "hey", then the question,
+        then the time - and answering each one as it lands gives them three
+        replies to one thought. So a reply is held for twenty seconds, every new
+        message restarts the wait, and the AI is then handed everything they
+        said as a single message. STOP and HELP are never held and are answered
+        at once.
+      </p>
+      <p>
         <strong>You can also push a stalled customer along.</strong> Their
         profile, and the side of any order, lists what we still need from
         them - their details, how they want it washed, where the bag goes, a
