@@ -1714,10 +1714,22 @@ function readPending(req) {
 router.get('/ops/login', (req, res) => {
   noStore(res);
 
-  // Already signed in? Don't make them do it again.
-  if (auth.isAuthed(req)) return res.redirect(302, safeNext(req.query.next));
+  // NO SHORT CUT FOR SOMEBODY ALREADY SIGNED IN. Neil's call, and it closes a
+  // hole that looked exactly like the code step being optional: this used to
+  // redirect a live session straight through, so typing a phone number on a
+  // device that was still signed in got you in without a code ever being
+  // entered. Asking for the sign-in page now means being asked to sign in.
+  //
+  // SAY WHY THEY ARE HERE when we know. Being thrown out of a screen you were
+  // just using, with no explanation, is indistinguishable from the thing being
+  // broken - and somebody who signed in on their phone and then found the
+  // laptop signed out would reasonably report it as a bug.
+  const why =
+    req.query.why === 'elsewhere'
+      ? 'You signed in on another device, so this one was signed out. Only one at a time.'
+      : '';
 
-  res.type('html').send(phoneStep({ next: safeNext(req.query.next) }));
+  res.type('html').send(phoneStep({ next: safeNext(req.query.next), error: why }));
 });
 
 // Step one: they gave us a number. Send a code.
@@ -1727,10 +1739,15 @@ router.post('/ops/login', async (req, res, next) => {
 
   noStore(res);
 
-  // ALREADY SIGNED IN. Send them on rather than texting a code that the next
-  // page would then swallow - which is what made this look like the code step
-  // could be skipped. A credential is not minted for somebody already inside.
-  if (auth.isAuthed(req)) return res.redirect(303, wanted);
+  // SUBMITTING A NUMBER ENDS WHATEVER SESSION WAS OPEN. Neil's rule: entering
+  // a phone number must never grant access without a code. It used to send an
+  // already-signed-in person straight on, so the code was skippable by anybody
+  // whose cookie was still alive.
+  //
+  // The old cookie is cleared here rather than at the code step, so the moment
+  // you start signing in the previous session is gone - there is no window in
+  // which abandoning the form leaves you inside on the old credential.
+  auth.clearSessionCookie(res);
 
   try {
     if (!auth.hasKey()) {
@@ -1774,8 +1791,9 @@ router.post('/ops/login', async (req, res, next) => {
 
 router.get('/ops/login/code', (req, res) => {
   noStore(res);
-  if (auth.isAuthed(req)) return res.redirect(302, safeNext(req.query.next));
 
+  // No short cut here either - see GET /ops/login above. The code is the only
+  // way in.
   const phone = readPending(req);
   if (!phone) return res.redirect(302, '/ops/login');
 
@@ -1806,7 +1824,9 @@ router.post('/ops/login/code', async (req, res, next) => {
     }
 
     res.clearCookie(PENDING_COOKIE, { path: '/ops' });
-    auth.setSessionCookie(res, result.user.id);
+    // The token verifyCode just minted. Every cookie carrying the previous one
+    // stops validating on its next request, which is what makes it one device.
+    auth.setSessionCookie(res, result.user.id, result.token);
     console.log(`Ops sign-in: ${result.user.name}`);
     return res.redirect(303, wanted);
   } catch (err) {

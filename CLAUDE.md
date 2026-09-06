@@ -1910,8 +1910,30 @@ does not get their session quietly extended on the way to being refused.
 customer session holds one person's own orders, not the business, and timing
 somebody out of their own account in an hour is friction for nothing.
 
-**The session cookie is not a credential.** It is `userId.expiry`, signed with
-`ADMIN_API_KEY`. A leaked cookie expires on its own and never held a secret.
+**A PHONE NUMBER NEVER GETS YOU IN. THE CODE DOES.** Neil's call, and it closed
+a real hole: `/ops/login` and `/ops/login/code` used to redirect an
+already-signed-in visitor straight through, so typing a number on a device whose
+cookie was still alive got you inside without a code ever being entered.
+Submitting a number now **clears the session first**, so there is no window
+where abandoning the form leaves you inside on the old credential.
+
+**ONE SIGNED-IN DEVICE PER PERSON.** The cookie carries a token as well as the
+id and the expiry, and `ops_users.session_token` holds the one that counts.
+Signing in mints a new one, so every other device fails on its next request. No
+session table to grow or sweep - one row, one live session. Compared in constant
+time, and the signature covers the token, so it cannot be swapped for another.
+
+**Being signed out elsewhere SAYS SO.** The redirect carries `?why=elsewhere`
+and the sign-in page renders it. Getting thrown out of a screen you were just
+using with no explanation is indistinguishable from the thing being broken, and
+would be reported as a bug.
+
+**Adding `session_token` signed everybody out exactly once**, which was the
+correct migration: a cookie minted before the column existed carries no token,
+matches nothing, and its holder signs in again.
+
+**The session cookie is not a credential.** It is `userId.expiry.token`, signed
+with `ADMIN_API_KEY`. A leaked cookie expires on its own and never held a secret.
 **Rotating `ADMIN_API_KEY` signs everybody out instantly** — that is the
 emergency lever if a phone goes missing.
 

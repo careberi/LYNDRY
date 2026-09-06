@@ -70,25 +70,42 @@ function hmac(value) {
 
 // --- The session cookie -----------------------------------------------------
 
-function issueSession(userId) {
+// ONE SIGNED-IN DEVICE PER PERSON, and this is how.
+//
+// The cookie carries a token as well as the id and the expiry, and the token is
+// stored on the person's row. Signing in mints a new one, so every cookie
+// holding the old token stops validating on its very next request - no session
+// table, nothing to sweep, one row per person.
+//
+// The signature covers all three parts, so the token cannot be swapped for
+// somebody else's or for one that has been retired.
+function newSessionToken() {
+  return crypto.randomBytes(18).toString('hex');
+}
+
+function issueSession(userId, token) {
   const expiresAt = Date.now() + SESSION_MS;
-  const payload = `${userId}.${expiresAt}`;
+  const payload = `${userId}.${expiresAt}.${token}`;
   return { value: `${payload}.${hmac(`ops.${payload}`)}`, maxAgeMs: SESSION_MS };
 }
 
-// Returns the user id the cookie vouches for, or null.
+// Returns { userId, token } the cookie vouches for, or null.
+//
+// This proves the cookie is OURS and still in date. It cannot prove the token
+// is the live one, because that is a row in the database - requireAdminPage
+// does that half, where it is already loading the person anyway.
 function readSession(value) {
   const parts = String(value || '').split('.');
-  if (parts.length !== 3) return null;
+  if (parts.length !== 4) return null;
 
-  const [userId, expiresAt, signature] = parts;
+  const [userId, expiresAt, token, signature] = parts;
 
   const expiry = Number(expiresAt);
   if (!Number.isFinite(expiry) || expiry < Date.now()) return null;
 
-  if (!sameSecret(signature, hmac(`ops.${userId}.${expiresAt}`))) return null;
+  if (!sameSecret(signature, hmac(`ops.${userId}.${expiresAt}.${token}`))) return null;
 
-  return userId;
+  return { userId, token };
 }
 
 // Express doesn't parse cookies on its own and this is the only cookie the app
@@ -108,8 +125,8 @@ function readCookie(req, name) {
   return null;
 }
 
-function setSessionCookie(res, userId) {
-  const { value, maxAgeMs } = issueSession(userId);
+function setSessionCookie(res, userId, token) {
+  const { value, maxAgeMs } = issueSession(userId, token);
 
   res.cookie(COOKIE_NAME, value, {
     httpOnly: true, // JavaScript on the page can never read it
@@ -245,15 +262,25 @@ async function verifyCode(rawPhone, rawCode, req) {
     .update({ consumed_at: new Date().toISOString() })
     .eq('id', record.id);
 
+  // THE ONE LIVE SESSION. Minted here rather than by the caller, because this
+  // is the only place a correct code has just been proved - and because a
+  // caller that forgot would leave every other device signed in, which is the
+  // whole thing this prevents.
+  const token = newSessionToken();
+
   await db
     .from('ops_users')
-    .update({ last_login_at: new Date().toISOString() })
+    .update({
+      last_login_at: new Date().toISOString(),
+      session_token: token,
+      session_started_at: new Date().toISOString(),
+    })
     .eq('id', user.id);
 
   clearBucket(`verify:ip:${req.ip}`);
   clearBucket(`code:phone:${phone}`);
 
-  return { ok: true, user };
+  return { ok: true, user, token };
 }
 
 // --- The checks routes use --------------------------------------------------
@@ -263,9 +290,15 @@ function hasApiKey(req) {
   return hasKey() && sameSecret(req.get('x-admin-key'), config.adminApiKey);
 }
 
-function sessionUserId(req) {
+// The { userId, token } a cookie vouches for, or null.
+function sessionOf(req) {
   if (!hasKey()) return null;
   return readSession(readCookie(req, COOKIE_NAME));
+}
+
+function sessionUserId(req) {
+  const session = sessionOf(req);
+  return session ? session.userId : null;
 }
 
 function isAuthed(req) {
@@ -294,25 +327,37 @@ async function requireAdminPage(req, res, next) {
     return res.status(503).type('text/plain').send('ADMIN_API_KEY is not set on the server.');
   }
 
-  const userId = sessionUserId(req);
+  const session = sessionOf(req);
 
-  if (!userId) {
+  if (!session) {
     const wanted = encodeURIComponent(req.originalUrl);
     return res.redirect(302, `/ops/login?next=${wanted}`);
   }
 
   try {
     // Checked on every request, not just at sign-in. Switching someone off has
-    // to take effect immediately, not in thirty days when their cookie lapses.
+    // to take effect immediately, not an hour later when their cookie lapses.
     const { data: user } = await db
       .from('ops_users')
-      .select('id, name, phone, status, role, drives')
-      .eq('id', userId)
+      .select('id, name, phone, status, role, drives, session_token')
+      .eq('id', session.userId)
       .maybeSingle();
 
     if (!user || user.status !== 'ACTIVE') {
       clearSessionCookie(res);
       return res.redirect(302, '/ops/login');
+    }
+
+    // ONE DEVICE. The cookie's token has to be the one on the row, so signing
+    // in somewhere else retires every other device on its next request.
+    //
+    // Compared in constant time like every other secret here, and a person with
+    // no token at all matches nothing - which is what signs out every cookie
+    // minted before this existed.
+    if (!user.session_token || !sameSecret(session.token, user.session_token)) {
+      clearSessionCookie(res);
+      const wanted = encodeURIComponent(req.originalUrl);
+      return res.redirect(302, `/ops/login?next=${wanted}&why=elsewhere`);
     }
 
     req.opsUser = user;
@@ -322,9 +367,9 @@ async function requireAdminPage(req, res, next) {
     // you signed in. Without this line the session is an absolute hour and a
     // driver gets thrown out halfway through a round.
     //
-    // It is set after the ops_users check above, so a person switched off does
-    // not get their session quietly extended on the way to being refused.
-    setSessionCookie(res, userId);
+    // It is set after both checks above, so a person switched off or signed in
+    // elsewhere does not get their session quietly extended on the way out.
+    setSessionCookie(res, user.id, user.session_token);
 
     return next();
   } catch (err) {
@@ -338,6 +383,8 @@ module.exports = {
   hasKey,
   sameSecret,
   isAuthed,
+  sessionOf,
+  newSessionToken,
   requireAdminApi,
   requireAdminPage,
   requestCode,
