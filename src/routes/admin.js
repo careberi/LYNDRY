@@ -50,6 +50,7 @@ const { loadoutBody, loadWalkBody } = require('../web/loadout-page');
 const { scanField, scannerScript, describeCodeFormat } = require('../web/scanner');
 const partners = require('../core/partners');
 const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
+const { scheduledBody } = require('../web/scheduled-page');
 const {
   adminDashboardBody,
   settingsBody,
@@ -267,6 +268,11 @@ const OPS_MENUS = Object.freeze([
       // so an admin who has not put themselves on the route is not offered one.
       { href: '/ops/run', label: 'Your route', permission: 'orders.drive' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
+      // WHAT WILL TEXT A CUSTOMER WITHOUT ANYBODY PRESSING SEND. Under
+      // Dashboard because it answers the same question the board and the
+      // route answer: what happens next, today. Behind messages.view - it
+      // is a list of what customers are about to be told.
+      { href: '/ops/scheduled', label: 'Going out on its own', permission: 'messages.view' },
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
       { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
@@ -7088,12 +7094,36 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
             ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-top:20px;">
                  <div style="max-width:78%;padding:12px 16px;border:2px dashed var(--ink-400);
                              border-radius:14px;background:transparent;">
-                   <p class="eyebrow" style="margin:0 0 4px;color:var(--ink-500);">Follow-up scheduled</p>
-                   <p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink-700);">
-                     The AI will chase its last question on
-                     <strong>${escapeHtml(dateTime(followUp.dueAt.toISOString()))}</strong>
-                     unless they reply first.
+                   <p class="eyebrow" style="margin:0 0 4px;color:var(--ink-500);">
+                     ${followUp.off ? 'Follow-up switched off' : 'Follow-up scheduled'}
                    </p>
+                   <p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink-700);">
+                     ${
+                       followUp.off
+                         ? `This one would have been chased on <strong>${escapeHtml(
+                             dateTime(followUp.dueAt.toISOString())
+                           )}</strong>. It will not be. The AI still answers them whenever they text.`
+                         : `The AI will chase its last question on <strong>${escapeHtml(
+                             dateTime(followUp.dueAt.toISOString())
+                           )}</strong> unless they reply first.`
+                     }
+                   </p>
+                   ${
+                     // THE SWITCH WHERE THE THING IT CONTROLS IS. Neil's case: a
+                     // customer said "Not yet, will let you know" and a chase was
+                     // queued anyway. Posts to the same route the list screen
+                     // posts to, so there is one implementation of it.
+                     canSend
+                       ? `<form method="post"
+                                action="/ops/scheduled/follow-ups/${encodeURIComponent(digits)}?from=thread"
+                                style="margin:12px 0 0;">
+                            <input type="hidden" name="state" value="${followUp.off ? 'on' : 'off'}">
+                            <button class="btn btn-outline btn-sm" type="submit">
+                              ${followUp.off ? 'Chase them after all' : 'Do not chase this one'}
+                            </button>
+                          </form>`
+                       : ''
+                   }
                  </div>
                  <span style="font-size:12px;color:var(--ink-400);">Only ever one, and only if they stay quiet</span>
                </div>`
@@ -7241,6 +7271,100 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
         stillAnswering
           ? 'Sent. The AI is still answering this number - switch it off if you are handling this yourself.'
           : 'Sent.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/scheduled - everything queued to text a customer on its own
+//
+// Neil's ask. Two things go out unprompted - a chase and a pickup reminder -
+// and the only way to know one was coming was to open the conversation it
+// belonged to. This is both, in the order they happen.
+//
+// Behind messages.view: it is a list of what customers are about to be told,
+// which is the same class of thing as reading their thread.
+//
+// EVERY TIME COMES FROM THE FUNCTION THE SCHEDULER CALLS. followups.allPending()
+// and reminders.allPending() read the same rows the sweeps read and use the same
+// assess(), so this screen and the send cannot disagree about who or when.
+// ---------------------------------------------------------------------------
+
+router.get('/ops/scheduled', guard, withIssues, may('messages.view'), async (req, res, next) => {
+  try {
+    const [chases, due, followUpsOn] = await Promise.all([
+      followups.allPending(),
+      reminders.allPending(),
+      settings.followUpsOn(),
+    ]);
+
+    // Names for the numbers. One query rather than one per row, and a number
+    // with no customer row is perfectly normal here - it is somebody who
+    // texted and never signed up, which is exactly who a chase is for.
+    const phones = [...new Set([...chases.map((c) => c.phone), ...due.map((d) => d.phone)])];
+    const { data: people } = phones.length
+      ? await db.from('customers').select('id, name, phone').in('phone', phones)
+      : { data: [] };
+
+    const byPhone = new Map((people || []).map((c) => [c.phone, c]));
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Going out on its own',
+        active: '/ops/scheduled',
+        body: scheduledBody({
+          followUps: chases.map((c) => ({
+            ...c,
+            name: (byPhone.get(c.phone) || {}).name || null,
+            phoneDisplay: formatPhone(c.phone),
+          })),
+          reminders: due.map((d) => ({ ...d, phoneDisplay: formatPhone(d.phone) })),
+          followUpsOn,
+          canManage: roles.can(req.opsUser, 'messages.send'),
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /ops/scheduled/follow-ups/:phone - chase this number, or do not
+//
+// Behind messages.send rather than messages.view, like the AI switch and the
+// message box: deciding what a customer is told is a different act from
+// reading what they were told.
+//
+// One route, both directions, and it posts from two screens - this list and
+// the conversation itself - so there is one implementation of "stop chasing
+// this number" rather than two that drift. ?from= decides where you land.
+router.post('/ops/scheduled/follow-ups/:phone', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const phone = normalisePhone(req.params.phone);
+    if (!phone) return res.redirect(303, '/ops/scheduled');
+
+    const off = String((req.body || {}).state || '') === 'off';
+    await aiPause.setFollowUps(phone, off, req.opsUser);
+
+    const back =
+      String((req.query || {}).from || '') === 'thread'
+        ? `/ops/messages/${encodeURIComponent(phone.replace(/\D/g, ''))}`
+        : '/ops/scheduled';
+
+    return res.redirect(
+      303,
+      `${back}?note=${encodeURIComponent(
+        off
+          ? 'The AI will not chase this number. It still answers them whenever they text in.'
+          : 'The AI will chase this number again if a question goes unanswered.'
       )}`
     );
   } catch (err) {

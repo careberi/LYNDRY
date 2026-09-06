@@ -158,7 +158,50 @@ async function pendingFor(phone) {
 
   if (error) throw error;
 
-  return assess(data || []);
+  const due = assess(data || []);
+  if (!due) return null;
+
+  // Still returned when it is switched off, with a flag, so the conversation
+  // screen can say "this one would be chased, and it will not be" rather than
+  // showing nothing at all. A switch whose effect is invisible is a switch
+  // nobody trusts.
+  return { ...due, off: await aiPause.followUpsOff(phone) };
+}
+
+// EVERYTHING QUEUED TO GO OUT ON ITS OWN, for the screen that lists them.
+//
+// Reads the same threads the sweep reads and asks the same assess(), so the
+// list and the send cannot disagree about who is due or when.
+async function allPending() {
+  const threads = await recentThreads();
+  const rows = [];
+
+  for (const [phone, thread] of threads) {
+    const due = assess(thread);
+    if (!due) continue;
+
+    const last = thread[thread.length - 1];
+    rows.push({
+      phone,
+      customerId: last.customer_id || null,
+      dueAt: due.dueAt,
+      lastAt: due.lastAt,
+      lastMessage: last.body || '',
+      overdue: hoursSince(due.lastAt) >= AFTER_HOURS,
+    });
+  }
+
+  // Which of them are switched off, in one query rather than one per row.
+  const off = await aiPause.followUpsOffAmong(rows.map((r) => r.phone)).catch(() => new Set());
+  const paused = await aiPause.pausedAmong(rows.map((r) => r.phone)).catch(() => new Set());
+
+  for (const row of rows) {
+    row.off = off.has(row.phone);
+    row.paused = paused.has(row.phone);
+  }
+
+  rows.sort((a, b) => a.dueAt - b.dueAt);
+  return rows;
 }
 
 // Ask the AI for the sentence. Null if it cannot produce a usable one, and a
@@ -241,6 +284,14 @@ async function sendDue({ now = null } = {}) {
         continue;
       }
 
+      // Chases turned off for this one number. Different from the pause above:
+      // the AI still answers them, it just never starts a conversation. Neil's
+      // case is a customer who has said they will come back.
+      if (await aiPause.followUpsOff(phone)) {
+        skipped.push({ phone, reason: 'follow-ups are off for this chat' });
+        continue;
+      }
+
       // The AI gave up on this thread and somebody owes them a real answer.
       // Chasing on top of that is the machine talking over the person.
       if (await issues.holdFor(customer.id).catch(() => null)) {
@@ -283,6 +334,7 @@ async function sendDue({ now = null } = {}) {
 module.exports = {
   sendDue,
   pendingFor,
+  allPending,
   assess,
   dueAt,
   AFTER_HOURS,

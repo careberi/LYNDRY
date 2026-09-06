@@ -62,7 +62,10 @@ async function isPaused(phone) {
 async function stateFor(phone) {
   const { data, error } = await db
     .from('ai_pauses')
-    .select('phone, paused, paused_at, paused_by, resumed_at, resumed_by, note')
+    .select(
+      'phone, paused, paused_at, paused_by, resumed_at, resumed_by, note, ' +
+        'follow_ups_off, follow_ups_changed_at, follow_ups_changed_by'
+    )
     .eq('phone', phone)
     .maybeSingle();
 
@@ -98,6 +101,75 @@ async function pausedAmong(phones) {
 
   if (error) throw error;
   return new Set((data || []).map((r) => r.phone));
+}
+
+// IS THE AI ALLOWED TO CHASE THIS ONE.
+//
+// Neil's case: the customer said "Not yet. Will LYK. Thanks!" and a chase was
+// queued for the next afternoon. They have already said they will come back;
+// chasing them is the wrong move, and stopping it should not mean stopping
+// every chase in the business.
+//
+// NOT THE SAME AS PAUSING. A pause stops the AI saying anything at all on this
+// number. This stops only the unprompted chase - the AI still answers the
+// moment they text in.
+//
+// Fails OPEN, unlike isPaused(). The cost of getting this wrong is one extra
+// text to somebody who said they would come back, where the cost of getting
+// the pause wrong is talking over a person handling a complaint. A read error
+// should not silently switch a feature off across the business either.
+async function followUpsOff(phone) {
+  const { data, error } = await db
+    .from('ai_pauses')
+    .select('follow_ups_off')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Could not read the follow-up switch for ${phone}: ${error.message}`);
+    return false;
+  }
+
+  return Boolean(data && data.follow_ups_off);
+}
+
+// Which of these numbers have chases turned off. One query for a list screen.
+async function followUpsOffAmong(phones) {
+  const wanted = [...new Set((phones || []).filter(Boolean))];
+  if (!wanted.length) return new Set();
+
+  const { data, error } = await db
+    .from('ai_pauses')
+    .select('phone')
+    .eq('follow_ups_off', true)
+    .in('phone', wanted);
+
+  if (error) throw error;
+  return new Set((data || []).map((r) => r.phone));
+}
+
+// Turn chases on or off for one number.
+//
+// An upsert, because the row may not exist yet - somebody whose AI has never
+// been paused has nothing in this table. It deliberately does NOT send
+// `paused`, so flipping the chase cannot disturb whether the AI is answering.
+async function setFollowUps(phone, off, opsUser) {
+  const { data, error } = await db
+    .from('ai_pauses')
+    .upsert(
+      {
+        phone,
+        follow_ups_off: Boolean(off),
+        follow_ups_changed_at: new Date().toISOString(),
+        follow_ups_changed_by: actorId(opsUser),
+      },
+      { onConflict: 'phone' }
+    )
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 // The machine key is not a person and has no row to point at, the same way it
@@ -187,4 +259,13 @@ async function resume(phone, opsUser) {
   return { row: data || null, liftedHold };
 }
 
-module.exports = { isPaused, stateFor, pausedAmong, pause, resume };
+module.exports = {
+  isPaused,
+  stateFor,
+  pausedAmong,
+  pause,
+  resume,
+  followUpsOff,
+  followUpsOffAmong,
+  setFollowUps,
+};

@@ -196,4 +196,36 @@ async function pendingFor(customerId) {
   return { order, goesOn, window: booking.arrivalWindow(order) };
 }
 
-module.exports = { sendDue, reminderMessage, pendingFor, JUST_BOOKED_HOURS };
+// EVERY PICKUP REMINDER STILL TO GO, for the screen that lists them.
+//
+// Reads the same orders the sweep reads. A reminder goes the evening BEFORE the
+// pickup, so anything whose evening has already passed is not pending - it
+// either went, or it was missed and saying "pending" would be a lie.
+async function allPending() {
+  const today = booking.today();
+
+  const { data, error } = await db
+    .from('orders')
+    .select(
+      'id, order_number, pickup_date, pickup_window_start, pickup_window_end, ' +
+        'customers (id, name, phone, status)'
+    )
+    .in('status', orders.AWAITING_COLLECTION)
+    .is('reminder_sent_at', null)
+    .gte('pickup_date', today)
+    .order('pickup_date', { ascending: true });
+
+  if (error) throw error;
+
+  return (data || [])
+    .map((order) => ({
+      order,
+      customer: order.customers || null,
+      phone: order.customers ? order.customers.phone : null,
+      goesOn: booking.addDays(order.pickup_date, -1),
+      window: booking.arrivalWindow(order),
+    }))
+    .filter((row) => row.phone && row.goesOn >= today);
+}
+
+module.exports = { sendDue, reminderMessage, pendingFor, allPending, JUST_BOOKED_HOURS };

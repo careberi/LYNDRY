@@ -674,6 +674,8 @@ GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
 GET  /ops/issues             everything still waiting on a person
+GET  /ops/scheduled          every text queued to send on its own
+POST /ops/scheduled/follow-ups/:phone   chase this number, or do not
 GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
 GET  /ops/process            how the whole thing works
@@ -858,6 +860,38 @@ which is worse than nothing. `brain.followUpMessage()` gets the thread and **no
 tools at all**, so it can only produce words - it cannot book, cancel, charge or
 look anything up. If it comes back empty or longer than two segments, nothing is
 sent.
+
+**CHASES CAN BE SWITCHED OFF FOR ONE CONVERSATION.** Neil's case, from a real
+thread: the customer said "Not yet. Will LYK. Thanks!", the AI said "Sounds
+good, no rush at all", and a chase was queued for the next afternoon. They had
+already said they would come back. `ai_pauses.follow_ups_off`, set from the
+thread or from `/ops/scheduled`, both posting to the same route.
+
+**It is NOT the AI pause, and they are independent.** A pause stops the AI
+saying anything at all on that number; this stops only the unprompted chase, so
+the AI still answers the moment they text in. Turning one on does not touch the
+other, and that is tested both ways.
+
+**`ai_pauses.paused` had to stop defaulting to true**, which is migration 0070
+and was a real bug caught on screen. The table was designed when a row meant
+one thing - this number is paused - so merely inserting a row paused the AI.
+The moment the table gained a second job, turning chases off for a number with
+no existing row silently switched the AI off for that customer entirely. A row
+now means "there are settings for this number", and every writer sets `paused`
+deliberately.
+
+**`/ops/scheduled` lists everything that will text a customer on its own** -
+the chases and the pickup reminders, in the order they happen, with a way into
+each conversation. Neil's ask: until it existed, the only way to know a text
+was coming was to open the conversation it belonged to. Both lists come from
+`allPending()` functions that read the same rows and call the same `assess()`
+the sweeps do, so the screen and the send cannot disagree.
+
+**A pickup reminder has no switch on that page, on purpose.** It goes because a
+van is coming to somebody's door and they need the bag out; the way to stop it
+is to move or cancel the pickup, which is a decision about the order rather
+than about a text. A chase has one, because "I'll let you know" is a decision
+about the conversation.
 
 **The thread says when a chase is coming**, in a dashed box where the next
 message would go. Neil's ask, and the reason is that nothing should text a
