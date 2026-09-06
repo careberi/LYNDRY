@@ -826,11 +826,67 @@ somebody wants the clean laundry left somewhere different. **Anything asking
 "do we know where the bag goes" must check both** - checking `dropoff_spot`
 alone says no for almost every customer who has told us.
 
+**THE AI CHASES AN UNANSWERED QUESTION ONCE, A DAY LATER.** Neil's ask: the AI
+asks for an address or a day, the customer never answers, and nothing in the
+system noticed - so a half-set-up customer sat there for ever.
+`src/core/followups.js` sweeps for it.
+
+| Rule | |
+|---|---|
+| The last message is the AI's own reply, 24 hours old | anything else means we are not waiting on them |
+| **One chase per silence** | a chase is written as `kind = 'FOLLOW_UP'`, so the last message is then a follow-up and the first rule can never fire again |
+| There was a conversation | at least one message from them and two from us. "Thanks" / "no problem" is not something to chase |
+| Nothing booked | the point is getting somebody over the line; a customer with a pickup coming does not need texting |
+
+**A FOLLOW-UP TO A FOLLOW-UP IS IMPOSSIBLE, NOT DISCOURAGED**, and that is the
+whole shape of the design. Rather than counting chases in a column, the chase
+changes what the last message IS. Only the customer speaking puts an AI reply
+back at the end of the thread.
+
+**`messages.kind` is what makes any of it work** - `AI`, `FOLLOW_UP`, `PERSON`,
+`SYSTEM`, and null for everything written before it existed. Only `AI` earns a
+chase, so a booking confirmation, a status text, a STOP reply, an apology after
+an outage and a nudge button are all silent. Null being "we do not know" is the
+safe direction: an unlabelled history can never trigger a chase at somebody who
+had a conversation last week.
+
+**THIS ONE MESSAGE IS WRITTEN BY THE AI**, which is the exception to the rule in
+`src/core/nudges.js`. Those ask for one of five known-missing things and can be
+written out in advance; a chase has to refer to a conversation that could have
+been about anything, and the fixed-sentence version is "just following up!",
+which is worse than nothing. `brain.followUpMessage()` gets the thread and **no
+tools at all**, so it can only produce words - it cannot book, cancel, charge or
+look anything up. If it comes back empty or longer than two segments, nothing is
+sent.
+
+**The thread says when a chase is coming**, in a dashed box where the next
+message would go. Neil's ask, and the reason is that nothing should text a
+customer at a time nobody could have predicted. The screen and the sweep both
+call `assess()`, so the time shown and the time sent cannot disagree - and
+`dueAt()` pushes the time out of quiet hours, because a screen promising a text
+at half seven that would never be sent then is worse than no screen.
+
+**It is skipped for an opted-out number, a thread a person has taken over, and
+one where the AI is on hold.** A chase on top of a hold is the machine talking
+over the person who owes them a real answer.
+
 **THE APP RUNS ITS OWN NIGHTLY PASS. There is no cron service and there does
-not need to be.** `src/core/nightly.js` watches the clock inside the running
-server and does two things once an evening, in this order: book tomorrow's
-standing orders (texting those customers as it goes), then remind everybody else
-whose pickup is tomorrow.
+not need to be.** `src/core/scheduler.js` owns one ten-minute tick inside the
+running server and runs two things on it: the nightly pass in
+`src/core/nightly.js` - book tomorrow's standing orders (texting those
+customers as it goes), then remind everybody else whose pickup is tomorrow -
+and the follow-up sweep, all day.
+
+**QUIET HOURS ARE A HARD FLOOR ON BOTH, 8am to 9pm New Jersey time**, and are
+not configurable because they are the law rather than a preference. Everything
+on this tick is unprompted - nobody has just texted us and is waiting - so late
+is never a reason to send at midnight.
+
+**The two react differently to being late, and the difference is real.** The
+nightly pass **skips** a night it missed, because its message says "tomorrow"
+and sending it at 6am the next day would be a lie. A follow-up **defers**: it is
+only "a day or so later", so one that came due at 3am goes out at 8am and is
+still exactly right.
 
 **It used to be a Railway cron service, and that was the wrong answer.** A cron
 is a second service configured by hand in a dashboard - and nobody had actually
@@ -839,16 +895,10 @@ while looking perfectly healthy. Neil asked why it needed a cron at all. It
 does not: the web app is already running every minute of every day, because an
 inbound text has to be answered, so it can watch the clock for free.
 
-**A POLL, NOT A TIMER.** Every ten minutes it asks two questions - is it evening,
-and is `app_settings.nightly_ran_on` today. A one-shot timer set at startup
-would be lost by any deploy, and a deploy at 5:59pm would silently skip the
-night. A poll simply asks again.
-
-**QUIET HOURS ARE A HARD STOP.** It runs between `NIGHTLY_HOUR` (18) and 9pm,
-and if the app was down all evening it does **not** catch up at midnight - it
-shouts in the log that it missed the night and waits. Federal rules put texts
-inside 8am to 9pm in the recipient's own time; a reminder nobody gets is a bad
-day, a text at 1am is a complaint and a carrier flag.
+**A POLL, NOT A TIMER.** The tick asks two questions - is it evening, and is
+`app_settings.nightly_ran_on` today. A one-shot timer set at startup would be
+lost by any deploy, and a deploy at 5:59pm would silently skip the night. A poll
+simply asks again.
 
 **OFF OUTSIDE PRODUCTION, and that guard is load-bearing.** The dev server
 shares the production database, so a laptop left running at six in the evening

@@ -1118,7 +1118,64 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
   return { type: 'text', text };
 }
 
+// ---------------------------------------------------------------------------
+// THE ONE CHASE, WRITTEN BY THE MODEL.
+//
+// Everything else the system sends unprompted is a fixed sentence in code, and
+// for good reason - a person can read it before a real phone gets it. This is
+// the exception, and the reason is that a chase has to refer to a conversation
+// that could have been about anything. The fixed-sentence version is "just
+// following up!", which is worse than saying nothing.
+//
+// TIGHTLY BOUND, THOUGH. No tools at all, so it cannot book, cancel, charge or
+// look anything up - it can only produce words. A low token ceiling, so it
+// physically cannot write an essay. And src/core/followups.js throws the answer
+// away if it comes back long or empty, so the failure mode is silence rather
+// than a bad text.
+// ---------------------------------------------------------------------------
+async function followUpMessage({ customer, order, recentMessages, recentOrders }) {
+  const now = booking.nowInService();
+  const open = booking.alwaysAllowed(customer || {}) || (await settings.takingOrders());
+  const opensOn = booking.alwaysAllowed(customer || {}) ? null : await settings.opensOn();
+
+  const instruction = [
+    'You said something to this customer a day ago and they have not replied.',
+    'Write ONE short text nudging them on THAT, and nothing else.',
+    '',
+    'Rules, all of them hard:',
+    '- Pick up your own last message. If you asked them something, ask it again',
+    '  more briefly. Do not introduce a new question and do not start over.',
+    '- Open by acknowledging the gap in a few words - "just following up",',
+    '  "checking back in" - then the thing you need. Nothing longer.',
+    '- One sentence, two at the very most. This is a nudge, not a conversation.',
+    '- Do not greet them as though the thread is new and do not re-introduce',
+    '  LYNDRY. They know who we are; they were mid-conversation with us.',
+    '- No apology for the delay. It has been a day, not a month.',
+    '- Plain ASCII. No emoji, no dashes, straight quotes only.',
+    '- Never invent a price, a date, a window or a promotion. If you need a',
+    '  fact you do not have above, ask for it instead of guessing.',
+    '',
+    'Reply with the text of the message and nothing else - no preamble, no',
+    'quotation marks around it, no explanation of what you are doing.',
+  ].join('\n');
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    system:
+      `${systemPrompt(now.date, now, { paused: open ? null : { reason: await settings.pausedReason(), launched: true }, promo: null, opensOn })}` +
+      `\n\n${customerContext(customer, order, recentMessages, recentOrders || [], null)}`,
+    messages: [{ role: 'user', content: instruction }],
+  });
+
+  return response.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join(' ')
+    .trim();
+}
+
 // systemPrompt and customerContext are exported so the exact words the AI is
 // given can be printed and read without starting the server or sending a text.
 // `npm run prompt` does that. Everything the AI is allowed to do is in here.
-module.exports = { decide, TOOLS, MODEL, systemPrompt, customerContext };
+module.exports = { decide, followUpMessage, TOOLS, MODEL, systemPrompt, customerContext };

@@ -17,6 +17,7 @@ const recurring = require('../core/recurring');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
 const nudges = require('../core/nudges');
+const followups = require('../core/followups');
 const { nudgePanel } = require('../web/nudge-panel');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
@@ -6733,7 +6734,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     // The pause is NOT caught and softened into "probably fine". If we cannot
     // read the switch the AI is silent - isPaused() fails closed - and a page
     // claiming it is answering while it says nothing is the worst of both.
-    const [{ data: messages, error }, { data: customer }, pause] = await Promise.all([
+    const [{ data: messages, error }, { data: customer }, pause, followUp] = await Promise.all([
       db
         .from('messages')
         .select('direction, body, created_at, delivery_status, delivery_error')
@@ -6741,6 +6742,14 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         .order('created_at', { ascending: true }),
       db.from('customers').select('id, name, status, address_line1, city, postal_code').eq('phone', phone).maybeSingle(),
       aiPause.stateFor(phone),
+      // IS A CHASE COMING, AND WHEN. Neil's ask: nothing should text a
+      // customer at a time nobody could have predicted, so the thread says so
+      // before it happens. Derived from the same function the sweep uses, so
+      // the time shown and the time sent cannot disagree.
+      followups.pendingFor(phone).catch((err) => {
+        console.error(`Could not work out the follow-up for ${phone}: ${err.message}`);
+        return null;
+      }),
     ]);
 
     if (error) throw error;
@@ -6942,6 +6951,30 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         }
 
         ${
+          // THE NEXT THING THAT WILL HAPPEN IN THIS CONVERSATION.
+          //
+          // Drawn where the next message would go, dashed rather than solid,
+          // because it has not been sent - it is the shape of a message rather
+          // than one. The AI chases a question nobody answered exactly once,
+          // a day later; anything the customer sends cancels it, and switching
+          // the AI off for this number stops it too.
+          followUp && !pauseState.paused
+            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-top:20px;">
+                 <div style="max-width:78%;padding:12px 16px;border:2px dashed var(--ink-400);
+                             border-radius:14px;background:transparent;">
+                   <p class="eyebrow" style="margin:0 0 4px;color:var(--ink-500);">Follow-up scheduled</p>
+                   <p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink-700);">
+                     The AI will chase its last question on
+                     <strong>${escapeHtml(dateTime(followUp.dueAt.toISOString()))}</strong>
+                     unless they reply first.
+                   </p>
+                 </div>
+                 <span style="font-size:12px;color:var(--ink-400);">Only ever one, and only if they stay quiet</span>
+               </div>`
+            : ''
+        }
+
+        ${
           // WRITING TO A REAL PHONE IS NOT READING A LIST, so it is behind its
           // own permission - the same reason texting a laundromat the partner
           // link sits behind partners.manage rather than partners.view.
@@ -7067,6 +7100,7 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
     // machine key has no person attached, so it writes nothing.
     await notify.sendAndLog(phone, body, customer ? customer.id : null, {
       sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+      kind: 'PERSON',
     });
 
     // SENDING DOES NOT SWITCH THE AI OFF, on purpose - a button that quietly

@@ -830,6 +830,13 @@ function processBody(user) {
         stays where you put it is forgetting you put it there.
       </p>
       <p>
+        <strong>It chases an unanswered question once.</strong> If the AI asked
+        somebody something and they went quiet, it sends one nudge a day later
+        picking up its own last question - and then never again unless they
+        reply. The conversation screen shows the chase coming before it lands,
+        so nothing goes out at a time nobody could have predicted.
+      </p>
+      <p>
         <strong>The app does its own evening round of texts</strong> - it watches
         the clock itself rather than depending on anything scheduled elsewhere,
         and it will not send outside 8am to 9pm whatever happens.

@@ -143,7 +143,9 @@ async function handleInbound(inbound) {
       signupUrl: `${config.baseUrl}/signup`,
     });
 
-    await reply(from, body, customer ? customer.id : null);
+    // SYSTEM, not AI. Nobody owes us an answer to a STOP confirmation, and a
+    // chase after one would be the exact opposite of what they asked for.
+    await reply(from, body, customer ? customer.id : null, { kind: 'SYSTEM' });
     return;
   }
 
@@ -284,7 +286,10 @@ async function answerWithBrain(customer, text, from) {
     await reply(
       from,
       `Sorry — something went wrong on our end. Email ${site.email} and we'll pick it up from there.`,
-      customer.id
+      customer.id,
+      // An apology is not a question. Chasing somebody about our own outage a
+      // day later would be worse than the outage.
+      { kind: 'SYSTEM' }
     );
     return;
   }
@@ -292,7 +297,9 @@ async function answerWithBrain(customer, text, from) {
   if (decision.type === 'text') {
     // Claude needs one detail before it can act.
     console.log(`ASK     ${from}: ${decision.text}`);
-    await reply(from, decision.text, customer.id);
+    // THE ONE THAT EARNS A FOLLOW-UP. This is the AI needing one more detail
+    // before it can act, which is exactly the message somebody goes quiet on.
+    await reply(from, decision.text, customer.id, { kind: 'AI' });
     return;
   }
 
@@ -312,7 +319,9 @@ async function answerWithBrain(customer, text, from) {
     message = await actions.run(decision.name, decision.input, customer, helpers);
   } catch (err) {
     console.error(`Action ${decision.name} failed:`, err.message);
-    await reply(from, `Sorry — I couldn't do that. Email ${site.email} and we'll sort it out.`, customer.id);
+    await reply(from, `Sorry — I couldn't do that. Email ${site.email} and we'll sort it out.`, customer.id, {
+      kind: 'SYSTEM',
+    });
     return;
   }
 
@@ -454,7 +463,12 @@ async function answerWithBrain(customer, text, from) {
     return;
   }
 
-  await reply(from, message, customer.id);
+  // The sentence an action produced. Marked AI because plenty of them are
+  // still questions - a refused slot asks for another day, a lookup asks for an
+  // address - and those are exactly the ones people go quiet on. The ones that
+  // are conclusions rather than questions are filtered out anyway: a booked
+  // customer is never chased.
+  await reply(from, message, customer.id, { kind: 'AI' });
 }
 
 // Whatever is already with a manager for this customer, or null.

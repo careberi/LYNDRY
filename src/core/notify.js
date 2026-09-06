@@ -116,7 +116,7 @@ function isFictional(phone) {
 // else - the AI's own replies, status texts, booking confirmations, the text
 // blast - because the one thing the AI needs to know is whether a colleague
 // wrote a line or it did. See migration 0062.
-async function sendAndLog(to, body, customerId, { sentBy = null } = {}) {
+async function sendAndLog(to, body, customerId, { sentBy = null, kind = null } = {}) {
   let providerMessageId = null;
 
   // Swap typographic characters for their plain twins first, then warn about
@@ -147,6 +147,9 @@ async function sendAndLog(to, body, customerId, { sentBy = null } = {}) {
     body: text,
     provider_message_id: providerMessageId,
     sent_by: sentBy || null,
+    // What kind of message this was. Null is honest for everything that has
+    // not been classified - see migration 0065. Only 'AI' earns a follow-up.
+    kind: kind || null,
   });
 
   if (error) console.error('Failed to log outbound message:', error.message);

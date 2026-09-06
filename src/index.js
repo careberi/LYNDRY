@@ -22,7 +22,7 @@ const bag = require('./routes/bag');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 const burst = require('./core/burst');
-const nightly = require('./core/nightly');
+const scheduler = require('./core/scheduler');
 
 // ---------------------------------------------------------------------------
 // The server
@@ -119,7 +119,7 @@ app.get('/health', (req, res) => {
     // is told. Reported here so "did it run" is a question answerable from a
     // browser rather than a log dive, which is exactly the hole the cron
     // service left. A name and a date, no secret.
-    nightly: nightly.enabled() ? 'on' : 'off',
+    scheduler: scheduler.enabled() ? 'on' : 'off',
 
     // 'off' means no payment credentials, 'test' means a sandbox key, 'live'
     // means real money. "Why did no money arrive" is usually answered by
@@ -207,11 +207,12 @@ const server = app.listen(config.port, () => {
   checkDatabase();
 
   // WATCH THE CLOCK OURSELVES rather than depending on a cron service somebody
-  // has to remember to set up in a dashboard. Standing orders and the
-  // day-before reminders both hang off this; without it they simply never
-  // happen, and nothing anywhere says so. Off outside production - see
-  // src/core/nightly.js for why a dev server doing this would be a disaster.
-  nightly.start();
+  // has to remember to set up in a dashboard. Standing orders, the day-before
+  // reminders and the follow-up chases all hang off this; without it they
+  // simply never happen, and nothing anywhere says so. Off outside production -
+  // see src/core/scheduler.js for why a dev server doing this would be a
+  // disaster.
+  scheduler.start();
 });
 
 // When the host wants to stop or redeploy us it sends SIGTERM. Finish the

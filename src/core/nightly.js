@@ -22,12 +22,13 @@ const reminders = require('./reminders');
 // hand in a dashboard, that nobody had actually set up - so the whole feature
 // would have sent nothing at all and looked fine doing it. The web app already
 // runs every minute of every day, because an inbound text has to be answered,
-// so it can watch the clock itself for nothing.
+// so it can watch the clock itself for nothing. That clock lives in
+// src/core/scheduler.js; this file is one of the two jobs on it.
 //
-// A POLL, NOT A TIMER. Every few minutes it asks: is it evening, and has today's
-// pass already run? A one-shot timer set at startup would be lost by any deploy
-// - and a deploy at 5:59pm would silently skip the night. A poll just asks
-// again.
+// A POLL, NOT A TIMER. src/core/scheduler.js ticks every few minutes and this
+// asks: is it evening, and has today's pass already run? A one-shot timer set
+// at startup would be lost by any deploy - and a deploy at 5:59pm would
+// silently skip the night. A poll just asks again.
 //
 // QUIET HOURS ARE A HARD STOP, not a preference. Federal rules put marketing
 // and service texts inside 8am to 9pm in the recipient's own time. If the app
@@ -57,8 +58,6 @@ const START_HOUR = Number(process.env.NIGHTLY_HOUR || 18);
 // The last hour it may still fire. 21 is 9pm, which is the legal edge, so the
 // last possible send is 20:5x.
 const LATEST_HOUR = 21;
-
-const POLL_MS = Number(process.env.NIGHTLY_POLL_MINUTES || 10) * 60 * 1000;
 
 // One at a time. A pass that takes longer than the poll interval must not have
 // a second one started on top of it.
@@ -140,49 +139,4 @@ async function runIfDue({ force = false, now = null } = {}) {
   }
 }
 
-// Whether this process should be the one watching the clock.
-//
-// NOT IN DEVELOPMENT, and this is the important half. The dev server shares the
-// production database, so a laptop left running at six in the evening would do
-// the whole pass, stamp every order as reminded, and send the texts through the
-// fake provider - meaning nothing reaches a phone and production then finds
-// nothing left to do. Everybody's reminder would vanish, silently, because
-// somebody had a terminal open.
-function enabled() {
-  const forced = String(process.env.NIGHTLY_ENABLED || '').toLowerCase();
-  if (forced === 'true') return true;
-  if (forced === 'false') return false;
-  return config.env === 'production';
-}
-
-// Start watching. Called once, from src/index.js.
-function start() {
-  if (!enabled()) {
-    console.log(
-      `  nightly    : off in ${config.env} (set NIGHTLY_ENABLED=true to override)`
-    );
-    return null;
-  }
-
-  console.log(`  nightly    : on, checks every ${Math.round(POLL_MS / 60000)}m after ${START_HOUR}:00 NJ`);
-
-  timer = setInterval(() => {
-    runIfDue().catch((err) => console.error(`Nightly poll threw: ${err.message}`));
-  }, POLL_MS);
-
-  // Must not be the reason the process stays alive; the HTTP server is.
-  if (timer.unref) timer.unref();
-
-  // One check on the way up, so a deploy at 6:30pm does not wait for the first
-  // interval before doing the night's work.
-  runIfDue().catch((err) => console.error(`Nightly startup check threw: ${err.message}`));
-
-  return timer;
-}
-
-function stop() {
-  if (timer) clearInterval(timer);
-  timer = null;
-}
-
-module.exports = { start, stop, runPass, runIfDue, enabled, START_HOUR, LATEST_HOUR };
+module.exports = { runPass, runIfDue, START_HOUR, LATEST_HOUR };
