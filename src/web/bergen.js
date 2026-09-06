@@ -158,9 +158,21 @@ const script = `
         // ON SUCCESS ONLY. A Lead fired on page load would count everybody who
         // bounced, and the campaign would be optimised toward traffic instead
         // of signups.
+        //
+        // FIRED BEFORE THE NAVIGATION, not after. The pixel sends immediately
+        // and the confirmation above is already on screen, so the event belongs
+        // to the page view that produced it - which is what the in-place swap
+        // was protecting and what a bare redirect would have thrown away.
         if (typeof fbq === 'function') {
-          fbq('track', 'Lead', { content_name: 'bergen_waitlist' });
+          fbq('track', 'Lead', { content_name: 'bergen_signup' });
         }
+
+        // THEN the page Neil asked for: check your texts, and here is the
+        // number it comes from. A beat first, so the pixel request is on the
+        // wire before the document is replaced.
+        setTimeout(function () {
+          window.location.href = '/bergen/sent';
+        }, 400);
       })
       .catch(function (err) {
         // NEVER A SILENT FAILURE. Somebody who typed three fields and saw

@@ -1,0 +1,77 @@
+<!-- Where /bergen lands after somebody gives us their number. Rendered bare,
+     like /bergen itself - no navigation and no footer, because this is traffic
+     we are paying for and every link is a way to leave.
+
+     IT NAMES THE NUMBER WE TEXT FROM, which /start/sent does not, and that is
+     Neil's ask and the whole reason this page exists rather than reusing that
+     one. Somebody who has just handed over their mobile on a phone screen is
+     about to get a text from a number they have never seen; putting it in
+     front of them first is the difference between "oh, that's them" and a
+     message that reads like spam.
+
+     A DEAD END ON PURPOSE. There is no form and nothing to click except the
+     number itself. Everything from here happens in their messages app, which
+     is the entire product - a page telling them to go and finish signing up
+     somewhere else would undo the thing we just did. -->
+
+<section class="section">
+  <div class="container container-narrow" style="text-align:center;">
+
+    <p class="eyebrow">Check your phone</p>
+
+    <h1 class="display-2" style="margin-bottom:18px;">
+      We've just texted you.
+    </h1>
+
+    <p style="font-size:19px;line-height:1.6;color:var(--ink-700);max-width:46ch;margin:0 auto 34px;">
+      It comes from the number below. Reply with your name and where we should
+      collect from, and you're set up - no account, no password, no app.
+    </p>
+
+    <!-- The number, as the one thing on the page you can act on. Tapping it
+         opens their messages app with the thread already started, which is a
+         real fallback for anybody whose text has not landed yet. -->
+    <div class="card card-xl" style="padding:28px;max-width:460px;margin:0 auto 34px;">
+      <p class="eyebrow" style="margin:0 0 10px;">We text from</p>
+      <a href="{{SMS_LINK}}"
+         style="font-family:var(--font-display);font-weight:900;font-size:34px;line-height:1.1;
+                letter-spacing:-0.02em;display:inline-block;">{{PHONE}}</a>
+      <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:14px 0 0;">
+        Save it, so you know it's us. Nothing else will ever text you from it.
+      </p>
+    </div>
+
+    <div class="card card-xl" style="padding:32px;text-align:left;max-width:520px;margin:0 auto;">
+      <p class="eyebrow" style="margin-bottom:14px;">What happens next</p>
+
+      <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        {{ICON_MESSAGE}}
+        <span style="font-size:16px;line-height:1.5;">
+          Tell us your name and address in the thread.
+        </span>
+      </div>
+
+      <div style="display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
+        {{ICON_CALENDAR}}
+        <span style="font-size:16px;line-height:1.5;">
+          Say when suits you - "tomorrow at 6" is enough. We'll text back a
+          pickup window.
+        </span>
+      </div>
+
+      <div style="display:flex;gap:14px;padding:14px 0;">
+        {{ICON_TRUCK}}
+        <span style="font-size:16px;line-height:1.5;">
+          Leave the bag out. It comes back the {{TURNAROUND}}, washed, dried
+          and folded, with 20% off your first order.
+        </span>
+      </div>
+    </div>
+
+    <p style="font-size:15px;line-height:1.6;color:var(--ink-500);max-width:44ch;margin:32px auto 0;">
+      Nothing arrived? Text us on <a href="{{SMS_LINK}}">{{PHONE}}</a> and we'll
+      pick it up from there.
+    </p>
+
+  </div>
+</section>

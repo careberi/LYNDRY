@@ -339,8 +339,27 @@ router.get('/p/:orderId', async (req, res, next) => {
 // ---------------------------------------------------------------------------
 
 const BERGEN_DESCRIPTION =
-  'Get on the founding list. 20% off your first order. Leave the bag at your ' +
-  'door and it comes back the next day washed, dried and folded.';
+  'Laundry picked up tomorrow in Bergen County. 20% off your first order. ' +
+  'Leave the bag at your door and it comes back the next day washed, dried ' +
+  'and folded.';
+
+// /bergen/sent - where the advert's form lands.
+//
+// Bare and noindex like /bergen itself: same paid traffic, same reason not to
+// give them a navigation to leave through, same reason not to have it turn up
+// in a search result on its own.
+router.get('/bergen/sent', (req, res) => {
+  res.type('html').send(
+    renderPage({
+      title: 'Check your phone',
+      description: BERGEN_DESCRIPTION,
+      path: '/bergen/sent',
+      body: readPageBody('bergen-sent.html'),
+      bare: true,
+      noindex: true,
+    })
+  );
+});
 
 router.get('/bergen', (req, res) => {
   res.type('html').send(

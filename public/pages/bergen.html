@@ -114,16 +114,20 @@
         <!-- Written in sentence case; the .eyebrow class uppercases it. That
              is the design system's rule — uppercase lives in the Space Mono
              label treatment, never in the copy itself. -->
-        <p class="eyebrow eyebrow-brand">Opening in Bergen County &middot; mid September</p>
+        <p class="eyebrow eyebrow-brand">Bergen County &middot; booking now</p>
 
-        <!-- Break at the full stop, not wherever the line happens to run out.
+        <!-- THE FOUNDING LIST IS GONE. It was right while there was nothing to
+             book: the only thing on offer was a place in a queue. We are taking
+             orders now, so the page asks for the thing it actually wants.
+
+             Break at the full stop, not wherever the line happens to run out.
              text-wrap:balance on its own put "We" alone at the end of the
              first line, which reads as a stumble. -->
-        <h1 class="display-1">Get on the<br>founding list.</h1>
+        <h1 class="display-1">Laundry, picked<br>up tomorrow.</h1>
 
         <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:40ch;margin:0 0 30px;">
-          <strong>20% off your first order.</strong> Leave it at your door and it
-          comes back the {{TURNAROUND}} washed, dried and folded.
+          <strong>20% off your first order.</strong> Leave the bag at your door
+          and it comes back the {{TURNAROUND}} washed, dried and folded.
           {{PRICE_PER_LB}} a pound, {{MINIMUM}} minimum.
         </p>
 
@@ -151,8 +155,11 @@
                      class="input input-lg" placeholder="Your mobile number">
             </div>
             <div style="flex:0 0 auto;white-space:nowrap;">
+              <!-- "Save my spot" was a waitlist button and there is no
+                   waitlist any more. This says what actually happens next,
+                   which is also the whole product: we text you. -->
               <button type="submit" id="join-btn" class="btn btn-ink btn-lg">
-                Save my spot {{ICON_ARROW}}
+                Text me {{ICON_ARROW}}
               </button>
             </div>
           </div>
@@ -195,16 +202,25 @@
           </p>
         </form>
 
-        <!-- Swapped in on success, in place, so the Meta event lands on the
-             same page view as the submit. -->
+        <!-- STILL HERE, AND STILL THE FIRST THING THAT HAPPENS. The visitor now
+             goes on to /bergen/sent, which names the number we text from -
+             Neil's ask, and worth a page of its own because somebody about to
+             receive a text from a number they have never seen should be shown
+             it first.
+
+             This block is not dead: it is swapped in for the moment before the
+             navigation, so the Meta Lead event lands on the same page view as
+             the submit rather than on the page after it, and so a browser that
+             blocks the redirect still shows a confirmation rather than a form
+             that appears to have done nothing. -->
         <div id="done" hidden>
           <div class="card card-xl" style="padding:30px;max-width:540px;">
             <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;
                        line-height:1.1;margin:0 0 12px;">
-              You're on the list.
+              Texting you now.
             </h2>
             <p style="font-size:17px;line-height:1.55;margin:0;color:var(--ink-800);">
-              We'll text you the day we start. Your 20% off is locked in.
+              Check your phone - it comes from {{PHONE}}.
             </p>
           </div>
         </div>
