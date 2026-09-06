@@ -10,6 +10,7 @@
 
 const { escapeHtml, icon } = require('./layout');
 const promotionsCore = require('../core/promotions');
+const booking = require('../core/booking');
 const { config } = require('../config');
 
 function banner(text, tone) {
@@ -266,6 +267,42 @@ function settingsBody({ settings, notice, problem }) {
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
+
+${
+  // DID LAST NIGHT'S TEXTS ACTUALLY GO OUT.
+  //
+  // Standing orders and the day-before pickup reminders both hang off one pass
+  // that runs each evening, and its whole failure mode is silence: it either
+  // runs, or nothing happens and nobody is told. It used to be a cron service
+  // nobody had set up, which is exactly that failure with nowhere to see it.
+  // So the last night it completed is said out loud, on the screen about how
+  // the service is running.
+  (() => {
+    const ran = settings.nightly_ran_on || null;
+    const today = booking.today();
+    const yesterday = booking.addDays(today, -1);
+
+    // Ran today or last night is normal. Anything older, or never, is worth
+    // looking at - though "never" is also what a brand new deployment says,
+    // so it is phrased as a fact rather than an alarm.
+    const recent = ran === today || ran === yesterday;
+
+    return `<div class="card" style="padding:16px 20px;margin-bottom:26px;${
+      recent ? '' : 'background:var(--sunbeam-500);'
+    }">
+      <p style="margin:0;font-size:15px;line-height:1.6;">
+        <strong>Evening texts</strong> - standing orders booked, and everybody
+        reminded their pickup is tomorrow.
+        ${
+          ran
+            ? `Last ran <strong>${escapeHtml(booking.readableDate(ran))}</strong>.`
+            : `<strong>Has not run yet.</strong>`
+        }
+        ${recent ? '' : 'It runs between 6pm and 9pm New Jersey time, every evening.'}
+      </p>
+    </div>`;
+  })()
+}
 
 <div class="card card-xl" style="padding:0;overflow:hidden;margin-bottom:26px;">
   <div style="padding:26px;background:${open ? 'var(--suds-300)' : 'var(--stain-100)'};

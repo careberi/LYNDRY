@@ -113,6 +113,14 @@ app.get('/health', (req, res) => {
     // means credentials are missing and every webhook is being refused.
     sms: require('./providers/sms').name,
 
+    // IS ANYTHING GOING TO SEND TONIGHT'S TEXTS. Standing orders and the
+    // day-before reminders both hang off the nightly pass, and its whole
+    // failure mode is silence - it either runs or nothing happens and nobody
+    // is told. Reported here so "did it run" is a question answerable from a
+    // browser rather than a log dive, which is exactly the hole the cron
+    // service left. A name and a date, no secret.
+    nightly: nightly.enabled() ? 'on' : 'off',
+
     // 'off' means no payment credentials, 'test' means a sandbox key, 'live'
     // means real money. "Why did no money arrive" is usually answered by
     // finding 'test' here on the production server.
