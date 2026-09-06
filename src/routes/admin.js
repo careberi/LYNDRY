@@ -3201,6 +3201,17 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
     const gaps = await nudges.gapsFor(person);
     const canAsk = roles.can(req.opsUser, 'messages.send') && person.status !== 'UNSUBSCRIBED';
 
+    // WHAT THEY HOLD, AND WHAT YOU COULD GIVE THEM.
+    //
+    // Giving money away is service.manage, the same permission that closes the
+    // business and sends a text blast - never customers.view. A salesperson can
+    // read this page and cannot discount anybody's laundry.
+    const mayPromote = roles.can(req.opsUser, 'service.manage');
+    const [holding, offerable] = await Promise.all([
+      promotions.heldBy(person.id).catch(() => []),
+      mayPromote ? promotions.list().catch(() => []) : Promise.resolve([]),
+    ]);
+
     // ?note= and ?problem= on the redirect, so refreshing after sending one
     // repeats the message and never the action - the same pattern as the order
     // page and the conversation screen.
@@ -3255,6 +3266,83 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       }
 
       ${nudgePanel({ gaps, action: `/ops/customers/${person.id}/ask`, canSend: canAsk })}
+
+      ${
+        // AN OFFER IS A THING THEY HOLD, not a code they type. Said on the
+        // screen, because it is the part people get wrong about this system:
+        // there is nothing to send them and nothing for them to remember. The
+        // AI knows who is texting, so it comes off the price by itself.
+        mayPromote || holding.length
+          ? `<div class="card card-xl" style="padding:24px;margin-bottom:32px;">
+               <p class="eyebrow" style="margin:0 0 14px;">Offers</p>
+
+               ${
+                 holding.length
+                   ? `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:${
+                       mayPromote ? '20px' : '0'
+                     };">
+                        ${holding
+                          .map(
+                            (h) => `
+                          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;
+                                      justify-content:space-between;padding:12px 16px;
+                                      border:2px solid var(--ink-900);border-radius:12px;
+                                      background:var(--sunbeam-500);">
+                            <span style="font-weight:700;font-size:16px;">${escapeHtml(h.name)}</span>
+                            <span style="font-size:15px;">${escapeHtml(promotions.describe(h))}</span>
+                            <span style="font-size:14px;font-family:var(--font-mono);">
+                              ${
+                                h.expiresAt
+                                  ? `runs out ${escapeHtml(dateTime(h.expiresAt))}`
+                                  : 'no expiry'
+                              }
+                            </span>
+                          </div>`
+                          )
+                          .join('')}
+                      </div>`
+                   : `<p style="margin:0 0 ${
+                       mayPromote ? '18px' : '0'
+                     };font-size:16px;color:var(--ink-700);">
+                        They are not holding an offer.
+                      </p>`
+               }
+
+               ${
+                 mayPromote
+                   ? offerable.length
+                     ? `<form method="post" action="/ops/customers/${person.id}/promotion"
+                              style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;
+                                     padding-top:${holding.length ? '18px' : '0'};
+                                     ${holding.length ? 'border-top:2px solid var(--ink-100);' : ''}">
+                          <div style="flex:1 1 280px;min-width:0;">
+                            <label class="field-label" for="give_promo">Give them one</label>
+                            <select class="field" id="give_promo" name="promotion_id">
+                              ${offerable
+                                .map(
+                                  (o) =>
+                                    `<option value="${o.id}">${escapeHtml(o.name)} - ${escapeHtml(
+                                      promotions.describe(o)
+                                    )}</option>`
+                                )
+                                .join('')}
+                            </select>
+                          </div>
+                          <button class="btn btn-ink" type="submit">Give it</button>
+                        </form>
+                        <p style="margin:12px 0 0;font-size:14px;line-height:1.55;color:var(--ink-500);">
+                          It goes on their account and comes off the price by itself.
+                          Nothing is texted - say so yourself on their thread if you want them to know now.
+                        </p>`
+                     : `<p style="margin:0;font-size:15px;color:var(--ink-500);">
+                          No promotions are running.
+                          <a href="/ops/promotions">Make one</a> and it can be given from here.
+                        </p>`
+                   : ''
+               }
+             </div>`
+          : ''
+      }
 
       <div class="grid-2" style="align-items:start;margin-bottom:44px;">
 
@@ -7123,6 +7211,67 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
 });
 
 // ---------------------------------------------------------------------------
+// POST /ops/customers/:id/promotion - give this one person an offer
+//
+// Neil's scenario: you are looking at somebody's account and decide they should
+// have $15 off their next order. One button, on the page you are already on.
+//
+// Behind service.manage rather than customers.view, like everything else that
+// gives money away. Reading a profile and discounting somebody's laundry are
+// not the same act, and a driver or a salesperson does neither.
+//
+// It does NOT text them. The offer sits on their account and the AI mentions it
+// the next time they are in touch, which is the whole point of a promotion
+// being an object attached to a person rather than a code. Use the message box
+// on their thread if you want to tell them now.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/customers/:id/promotion', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
+
+    const back = `/ops/customers/${req.params.id}`;
+    const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
+
+    const promotionId = String((req.body || {}).promotion_id || '');
+    if (!UUID.test(promotionId)) return said('problem', 'Pick a promotion first.');
+
+    const promo = await promotions.find(promotionId);
+    if (!promo || !promotions.live(promo)) return said('problem', 'That promotion is not running.');
+
+    const { data: person } = await db
+      .from('customers')
+      .select('id, name, status')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    // STOP is a legal instruction. An offer they can never be told about is not
+    // an offer, and the AI is silent to them anyway.
+    if (person.status === 'UNSUBSCRIBED') {
+      return said('problem', 'That number has opted out, so there is no way to tell them.');
+    }
+
+    const row = await promotions.grant(person.id, promotionId);
+
+    if (!row) return said('note', `They already had ${promo.name}. Nothing changed.`);
+
+    const until = row.expires_at
+      ? ` It runs out on ${dateTime(row.expires_at)}.`
+      : ' It does not expire.';
+
+    return said(
+      'note',
+      `${promo.name} is on their account - ${promotions.describe(promo)}.${until} ` +
+        'They have not been texted; the AI mentions it next time they are in touch.'
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /ops/customers/:id/ask - text them for one missing thing
 //
 // The buttons on the "what is still missing" panel, which appears on the
@@ -7534,16 +7683,26 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
       );
     }
 
-    const autoGrant = body.auto_grant === 'yes';
+    const known = promotions.AUDIENCES.map((a) => a.key);
+    const audience = known.includes(body.audience) ? body.audience : 'SPECIFIC';
 
-    // ONLY ONE AUTO-GRANT AT A TIME. The unique index refuses a second, so the
-    // old one is stood down first rather than the save failing with a database
-    // error nobody can act on.
-    if (autoGrant) {
+    // Dollars in, whole cents stored. Blank stays null rather than becoming
+    // zero, because "no minimum" and "a minimum of nothing" are different
+    // sentences and only one of them is true.
+    const dollars = (raw_) => {
+      const n = Number(raw_);
+      return String(raw_ || '').trim() && Number.isFinite(n) && n > 0 ? Math.round(n * 100) : null;
+    };
+    const days = Number(body.expires_days);
+
+    // ONLY ONE AUTOMATIC PROMOTION AT A TIME. The unique index refuses a
+    // second, so the old one is stood down first rather than the save failing
+    // with a database error nobody can act on.
+    if (audience === 'NEW_NUMBERS') {
       await db
         .from('promotions')
-        .update({ auto_grant: false })
-        .eq('auto_grant', true)
+        .update({ audience: 'SPECIFIC' })
+        .eq('audience', 'NEW_NUMBERS')
         .eq('status', 'ACTIVE');
     }
 
@@ -7553,7 +7712,12 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
       kind,
       value,
       applies_to: body.applies_to === 'EVERY_ORDER' ? 'EVERY_ORDER' : 'FIRST_ORDER',
-      auto_grant: autoGrant,
+      audience,
+      // Kept in step for now because the column still exists; nothing reads it.
+      auto_grant: audience === 'NEW_NUMBERS',
+      min_order_cents: dollars(body.min_order),
+      max_discount_cents: dollars(body.max_discount),
+      expires_days: Number.isFinite(days) && days > 0 ? Math.round(days) : null,
       created_by: req.opsUser && req.opsUser.id,
     });
 
@@ -7562,7 +7726,48 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
     return res.redirect(
       303,
       `/ops/promotions?note=${encodeURIComponent(
-        `${name} is live${autoGrant ? ' and every new number gets it' : ''}.`
+        `${name} is live${
+          audience === 'NEW_NUMBERS'
+            ? ' and every new number gets it'
+            : audience === 'SPECIFIC'
+            ? '. Hand it out from a customer page.'
+            : '. Press "give it to everyone who qualifies" when you are ready.'
+        }`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /ops/promotions/:id/issue - hand it to everybody the audience describes
+//
+// A BUTTON, NOT A STANDING RULE, and deliberately. A rule that keeps issuing in
+// the background texts customers while nobody is watching, and the interesting
+// rules - "has not ordered in 30 days" - match nobody until there is order
+// history to match against. This is where that grows when there is.
+//
+// Idempotent: promotions.grant() refuses a second copy, so pressing it twice
+// reaches the same place as pressing it once.
+router.post('/ops/promotions/:id/issue', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That promotion id is not valid.');
+
+    const result = await promotions.issueToAudience(req.params.id);
+
+    if (!result.ok) {
+      return res.redirect(
+        303,
+        `/ops/promotions?problem=${encodeURIComponent(`Nothing given out - ${result.reason}.`)}`
+      );
+    }
+
+    return res.redirect(
+      303,
+      `/ops/promotions?note=${encodeURIComponent(
+        `Given to ${result.given} ${result.given === 1 ? 'person' : 'people'}` +
+          `${result.already ? `, ${result.already} already had it` : ''}. ` +
+          'Nobody has been texted - the AI mentions it when they next get in touch.'
       )}`
     );
   } catch (err) {

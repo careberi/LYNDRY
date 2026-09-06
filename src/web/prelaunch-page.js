@@ -437,118 +437,321 @@ ${
 
 // --- 2. Promotions ----------------------------------------------------------
 
-function promotionsBody({ list, counts, notice, problem }) {
-  const rows = list
-    .map((p) => {
-      const held = counts[p.id] || { granted: 0, redeemed: 0 };
-      return `
-  <div class="card card-xl" style="padding:22px 24px;margin-bottom:14px;">
-    <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-start;">
-      <div style="min-width:0;flex:1 1 320px;">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span style="font-family:var(--font-display);font-weight:900;font-size:22px;">
+// --- 2. Promotions ----------------------------------------------------------
+//
+// A PROMOTION WAS ALREADY AN OBJECT ATTACHED TO A PERSON rather than a code -
+// customer_promotions has recorded who holds what, whether they spent it and
+// on which order since the day it was written. What it could not say was who
+// should GET one, or for how long. This screen is where those two live.
+//
+// Everything on it is one of four questions, in this order: what is the offer,
+// who is it for, how long does it last, and what may the AI say about it. The
+// old form asked them all at once in a flat list, so "applies to" was quietly
+// answering two of them.
+
+// One promotion as a campaign card rather than a row.
+function promotionCard(p, counts) {
+  const held = counts[p.id] || { granted: 0, redeemed: 0 };
+  const aud = promotionsCore.audienceOf(p.audience);
+  const ended = p.status === 'ENDED';
+
+  // Only an audience that describes a group can be handed out in one go. The
+  // automatic one needs no button and the by-hand one has no list to work from.
+  const issuable = !ended && (p.audience === 'NEVER_ORDERED' || p.audience === 'EVERYONE');
+
+  const stat = (n, label) => `
+    <div style="text-align:right;">
+      <div style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1;
+                  font-variant-numeric:tabular-nums;">${n}</div>
+      <div class="eyebrow" style="margin:4px 0 0;">${escapeHtml(label)}</div>
+    </div>`;
+
+  return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:16px;${ended ? 'opacity:0.72;' : ''}">
+    <div style="display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:flex-start;">
+      <div style="min-width:0;flex:1 1 340px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <span style="font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.1;">
             ${escapeHtml(p.name)}
           </span>
-          ${p.auto_grant ? '<span class="badge" style="background:var(--sunbeam-500);">Auto</span>' : ''}
           ${
-            p.status === 'ENDED'
+            ended
               ? '<span class="badge">Ended</span>'
               : '<span class="badge" style="background:var(--suds-300);">Live</span>'
           }
+          ${aud.automatic ? '<span class="badge" style="background:var(--sunbeam-500);">Automatic</span>' : ''}
         </div>
-        <p style="font-size:16px;margin:8px 0 0;color:var(--ink-700);">
+
+        <p style="font-size:17px;font-weight:700;margin:0 0 4px;">
           ${escapeHtml(promotionsCore.describe(p))}
         </p>
-        <p style="font-size:15px;margin:10px 0 0;padding:10px 14px;border:2px solid var(--ink-900);
-                  border-radius:10px;background:var(--paper-200);">
-          <strong>The AI says:</strong> ${escapeHtml(p.blurb)}
+        <p style="font-size:15px;margin:0 0 12px;color:var(--ink-700);">
+          For ${escapeHtml(aud.label.toLowerCase())}.
+        </p>
+
+        <p style="font-size:15px;line-height:1.5;margin:0;padding:11px 14px;border:2px solid var(--ink-900);
+                  border-radius:10px;background:var(--paper-000);">
+          <span class="eyebrow" style="margin:0 8px 0 0;">The AI may say</span>
+          ${escapeHtml(p.blurb)}
         </p>
       </div>
-      <div style="text-align:right;font-family:var(--font-mono);font-size:13px;color:var(--ink-500);">
-        <div>${held.granted} given</div>
-        <div>${held.redeemed} used</div>
-        ${
-          p.status === 'ACTIVE'
-            ? `<form method="post" action="/ops/promotions/${p.id}/end" style="margin-top:12px;">
-                 <button class="btn btn-sm btn-outline">End it</button>
-               </form>`
-            : ''
-        }
+
+      <div style="display:flex;gap:26px;align-items:flex-start;">
+        ${stat(held.granted, 'given out')}
+        ${stat(held.redeemed, 'used')}
       </div>
     </div>
+
+    ${
+      !ended
+        ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;padding-top:18px;
+                       border-top:2px solid var(--ink-100);">
+             ${
+               issuable
+                 ? `<form method="post" action="/ops/promotions/${p.id}/issue" style="margin:0;">
+                      <button class="btn btn-outline" type="submit">
+                        Give it to everyone who qualifies
+                      </button>
+                    </form>`
+                 : ''
+             }
+             ${
+               p.audience === 'SPECIFIC'
+                 ? `<span style="align-self:center;font-size:15px;color:var(--ink-700);">
+                      Hand this one out from a customer's own page.
+                    </span>`
+                 : ''
+             }
+             <form method="post" action="/ops/promotions/${p.id}/end" style="margin:0 0 0 auto;">
+               <button class="btn btn-outline btn-sm" type="submit">Stop giving it out</button>
+             </form>
+           </div>`
+        : `<p style="margin:16px 0 0;font-size:14px;color:var(--ink-500);">
+             Nobody new gets this. Anyone already holding it keeps it.
+           </p>`
+    }
   </div>`;
-    })
-    .join('');
+}
+
+function promotionsBody({ list, counts, notice, problem }) {
+  const live = list.filter((p) => p.status !== 'ENDED');
+  const ended = list.filter((p) => p.status === 'ENDED');
+
+  const audienceOptions = promotionsCore.AUDIENCES.map(
+    (a) => `<option value="${a.key}">${escapeHtml(a.label)}</option>`
+  ).join('');
+
+  const audienceNotes = promotionsCore.AUDIENCES.map(
+    (a) =>
+      `<p class="js-aud" data-aud="${a.key}" hidden
+          style="margin:8px 0 0;font-size:14px;line-height:1.55;color:var(--ink-700);">
+         ${escapeHtml(a.detail)}
+       </p>`
+  ).join('');
 
   return `
-<p class="eyebrow" style="margin:0 0 8px;">What we are giving away</p>
+<p class="eyebrow" style="margin:0 0 8px;">The business</p>
 <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Promotions</h1>
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
-  A promotion is applied by code when an order is priced. The AI only ever
-  repeats the sentence you write here. It cannot invent a discount, decide who
-  qualifies, or work out what anything costs.
+<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
+  An offer belongs to a person, not to a code. Give one out and it sits on their
+  account until they spend it or it runs out - there is nothing for anybody to
+  type, because the AI already knows who is texting.
 </p>
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
 
-${rows || '<p style="font-size:16px;color:var(--ink-500);margin-bottom:26px;">Nothing running.</p>'}
+${
+  live.length
+    ? live.map((p) => promotionCard(p, counts)).join('')
+    : `<div class="card" style="padding:20px 24px;margin-bottom:16px;">
+         <p style="margin:0;font-size:16px;">Nothing running. The form below starts one.</p>
+       </div>`
+}
 
-<div class="card card-xl" style="padding:28px;margin-top:30px;">
-  <p class="eyebrow" style="margin:0 0 16px;">New promotion</p>
-  <form method="post" action="/ops/promotions" style="display:flex;flex-direction:column;gap:18px;">
+${
+  ended.length
+    ? `<p class="eyebrow" style="margin:30px 0 12px;">Finished</p>
+       ${ended.map((p) => promotionCard(p, counts)).join('')}`
+    : ''
+}
 
-    <div>
-      <label class="field-label" for="p_name">Name</label>
-      <p class="field-hint" style="margin:0 0 8px;">For you and for the order history. A customer never sees it on its own.</p>
-      <input class="field" id="p_name" name="name" required maxlength="60" placeholder="Pre-launch 20%">
-    </div>
+<div class="grid-2 grid-2-wide" style="align-items:start;margin-top:34px;">
 
-    <div class="grid-2">
+  <div class="card card-xl" style="padding:28px;">
+    <p class="eyebrow" style="margin:0 0 18px;">New promotion</p>
+    <form method="post" action="/ops/promotions" id="promo-form"
+          style="display:flex;flex-direction:column;gap:26px;">
+
       <div>
-        <label class="field-label" for="p_kind">What it takes off</label>
-        <select class="field" id="p_kind" name="kind">
-          <option value="PERCENT_OFF">A percentage</option>
-          <option value="AMOUNT_OFF">A fixed amount</option>
+        <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">1 &middot; What are you offering</p>
+
+        <label class="field-label" for="p_name">Name it</label>
+        <p class="field-hint" style="margin:0 0 8px;">
+          For you and for the order history. A customer never sees this on its own.
+        </p>
+        <input class="field" id="p_name" name="name" required maxlength="60"
+               placeholder="Win-back - 30% off">
+
+        <div class="grid-2" style="margin-top:16px;">
+          <div>
+            <label class="field-label" for="p_kind">What it takes off</label>
+            <select class="field" id="p_kind" name="kind">
+              <option value="PERCENT_OFF">A percentage</option>
+              <option value="AMOUNT_OFF">A fixed amount</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="p_value">How much</label>
+            <p class="field-hint" style="margin:0 0 8px;">Percent as a whole number, or dollars.</p>
+            <input class="field" id="p_value" name="value" type="number" min="1" step="0.01" required
+                   placeholder="30">
+          </div>
+        </div>
+      </div>
+
+      <div style="padding-top:22px;border-top:2px solid var(--ink-100);">
+        <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">2 &middot; Who gets it</p>
+
+        <select class="field" id="p_audience" name="audience">${audienceOptions}</select>
+        ${audienceNotes}
+      </div>
+
+      <div style="padding-top:22px;border-top:2px solid var(--ink-100);">
+        <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">3 &middot; What they can use it on</p>
+
+        <label class="field-label" for="p_applies">Which order</label>
+        <select class="field" id="p_applies" name="applies_to">
+          <option value="FIRST_ORDER">Their first order only</option>
+          <option value="EVERY_ORDER">Every order</option>
         </select>
+
+        <div class="grid-2" style="margin-top:16px;">
+          <div>
+            <label class="field-label" for="p_expires">Runs out after</label>
+            <p class="field-hint" style="margin:0 0 8px;">Days from when they get it. Blank never expires.</p>
+            <input class="field" id="p_expires" name="expires_days" type="number" min="1" step="1"
+                   placeholder="7">
+          </div>
+          <div>
+            <label class="field-label" for="p_min">Only on orders over</label>
+            <p class="field-hint" style="margin:0 0 8px;">Dollars. Blank means any order.</p>
+            <input class="field" id="p_min" name="min_order" type="number" min="1" step="0.01"
+                   placeholder="30">
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <label class="field-label" for="p_max">Never take off more than</label>
+          <p class="field-hint" style="margin:0 0 8px;">
+            Dollars. Worth setting on a percentage so a heavy load cannot cost more than you meant.
+          </p>
+          <input class="field" id="p_max" name="max_discount" type="number" min="1" step="0.01"
+                 placeholder="20">
+        </div>
       </div>
+
+      <div style="padding-top:22px;border-top:2px solid var(--ink-100);">
+        <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">4 &middot; What the AI may say</p>
+        <p class="field-hint" style="margin:0 0 8px;">
+          Written by you, because a discount is money and the AI never invents money.
+          It gets worked into a reply rather than quoted. Plain words, no dashes.
+        </p>
+        <input class="field" id="p_blurb" name="blurb" required maxlength="200"
+               placeholder="you have 30% off your next order">
+      </div>
+
       <div>
-        <label class="field-label" for="p_value">How much</label>
-        <p class="field-hint" style="margin:0 0 8px;">Percent as a whole number, or dollars.</p>
-        <input class="field" id="p_value" name="value" type="number" min="1" step="0.01" required placeholder="20">
+        <button class="btn btn-ink btn-lg" type="submit">Create it ${icon('arrow-right', '22')}</button>
       </div>
-    </div>
+    </form>
+  </div>
 
-    <div>
-      <label class="field-label" for="p_applies">Applies to</label>
-      <select class="field" id="p_applies" name="applies_to">
-        <option value="FIRST_ORDER">Their first order only</option>
-        <option value="EVERY_ORDER">Every order</option>
-      </select>
-    </div>
+  <div class="card card-xl" id="promo-preview"
+       style="padding:26px;background:var(--paper-050);position:sticky;top:20px;">
+    <p class="eyebrow" style="margin:0 0 14px;">What you are making</p>
 
-    <div>
-      <label class="field-label" for="p_blurb">The sentence the AI may say</label>
-      <p class="field-hint" style="margin:0 0 8px;">
-        Written by you, because a discount is money and the AI never invents money.
-        Plain words, no dashes, and it gets worked into a reply rather than quoted.
-      </p>
-      <input class="field" id="p_blurb" name="blurb" required maxlength="200"
-             placeholder="you have 20% off your first order for texting us early">
-    </div>
+    <p id="pv_offer" style="font-family:var(--font-display);font-weight:900;font-size:28px;
+              line-height:1.1;margin:0 0 16px;">30% off</p>
 
-    <label style="display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.5;">
-      <input type="checkbox" name="auto_grant" value="yes" style="margin-top:4px;width:22px;height:22px;">
-      <span>
-        <strong>Give it to every new number automatically.</strong>
-        The moment somebody texts in for the first time they hold this, before
-        they have booked anything. Only one promotion can do this at a time.
-      </span>
-    </label>
+    <dl style="margin:0;display:flex;flex-direction:column;gap:12px;">
+      <div><span class="eyebrow" style="margin:0;">Who</span>
+        <div id="pv_who" style="font-size:16px;margin-top:3px;">Only people you pick</div></div>
+      <div><span class="eyebrow" style="margin:0;">Which order</span>
+        <div id="pv_order" style="font-size:16px;margin-top:3px;">Their first order only</div></div>
+      <div><span class="eyebrow" style="margin:0;">Runs out</span>
+        <div id="pv_expiry" style="font-size:16px;margin-top:3px;">Never</div></div>
+      <div><span class="eyebrow" style="margin:0;">Limits</span>
+        <div id="pv_limits" style="font-size:16px;margin-top:3px;">None</div></div>
+    </dl>
 
-    <div><button class="btn btn-ink btn-lg" type="submit">Create it ${icon('arrow-right', '22')}</button></div>
-  </form>
-</div>`;
+    <p class="eyebrow" style="margin:22px 0 8px;">They might read</p>
+    <p id="pv_blurb" style="margin:0;padding:13px 16px;border:2px solid var(--ink-900);
+              border-radius:12px;background:var(--paper-000);font-size:15px;line-height:1.55;">
+      Whatever you write in step 4, worked into a sentence by the AI.
+    </p>
+
+    <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:var(--ink-500);">
+      Nothing is created until you press the button. The panel just reads the form.
+    </p>
+  </div>
+</div>
+
+<script>
+(function () {
+  // A PREVIEW, NOT A SECOND IMPLEMENTATION. Everything real - what the discount
+  // is worth, who qualifies, whether it has expired - is decided in
+  // src/core/promotions.js when an order is priced. This only reads the form
+  // back to whoever is filling it in, and the page works perfectly without it.
+  var form = document.getElementById('promo-form');
+  if (!form) return;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var money = function (v) { return '$' + (Math.round(Number(v) * 100) / 100).toFixed(2); };
+
+  function paint() {
+    var kind = $('p_kind').value;
+    var value = $('p_value').value;
+    var aud = $('p_audience');
+
+    $('pv_offer').textContent = !value
+      ? 'An offer'
+      : (kind === 'PERCENT_OFF' ? value + '% off' : money(value) + ' off');
+
+    $('pv_who').textContent = aud.options[aud.selectedIndex].text;
+
+    $('pv_order').textContent = $('p_applies').value === 'FIRST_ORDER'
+      ? 'Their first order only'
+      : 'Every order';
+
+    var days = $('p_expires').value;
+    $('pv_expiry').textContent = days
+      ? days + (Number(days) === 1 ? ' day' : ' days') + ' after they get it'
+      : 'Never';
+
+    var limits = [];
+    if ($('p_min').value) limits.push('orders over ' + money($('p_min').value));
+    if ($('p_max').value) limits.push('at most ' + money($('p_max').value) + ' off');
+    $('pv_limits').textContent = limits.length ? limits.join(', ') : 'None';
+
+    var blurb = $('p_blurb').value.trim();
+    $('pv_blurb').textContent = blurb
+      ? blurb
+      : 'Whatever you write in step 4, worked into a sentence by the AI.';
+
+    // Only the note for the chosen audience is on screen. Every option's note
+    // is rendered server-side and hidden, so this needs no strings of its own.
+    var notes = form.querySelectorAll('.js-aud');
+    for (var i = 0; i < notes.length; i += 1) {
+      notes[i].hidden = notes[i].getAttribute('data-aud') !== aud.value;
+    }
+  }
+
+  form.addEventListener('input', paint);
+  form.addEventListener('change', paint);
+  paint();
+})();
+</script>`;
 }
 
 // --- 3. The text blast ------------------------------------------------------

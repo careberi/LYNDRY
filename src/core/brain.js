@@ -454,7 +454,12 @@ Say it as good news alongside the bad. Do not restate the terms, do not work out
 `
     : promo
       ? `THEY HAVE A PROMOTION ON THEIR ACCOUNT, AND YOU MAY MENTION IT: ${promo.blurb}
-Mention it once, when it is relevant. Do NOT work out what it makes anything cost, do not restate the terms, and never invent one that is not on this line. Code applies it when the order is priced.
+Mention it once, when it is relevant. Do NOT work out what it makes anything cost, do not restate the terms, and never invent one that is not on this line. Code applies it when the order is priced.${
+          promo.expiresAt
+            ? `
+IT RUNS OUT ON ${booking.readableDate(String(promo.expiresAt).slice(0, 10))}, AND THAT DATE IS A FACT YOU ARE BEING TOLD - you did not work it out and you may not change it. Say it only if it is close enough to matter or they ask. Never guess an expiry for a promotion that has none.`
+            : ''
+        }
 
 `
       : ''

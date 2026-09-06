@@ -1307,6 +1307,44 @@ arguments.
 `promotions`. Ending a promotion stops new grants and never withdraws it from
 somebody already told they had it.
 
+**A PROMOTION IS AN OBJECT ATTACHED TO A PERSON, NOT A CODE**, and it always
+was. A redesign proposal assumed otherwise and recommended building it; the
+answer is that `customer_promotions` already records who holds what, whether
+they spent it and on which order. **There is nothing for a customer to type and
+no link to click** - the AI knows who is texting, so the discount comes off by
+itself. Don't add a code field or a `?promo=` booking link: that is a worse
+version of what exists, and CLAUDE.md already records that sending customers to
+a web form was removed.
+
+**`promotions.audience` says who gets one**, and it replaced the `auto_grant`
+boolean, which could only ever say "every new number". `NEW_NUMBERS` (automatic
+on first text, still at most one, now enforced on the audience),
+`NEVER_ORDERED` and `EVERYONE` (handed out in one go from a button),
+`SPECIFIC` (given to one person from their own page). `auto_grant` survives
+unread, like `customers.recurring_*`.
+
+**Issuing to an audience is a BUTTON, not a standing rule.** A rule that keeps
+issuing in the background texts customers while nobody is watching, and the
+interesting rules - "has not ordered in 30 days" - match nobody until there is
+order history to match against. `promotions.issueToAudience()` is where that
+grows when there is.
+
+**EXPIRY IS PER GRANT, NOT PER PROMOTION.** "Seven days from when you got it" is
+a different date for every holder. `promotions.expires_days` is the rule;
+`customer_promotions.expires_at` is the promise made to one person, stamped at
+the moment it is granted and **never recomputed** - so shortening the rule later
+cannot shorten a promise already made. `heldBy()` drops expired grants, so an
+expired promotion silently stops discounting rather than needing a sweep.
+
+**`min_order_cents` is not the order minimum.** `config.pricing.minimumCents` is
+the floor on what any order costs; this is "valid on orders over $30" and is
+checked against the price BEFORE the discount comes off - otherwise a promotion
+could take an order under its own minimum and disqualify itself.
+
+**The AI is TOLD the expiry date, it does not work it out.** Same rule as the
+pickup windows and the opening date. It may say it when it matters and may
+never guess one for a promotion that has none.
+
 **The discount comes off AFTER the minimum.** Taking 20% off an 8 lb load's $16
 and then flooring at $25 would charge the full minimum and hand the customer
 nothing while the order claimed a promotion had been used. And the price text
