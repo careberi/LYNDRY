@@ -7627,7 +7627,7 @@ router.post('/ops/partners/send-overview', guard, may('partners.manage'), async 
 
 router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, res, next) => {
   try {
-    const [current, limits, promos, board] = await Promise.all([
+    const [current, limits, promos, board, chases, dueReminders] = await Promise.all([
       settings.read({ fresh: true }),
       settings.weightLimits(),
       promotions.list().catch(() => []),
@@ -7635,6 +7635,12 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
         .from('orders')
         .select('status, pickup_date')
         .in('status', ['REQUESTED', 'IN_PROCESS', 'AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY']),
+      // What is queued to text a customer on its own. Caught rather than
+      // awaited into a failure: a dashboard card is not worth taking the
+      // whole page down for, and the page it links to says the same thing
+      // properly.
+      followups.allPending().catch(() => []),
+      reminders.allPending().catch(() => []),
     ]);
 
     const rows = (board && board.data) || [];
@@ -7655,6 +7661,13 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
           settings: current,
           limits,
           promotions: promos,
+          scheduled: {
+            // Only the ones that will actually go. A chase switched off for a
+            // conversation is not queued, and a card claiming otherwise would
+            // be the switch appearing not to work.
+            chases: (chases || []).filter((c) => !c.off && !c.paused).length,
+            reminders: (dueReminders || []).length,
+          },
           openIssues: req.openIssues,
           orderCounts,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,

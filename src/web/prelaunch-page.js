@@ -48,12 +48,23 @@ function banner(text, tone) {
 // already existed, and the summaries read what the full screens read.
 // ---------------------------------------------------------------------------
 
+// What the follow-up card says. Two numbers rather than one, because they are
+// different promises: a chase only happens if the customer stays quiet, a
+// reminder happens because a van is coming.
+function scheduledLine({ chases = 0, reminders = 0 } = {}) {
+  const bits = [];
+  if (chases) bits.push(`${chases} follow-up${chases === 1 ? '' : 's'}`);
+  if (reminders) bits.push(`${reminders} reminder${reminders === 1 ? '' : 's'}`);
+  return bits.length ? `${bits.join(', ')} queued` : 'Nothing queued';
+}
+
 function adminDashboardBody({
   settings,
   limits,
   promotions = [],
   openIssues = 0,
   orderCounts = {},
+  scheduled = {},
   notice,
   problem,
 }) {
@@ -234,6 +245,15 @@ ${banner(problem, 'bad')}
       eyebrow: 'Everybody at once',
       title: 'Text blast',
       line: 'One message to every customer who has not opted out',
+    },
+    {
+      // The other thing that texts customers without anybody pressing send.
+      // It belongs beside Promotions and the text blast for the same reason
+      // they are here: all three are an owner deciding what customers hear.
+      href: '/ops/scheduled',
+      eyebrow: 'Texts nobody has to send',
+      title: 'Customer follow-up',
+      line: scheduledLine(scheduled),
     },
     {
       href: '/ops/issues',
