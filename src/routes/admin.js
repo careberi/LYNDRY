@@ -6664,6 +6664,11 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     const digits = phone.replace(/\D/g, '');
     const canSend = roles.can(req.opsUser, 'messages.send');
 
+    // STOP is a legal instruction, not a preference, so the message box is
+    // absent entirely for an opted-out number - a box that lets somebody type
+    // into it and then refuses is worse than no box.
+    const canWrite = canSend && !(customer && customer.status === 'UNSUBSCRIBED');
+
     // Is the AI waiting on a person for this conversation? Only asked when
     // there is a customer - a number that never signed up has no issues row to
     // hold anything against, and the AI was never talking to it either.
@@ -6690,6 +6695,55 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       handedBack: pause && !pause.paused ? pause.resumed_at : null,
       handedBackBy: pause && !pause.paused ? pause.resumed_by_name : null,
     };
+
+    // WHO ANSWERS THIS NUMBER - the AI, or you.
+    //
+    // NEIL'S CALL that this sits at the foot of the thread beside the message
+    // box rather than in a card above it. Deciding to handle somebody yourself
+    // and then writing to them is one action, so the switch belongs next to
+    // the button that sends, with the state of it said in the same place.
+    //
+    // IT IS ONE NUMBER, and the wording says so on the badge itself. Nothing
+    // here touches the AI anywhere else: every other conversation carries on
+    // being answered while this one is yours.
+    const aiRow = `
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;
+                  margin:${canWrite ? '16px' : '26px'} 0 0;${
+                    canWrite ? '' : 'padding-top:24px;border-top:2px solid var(--ink-100);'
+                  }">
+        ${
+          // Outside the form it submits, so the AI control can sit beside it on
+          // the same row - two forms cannot be nested. Plain HTML, no script.
+          canWrite
+            ? `<button class="btn btn-ink btn-lg" type="submit" form="send-message">Send it</button>`
+            : ''
+        }
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-left:auto;">
+          <span class="badge" style="background:var(--${pauseState.paused ? 'sunbeam' : 'suds'}-500);">
+            AI is ${pauseState.paused ? 'off' : 'on'} for this chat
+          </span>
+          ${
+            canSend
+              ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/ai" style="margin:0;">
+                   <input type="hidden" name="state" value="${pauseState.paused ? 'on' : 'off'}">
+                   <button class="btn btn-outline" type="submit">
+                     ${pauseState.paused ? 'Switch the AI on' : 'Switch the AI off'}
+                   </button>
+                 </form>`
+              : ''
+          }
+        </div>
+      </div>
+      ${
+        pauseState.paused
+          ? `<p style="margin:12px 0 0;font-size:14px;line-height:1.55;color:var(--ink-700);">
+               <strong>Nothing reaches this number but what you write here.</strong>
+               Switched off ${escapeHtml(timeAgo(pauseState.at))}${
+                 pauseState.who ? ` by ${escapeHtml(pauseState.who)}` : ''
+               }${pauseState.note ? ` - ${escapeHtml(pauseState.note)}` : ''}.
+             </p>`
+          : ''
+      }`;
 
     const heading = customer ? customer.name || 'Unnamed customer' : formatPhone(phone);
 
@@ -6795,74 +6849,6 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           : ''
       }
 
-      ${
-        // WHO IS ANSWERING THIS NUMBER - the AI, or you.
-        //
-        // NEIL'S CALL, and deliberately not the hold above. The hold is the AI
-        // admitting it is stuck, and it lifts ITSELF the moment the customer
-        // replies to a person. That is exactly wrong for somebody handling a
-        // customer by hand: they would send a message, get an answer back, and
-        // the AI would walk straight into the middle of their conversation. So
-        // this is a switch with a person at both ends.
-        //
-        // Shown to anybody who can read the thread, because "the AI is off" is
-        // the reason nobody has replied and that is worth knowing. The button
-        // is behind messages.send, like the box below: reading a conversation
-        // and deciding who answers it are different acts.
-        pauseState.paused
-          ? `<div class="card card-xl" style="padding:22px;margin-bottom:20px;background:var(--sunbeam-500);">
-               <p class="eyebrow" style="margin:0 0 8px;">You are handling this one</p>
-               <p style="font-size:16px;line-height:1.6;margin:0 0 8px;">
-                 <strong>The AI is switched off for this number.</strong> It will
-                 not answer anything they send, so every reply has to be written
-                 below. They have not been told anything is different - to them
-                 this is just LYNDRY texting back.
-               </p>
-               <p style="font-size:15px;line-height:1.55;margin:0 0 16px;">
-                 Switched off ${escapeHtml(timeAgo(pauseState.at))}${
-                   pauseState.who ? ` by ${escapeHtml(pauseState.who)}` : ''
-                 }${pauseState.note ? ` - ${escapeHtml(pauseState.note)}` : ''}.
-               </p>
-               ${
-                 canSend
-                   ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/ai" style="margin:0;">
-                        <input type="hidden" name="state" value="on">
-                        <button class="btn btn-ink btn-lg" type="submit">Let the AI answer again</button>
-                      </form>`
-                   : ''
-               }
-             </div>`
-          : `<div class="card" style="padding:18px 22px;margin-bottom:20px;">
-               <p style="margin:0 0 4px;font-size:16px;line-height:1.55;">
-                 <strong>The AI is answering this number.</strong> Anything you
-                 send below goes out alongside it.
-               </p>
-               ${
-                 pauseState.handedBack
-                   ? `<p style="margin:0;font-size:14px;color:var(--ink-500);">
-                        Handed back ${escapeHtml(timeAgo(pauseState.handedBack))}${
-                          pauseState.handedBackBy ? ` by ${escapeHtml(pauseState.handedBackBy)}` : ''
-                        }.
-                      </p>`
-                   : ''
-               }
-               ${
-                 canSend
-                   ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/ai"
-                            style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:14px 0 0;">
-                        <input type="hidden" name="state" value="off">
-                        <div style="flex:1 1 240px;min-width:0;">
-                          <label class="field-label" for="ai-why">Taking it over? (optional note)</label>
-                          <input class="field" id="ai-why" name="note" type="text" maxlength="200"
-                                 placeholder="complaint about a stain, calling them">
-                        </div>
-                        <button class="btn btn-outline" type="submit">Switch the AI off</button>
-                      </form>`
-                   : ''
-               }
-             </div>`
-      }
-
       <div class="card card-xl" style="padding:28px;">
         ${
           thread.length
@@ -6878,24 +6864,25 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           // Absent entirely for an opted-out number. STOP is a legal
           // instruction, not a preference, and a box that lets somebody type
           // into it and then refuses is worse than no box.
-          canSend && !(customer && customer.status === 'UNSUBSCRIBED')
-            ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/send"
-                     style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-100);">
+          canWrite
+            ? `<div style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-100);">
                  <label class="field-label" for="msg">Send them a message</label>
                  <p class="field-hint" style="margin:0 0 10px;">
                    Goes straight to their phone from the LYNDRY number, and is
                    logged in this thread like any other. Plain text - no dashes
                    or curly quotes, they cost an extra segment.
                  </p>
-                 <textarea class="field" id="msg" name="body" rows="3" maxlength="600" required
-                           style="width:100%;resize:vertical;"
-                           placeholder="Hi, sorry for the wait - just checking..."></textarea>
-                 <button class="btn btn-ink btn-lg" type="submit" style="margin-top:14px;">
-                   Send it
-                 </button>
-               </form>`
+                 <form method="post" id="send-message"
+                       action="/ops/messages/${encodeURIComponent(digits)}/send" style="margin:0;">
+                   <textarea class="field" id="msg" name="body" rows="3" maxlength="600" required
+                             style="width:100%;resize:vertical;"
+                             placeholder="Hi, sorry for the wait - just checking..."></textarea>
+                 </form>
+               </div>`
             : ''
         }
+
+        ${aiRow}
       </div>`;
 
     res.type('html').send(

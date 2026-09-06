@@ -1284,6 +1284,18 @@ lives on is a list of numbers and some of them never signed up. Keying on a
 customer would lose the pause the moment a number that was never a customer
 became one.
 
+**The switch lives at the FOOT of the thread, on the same row as Send it.**
+Neil's call, and it replaced a card above the conversation. Deciding to handle
+somebody yourself and then writing to them is one action, so the control and
+the state of it belong next to the button that sends. The badge says "AI is on
+/ off **for this chat**" in as many words, because the one thing nobody must
+wonder is whether they have just turned the AI off for the whole business.
+
+**The Send it button sits outside the form it submits**, tied to it with
+`form="send-message"`, because forms cannot be nested and the AI control is its
+own form on the same row. Plain HTML, no script - the same rule the rest of ops
+follows.
+
 **A muted thread is badged on the conversations list and counted in a banner at
 the top of it.** The whole risk of a switch that stays where you put it is
 forgetting you put it there, and a paused thread is a customer nobody is
