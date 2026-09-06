@@ -12,6 +12,7 @@ const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
 const { renderPage } = require('../web/layout');
 const bergen = require('../web/bergen');
+const vcard = require('../web/vcard');
 
 const router = express.Router();
 
@@ -342,6 +343,31 @@ const BERGEN_DESCRIPTION =
   'Laundry picked up tomorrow in Bergen County. 20% off your first order. ' +
   'Leave the bag at your door and it comes back the next day washed, dried ' +
   'and folded.';
+
+// GET /lyndry.vcf - our contact card.
+//
+// Tapping this on a phone opens the Add Contact sheet with the name, the number
+// and the logo already in it. It matters more than it sounds before launch: a
+// text from an unsaved number reads as spam, and one that shows up as LYNDRY
+// with a mark beside it does not.
+//
+// A LINK RATHER THAN AN ATTACHMENT, because sending the file itself is MMS and
+// this system has never sent one - the Telnyx adapter takes { to, text } and
+// nothing else, and MMS needs provisioning on the messaging profile on top of
+// the 10DLC campaign. A texted link on our own domain is also the rule the rest
+// of the system already follows, for exactly the carrier-trust reason the
+// delivery photos do.
+//
+// Cached for a day rather than a year: it is small, it changes only when the
+// number or the logo does, and a stale contact card is a wrong phone number in
+// somebody's address book.
+router.get('/lyndry.vcf', (req, res) => {
+  res
+    .type('text/vcard; charset=utf-8')
+    .set('Content-Disposition', 'attachment; filename="LYNDRY.vcf"')
+    .set('Cache-Control', 'public, max-age=86400')
+    .send(vcard.card());
+});
 
 // /bergen/sent - where the advert's form lands.
 //
