@@ -136,8 +136,8 @@ function scheduledBody({ followUps, reminders, followUpsOn, canManage, notice, p
     });
 
   return `
-<p class="eyebrow" style="margin:0 0 8px;">Dashboard</p>
-<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Going out on its own</h1>
+<p class="eyebrow" style="margin:0 0 8px;">Admin</p>
+<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Customer follow-up</h1>
 <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
   Every text queued to send without anybody pressing a button. Nothing here goes
   outside 8am to 9pm, and nothing on this page sends anything - it is a reading

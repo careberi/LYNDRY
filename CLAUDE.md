@@ -880,9 +880,13 @@ no existing row silently switched the AI off for that customer entirely. A row
 now means "there are settings for this number", and every writer sets `paused`
 deliberately.
 
-**`/ops/scheduled` lists everything that will text a customer on its own** -
-the chases and the pickup reminders, in the order they happen, with a way into
-each conversation. Neil's ask: until it existed, the only way to know a text
+**`/ops/scheduled` is "Customer follow-up", under Admin.** It lists everything
+that will text a customer on its own - the chases and the pickup reminders, in
+the order they happen, with a way into each conversation. Neil's call to file it
+beside the conversations it is about rather than under Dashboard with the board
+and the route: it is something an owner reviews, not something a driver acts
+on. The heading, the page title and the menu entry all say the same words,
+which is the rule the rest of the nav follows. Neil's ask: until it existed, the only way to know a text
 was coming was to open the conversation it belonged to. Both lists come from
 `allPending()` functions that read the same rows and call the same `assess()`
 the sweeps do, so the screen and the send cannot disagree.

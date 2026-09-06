@@ -268,11 +268,6 @@ const OPS_MENUS = Object.freeze([
       // so an admin who has not put themselves on the route is not offered one.
       { href: '/ops/run', label: 'Your route', permission: 'orders.drive' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
-      // WHAT WILL TEXT A CUSTOMER WITHOUT ANYBODY PRESSING SEND. Under
-      // Dashboard because it answers the same question the board and the
-      // route answer: what happens next, today. Behind messages.view - it
-      // is a list of what customers are about to be told.
-      { href: '/ops/scheduled', label: 'Going out on its own', permission: 'messages.view' },
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
       { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
@@ -337,6 +332,12 @@ const OPS_MENUS = Object.freeze([
       // worth reading, so the page says so in its own subtitle rather than
       // relying on the menu word to carry it.
       { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
+      // WHAT WILL TEXT A CUSTOMER WITHOUT ANYBODY PRESSING SEND - the chases
+      // and the pickup reminders. Neil's call to file it under Admin, beside
+      // the conversations it is about, rather than under Dashboard with the
+      // board and the route. It is something an owner reviews, not something
+      // a driver acts on.
+      { href: '/ops/scheduled', label: 'Customer follow-up', permission: 'messages.view' },
       { href: '/ops/team', label: 'Team', permission: 'team.manage' },
       // "Laundromats", also Neil's. Worth knowing that the table behind it
       // holds property managers too - partner_type is LAUNDROMAT or
@@ -7313,7 +7314,7 @@ router.get('/ops/scheduled', guard, withIssues, may('messages.view'), async (req
 
     return res.type('html').send(
       adminPage({
-        title: 'Going out on its own',
+        title: 'Customer follow-up',
         active: '/ops/scheduled',
         body: scheduledBody({
           followUps: chases.map((c) => ({
