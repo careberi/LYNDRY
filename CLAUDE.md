@@ -1323,6 +1323,29 @@ on first text, still at most one, now enforced on the audience),
 `SPECIFIC` (given to one person from their own page). `auto_grant` survives
 unread, like `customers.recurring_*`.
 
+**WHICH ORDERS IT IS GOOD FOR: `FIRST_ORDER`, `NEXT_ORDERS` (a number you type)
+or `EVERY_ORDER`.** `customer_promotions.uses` counts what has been spent and
+`redeemed_at` now means **used up**, stamped only when the count reaches the
+grant's own limit. **This fixed a real bug**: `redeem()` closed every grant on
+first use, so `EVERY_ORDER` behaved exactly like `FIRST_ORDER` and nobody had
+noticed, because no promotion had ever been redeemed twice. The limit is
+**copied onto the grant**, like the expiry and for the same reason - editing
+"next five" down to two must not take three orders off somebody already
+promised five.
+
+**A PROMOTION WITH NO BLURB IS SILENT.** Neil's case: he texts somebody himself
+("you were one of the first to reach out, so I can do 30% instead of 20") and
+puts the offer on their account. The AI announcing it again would be the same
+news twice from two voices. `blurb` is nullable, the model is handed the first
+held promotion **that has one**, and the discount comes off regardless. It does
+not weaken the rule - being told nothing is a stronger guarantee than a sentence
+it is allowed to repeat.
+
+**`/ops/promotions/:id` is the list behind the number.** "23 given out" is a
+count; this says which 23, where each got to (holding it, used it, ran out) and
+which order spent it. Each grant's state is **derived** in `holders()` so it
+cannot disagree with what `discountFor()` would do.
+
 **Issuing to an audience is a BUTTON, not a standing rule.** A rule that keeps
 issuing in the background texts customers while nobody is watching, and the
 interesting rules - "has not ordered in 30 days" - match nobody until there is

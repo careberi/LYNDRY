@@ -1037,7 +1037,16 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
       };
 
   const held = customer && customer.id ? await promotions.heldBy(customer.id).catch(() => []) : [];
-  const promo = held.length ? held[0] : null;
+
+  // A PROMOTION WITH NO SENTENCE IS SILENT, and the AI is told nothing at all
+  // about it. Neil's case: he texts somebody himself - "you were one of the
+  // first to reach out, so I can do 30% instead of 20" - and puts the offer on
+  // their account. The AI announcing it again in its next reply would be the
+  // same news twice from two voices.
+  //
+  // It still comes off the price. discountFor() does not care whether anybody
+  // was told; this only decides what the model is allowed to say.
+  const promo = held.find((h) => String(h.blurb || '').trim()) || null;
 
   const response = await client.messages.create({
     model: MODEL,

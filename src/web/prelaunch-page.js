@@ -502,9 +502,10 @@ function promotionCard(p, counts) {
     <div style="display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:flex-start;">
       <div style="min-width:0;flex:1 1 340px;">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-          <span style="font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.1;">
+          <a href="/ops/promotions/${p.id}"
+             style="font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.1;">
             ${escapeHtml(p.name)}
-          </span>
+          </a>
           ${
             ended
               ? '<span class="badge">Ended</span>'
@@ -553,6 +554,7 @@ function promotionCard(p, counts) {
                     </span>`
                  : ''
              }
+             <a class="btn btn-outline btn-sm" href="/ops/promotions/${p.id}">See who has it</a>
              <form method="post" action="/ops/promotions/${p.id}/end" style="margin:0 0 0 auto;">
                <button class="btn btn-outline btn-sm" type="submit">Stop giving it out</button>
              </form>
@@ -562,6 +564,124 @@ function promotionCard(p, counts) {
            </p>`
     }
   </div>`;
+}
+
+// One promotion, and every person holding it. The number on the card is a
+// count; this is the list behind it, which is what Neil asked for: not "82
+// issued" but which 82.
+function promotionDetailBody({ promo, holders, notice, problem }) {
+  const aud = promotionsCore.audienceOf(promo.audience);
+  const tone = { HOLDING: 'var(--suds-300)', USED: 'var(--paper-200)', EXPIRED: 'var(--sunbeam-500)' };
+  const words = { HOLDING: 'Holding it', USED: 'Used it', EXPIRED: 'Ran out' };
+
+  const counted = (state) => holders.filter((h) => h.state === state).length;
+
+  const when = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short', timeZone: 'America/New_York' })}`;
+  };
+
+  const cell = 'padding:12px 10px;border-bottom:1px solid var(--ink-100);';
+
+  const rows = holders
+    .map((h) => {
+      const c = h.customer;
+      const who = c
+        ? `<a href="/ops/customers/${c.id}">${escapeHtml(c.name || 'Unnamed')}</a>`
+        : '<span style="color:var(--ink-500);">customer gone</span>';
+
+      return `
+      <tr>
+        <td style="${cell}">
+          ${who}
+          <div style="font-size:13px;color:var(--ink-500);font-variant-numeric:tabular-nums;">
+            ${escapeHtml(c ? c.phone : '')}
+          </div>
+        </td>
+        <td style="${cell}white-space:nowrap;">
+          <span class="badge" style="background:${tone[h.state]};">${words[h.state]}</span>
+        </td>
+        <td style="${cell}white-space:nowrap;font-variant-numeric:tabular-nums;">${escapeHtml(when(h.grantedAt))}</td>
+        <td style="${cell}white-space:nowrap;font-variant-numeric:tabular-nums;">
+          ${h.limit ? `${h.uses} of ${h.limit}` : h.uses ? String(h.uses) : '&mdash;'}
+        </td>
+        <td style="${cell}white-space:nowrap;font-variant-numeric:tabular-nums;">
+          ${h.expiresAt ? escapeHtml(when(h.expiresAt)) : 'no expiry'}
+        </td>
+        <td style="${cell}white-space:nowrap;">
+          ${h.order ? `<a href="/ops/orders/${h.order.order_number}">#${h.order.order_number}</a>` : '&mdash;'}
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  const stat = (n, label) => `
+    <div>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;
+                  font-variant-numeric:tabular-nums;">${n}</div>
+      <div class="eyebrow" style="margin:5px 0 0;">${escapeHtml(label)}</div>
+    </div>`;
+
+  const heads = ['Who', 'Where it got to', 'Given', 'Used', 'Runs out', 'Order']
+    .map(
+      (h) =>
+        `<th class="eyebrow" style="text-align:left;padding:14px 10px;border-bottom:2px solid var(--ink-900);">${h}</th>`
+    )
+    .join('');
+
+  return `
+<a href="/ops/promotions" style="font-size:15px;font-weight:600;">&larr; All promotions</a>
+
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:18px 0 8px;">
+  <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0;">
+    ${escapeHtml(promo.name)}
+  </h1>
+  ${
+    promo.status === 'ENDED'
+      ? '<span class="badge">Ended</span>'
+      : '<span class="badge" style="background:var(--suds-300);">Live</span>'
+  }
+  ${aud.automatic ? '<span class="badge" style="background:var(--sunbeam-500);">Automatic</span>' : ''}
+</div>
+
+<p style="font-size:18px;font-weight:700;margin:0 0 4px;">${escapeHtml(promotionsCore.describe(promo))}</p>
+<p style="font-size:15px;color:var(--ink-700);margin:0 0 24px;">For ${escapeHtml(aud.label.toLowerCase())}.</p>
+
+${banner(notice, 'good')}
+${banner(problem, 'bad')}
+
+<div class="card card-xl" style="padding:24px;margin-bottom:24px;">
+  <div style="display:flex;flex-wrap:wrap;gap:40px;">
+    ${stat(holders.length, 'given out')}
+    ${stat(counted('HOLDING'), 'still holding')}
+    ${stat(counted('USED'), 'used it')}
+    ${stat(counted('EXPIRED'), 'ran out')}
+  </div>
+
+  <p style="margin:20px 0 0;padding:12px 16px;border:2px solid var(--ink-900);border-radius:10px;
+            background:var(--paper-000);font-size:15px;line-height:1.55;">
+    <span class="eyebrow" style="margin:0 8px 0 0;">The AI may say</span>
+    ${
+      String(promo.blurb || '').trim()
+        ? escapeHtml(promo.blurb)
+        : '<em style="color:var(--ink-500);">Nothing. This one is silent - it comes off the price and the AI never mentions it.</em>'
+    }
+  </p>
+</div>
+
+${
+  holders.length
+    ? `<div class="card card-xl" style="padding:8px 16px 4px;overflow-x:auto;">
+         <table style="width:100%;border-collapse:collapse;font-size:15px;min-width:640px;">
+           <thead><tr>${heads}</tr></thead>
+           <tbody>${rows}</tbody>
+         </table>
+       </div>`
+    : `<div class="card" style="padding:20px 24px;">
+         <p style="margin:0;font-size:16px;">Nobody holds this yet.</p>
+       </div>`
+}`;
 }
 
 function promotionsBody({ list, counts, notice, problem }) {
@@ -654,8 +774,17 @@ ${
         <label class="field-label" for="p_applies">Which order</label>
         <select class="field" id="p_applies" name="applies_to">
           <option value="FIRST_ORDER">Their first order only</option>
-          <option value="EVERY_ORDER">Every order</option>
+          <option value="NEXT_ORDERS">Their next few orders</option>
+          <option value="EVERY_ORDER">Every order, for ever</option>
         </select>
+
+        <div id="p_limit_row" hidden style="margin-top:12px;">
+          <label class="field-label" for="p_limit">How many orders</label>
+          <p class="field-hint" style="margin:0 0 8px;">
+            One is their very next order. Five is the next five, whenever they come.
+          </p>
+          <input class="field" id="p_limit" name="use_limit" type="number" min="1" step="1" value="1">
+        </div>
 
         <div class="grid-2" style="margin-top:16px;">
           <div>
@@ -688,8 +817,13 @@ ${
           Written by you, because a discount is money and the AI never invents money.
           It gets worked into a reply rather than quoted. Plain words, no dashes.
         </p>
-        <input class="field" id="p_blurb" name="blurb" required maxlength="200"
+        <input class="field" id="p_blurb" name="blurb" maxlength="200"
                placeholder="you have 30% off your next order">
+        <p class="field-hint" style="margin:8px 0 0;">
+          <strong>Leave it blank and the promotion is silent.</strong> It still comes
+          off the price; the AI is simply told nothing about it, which is what you
+          want when you have already told somebody yourself.
+        </p>
       </div>
 
       <div>
@@ -751,9 +885,15 @@ ${
 
     $('pv_who').textContent = aud.options[aud.selectedIndex].text;
 
-    $('pv_order').textContent = $('p_applies').value === 'FIRST_ORDER'
-      ? 'Their first order only'
-      : 'Every order';
+    var applies = $('p_applies').value;
+    var limit = $('p_limit').value || '1';
+    $('p_limit_row').hidden = applies !== 'NEXT_ORDERS';
+    $('pv_order').textContent =
+      applies === 'FIRST_ORDER'
+        ? 'Their first order only'
+        : applies === 'NEXT_ORDERS'
+        ? 'Their next ' + limit + (Number(limit) === 1 ? ' order' : ' orders')
+        : 'Every order, for ever';
 
     var days = $('p_expires').value;
     $('pv_expiry').textContent = days
@@ -768,7 +908,7 @@ ${
     var blurb = $('p_blurb').value.trim();
     $('pv_blurb').textContent = blurb
       ? blurb
-      : 'Whatever you write in step 4, worked into a sentence by the AI.';
+      : 'Nothing. This promotion is silent - it comes off the price and the AI never mentions it.';
 
     // Only the note for the chosen audience is on screen. Every option's note
     // is rendered server-side and hidden, so this needs no strings of its own.
@@ -893,4 +1033,4 @@ ${
 }`;
 }
 
-module.exports = { adminDashboardBody, settingsBody, promotionsBody, broadcastBody, AUDIENCES };
+module.exports = { adminDashboardBody, settingsBody, promotionsBody, promotionDetailBody, broadcastBody, AUDIENCES };

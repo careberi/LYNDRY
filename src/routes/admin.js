@@ -54,6 +54,7 @@ const {
   adminDashboardBody,
   settingsBody,
   promotionsBody,
+  promotionDetailBody,
   broadcastBody,
   AUDIENCES,
 } = require('../web/prelaunch-page');
@@ -7716,18 +7717,53 @@ router.get('/ops/promotions', guard, withIssues, may('service.manage'), async (r
   }
 });
 
+// GET /ops/promotions/:id - one promotion, and everybody holding it
+//
+// Neil's ask. The card says "23 given out"; this says which 23, where each of
+// them got to, and which order spent it. Mounted BEFORE the POST routes below
+// only for readability - Express matches on method as well as path, so the
+// order does not matter here the way it does for /ops/partners/:id.
+router.get('/ops/promotions/:id', guard, withIssues, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That promotion id is not valid.');
+
+    const promo = await promotions.find(req.params.id);
+    if (!promo) return notFoundPage(res, 'No promotion with that id.');
+
+    return res.type('html').send(
+      adminPage({
+        title: promo.name,
+        active: '/ops/promotions',
+        body: promotionDetailBody({
+          promo,
+          holders: await promotions.holders(promo.id),
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/promotions', guard, may('service.manage'), async (req, res, next) => {
   try {
     const body = req.body || {};
     const name = String(body.name || '').trim().slice(0, 60);
-    const blurb = String(body.blurb || '').trim().slice(0, 200);
+    // OPTIONAL NOW. Blank means the promotion is silent: it discounts the order
+    // and the AI is told nothing about it - see migration 0068.
+    const blurb = String(body.blurb || '').trim().slice(0, 200) || null;
     const kind = body.kind === 'AMOUNT_OFF' ? 'AMOUNT_OFF' : 'PERCENT_OFF';
     const raw = Number(body.value);
 
-    if (!name || !blurb || !Number.isFinite(raw) || raw <= 0) {
+    if (!name || !Number.isFinite(raw) || raw <= 0) {
       return res.redirect(
         303,
-        `/ops/promotions?problem=${encodeURIComponent('Needs a name, a sentence and an amount.')}`
+        `/ops/promotions?problem=${encodeURIComponent('Needs a name and an amount.')}`
       );
     }
 
@@ -7770,7 +7806,15 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
       blurb,
       kind,
       value,
-      applies_to: body.applies_to === 'EVERY_ORDER' ? 'EVERY_ORDER' : 'FIRST_ORDER',
+      applies_to: ['EVERY_ORDER', 'NEXT_ORDERS'].includes(body.applies_to)
+        ? body.applies_to
+        : 'FIRST_ORDER',
+      // Only meaningful for NEXT_ORDERS. One by definition for a first order,
+      // and no limit at all for every order.
+      use_limit:
+        body.applies_to === 'NEXT_ORDERS'
+          ? Math.max(1, Math.round(Number(body.use_limit) || 1))
+          : null,
       audience,
       // Kept in step for now because the column still exists; nothing reads it.
       auto_grant: audience === 'NEW_NUMBERS',

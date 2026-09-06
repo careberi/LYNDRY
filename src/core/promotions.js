@@ -21,7 +21,7 @@ const db = require('../db');
 
 const FIELDS =
   'id, name, blurb, kind, value, applies_to, audience, status, starts_at, ends_at, ' +
-  'min_order_cents, max_discount_cents, expires_days';
+  'min_order_cents, max_discount_cents, expires_days, use_limit';
 
 // WHO A PROMOTION IS FOR. See migration 0066 - this replaced the auto_grant
 // boolean, which could only ever say "new numbers" and had no way to say
@@ -100,6 +100,20 @@ async function autoGrant() {
   return live(data) ? data : null;
 }
 
+// HOW MANY ORDERS THIS IS GOOD FOR. Null means no limit.
+//
+// FIRST_ORDER is one by definition - it can only ever apply to the first
+// delivered order, and discountFor() enforces that separately. EVERY_ORDER has
+// no limit, which is what it always meant and did not do: redeem() used to
+// close every grant on first use, so "every order" behaved exactly like "first
+// order" until migration 0068.
+function limitOf(promo) {
+  if (!promo) return null;
+  if (promo.applies_to === 'FIRST_ORDER') return 1;
+  if (promo.applies_to === 'NEXT_ORDERS') return promo.use_limit || 1;
+  return null;
+}
+
 // Give somebody a promotion. Safe to call repeatedly - the unique index means
 // a second grant is a no-op rather than a duplicate, which matters because the
 // obvious place to call this is "every time an unknown number texts".
@@ -116,7 +130,15 @@ async function grant(customerId, promotionId) {
 
   const { data, error } = await db
     .from('customer_promotions')
-    .insert({ customer_id: customerId, promotion_id: promotionId, expires_at: expiresAt })
+    .insert({
+      customer_id: customerId,
+      promotion_id: promotionId,
+      expires_at: expiresAt,
+      // COPIED, NOT READ BACK. "Your next five orders" is a promise to one
+      // person; editing the promotion to two later must not take three orders
+      // off somebody already told five. Same rule as the expiry above.
+      use_limit: promo ? limitOf(promo) : null,
+    })
     .select('*')
     .maybeSingle();
 
@@ -183,7 +205,7 @@ async function heldBy(customerId) {
 
   const { data, error } = await db
     .from('customer_promotions')
-    .select(`id, granted_at, redeemed_at, expires_at, promotions (${FIELDS})`)
+    .select(`id, granted_at, redeemed_at, expires_at, uses, use_limit, promotions (${FIELDS})`)
     .eq('customer_id', customerId)
     .is('redeemed_at', null);
 
@@ -195,6 +217,10 @@ async function heldBy(customerId) {
       grantId: row.id,
       grantedAt: row.granted_at,
       expiresAt: row.expires_at,
+      uses: row.uses || 0,
+      // The grant's own limit wins over the promotion's. Older grants have
+      // none recorded, so they fall back to what the promotion says now.
+      grantLimit: row.use_limit != null ? row.use_limit : limitOf(row.promotions),
       ...row.promotions,
     }));
 }
@@ -256,9 +282,35 @@ async function discountFor(customer, order, priceCents) {
 // Spend it. Written at the moment the order is priced, so a promotion is used
 // exactly once even if the price is settled twice.
 async function redeem(grantId, orderId) {
+  const { data: row, error: readError } = await db
+    .from('customer_promotions')
+    .select('id, uses, use_limit, redeemed_at, promotions (applies_to, use_limit)')
+    .eq('id', grantId)
+    .maybeSingle();
+
+  if (readError) throw readError;
+  if (!row || row.redeemed_at) return;
+
+  const limit = row.use_limit != null ? row.use_limit : limitOf(row.promotions);
+  const uses = (row.uses || 0) + 1;
+
+  // CLOSED ONLY WHEN IT IS ACTUALLY SPENT. An EVERY_ORDER grant has no limit
+  // and never closes, which is what it always meant - before this it was shut
+  // on first use and behaved exactly like a first-order offer.
+  //
+  // order_id records the LAST order it came off. A grant good for five orders
+  // spans five, and the per-order record of what was discounted lives on the
+  // order itself (orders.discount_cents and orders.promotion_id), which is the
+  // authoritative one anyway.
+  const done = limit != null && uses >= limit;
+
   const { error } = await db
     .from('customer_promotions')
-    .update({ redeemed_at: new Date().toISOString(), order_id: orderId })
+    .update({
+      uses,
+      order_id: orderId,
+      redeemed_at: done ? new Date().toISOString() : null,
+    })
     .eq('id', grantId)
     .is('redeemed_at', null);
 
@@ -271,7 +323,12 @@ function describe(promo) {
   if (!promo) return '';
   const amount =
     promo.kind === 'PERCENT_OFF' ? `${promo.value}% off` : `$${(promo.value / 100).toFixed(2)} off`;
-  const when = promo.applies_to === 'FIRST_ORDER' ? 'their first order' : 'every order';
+  const when =
+    promo.applies_to === 'FIRST_ORDER'
+      ? 'their first order'
+      : promo.applies_to === 'NEXT_ORDERS'
+      ? `their next ${promo.use_limit || 1} order${(promo.use_limit || 1) === 1 ? '' : 's'}`
+      : 'every order';
 
   const extras = [];
   if (promo.min_order_cents) extras.push(`orders over $${(promo.min_order_cents / 100).toFixed(2)}`);
@@ -285,6 +342,47 @@ function describe(promo) {
   return `${amount} ${when}${extras.length ? `, ${extras.join(', ')}` : ''}`;
 }
 
+// EVERY PERSON WHO HOLDS THIS, and what happened to it.
+//
+// Neil's ask: drill into a promotion and see exactly which customers or numbers
+// have it. "Given out: 82" is a number on a card; this is the list behind it,
+// which is the difference between knowing 82 and knowing whether the right 82.
+//
+// The state of each grant is worked out here rather than stored, so it can
+// never disagree with what discountFor() would do: used up, run out, or still
+// good.
+async function holders(promotionId) {
+  const { data, error } = await db
+    .from('customer_promotions')
+    .select(
+      'id, granted_at, redeemed_at, expires_at, uses, use_limit, order_id, ' +
+        'customers (id, name, phone, status), orders (order_number, discount_cents)'
+    )
+    .eq('promotion_id', promotionId)
+    .order('granted_at', { ascending: false });
+
+  if (error) throw error;
+
+  const now = new Date();
+
+  return (data || []).map((row) => {
+    const gone = expired(row, now);
+    return {
+      grantId: row.id,
+      customer: row.customers || null,
+      grantedAt: row.granted_at,
+      redeemedAt: row.redeemed_at,
+      expiresAt: row.expires_at,
+      uses: row.uses || 0,
+      limit: row.use_limit,
+      order: row.orders || null,
+      // Used up beats run out: somebody who spent it before it expired got what
+      // they were promised, and the row should say so.
+      state: row.redeemed_at ? 'USED' : gone ? 'EXPIRED' : 'HOLDING',
+    };
+  });
+}
+
 module.exports = {
   list,
   find,
@@ -292,11 +390,13 @@ module.exports = {
   grant,
   issueToAudience,
   heldBy,
+  holders,
   discountFor,
   redeem,
   describe,
   live,
   expired,
+  limitOf,
   AUDIENCES,
   audienceOf,
 };
