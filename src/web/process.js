@@ -829,6 +829,14 @@ function processBody(user) {
         a banner at the top of it, because the whole risk of a switch that
         stays where you put it is forgetting you put it there.
       </p>
+      <p>
+        <strong>When it comes back on it reads what you said first.</strong> The
+        AI is handed the last ten messages of the thread, and the ones a person
+        typed are marked as theirs - so it carries on from where you left off
+        rather than repeating what you promised or contradicting it. It sends
+        nothing at the moment you switch it back on; it picks the conversation
+        up when the customer next texts.
+      </p>
     </div>`
   ) : ''}
 

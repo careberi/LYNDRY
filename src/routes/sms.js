@@ -491,7 +491,7 @@ async function recentOrdersFor(customerId) {
 async function recentConversation(customerId) {
   const { data, error } = await db
     .from('messages')
-    .select('direction, body, created_at')
+    .select('direction, body, created_at, sent_by')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(10);

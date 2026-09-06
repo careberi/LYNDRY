@@ -1301,6 +1301,35 @@ the top of it.** The whole risk of a switch that stays where you put it is
 forgetting you put it there, and a paused thread is a customer nobody is
 answering at all.
 
+**COMING BACK ON IS PICKING UP SOMEBODY ELSE'S CONVERSATION, and the AI has
+to be told whose words are whose.** It was already handed the last ten messages
+before every reply - that part was never missing. What was missing is that
+everything outbound read to it as something IT had said, including the four
+messages a person had just typed by hand. So it would re-promise what a
+colleague promised, or contradict it, or carry on as though the thread had gone
+fine.
+
+`messages.sent_by` is the person who typed a message, and null for everything
+nobody typed - the AI's own replies, status texts, booking confirmations. The
+thread handed to the AI labels those lines **A colleague** rather than **Us**,
+and a thread containing any of them carries a block telling it to carry on from
+where they left off, never repeat or contradict what they said, never say "my
+colleague" (to the customer this is one conversation with us), and to call
+`handoff_to_human` rather than guess at a promise it cannot see.
+
+**The trigger is a colleague's message in the window, not the switch.** An admin
+who replies by hand without ever touching the toggle creates exactly the same
+problem, so the rule keys off the thing that causes it.
+
+**The text blast deliberately does NOT stamp `sent_by`.** A blast is written by
+a person and is not somebody handling a conversation; marking it would tell the
+AI that every customer who got a promotion text is being dealt with by hand.
+
+**Switching the AI back on sends nothing by itself.** It picks the thread up on
+the customer's next message. An unprompted text the instant somebody flips a
+switch is a message nobody asked for, and every segment is money and carrier
+reputation.
+
 **Sending a message does not switch the AI off.** A button that quietly does a
 second thing is one nobody trusts. What it does instead is say so on the way
 back - writing to somebody while the AI is still answering them is how two of

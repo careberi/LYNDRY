@@ -900,6 +900,20 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
   }
 
   if (recentMessages && recentMessages.length) {
+    // A LINE A PERSON TYPED IS NOT A LINE YOU WROTE.
+    //
+    // Until messages.sent_by existed the AI could not tell the two apart: every
+    // outbound message in the thread read as its own. So an admin who switched
+    // the AI off, dealt with a complaint by hand - "really sorry, I'll get that
+    // looked at and come back to you today" - and switched it back on left the
+    // AI reading somebody else's promise as something it had said itself, and
+    // either repeating it, contradicting it, or carrying on as though the last
+    // four messages had gone fine.
+    //
+    // Neil's ask, and the reason the switch needed this: coming back on is not
+    // just resuming, it is picking up a conversation somebody else was having.
+    const handledByHand = recentMessages.some((m) => m.sent_by);
+
     lines.push(
       '',
       'THE CONVERSATION SO FAR (oldest first). Read this before replying: their',
@@ -908,7 +922,29 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
       'below, and if they are replying to a question we asked, answer THAT.'
     );
     for (const m of recentMessages) {
-      lines.push(`${m.direction === 'INBOUND' ? 'Them' : 'Us'}: ${m.body}`);
+      const who = m.direction === 'INBOUND' ? 'Them' : m.sent_by ? 'A colleague' : 'Us';
+      lines.push(`${who}: ${m.body}`);
+    }
+
+    if (handledByHand) {
+      lines.push(
+        '',
+        'A PERSON HERE HAS BEEN ANSWERING THIS THREAD BY HAND. Every line marked',
+        '"A colleague" above was typed by a human colleague, not by you. They may',
+        'have stepped away again and left the rest to you.',
+        '',
+        'Read those lines properly before you reply:',
+        '- Carry on from where they left off. Do not start the conversation again,',
+        '  do not greet them, and do not apologise for a gap.',
+        '- Never repeat or re-promise something a colleague has already said, and',
+        '  never contradict it. If they said someone would call, that still stands.',
+        '- Speak as LYNDRY, one voice. Never say "my colleague", "someone else',
+        '  here" or "I have been told" - to the customer this is one conversation',
+        '  with us and always has been.',
+        '- If a colleague promised something you cannot see in the details above,',
+        '  or cannot do yourself, call handoff_to_human rather than guessing at',
+        '  what they meant. Getting it wrong here undoes what they just fixed.'
+      );
     }
 
     // How stale the thread is changes what "context" means. "yes" two minutes

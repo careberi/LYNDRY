@@ -6976,7 +6976,13 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
     // Through notify, like every other outbound text: it strips the typographic
     // characters that would double the segment count and it logs what was
     // actually sent. Nothing may text somebody without recording it.
-    await notify.sendAndLog(phone, body, customer ? customer.id : null);
+    // MARKED AS WRITTEN BY A PERSON. This is the only send in the system that
+    // is somebody typing into a conversation, and it is what lets the AI tell
+    // a colleague's words from its own when it picks the thread back up. The
+    // machine key has no person attached, so it writes nothing.
+    await notify.sendAndLog(phone, body, customer ? customer.id : null, {
+      sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+    });
 
     // SENDING DOES NOT SWITCH THE AI OFF, on purpose - a button that quietly
     // does a second thing is a button nobody trusts. But writing to somebody
