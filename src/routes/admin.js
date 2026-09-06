@@ -16,6 +16,8 @@ const billing = require('../core/billing');
 const recurring = require('../core/recurring');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
+const nudges = require('../core/nudges');
+const { nudgePanel } = require('../web/nudge-panel');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
@@ -1906,7 +1908,10 @@ const ORDER_FIELDS =
   // still waiting on a card, and that answer comes off the customer. Same trap
   // as the weigh-in page: a select list in one file quietly deciding what
   // another file can know.
-  'customers(id, name, phone, address_line1, address_line2, city, postal_code, preferences, ' +
+  // status, because the panel that offers to text them must not offer it for
+  // a number that has opted out - a control that renders and then refuses is
+  // worse than no control.
+  'customers(id, name, phone, status, address_line1, address_line2, city, postal_code, preferences, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
@@ -2709,6 +2714,18 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     // no reassign control, so the query would be work for nothing.
     const team = roles.can(req.opsUser, 'customers.view') ? await drivers.active() : [];
 
+    // WHAT IS STILL NEEDED FROM THE CUSTOMER, for the panel in the side column.
+    // Worked out here rather than in the markup because that is built inside a
+    // synchronous function and this reads the database.
+    //
+    // Skipped entirely for a driver: they never see the panel, so working it
+    // out for them would be three queries for markup that is thrown away.
+    const canAskOnOrder =
+      roles.can(req.opsUser, 'messages.send') && c.status !== 'UNSUBSCRIBED';
+    const orderGaps = roles.can(req.opsUser, 'customers.view')
+      ? await nudges.gapsFor(c)
+      : [];
+
     // The conversation around this order. There is no order id on a message,
     // so this is the customer's recent thread rather than a per-order log.
     const { data: messages } = await db
@@ -2799,6 +2816,20 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           })()
         }
       </div>
+
+      ${
+        // WHAT JUST HAPPENED. This page had no free-text banner at all, so an
+        // action that redirected back here with something to say said nothing -
+        // which for a button that texts a customer is indistinguishable from a
+        // button that did not work. ?note= and ?problem= on the redirect, so a
+        // refresh repeats the message and never the action.
+        req.query.note
+          ? `<p style="margin:0 0 20px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--suds-300);font-size:16px;font-weight:600;white-space:pre-wrap;">${escapeHtml(
+                         String(req.query.note).slice(0, 300)
+                       )}</p>`
+          : ''
+      }
 
       <!-- A STOPPED DRIVER COMES FIRST. This is somebody standing at a counter
            right now, so it sits above the money and above the progress card. -->
@@ -3022,7 +3053,26 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             <div style="padding-top:20px;">
               <a href="/ops/customers/${c.id}" class="btn btn-outline">Full profile ${icon('arrow-right', '16')}</a>
             </div>
-          </div>` : ''}
+          </div>
+
+          ${
+            // THE SAME PANEL, FROM THE SAME FUNCTION. An order sitting on
+            // AWAITING CARD is exactly where somebody wants to chase the card,
+            // and this is the screen they are already looking at. Inside the
+            // seeCustomer block, so a driver never gets it - texting a customer
+            // is not part of driving the round.
+            //
+            // It posts to the customer's route, not the order's: every one of
+            // these gaps is a fact about the person, not about this order.
+            orderGaps.length
+              ? `<div style="margin-bottom:22px;">${nudgePanel({
+                  gaps: orderGaps,
+                  action: `/ops/customers/${c.id}/ask?order=${order.order_number}`,
+                  canSend: canAskOnOrder,
+                  heading: 'Still needed from them',
+                })}</div>`
+              : ''
+          }` : ''}
 
           ${seeThread ? `
           <div class="card card-xl" style="padding:28px;">
@@ -3138,6 +3188,24 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       .order('pickup_date', { ascending: false });
 
     const showMoney = roles.can(req.opsUser, 'money.view');
+
+    // WHAT IS STILL MISSING, worked out fresh every time from the same
+    // predicates bookPickup() refuses on. Never stored - see src/core/nudges.js
+    // for why an "intake stage" column would have been the wrong answer.
+    //
+    // The buttons are behind messages.send, because pressing one texts a real
+    // phone, and absent entirely for a number that has opted out: STOP is a
+    // legal instruction and a button that offers to text them anyway is worse
+    // than no button.
+    const gaps = await nudges.gapsFor(person);
+    const canAsk = roles.can(req.opsUser, 'messages.send') && person.status !== 'UNSUBSCRIBED';
+
+    // ?note= and ?problem= on the redirect, so refreshing after sending one
+    // repeats the message and never the action - the same pattern as the order
+    // page and the conversation screen.
+    const askNote = req.query.note ? String(req.query.note).slice(0, 300) : null;
+    const askProblem = req.query.problem ? String(req.query.problem).slice(0, 300) : null;
+
     const prefs = person.preferences || {};
     const billed = (history || [])
       .filter((o) => o.payment_status !== 'WAIVED')
@@ -3169,6 +3237,23 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
             : ''
         }
       </div>
+
+      ${
+        askNote
+          ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--suds-300);font-size:16px;font-weight:600;white-space:pre-wrap;">${escapeHtml(
+                         askNote
+                       )}</p>`
+          : ''
+      }
+      ${
+        askProblem
+          ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--stain-100);font-size:16px;font-weight:600;">${escapeHtml(askProblem)}</p>`
+          : ''
+      }
+
+      ${nudgePanel({ gaps, action: `/ops/customers/${person.id}/ask`, canSend: canAsk })}
 
       <div class="grid-2" style="align-items:start;margin-bottom:44px;">
 
@@ -6998,6 +7083,64 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
           : 'Sent.'
       )}`
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/customers/:id/ask - text them for one missing thing
+//
+// The buttons on the "what is still missing" panel, which appears on the
+// customer page and in the side column of an order. One route for every gap,
+// with the gap named in a form field, so five buttons cannot become five
+// implementations of "send a text".
+//
+// Behind messages.send rather than customers.view: this puts a message on a
+// real phone, which is a different act from reading a profile.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/customers/:id/ask', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
+
+    // Back where they came from. The order number rides in the query string
+    // and is checked for digits before it is used - anything else and they
+    // land on the profile, because a redirect built out of whatever was
+    // posted is an open redirector on our own domain.
+    const from = String((req.query || {}).order || '');
+    const back = /^\d+$/.test(from)
+      ? `/ops/orders/${from}`
+      : `/ops/customers/${req.params.id}`;
+
+    const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
+
+    const { data: person } = await db
+      .from('customers')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    const gap = String((req.body || {}).gap || '');
+
+    // nudges.send() re-derives the gap rather than trusting the button, so a
+    // page left open since this morning cannot ask somebody for a card they
+    // saved an hour ago. Its refusals are turned into sentences here.
+    const result = await nudges.send(gap, person);
+
+    if (!result.ok) {
+      if (result.reason === 'already_done') {
+        return said('note', 'Nothing sent - they have already given us that. The panel is up to date now.');
+      }
+      if (result.reason === 'unsubscribed') {
+        return said('problem', 'That number has opted out. We cannot text them.');
+      }
+      return said('problem', 'That is not something we can ask for.');
+    }
+
+    return said('note', `Sent:\n\n${result.text}`);
   } catch (err) {
     return next(err);
   }

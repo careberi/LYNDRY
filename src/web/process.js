@@ -830,6 +830,15 @@ function processBody(user) {
         stays where you put it is forgetting you put it there.
       </p>
       <p>
+        <strong>You can also push a stalled customer along.</strong> Their
+        profile, and the side of any order, lists what we still need from
+        them - their details, how they want it washed, where the bag goes, a
+        card, a pickup date - with a button for each that texts them asking for
+        exactly that one thing. The words are fixed and shown on screen before
+        you press it. Ask for the first one and the AI carries the rest of the
+        conversation from there.
+      </p>
+      <p>
         <strong>When it comes back on it reads what you said first.</strong> The
         AI is handed the last ten messages of the thread, and the ones a person
         typed are marked as theirs - so it carries on from where you left off

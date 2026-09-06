@@ -669,6 +669,7 @@ POST /ops/orders/:id/<step>  the buttons: collected, at-partner, ready,
                              weight, out-for-delivery, delivered
 GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
+POST /ops/customers/:id/ask  text them for one thing we still need
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
@@ -1334,6 +1335,58 @@ reputation.
 second thing is one nobody trusts. What it does instead is say so on the way
 back - writing to somebody while the AI is still answering them is how two of
 us reply to the same message.
+
+**WHAT IS STILL MISSING, AND ONE BUTTON PER THING.** Neil's ask: an admin
+should be able to press a button at each step of getting an order started -
+their details, how they want it washed, where the bag goes, a card, when they
+want collecting - and have a text go out asking for exactly that. It is in
+`src/core/nudges.js`, rendered by `src/web/nudge-panel.js` on the customer page
+and in the side column of an order, from one function.
+
+**IT IS NOT A SECOND STATUS ON THE ORDER, and that is the part worth keeping.**
+He described these as stages an order moves through. They are not: the order
+state machine is about where the BAG is, only `orders.js` may move it, and every
+one of these happens before a bag exists. A stored "intake stage" would be a
+second copy of facts the database already holds - a name, an address,
+preferences, a card - free to disagree with them the first time anybody did
+something by hand. So a gap is **derived every time**, from the same predicates
+`checkSlot()` refuses on, and listed in the order it refuses them. Same rule as
+BOOKED on the board and the partner load.
+
+**THE MESSAGES ARE WRITTEN IN CODE, NOT BY THE AI.** Neil's call, taken with
+the alternative in front of him. They are fixed sentences, so the screen shows
+the exact words and the segment count **before** the button is pressed - a
+button that texts a customer something nobody has read is not one anybody
+should press - and because texting somebody who has not just texted us is the
+one thing the AI has never done.
+
+**The AI still does the part that matters.** The nudge lands in `messages` like
+any other outbound, and the AI is handed the last ten before it replies - so it
+sees the question that was asked and handles whatever comes back, including
+"actually make it Friday", in the thread as usual.
+
+**A nudge is NOT stamped `sent_by`.** A person pressed the button but nobody
+typed the sentence, and stamping it would put the AI into the handover
+behaviour as though a colleague were working the thread by hand.
+
+**Only the card message is not written there.** `billing.setupLinkMessage()`
+already owns that wording and mints the `/pay/<token>` in it, so the button
+sends the same sentence the AI and the website already send. The panel cannot
+call it to build the preview - that would create a Stripe session on every page
+load - so it shows the wording with the link stubbed and says so.
+
+**`send()` re-derives the gap rather than trusting the button.** A page left
+open since the morning would otherwise ask somebody for a card they saved an
+hour ago.
+
+**With the shop shut, nobody is asked when they want collecting.**
+`bookPickup()` would refuse whatever they answered, and inviting a customer to
+book something that is then refused is the mistake the closed sign has already
+caused once. The pickup nudge also states the opening date when there is one.
+
+**There is deliberately no "confirm the order" button**, though Neil named one.
+There is exactly one confirmation - the recap, a yes, then it books - and a
+second one from the ops side is the thing he twice asked never to have.
 
 **The conversations screen is grouped by phone number, not by customer,** and
 that is the point: a message from someone with no account is still logged
