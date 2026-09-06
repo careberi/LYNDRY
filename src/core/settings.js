@@ -122,6 +122,36 @@ async function setTakingOrders(taking, reason, opsUserId) {
   return data;
 }
 
+// ARE THE FOLLOW-UP CHASES RUNNING.
+//
+// Anything that texts customers on its own needs a way to stop it that is not
+// a deploy - the same instinct as the closed sign. Defaults to on when the
+// column has not been read yet, because the safe failure for a read error is
+// the system behaving as it is configured to, not silently going quiet.
+async function followUpsOn() {
+  const s = await read();
+  return s.follow_ups_on !== false;
+}
+
+async function setFollowUps(on, opsUserId) {
+  const { data, error } = await db
+    .from('app_settings')
+    .update({
+      follow_ups_on: Boolean(on),
+      updated_at: new Date().toISOString(),
+      updated_by: opsUserId || null,
+    })
+    .eq('id', true)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+
+  cached = data;
+  cachedAt = Date.now();
+  return data;
+}
+
 // THE LAST NIGHT THE PASS COMPLETED.
 //
 // Standing orders and day-before reminders both run once an evening, and this
@@ -300,4 +330,4 @@ module.exports = {
   setServiceBase,
   weightLimits,
   setWeightLimits, read, takingOrders, pausedReason, setTakingOrders,
-  opensOn, setOpensOn, markNightlyRan, CACHE_MS };
+  opensOn, setOpensOn, markNightlyRan, followUpsOn, setFollowUps, CACHE_MS };

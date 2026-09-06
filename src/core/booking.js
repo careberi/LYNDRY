@@ -8,6 +8,7 @@ const payments = require('../providers/payments');
 const { site } = require('../web/site');
 const { config } = require('../config');
 const wash = require('./wash');
+const geocode = require('./geocode');
 const settings = require('./settings');
 
 // ---------------------------------------------------------------------------
@@ -218,6 +219,58 @@ const BERGEN_ZIPS = new Set([
   '07660', '07661', '07662', '07663', '07666', '07670', '07675', '07676',
   '07677',
 ]);
+
+// --- DOES THE TOWN MATCH THE ZIP --------------------------------------------
+//
+// Neil's ask. inServiceArea() proves a ZIP is in Bergen County and proves
+// nothing about the rest of the line: "16-16 Chandler drive, Bergenfield nj
+// 07410" went straight in, and 07410 is Fair Lawn.
+//
+// ONLY THE CONTRADICTION IS CHECKED, never whether the house exists. Bergen
+// uses hyphenated house numbers and free geocoders miss them constantly, so
+// refusing an unfound door would turn away real customers. A ZIP has exactly
+// one town, though, and that is worth checking.
+//
+// SILENCE IS NOT AN ACCUSATION. If the geocoder is down, slow, or cannot place
+// the ZIP, this returns null and the address is accepted - the same rule the
+// routing follows. A free service having a bad day must never be able to stop
+// somebody becoming a customer.
+function sameTown(a, b) {
+  const norm = (t) =>
+    String(t || '')
+      .toLowerCase()
+      .replace(/\b(township|twp|borough|boro|village|city|town)\b/g, '')
+      .replace(/[^a-z]/g, '');
+
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return true;
+
+  // Contains either way, so "Fort Lee" and "Ft Lee" and "Lee" all agree.
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+async function addressProblem({ city, postal }) {
+  const zip = String(postal || '').trim();
+  const said = String(city || '').trim();
+  if (!zip || !said) return null;
+
+  const real = await geocode.townForZip(zip).catch(() => null);
+  if (!real) return null;
+
+  if (sameTown(real, said)) return null;
+
+  return {
+    reason: 'town_zip_mismatch',
+    said,
+    real,
+    // Written here rather than left to the AI, because it names a place and a
+    // number and both have to be right.
+    say:
+      `That zip is ${real}, not ${said} - one of them is off. ` +
+      `What is the right town and zip?`,
+  };
+}
 
 // NEIL'S OWN NUMBER, WHICH CAN ALWAYS BOOK.
 //
@@ -1037,6 +1090,8 @@ module.exports = {
   hasName,
   hasPreferences,
   inServiceArea,
+  addressProblem,
+  sameTown,
   alwaysAllowed,
   checkSlot,
   readableDate,

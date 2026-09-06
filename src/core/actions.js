@@ -608,6 +608,45 @@ async function saveDetails(customer, input) {
     changes.state = DEFAULT_STATE;
   }
 
+  // DOES THE TOWN MATCH THE ZIP.
+  //
+  // "16-16 Chandler drive, Bergenfield nj 07410" was saved exactly as typed,
+  // and 07410 is Fair Lawn. The ZIP list proves somebody is in the county and
+  // says nothing about the rest of the line.
+  //
+  // THE NAME IS STILL SAVED. Only the address fields are held back, because a
+  // name is not wrong just because a ZIP is - and CLAUDE.md's rule is to save a
+  // name the moment it is given, since losing one is how a customer ended up
+  // on the board as "Unnamed".
+  //
+  // Nothing here refuses on a geocoder being down: addressProblem() returns
+  // null when it does not know, and not knowing is not an accusation.
+  const wouldBe = {
+    city: changes.city || customer.city,
+    postal: changes.postal_code || customer.postal_code,
+  };
+
+  if (changes.city || changes.postal_code) {
+    const problem = await booking.addressProblem(wouldBe).catch(() => null);
+
+    if (problem) {
+      delete changes.city;
+      delete changes.postal_code;
+      delete changes.address_line1;
+      delete changes.state;
+
+      if (Object.keys(changes).length) {
+        await db.from('customers').update(changes).eq('id', customer.id);
+      }
+
+      console.warn(
+        `ADDRESS ${customer.phone}: said ${problem.said} with ${wouldBe.postal}, which is ${problem.real}.`
+      );
+
+      return problem.say;
+    }
+  }
+
   // A MOVE THROWS THE MAP PIN AWAY. Without this the address changes and the
   // coordinates do not, so every routing decision is made about the old house -
   // which is exactly what happened when a customer moved to Glen Rock and the

@@ -18,6 +18,7 @@ const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
 const nudges = require('../core/nudges');
 const followups = require('../core/followups');
+const reminders = require('../core/reminders');
 const { nudgePanel } = require('../web/nudge-panel');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
@@ -6822,7 +6823,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     // The pause is NOT caught and softened into "probably fine". If we cannot
     // read the switch the AI is silent - isPaused() fails closed - and a page
     // claiming it is answering while it says nothing is the worst of both.
-    const [{ data: messages, error }, { data: customer }, pause, followUp] = await Promise.all([
+    const [{ data: messages, error }, { data: customer }, pause, followUp, reminder] = await Promise.all([
       db
         .from('messages')
         .select('direction, body, created_at, delivery_status, delivery_error')
@@ -6838,6 +6839,19 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         console.error(`Could not work out the follow-up for ${phone}: ${err.message}`);
         return null;
       }),
+      // The other thing that will text them without anybody pressing a button.
+      // Same reasoning: a message that goes out on its own should be visible
+      // before it lands rather than discovered afterwards in the thread.
+      db
+        .from('customers')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle()
+        .then(({ data }) => (data ? reminders.pendingFor(data.id) : null))
+        .catch((err) => {
+          console.error(`Could not work out the reminder for ${phone}: ${err.message}`);
+          return null;
+        }),
     ]);
 
     if (error) throw error;
@@ -7036,6 +7050,29 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           thread.length
             ? `<div style="display:flex;flex-direction:column;gap:20px;">${thread.map(bubble).join('')}</div>`
             : `<p style="font-size:16px;color:var(--ink-500);margin:0;">Nothing has been sent to or from this number.</p>`
+        }
+
+        ${
+          // A PICKUP REMINDER IS ALREADY BOOKED IN. Different from the chase
+          // below in one way that matters: this one goes out unless the order
+          // is cancelled, where a chase goes out unless they reply. So it is
+          // stated flatly rather than hedged.
+          reminder
+            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-top:20px;">
+                 <div style="max-width:78%;padding:12px 16px;border:2px dashed var(--ink-400);
+                             border-radius:14px;background:transparent;">
+                   <p class="eyebrow" style="margin:0 0 4px;color:var(--ink-500);">Pickup reminder scheduled</p>
+                   <p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink-700);">
+                     Order #${reminder.order.order_number} is
+                     <strong>${escapeHtml(booking.readableDate(reminder.order.pickup_date))}${
+                       reminder.window ? ` ${escapeHtml(reminder.window)}` : ''
+                     }</strong>, so they get "have the bag out" on the evening of
+                     <strong>${escapeHtml(booking.readableDate(reminder.goesOn))}</strong>.
+                   </p>
+                 </div>
+                 <span style="font-size:12px;color:var(--ink-400);">Goes out between 6pm and 9pm</span>
+               </div>`
+            : ''
         }
 
         ${
@@ -7552,6 +7589,28 @@ router.get('/ops/settings', guard, withIssues, may('service.manage'), async (req
         user: req.opsUser,
         openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /ops/settings/follow-ups - stop or start the chases, everywhere
+//
+// Behind service.manage like the closed sign, and for the same reason: it
+// changes what customers are told without anybody pressing send.
+router.post('/ops/settings/follow-ups', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const on = String((req.body || {}).state || '') === 'on';
+    await settings.setFollowUps(on, req.opsUser && req.opsUser.id);
+
+    return res.redirect(
+      303,
+      `/ops/settings?note=${encodeURIComponent(
+        on
+          ? 'Follow-ups are on. An unanswered question gets chased once, a day later.'
+          : 'Follow-ups are off. Nobody will be chased until you switch them back on.'
+      )}`
     );
   } catch (err) {
     return next(err);

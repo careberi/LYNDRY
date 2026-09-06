@@ -145,6 +145,77 @@ function lookupOnce(query) {
   return throttled(() => lookup(query));
 }
 
+// --- IS THAT A REAL ADDRESS -------------------------------------------------
+//
+// Neil's ask, and CLAUDE.md already flagged it as the deliberate gap: the ZIP
+// list proves a customer is in Bergen County and proves nothing about whether
+// 16-16 Chandler Drive is a door. A real test message read "16-16 Chandler
+// drive, Bergenfield nj 07410" and went straight in - 07410 is Fair Lawn and
+// Bergenfield is 07621, so the town and the ZIP contradicted each other and
+// nothing noticed.
+//
+// WHAT IS CHECKED IS THE CONTRADICTION, NOT THE DOOR. Asking a geocoder "does
+// this house exist" is unreliable here in a way that would hurt real
+// customers: Bergen County uses hyphenated house numbers - 16-50 Chandler Dr
+// is a real saved address in this system - and free geocoders miss them
+// routinely. Refusing on that would turn away the people we most want.
+//
+// A ZIP resolving to a different town IS reliable, because a ZIP has exactly
+// one place name and nothing about it is fuzzy. So that is the check.
+//
+// CACHED FOR THE LIFE OF THE PROCESS. A ZIP's town does not change, there are
+// only 67 of them in the county, and the alternative is a rate-limited request
+// on a path where somebody is waiting for a text.
+const zipTowns = new Map();
+
+async function townForZip(zip) {
+  const clean = String(zip || '').trim();
+  if (!/^\d{5}$/.test(clean)) return null;
+  if (zipTowns.has(clean)) return zipTowns.get(clean);
+
+  const url =
+    `${ENDPOINT}?format=json&limit=1&countrycodes=us&addressdetails=1` +
+    `&postalcode=${encodeURIComponent(clean)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  const answer = await throttled(async () => {
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': `${site.name}/1.0 (${site.email})`,
+          'Accept-Language': 'en',
+        },
+      });
+
+      if (!response.ok) return null;
+
+      const results = await response.json();
+      const first = Array.isArray(results) ? results[0] : null;
+      const a = (first && first.address) || null;
+      if (!a) return null;
+
+      // Nominatim puts the place under whichever of these fits. Boroughs and
+      // townships come back as town or village rather than city.
+      const town = a.city || a.town || a.village || a.municipality || a.hamlet || null;
+      return town ? String(town).trim() : null;
+    } catch {
+      // Down, slow, or nonsense back. We do not know, and not knowing must
+      // never be turned into an accusation - see addressProblem().
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  // A null is cached too. Retrying a ZIP the geocoder cannot place, on every
+  // message, would be a request an hour for nothing.
+  zipTowns.set(clean, answer);
+  return answer;
+}
+
 // --- Putting stops in order -------------------------------------------------
 
 const R_MI = 3958.8;
@@ -352,6 +423,7 @@ module.exports = {
   milesBetween,
   addressLine,
   clearPinIfMoved,
+  townForZip,
   ADDRESS_COLUMNS,
   BASE,
 };

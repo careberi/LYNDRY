@@ -161,4 +161,39 @@ async function sendDue({ date = null } = {}) {
   return { date: target, sent, skipped };
 }
 
-module.exports = { sendDue, reminderMessage, JUST_BOOKED_HOURS };
+// IS A PICKUP REMINDER COMING FOR THIS PERSON, and when.
+//
+// Neil's ask, and the same reasoning as the follow-up: a text that goes out on
+// its own should be visible before it lands, not discovered afterwards in the
+// thread. Shown on the conversation screen.
+//
+// Derived, never stored - it reads the same order the sweep will read. The
+// reminder goes out the evening BEFORE the pickup, so the date is the pickup
+// minus a day, and it is only pending if it has not already been sent.
+async function pendingFor(customerId) {
+  if (!customerId) return null;
+
+  const { data, error } = await db
+    .from('orders')
+    .select('id, order_number, pickup_date, pickup_window_start, pickup_window_end, reminder_sent_at')
+    .eq('customer_id', customerId)
+    .in('status', orders.AWAITING_COLLECTION)
+    .is('reminder_sent_at', null)
+    .gte('pickup_date', booking.today())
+    .order('pickup_date', { ascending: true })
+    .limit(1);
+
+  if (error) throw error;
+
+  const order = (data || [])[0];
+  if (!order) return null;
+
+  // The evening before. A pickup TODAY has no reminder left to send - the
+  // evening before it has already gone by.
+  const goesOn = booking.addDays(order.pickup_date, -1);
+  if (goesOn < booking.today()) return null;
+
+  return { order, goesOn, window: booking.arrivalWindow(order) };
+}
+
+module.exports = { sendDue, reminderMessage, pendingFor, JUST_BOOKED_HOURS };

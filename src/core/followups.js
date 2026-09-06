@@ -7,6 +7,7 @@ const orders = require('./orders');
 const issues = require('./issues');
 const notify = require('./notify');
 const aiPause = require('./ai-pause');
+const settings = require('./settings');
 
 // ---------------------------------------------------------------------------
 // CHASE ONCE, THEN LEAVE THEM ALONE.
@@ -193,6 +194,13 @@ async function compose(customer, thread) {
 
 // The sweep. Everything due, sent, in one pass.
 async function sendDue({ now = null } = {}) {
+  // THE SWITCH, checked before anything is read. Off means off everywhere -
+  // see migration 0067. Switching the AI off for one conversation already
+  // stops that one, because a chase is the AI speaking.
+  if (!(await settings.followUpsOn())) {
+    return { sent: [], skipped: [], off: true };
+  }
+
   const threads = await recentThreads();
   const sent = [];
   const skipped = [];

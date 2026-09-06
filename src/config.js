@@ -76,14 +76,17 @@ const config = Object.freeze({
   // two answer half a sentence. So a reply waits, every new message restarts
   // the wait, and the AI is then handed the lot as one message.
   //
-  // The cost is felt by somebody who sends ONE message and waits the full
-  // window for an answer, which is why this is the shorter of the two numbers
-  // he named rather than the longer one.
+  // TEN SECONDS, down from twenty. Neil's call after living with it: the cost
+  // of the window is paid by somebody who sends ONE message and then waits the
+  // whole thing for an answer, and twenty seconds of nothing reads as broken.
+  // Ten still catches the common burst - "hey", then the actual question - and
+  // the clock restarts on each message either way, so a real burst is still
+  // answered once.
   //
   // Set SMS_REPLY_WAIT_SECONDS to 0 to switch it off entirely - which is what
-  // the tests run with, so they are not twenty seconds a message.
+  // the tests run with, so they are not ten seconds a message.
   replies: Object.freeze({
-    burstSeconds: Number(process.env.SMS_REPLY_WAIT_SECONDS ?? 20),
+    burstSeconds: Number(process.env.SMS_REPLY_WAIT_SECONDS ?? 10),
 
     // The longest a reply can be put off, measured from the FIRST message of
     // the burst. Without it somebody texting every fifteen seconds resets the

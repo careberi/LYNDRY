@@ -304,6 +304,37 @@ ${
   })()
 }
 
+${
+  // THE OTHER THING THAT TEXTS PEOPLE ON ITS OWN. Beside the evening line
+  // rather than buried, because the two are the same kind of switch: things
+  // that speak to customers while nobody is watching.
+  (() => {
+    const chasing = settings.follow_ups_on !== false;
+    return `<div class="card" style="padding:16px 20px;margin-bottom:26px;">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;">
+        <p style="margin:0;font-size:15px;line-height:1.6;max-width:60ch;">
+          <strong>Follow-ups</strong> - when the AI asks somebody a question and
+          they go quiet, it chases once a day later and then never again.
+          ${
+            chasing
+              ? 'Switching the AI off on one conversation already stops that one.'
+              : '<strong>Off. Nobody is being chased.</strong>'
+          }
+        </p>
+        <form method="post" action="/ops/settings/follow-ups" style="margin:0;display:flex;gap:12px;align-items:center;">
+          <span class="badge" style="background:var(--${chasing ? 'suds-300' : 'sunbeam-500'});">
+            ${chasing ? 'On' : 'Off'}
+          </span>
+          <input type="hidden" name="state" value="${chasing ? 'off' : 'on'}">
+          <button class="btn btn-outline btn-sm" type="submit">
+            Switch them ${chasing ? 'off' : 'on'}
+          </button>
+        </form>
+      </div>
+    </div>`;
+  })()
+}
+
 <div class="card card-xl" style="padding:0;overflow:hidden;margin-bottom:26px;">
   <div style="padding:26px;background:${open ? 'var(--suds-300)' : 'var(--stain-100)'};
               border-bottom:2px solid var(--ink-900);">

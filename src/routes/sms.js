@@ -58,6 +58,7 @@ const reply = require('../core/notify').sendAndLog;
 // The same normaliser the send path uses, so "did we just say this?" compares
 // the words that actually went out rather than the ones we composed.
 const { toPlainText } = require('../core/notify');
+const notify = require('../core/notify');
 
 // Writes the carrier's verdict onto the message we sent.
 //
@@ -112,6 +113,22 @@ async function handleInbound(inbound) {
   }
 
   console.log(`SMS in  ${from}: ${text}`);
+
+  // --- A MESSAGE WITH NOTHING IN IT ----------------------------------------
+  //
+  // A real customer's phone sent one - an empty body, most likely a reaction or
+  // an attachment that carried no text - and it went to the AI, which threw,
+  // and she was told "something went wrong on our end. Email us." She had just
+  // given us her name and address. Nothing was wrong on our end and there was
+  // nothing to email about.
+  //
+  // Neil's call: say it came through blank and repeat the last thing we said,
+  // so the thread carries on from where it actually is.
+  if (!String(text || '').trim()) {
+    console.log(`BLANK   ${from}: nothing in the message.`);
+    await replyToBlank(from, customer);
+    return;
+  }
 
   // --- Compliance keywords, before anything else ---------------------------
   // The customer is passed so that "yes" only counts as an opt-in from
@@ -201,6 +218,36 @@ async function handleInbound(inbound) {
   await burst.collect(from, text, (said) => answerWithBrain(customer, said, from));
 }
 
+// WHAT TO SAY WHEN THEIR MESSAGE ARRIVED EMPTY.
+//
+// The AI is not asked. There is nothing to answer, and the one useful thing to
+// do is put the last question back in front of them - so this is written here,
+// in code, like every other sentence nobody asked for.
+//
+// The repeat is dropped when it would cost more than a couple of segments. A
+// blank text is somebody's phone misfiring; sending three segments of an old
+// answer back at them is a worse reply than a short one.
+async function replyToBlank(from, customer) {
+  const { data } = await db
+    .from('messages')
+    .select('body')
+    .eq('phone', from)
+    .eq('direction', 'OUTBOUND')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const last = ((data || [])[0] || {}).body || '';
+  const lead = "Sorry, that came through blank on our end.";
+
+  const withRepeat = `${lead} Here's my last message again: ${last}`;
+  const body =
+    last && notify.describeCost(notify.toPlainText(withRepeat)).segments <= 2
+      ? withRepeat
+      : `${lead} What were you going to say?`;
+
+  await reply(from, body, customer ? customer.id : null, { kind: 'AI' });
+}
+
 async function answerWithBrain(customer, text, from) {
   // --- HAS SOMEBODY SWITCHED THE AI OFF FOR THIS NUMBER? -------------------
   //
@@ -283,9 +330,27 @@ async function answerWithBrain(customer, text, from) {
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.
     console.error('Claude call failed:', err.message);
+    // NEVER SEND A CUSTOMER TO EMAIL. Neil's call, and it is the whole point of
+    // the product: they texted, so they get an answer in the thread. Pointing
+    // somebody at an inbox is asking them to start again somewhere nobody is
+    // watching - and this exact sentence went to a real customer who had just
+    // given us her address, because her phone sent a blank message.
+    //
+    // Instead a person is told. issues.raise() texts every admin and puts the
+    // thread in the queue, so "somebody will pick this up" is a promise the
+    // system actually keeps rather than a sentence.
+    await issues
+      .raise({
+        customer,
+        reason: 'The AI could not be reached, so this customer got no real answer.',
+        customerSaid: text,
+        aiHold: true,
+      })
+      .catch((err) => console.error(`Could not raise an issue for the AI outage: ${err.message}`));
+
     await reply(
       from,
-      `Sorry — something went wrong on our end. Email ${site.email} and we'll pick it up from there.`,
+      `Sorry, I'm having trouble on my end. Someone here will pick this up shortly.`,
       customer.id,
       // An apology is not a question. Chasing somebody about our own outage a
       // day later would be worse than the outage.
@@ -319,7 +384,17 @@ async function answerWithBrain(customer, text, from) {
     message = await actions.run(decision.name, decision.input, customer, helpers);
   } catch (err) {
     console.error(`Action ${decision.name} failed:`, err.message);
-    await reply(from, `Sorry — I couldn't do that. Email ${site.email} and we'll sort it out.`, customer.id, {
+    // Again, no email address. A person is told and answers in the thread.
+    await issues
+      .raise({
+        customer,
+        reason: `The action "${decision.name}" failed, so this customer got no real answer.`,
+        customerSaid: text,
+        aiHold: true,
+      })
+      .catch((err) => console.error(`Could not raise an issue for a failed action: ${err.message}`));
+
+    await reply(from, `Sorry, I couldn't do that just now. Someone here will pick this up shortly.`, customer.id, {
       kind: 'SYSTEM',
     });
     return;
