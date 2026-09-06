@@ -689,6 +689,7 @@ GET  /ops/routing            the live day on a map; ?date= ?from= ?driver= pick 
 GET  /ops/labels             print a sheet of bag stickers
 GET  /o/<code>               the page behind the QR on a bag (public)
 GET  /ops/settings           are we taking orders, and why not
+GET  /ops/weights            how far two scales may disagree
 POST /ops/settings/close     stop taking orders, with a reason
 POST /ops/settings/open      start again
 GET  /ops/promotions         what we are giving away
@@ -1268,6 +1269,14 @@ two what-if calculators.
 | **People** | Everyone you deal with: Customers, Conversations, Team, Partners |
 | **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag tags, Unit economics, Route planner |
 | **Resources** | How it all works, What happens to a bag, What we send a laundromat |
+
+**THE ADMIN DASHBOARD IS A GRID OF EQUAL CARDS, and nothing else.** Neil's
+call. The weight thresholds were a full-width form dropped into the middle of
+it, which made the page five small cards with one enormous form between them;
+they have their own screen at `/ops/weights` now and a card like everything
+else. The grid sets `grid-auto-rows:1fr` so every row is as tall as the tallest
+card rather than each row sizing itself - without it the second row was visibly
+shorter than the first.
 
 **Pre-launch lives under Business**: Taking orders?, Promotions, Text blast,
 all behind `service.manage` (Admin only). Closing the business, giving money

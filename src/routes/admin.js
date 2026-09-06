@@ -54,6 +54,7 @@ const { scheduledBody } = require('../web/scheduled-page');
 const {
   adminDashboardBody,
   settingsBody,
+  weightLimitsBody,
   promotionsBody,
   promotionDetailBody,
   broadcastBody,
@@ -7700,6 +7701,33 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
   }
 });
 
+// GET /ops/weights - the three weight thresholds, on their own page.
+//
+// They were a full-width form in the middle of the Admin dashboard, which made
+// that page five small cards with one enormous form dropped between them.
+// Neil's call: it is a screen you go to in order to change something, not one
+// you read at a glance, so it sits behind a card like everything else.
+router.get('/ops/weights', guard, withIssues, may('service.manage'), async (req, res, next) => {
+  try {
+    return res.type('html').send(
+      adminPage({
+        title: 'Weight thresholds',
+        active: '/ops/weights',
+        body: weightLimitsBody({
+          limits: await settings.weightLimits(),
+          notice: req.query.note ? String(req.query.note).slice(0, 300) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // The three weight thresholds. The only control that lives nowhere else.
 router.post('/ops/admin/weights', guard, may('service.manage'), async (req, res, next) => {
   try {
@@ -7725,7 +7753,7 @@ router.post('/ops/admin/weights', guard, may('service.manage'), async (req, res,
       `Clean laundry may come back ${saved.weight_dry_loss_pct}% lighter or ` +
       `${saved.weight_gain_lb} lb heavier.`;
 
-    return res.redirect(303, `/ops/admin?note=${encodeURIComponent(note)}`);
+    return res.redirect(303, `/ops/weights?note=${encodeURIComponent(note)}`);
   } catch (err) {
     return next(err);
   }

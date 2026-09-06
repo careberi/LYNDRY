@@ -154,85 +154,8 @@ ${banner(problem, 'bad')}
   </div>
 </div>
 
-<div class="card card-xl" style="padding:26px;margin-bottom:24px;">
-  <p class="eyebrow" style="margin:0 0 6px;">Two scales</p>
-  <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 10px;">
-    How far apart is too far
-  </h2>
-  <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 18px;">
-    The customer is charged the <strong>heavier</strong> of our weight and the
-    laundromat's, always. The laundromat is billed <strong>their own</strong>
-    figure - unless the two are further apart than the exception line, and then
-    nothing is invoiced until you decide it.
-  </p>
-
-  <form method="post" action="/ops/admin/weights"
-        style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
-    <div style="flex:1 1 130px;">
-      <label class="field-label" for="np">Normal up to</label>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <input class="field" id="np" name="normal_pct" type="number" step="0.5" min="0" max="50"
-               value="${escapeHtml(String(limits.normalPct))}" required style="min-width:0;">
-        <span style="font-weight:700;">%</span>
-      </div>
-    </div>
-    <div style="flex:1 1 130px;">
-      <label class="field-label" for="ap">Acceptable up to</label>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <input class="field" id="ap" name="acceptable_pct" type="number" step="0.5" min="0" max="50"
-               value="${escapeHtml(String(limits.acceptablePct))}" required style="min-width:0;">
-        <span style="font-weight:700;">%</span>
-      </div>
-    </div>
-    <div style="flex:1 1 130px;">
-      <label class="field-label" for="ml">Always allow at least</label>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <input class="field" id="ml" name="min_lb" type="number" step="0.5" min="0" max="20"
-               value="${escapeHtml(String(limits.minLb))}" required style="min-width:0;">
-        <span style="font-weight:700;">lb</span>
-      </div>
-    </div>
-    <div style="flex:1 1 100%;padding-top:18px;margin-top:6px;border-top:2px solid var(--ink-100);">
-      <p class="eyebrow" style="margin:0 0 6px;">Dirty in against clean out</p>
-      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 14px;">
-        A different question, so it has its own numbers. Water and grit come out
-        in the wash, so laundry comes back <strong>lighter</strong> - that is
-        normal and this says how much. Heavier is never normal, whatever the
-        load weighs, so that one is a flat allowance rather than a percentage.
-      </p>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
-        <div style="flex:1 1 150px;">
-          <label class="field-label" for="dl">May come back lighter by</label>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <input class="field" id="dl" name="dry_loss_pct" type="number" step="0.5" min="0" max="50"
-                   value="${escapeHtml(String(limits.dryLossPct))}" required style="min-width:0;">
-            <span style="font-weight:700;">%</span>
-          </div>
-        </div>
-        <div style="flex:1 1 150px;">
-          <label class="field-label" for="gl">May come back heavier by</label>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <input class="field" id="gl" name="gain_lb" type="number" step="0.1" min="0" max="10"
-                   value="${escapeHtml(String(limits.gainLb))}" required style="min-width:0;">
-            <span style="font-weight:700;">lb</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <button class="btn btn-ink btn-lg" type="submit">Save</button>
-  </form>
-
-  <p class="field-hint" style="margin-top:14px;max-width:62ch;">
-    The pounds figure is a floor, and it matters as much as the percentages:
-    5% of a 10 lb bag is half a pound, which is inside what two honest scales
-    differ by. Without it every small order would raise an exception.
-    <strong>One set of numbers for every laundromat</strong> - a bad scale is
-    something to replace, not something to make allowances for.
-  </p>
-</div>
-
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+            grid-auto-rows:1fr;gap:18px;">
   ${[
     {
       href: '/ops/promotions',
@@ -272,13 +195,121 @@ ${banner(problem, 'bad')}
       // orders, so it belongs with the rest of what an owner checks rather
       // than with the two what-if calculators under Tools.
       href: '/ops/reports',
-      eyebrow: 'Ours, theirs, and the bill',
+      eyebrow: 'Three weights',
       title: 'Weight and money report',
-      line: 'Every order that went to a laundromat, with all three weights',
+      line: 'Every order that went to a laundromat, ours against theirs',
+    },
+    {
+      // Was a full-width form in the middle of this page. It is a thing you go
+      // and change, not a thing you read, so it reads as a card like the rest.
+      href: '/ops/weights',
+      eyebrow: 'How far apart is too far',
+      title: 'Weight thresholds',
+      line: `Normal to ${limits.weight_normal_pct}%, exception past ${limits.weight_acceptable_pct}%`,
     },
   ]
     .map(card)
     .join('')}
+</div>`;
+}
+
+// THE WEIGHT THRESHOLDS, on their own page.
+//
+// They were a full-width card in the middle of the Admin dashboard, which made
+// that page a list of six small cards with one enormous form dropped into it.
+// Neil's call: it is a screen you visit to change something, not something you
+// read at a glance, so it gets a card like everything else and lives behind it.
+//
+// The markup is the same and the form still posts to the same route - only
+// where it lands afterwards changed, from the dashboard back to here.
+function weightLimitsBody({ limits, notice, problem }) {
+  return `
+<p class="eyebrow" style="margin:0 0 8px;">Admin</p>
+<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Weight thresholds</h1>
+<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
+  How far two scales may disagree before an order stops and waits for a person.
+  One set of numbers for every laundromat.
+</p>
+
+${banner(notice, 'good')}
+${banner(problem, 'bad')}
+
+<div class="card card-xl" style="padding:26px;margin-bottom:24px;">
+  <p class="eyebrow" style="margin:0 0 6px;">Two scales</p>
+  <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 10px;">
+    How far apart is too far
+  </h2>
+  <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 18px;">
+    The customer is charged the <strong>heavier</strong> of our weight and the
+    laundromat's, always. The laundromat is billed <strong>their own</strong>
+    figure - unless the two are further apart than the exception line, and then
+    nothing is invoiced until you decide it.
+  </p>
+
+  <form method="post" action="/ops/admin/weights"
+        style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+    <div style="flex:1 1 130px;">
+      <label class="field-label" for="np">Normal up to</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input class="field" id="np" name="normal_pct" type="number" step="0.5" min="0" max="50"
+               value="\${escapeHtml(String(limits.normalPct))}" required style="min-width:0;">
+        <span style="font-weight:700;">%</span>
+      </div>
+    </div>
+    <div style="flex:1 1 130px;">
+      <label class="field-label" for="ap">Acceptable up to</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input class="field" id="ap" name="acceptable_pct" type="number" step="0.5" min="0" max="50"
+               value="\${escapeHtml(String(limits.acceptablePct))}" required style="min-width:0;">
+        <span style="font-weight:700;">%</span>
+      </div>
+    </div>
+    <div style="flex:1 1 130px;">
+      <label class="field-label" for="ml">Always allow at least</label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input class="field" id="ml" name="min_lb" type="number" step="0.5" min="0" max="20"
+               value="\${escapeHtml(String(limits.minLb))}" required style="min-width:0;">
+        <span style="font-weight:700;">lb</span>
+      </div>
+    </div>
+    <div style="flex:1 1 100%;padding-top:18px;margin-top:6px;border-top:2px solid var(--ink-100);">
+      <p class="eyebrow" style="margin:0 0 6px;">Dirty in against clean out</p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 14px;">
+        A different question, so it has its own numbers. Water and grit come out
+        in the wash, so laundry comes back <strong>lighter</strong> - that is
+        normal and this says how much. Heavier is never normal, whatever the
+        load weighs, so that one is a flat allowance rather than a percentage.
+      </p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="flex:1 1 150px;">
+          <label class="field-label" for="dl">May come back lighter by</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input class="field" id="dl" name="dry_loss_pct" type="number" step="0.5" min="0" max="50"
+                   value="\${escapeHtml(String(limits.dryLossPct))}" required style="min-width:0;">
+            <span style="font-weight:700;">%</span>
+          </div>
+        </div>
+        <div style="flex:1 1 150px;">
+          <label class="field-label" for="gl">May come back heavier by</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input class="field" id="gl" name="gain_lb" type="number" step="0.1" min="0" max="10"
+                   value="\${escapeHtml(String(limits.gainLb))}" required style="min-width:0;">
+            <span style="font-weight:700;">lb</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-ink btn-lg" type="submit">Save</button>
+  </form>
+
+  <p class="field-hint" style="margin-top:14px;max-width:62ch;">
+    The pounds figure is a floor, and it matters as much as the percentages:
+    5% of a 10 lb bag is half a pound, which is inside what two honest scales
+    differ by. Without it every small order would raise an exception.
+    <strong>One set of numbers for every laundromat</strong> - a bad scale is
+    something to replace, not something to make allowances for.
+  </p>
 </div>`;
 }
 
@@ -1062,4 +1093,12 @@ ${
 }`;
 }
 
-module.exports = { adminDashboardBody, settingsBody, promotionsBody, promotionDetailBody, broadcastBody, AUDIENCES };
+module.exports = {
+  adminDashboardBody,
+  settingsBody,
+  weightLimitsBody,
+  promotionsBody,
+  promotionDetailBody,
+  broadcastBody,
+  AUDIENCES,
+};
