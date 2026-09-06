@@ -83,7 +83,7 @@ function reportsBody({ report, partners = [], form = {} }) {
   return `
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
     <h1 style="font-family:var(--font-display);font-weight:900;font-size:34px;line-height:1;margin:0;">
-      Weights and money
+      Weight and money report
     </h1>
     <a class="btn btn-sm" href="${escapeHtml(csvHref)}">Export CSV</a>
   </div>

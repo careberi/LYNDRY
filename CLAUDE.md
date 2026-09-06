@@ -675,6 +675,7 @@ GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
 GET  /ops/issues             everything still waiting on a person
 GET  /ops/scheduled          every text queued to send on its own
+                             (reached from the Admin dashboard, not the menu)
 POST /ops/scheduled/follow-ups/:phone   chase this number, or do not
 GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
@@ -880,13 +881,16 @@ no existing row silently switched the AI off for that customer entirely. A row
 now means "there are settings for this number", and every writer sets `paused`
 deliberately.
 
-**`/ops/scheduled` is "Customer follow-up", under Admin.** It lists everything
+**`/ops/scheduled` is "Customer follow-up", reached from a card on the Admin
+dashboard rather than from the menu** - the same treatment Issues and the weight
+and money report get, and for the same reason: a menu is where you go looking
+for a screen, and none of the three is something you go looking for daily. The
+routes still exist and still carry their own permissions; hiding a page whose
+route still fires is a menu rule, never a guard. It lists everything
 that will text a customer on its own - the chases and the pickup reminders, in
-the order they happen, with a way into each conversation. Neil's call to file it
-beside the conversations it is about rather than under Dashboard with the board
-and the route: it is something an owner reviews, not something a driver acts
-on. The heading, the page title and the menu entry all say the same words,
-which is the rule the rest of the nav follows. Neil's ask: until it existed, the only way to know a text
+the order they happen, with a way into each conversation. The heading, the page
+title and the card all say the same words, which is the rule the rest of the
+nav follows. Neil's ask: until it existed, the only way to know a text
 was coming was to open the conversation it belonged to. Both lists come from
 `allPending()` functions that read the same rows and call the same `assess()`
 the sweeps do, so the screen and the send cannot disagree.

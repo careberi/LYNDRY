@@ -267,6 +267,15 @@ ${banner(problem, 'bad')}
       title: 'Orders',
       line: `${orderCounts.toCollect || 0} to collect, ${orderCounts.withUs || 0} with us`,
     },
+    {
+      // Three weights side by side and the money beside them. It reads real
+      // orders, so it belongs with the rest of what an owner checks rather
+      // than with the two what-if calculators under Tools.
+      href: '/ops/reports',
+      eyebrow: 'Ours, theirs, and the bill',
+      title: 'Weight and money report',
+      line: 'Every order that went to a laundromat, with all three weights',
+    },
   ]
     .map(card)
     .join('')}

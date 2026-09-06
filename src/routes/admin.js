@@ -321,10 +321,17 @@ const OPS_MENUS = Object.freeze([
       // The dashboard first: taking orders, the weight thresholds, and the way
       // through to promotions, text blasts and issues.
       { href: '/ops/admin', label: 'Admin dashboard', permission: 'service.manage' },
-      // The reconciliation: three weights and the money beside them, per order.
-      // Under Admin rather than Tools because it reads real orders - Tools is
-      // the two calculators that read nothing.
-      { href: '/ops/reports', label: 'Weights and money', permission: 'money.view' },
+      // NOT LISTED: the weight and money report, and customer follow-up. Both
+      // are cards on the Admin dashboard above instead, which is the same
+      // treatment Issues already gets and for the same reason - a menu is
+      // where you go looking for a screen, and neither of these is something
+      // you go looking for daily. /ops/reports and /ops/scheduled still exist
+      // and still answer to money.view and messages.view respectively.
+      //
+      // THIS IS A MENU RULE, NOT ACCESS CONTROL. Anybody who knows the URL and
+      // holds the permission still gets in, which is correct: hiding a page
+      // whose route still fires is exactly what this codebase says not to
+      // mistake for a guard.
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
       // "Messages" at Neil's request. It was called Conversations to make the
       // point that the screen is one row per phone NUMBER and holds people who
@@ -332,12 +339,6 @@ const OPS_MENUS = Object.freeze([
       // worth reading, so the page says so in its own subtitle rather than
       // relying on the menu word to carry it.
       { href: '/ops/messages', label: 'Messages', permission: 'messages.view' },
-      // WHAT WILL TEXT A CUSTOMER WITHOUT ANYBODY PRESSING SEND - the chases
-      // and the pickup reminders. Neil's call to file it under Admin, beside
-      // the conversations it is about, rather than under Dashboard with the
-      // board and the route. It is something an owner reviews, not something
-      // a driver acts on.
-      { href: '/ops/scheduled', label: 'Customer follow-up', permission: 'messages.view' },
       { href: '/ops/team', label: 'Team', permission: 'team.manage' },
       // "Laundromats", also Neil's. Worth knowing that the table behind it
       // holds property managers too - partner_type is LAUNDROMAT or
@@ -2011,6 +2012,22 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     const g = {};
     for (const [key, test] of Object.entries(inGroup)) g[key] = all.filter(test);
+
+    // UPCOMING RUNS SOONEST FIRST. Neil's ask, and the query cannot give it:
+    // it sorts pickup_date DESCENDING, which is right for Past - the most
+    // recent delivery at the top - and backwards for anything in the future,
+    // where it put a pickup eleven days out above one happening tomorrow.
+    //
+    // Sorted here rather than in the query because the two groups want
+    // opposite orders out of the same fetch. Time breaks the tie within a day,
+    // so an 8am pickup sits above a 4pm one; an order with no stated time
+    // sorts last, since it is the one nobody has pinned down.
+    g.upcoming.sort((a, b) => {
+      if (a.pickup_date !== b.pickup_date) return a.pickup_date < b.pickup_date ? -1 : 1;
+      const at = a.pickup_window_start || a.pickup_time || '99:99';
+      const bt = b.pickup_window_start || b.pickup_time || '99:99';
+      return at < bt ? -1 : at > bt ? 1 : 0;
+    });
 
     // Anything a group forgot. If this is ever non-empty the board is lying,
     // so it is shown rather than swallowed.
@@ -4914,7 +4931,7 @@ router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res
 
     return res.type('html').send(
       adminPage({
-        title: 'Weights and money',
+        title: 'Weight and money report',
         active: '/ops/reports',
         body: reportsBody({ report, partners: partnerRows || [], form }),
         user: req.opsUser,
