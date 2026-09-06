@@ -12,12 +12,23 @@ const { config } = require('../config');
 
 // The legal entity behind LYNDRY, exactly as registered for business texting.
 //
-// These two MUST match what was submitted to the carriers. During campaign
+// THE LEGAL NAME MUST MATCH WHAT WAS SUBMITTED TO THE CARRIERS. During campaign
 // review a person opens this website and checks that the company named in the
 // registration actually appears on it. A mismatch is a rejection.
 //
 // LYNDRY is the trading name; napiii LLC is the company.
 const LEGAL_NAME = 'napiii LLC';
+
+// THE ADDRESS IS NO LONGER PUBLISHED. Neil's call. It is kept here rather than
+// deleted because it is the registered address that went on the 10DLC
+// application, and if a reviewer asks to see it on the site, putting it back is
+// one line - add BUSINESS_ADDRESS to the token list below and it returns
+// everywhere it used to be.
+//
+// WORTH KNOWING BEFORE THAT HAPPENS: this used to sit beside the legal name in
+// the contact block on /contact, /privacy, /terms and /sms-terms precisely
+// because carriers look. Registration is still pending, so removing it is a
+// real, if small, risk to the campaign - taken deliberately, not by accident.
 const BUSINESS_ADDRESS = '8 The Green, Dover, DE 19901';
 
 // The public LYNDRY texting number — the one customers text to place an order.
@@ -61,6 +72,13 @@ const site = Object.freeze({
 
   tagline: 'Laundry, handled.',
 
+  // NOT PUBLISHED ON THE WEBSITE. Neil's call - the inbox is not one anybody
+  // is watching yet, and a dead address on a page is worse than none. It has
+  // no {{EMAIL}} token any more, so a page cannot render it by accident.
+  //
+  // It survives here because the HELP reply is legally required to carry a
+  // contact method and carriers check that one. Put it back on the site by
+  // adding the token again, once somebody is actually reading the mail.
   email: 'info@lyndry.com',
 
   publicPhoneDisplay: PUBLIC_PHONE_DISPLAY,
@@ -110,9 +128,9 @@ function phoneLine() {
 // not the texting number exists yet.
 function contactSentence() {
   if (site.hasPublicPhone) {
-    return `Text us at ${site.publicPhoneDisplay} or email ${site.email}.`;
+    return `Text us at ${site.publicPhoneDisplay}.`;
   }
-  return `Email us at ${site.email}. Our texting number goes live once carrier registration is approved — sign up now and we'll text you the moment it does.`;
+  return `Sign up below and we'll text you the moment our number goes live — carrier registration is still being approved.`;
 }
 
 // The tokens available inside public/pages/*.html files. Write
@@ -122,9 +140,7 @@ const tokens = Object.freeze({
   PHONE: site.publicPhoneDisplay,
   SMS_LINK: site.hasPublicPhone ? `sms:${site.publicPhoneLink}` : '/#get-started',
   LEGAL_NAME: site.legalName,
-  BUSINESS_ADDRESS: site.businessAddress,
   TAGLINE: site.tagline,
-  EMAIL: site.email,
   PHONE_LINE: phoneLine(),
   CONTACT_SENTENCE: contactSentence(),
   SERVICE_AREA: site.serviceArea,

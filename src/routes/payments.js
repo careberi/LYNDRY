@@ -107,7 +107,7 @@ function notAPaymentLink(res) {
     title: 'Payment link not found',
     heading: "That link doesn't work.",
     body: `<p>It may have been mistyped, or it belongs to an account that no longer exists.</p>
-           <p>Text us and we'll send you a new one, or email <a href="mailto:${site.email}" class="font-semibold text-brand-800 underline underline-offset-2">${site.email}</a>.</p>`,
+           <p>Text us and we'll send you a new one.</p>`,
   });
 }
 

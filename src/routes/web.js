@@ -84,7 +84,7 @@ const PAGES = [
     path: '/contact',
     file: 'contact.html',
     title: 'Contact',
-    description: `Get in touch with LYNDRY. Email ${site.email}, or ask about offering LYNDRY in your building.`,
+    description: `Get in touch with LYNDRY. Text us on ${site.publicPhoneDisplay}, or ask about offering LYNDRY in your building.`,
   },
   {
     // The page Neil SENDS to a laundromat he has already met, as opposed to
@@ -638,7 +638,7 @@ router.post('/signup', async (req, res, next) => {
     if (existing) {
       return fail(
         `That mobile number is already registered with LYNDRY. If it's yours and you ` +
-          `need to change something, email ${site.email} and we'll sort it out.`
+          `need to change something, just text us and we'll sort it out.`
       );
     }
 

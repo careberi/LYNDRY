@@ -394,7 +394,7 @@ async function openLocker(customer) {
 
   // Phase 7 wires this to the real hardware. Until then, refuse honestly
   // rather than telling someone a door opened when it did not.
-  return `Locker unlocking isn't switched on yet. Email ${site.email} and we'll sort it out.`;
+  return `Locker unlocking isn't switched on yet - just tell me what you need and I'll sort it out.`;
 }
 
 // --- What may still be changed, and when ------------------------------------

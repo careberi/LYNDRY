@@ -229,7 +229,7 @@ function footer() {
              checks that the company on the registration appears on the site.
              If it doesn't, the campaign is rejected. -->
         <p class="footer-legal">
-          ${site.name} is a service of ${site.legalName}, ${site.businessAddress}<br>
+          ${site.name} is a service of ${site.legalName}<br>
           &copy; ${year} ${site.legalName} &middot; Message and data rates may apply. Reply STOP to end.<br>
           We never sell or share your phone number with third parties for marketing.
         </p>
