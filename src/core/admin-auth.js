@@ -29,9 +29,22 @@ const { normalisePhone } = require('./phone');
 
 const COOKIE_NAME = 'ly_ops';
 
-// Long enough that a driver isn't signing in mid-route, short enough that a
-// lost phone stops working on its own.
-const SESSION_DAYS = 30;
+// AN HOUR OF DOING NOTHING, and then you sign in again. Neil's call: he was
+// staying signed in on every device he had ever opened the ops screens on,
+// which is a lot of live sessions for a tool that holds customer addresses,
+// phone numbers and the books.
+//
+// IT IS INACTIVITY, NOT AN HOUR FROM SIGNING IN, and the difference is the
+// whole feature. Every authenticated request re-issues the cookie with a fresh
+// hour on it - see requireAdminPage - so somebody working is never interrupted
+// and somebody who put their phone down is signed out. An absolute hour would
+// throw a driver out mid-round for no security gain.
+//
+// It replaced thirty days. Thirty was chosen so a driver was not signing in
+// mid-route; the sliding window gives that for free and does not leave a
+// month-long session on a phone in a taxi.
+const SESSION_MINUTES = 60;
+const SESSION_MS = SESSION_MINUTES * 60 * 1000;
 
 // Codes are short-lived on purpose. One sitting valid for an hour is one
 // someone can read off a lock screen long after it was needed.
@@ -58,9 +71,9 @@ function hmac(value) {
 // --- The session cookie -----------------------------------------------------
 
 function issueSession(userId) {
-  const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+  const expiresAt = Date.now() + SESSION_MS;
   const payload = `${userId}.${expiresAt}`;
-  return { value: `${payload}.${hmac(`ops.${payload}`)}`, maxAgeMs: SESSION_DAYS * 24 * 60 * 60 * 1000 };
+  return { value: `${payload}.${hmac(`ops.${payload}`)}`, maxAgeMs: SESSION_MS };
 }
 
 // Returns the user id the cookie vouches for, or null.
@@ -303,6 +316,16 @@ async function requireAdminPage(req, res, next) {
     }
 
     req.opsUser = user;
+
+    // THE SLIDING HOUR. Re-issued on every request that got this far, so the
+    // clock measures time since you last DID something rather than time since
+    // you signed in. Without this line the session is an absolute hour and a
+    // driver gets thrown out halfway through a round.
+    //
+    // It is set after the ops_users check above, so a person switched off does
+    // not get their session quietly extended on the way to being refused.
+    setSessionCookie(res, userId);
+
     return next();
   } catch (err) {
     return next(err);

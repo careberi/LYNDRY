@@ -1891,6 +1891,25 @@ and write a credential row the next page then swallows.
 unknown number gets the identical "check your phone" response. Otherwise
 `/ops/login` becomes a way to find out who works here.
 
+**AN OPS SESSION LAPSES AFTER AN HOUR OF DOING NOTHING.** Neil's call: he was
+staying signed in on every device he had ever opened the ops screens on, which
+is a lot of live sessions for a tool holding customer addresses, phone numbers
+and the books.
+
+**It is INACTIVITY, not an hour from signing in, and that is the whole
+feature.** `requireAdminPage` re-issues the cookie with a fresh hour on every
+authenticated request, so somebody working is never interrupted and somebody who
+put their phone down is signed out. An absolute hour would throw a driver out
+mid-round for no security gain. It replaced thirty days, which existed so a
+driver was not signing in mid-route - the sliding window gives that for free.
+
+**The slide happens AFTER the `ops_users` check**, so somebody switched off
+does not get their session quietly extended on the way to being refused.
+
+**The customer sign-in at `/account` is untouched and still lasts 14 days.** A
+customer session holds one person's own orders, not the business, and timing
+somebody out of their own account in an hour is friction for nothing.
+
 **The session cookie is not a credential.** It is `userId.expiry`, signed with
 `ADMIN_API_KEY`. A leaked cookie expires on its own and never held a secret.
 **Rotating `ADMIN_API_KEY` signs everybody out instantly** — that is the
