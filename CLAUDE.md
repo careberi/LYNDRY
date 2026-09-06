@@ -826,11 +826,48 @@ somebody wants the clean laundry left somewhere different. **Anything asking
 "do we know where the bag goes" must check both** - checking `dropoff_spot`
 alone says no for almost every customer who has told us.
 
-**Standing orders need a scheduler or they never happen.** `npm run
-cron:recurring` books tomorrow's recurring pickups and texts each customer the
-evening before with a way to SKIP. Nothing in the app calls it — it is a Railway
-cron service running once a day. Without that, a customer can set up a weekly
-pickup, be told it is arranged, and never be collected from.
+**THE APP RUNS ITS OWN NIGHTLY PASS. There is no cron service and there does
+not need to be.** `src/core/nightly.js` watches the clock inside the running
+server and does two things once an evening, in this order: book tomorrow's
+standing orders (texting those customers as it goes), then remind everybody else
+whose pickup is tomorrow.
+
+**It used to be a Railway cron service, and that was the wrong answer.** A cron
+is a second service configured by hand in a dashboard - and nobody had actually
+set this one up, so standing orders and reminders would both have sent nothing
+while looking perfectly healthy. Neil asked why it needed a cron at all. It
+does not: the web app is already running every minute of every day, because an
+inbound text has to be answered, so it can watch the clock for free.
+
+**A POLL, NOT A TIMER.** Every ten minutes it asks two questions - is it evening,
+and is `app_settings.nightly_ran_on` today. A one-shot timer set at startup
+would be lost by any deploy, and a deploy at 5:59pm would silently skip the
+night. A poll simply asks again.
+
+**QUIET HOURS ARE A HARD STOP.** It runs between `NIGHTLY_HOUR` (18) and 9pm,
+and if the app was down all evening it does **not** catch up at midnight - it
+shouts in the log that it missed the night and waits. Federal rules put texts
+inside 8am to 9pm in the recipient's own time; a reminder nobody gets is a bad
+day, a text at 1am is a complaint and a carrier flag.
+
+**OFF OUTSIDE PRODUCTION, and that guard is load-bearing.** The dev server
+shares the production database, so a laptop left running at six in the evening
+would do the whole pass, stamp every order as reminded, and send the texts
+through the fake provider - meaning nothing reaches a phone and production then
+finds nothing left to do. Everybody's reminder would vanish because somebody
+had a terminal open. `NIGHTLY_ENABLED=true` overrides it deliberately.
+
+**`npm run cron:recurring` is still the way to run the pass by hand**, and it
+calls the same `nightly.runPass()` the timer does rather than reimplementing
+it. If a cron service is ever set up as well, the two race to do the same
+idempotent work and whichever wins does it - `bookPickup()` refuses a second
+pickup for anybody who has one waiting, and `orders.reminder_sent_at` stops a
+reminder going twice.
+
+**One instance is assumed**, like the sign-in throttles. Two web processes would
+both poll and the "has tonight run" check is a read then a write with no lock
+between them. The per-order stamps make that mostly harmless; if this ever runs
+on more than one replica, that check needs a lock.
 
 **That one cron is now the whole nightly pass, and it does two things in
 order**: book tomorrow's standing orders (texting those customers as it goes),

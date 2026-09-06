@@ -122,6 +122,28 @@ async function setTakingOrders(taking, reason, opsUserId) {
   return data;
 }
 
+// THE LAST NIGHT THE PASS COMPLETED.
+//
+// Standing orders and day-before reminders both run once an evening, and this
+// is how the app knows tonight's has already happened. Written after the pass,
+// never before, so a failure retries on the next poll rather than being
+// written off - which is safe because every part of that pass refuses to do
+// the same thing twice. See src/core/nightly.js.
+async function markNightlyRan(date) {
+  const { data, error } = await db
+    .from('app_settings')
+    .update({ nightly_ran_on: date })
+    .eq('id', true)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+
+  cached = data;
+  cachedAt = Date.now();
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // WHERE THE VAN LIVES.
 //
@@ -278,4 +300,4 @@ module.exports = {
   setServiceBase,
   weightLimits,
   setWeightLimits, read, takingOrders, pausedReason, setTakingOrders,
-  opensOn, setOpensOn, CACHE_MS };
+  opensOn, setOpensOn, markNightlyRan, CACHE_MS };

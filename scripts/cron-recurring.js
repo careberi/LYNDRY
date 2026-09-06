@@ -12,9 +12,19 @@
 // been texted, so step 2 must not text it again. recurring.bookDue() records
 // its own message as the reminder, which is what keeps them apart.
 //
-// The npm script is still called cron:recurring because that is what Railway's
-// scheduler is pointed at. Renaming it would mean a name in two places that
-// could disagree, for no gain.
+// THE APP DOES THIS BY ITSELF NOW. src/core/nightly.js watches the clock inside
+// the running server, because a cron service is a second thing to configure by
+// hand in a dashboard and this one had never actually been set up - so the
+// whole feature would have sent nothing and looked fine doing it.
+//
+// This script stays as the way to run the pass by hand, and it calls the same
+// runPass() the timer does rather than reimplementing it. Safe to run at any
+// time: every part of the pass refuses to do the same thing twice. If a cron
+// service IS ever set up, it and the app simply race to do the same idempotent
+// work and whichever wins does it.
+//
+// The npm script keeps the name cron:recurring because that is what any
+// existing scheduler points at.
 //
 // A customer who says "same time every week" has a schedule stored against
 // them, and something has to actually look at those schedules and book the
@@ -42,8 +52,7 @@
 //   npm run cron:recurring -- 2026-08-20   book for a named day, for testing
 // ---------------------------------------------------------------------------
 
-const recurring = require('../src/core/recurring');
-const reminders = require('../src/core/reminders');
+const nightly = require('../src/core/nightly');
 const booking = require('../src/core/booking');
 
 async function main() {
@@ -54,7 +63,10 @@ async function main() {
   console.log('');
   console.log(`  Standing orders - it is ${booking.nowInService().date} ${booking.nowInService().time} in New Jersey`);
 
-  const result = await recurring.bookDue(date ? { date } : {});
+  // THE SAME FUNCTION THE APP'S OWN TIMER CALLS. This script is now the
+  // by-hand door onto the nightly pass rather than a second implementation of
+  // it, so testing it here tests what actually runs at night.
+  const { booked: result, reminded } = await nightly.runPass(date ? { date } : {});
 
   console.log('');
   console.log(`  Booking for ${result.date}`);
@@ -87,8 +99,6 @@ async function main() {
   // Run even when the standing-order half found nothing: the two are
   // independent, and the reminder is the half that runs every single night.
   console.log('');
-  const reminded = await reminders.sendDue(date ? { date } : {});
-
   console.log(`  Reminders for ${reminded.date}`);
 
   if (reminded.sent.length) {

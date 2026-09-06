@@ -830,6 +830,11 @@ function processBody(user) {
         stays where you put it is forgetting you put it there.
       </p>
       <p>
+        <strong>The app does its own evening round of texts</strong> - it watches
+        the clock itself rather than depending on anything scheduled elsewhere,
+        and it will not send outside 8am to 9pm whatever happens.
+      </p>
+      <p>
         <strong>Every pickup gets a reminder the evening before</strong> saying
         when we are coming and where to leave the bag, so a bag is actually out
         when the van arrives. Somebody who booked in the last few hours is not

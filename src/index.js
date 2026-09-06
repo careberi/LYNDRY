@@ -22,6 +22,7 @@ const bag = require('./routes/bag');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 const burst = require('./core/burst');
+const nightly = require('./core/nightly');
 
 // ---------------------------------------------------------------------------
 // The server
@@ -196,6 +197,13 @@ const server = app.listen(config.port, () => {
   warnAboutUnusableCredentials();
   warnIfNobodyCanAlwaysBook();
   checkDatabase();
+
+  // WATCH THE CLOCK OURSELVES rather than depending on a cron service somebody
+  // has to remember to set up in a dashboard. Standing orders and the
+  // day-before reminders both hang off this; without it they simply never
+  // happen, and nothing anywhere says so. Off outside production - see
+  // src/core/nightly.js for why a dev server doing this would be a disaster.
+  nightly.start();
 });
 
 // When the host wants to stop or redeploy us it sends SIGTERM. Finish the
