@@ -830,6 +830,14 @@ function processBody(user) {
         stays where you put it is forgetting you put it there.
       </p>
       <p>
+        <strong>Every pickup gets a reminder the evening before</strong> saying
+        when we are coming and where to leave the bag, so a bag is actually out
+        when the van arrives. Somebody who booked in the last few hours is not
+        reminded - the confirmation is the message right above it - and a
+        standing order is not reminded twice, because the text that books it is
+        already the reminder.
+      </p>
+      <p>
         <strong>It waits about twenty seconds before answering.</strong> People
         text a business the way they text a friend - "hey", then the question,
         then the time - and answering each one as it lands gives them three

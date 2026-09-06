@@ -785,11 +785,60 @@ longer read; they stay until it is certain nothing touches them.
 a duplicate being created, and `bookPickup()` would refuse the second anyway —
 silently, which is worse.
 
+**EVERY PICKUP IS REMINDED THE EVENING BEFORE.** Neil's ask: somebody books
+on Saturday for Tuesday, and by Monday night the confirmation is four messages
+up a thread they have not looked at - so the van arrives at a door with no bag
+on it. `src/core/reminders.js` sends one text the night before saying when we
+are coming and where to leave the bag.
+
+**It is the evening before, not exactly 24 hours.** Neil said both, meaning the
+same thing. A true per-order 24-hour timer needs a job queue, which CLAUDE.md
+rules out, or a cron firing every few minutes, which is a lot of machinery for a
+van that visits a door once a day. The evening before is also when somebody can
+act on it - nobody puts a bag out at 6am because they were reminded at 6am.
+
+**`orders.reminder_sent_at` is the one thing here that is stored rather than
+derived, and it has to be.** "Did we already tell them" is a fact about
+something we DID; the nearest derivation is searching `messages` for a sentence
+that looks like a reminder, which breaks the first time the wording changes. It
+is what makes the pass safe to run twice, which matters because Railway retries.
+
+**Stamped AFTER the send, never before.** A stamp that went first would mark an
+order reminded when the carrier was down, and nobody would ever be told.
+Sent-but-unstamped is the safer failure: it costs one duplicate, and only if the
+pass dies between the two lines.
+
+**A STANDING ORDER IS NOT REMINDED TWICE.** It already gets a day-before text
+with the SKIP line, sent as it is booked, so `recurring.bookDue()` stamps
+`reminder_sent_at` at that moment. Without that, the reminder half of the same
+nightly pass would find the order unreminded an hour later and send a second,
+near-identical text the same evening.
+
+**A pickup booked in the last three hours is skipped.** They booked it this
+evening and the confirmation is the message directly above; a second text an
+hour later reads as a system talking to itself. Same reasoning as `AT_PARTNER`
+and `READY` saying nothing.
+
+**Both spot fields are read, newest first** - `dropoff_spot || special_instructions`,
+exactly as `run.spotOf()` does. `special_instructions` is where the AI saves the
+pickup spot and where every older customer's is; `dropoff_spot` is only set when
+somebody wants the clean laundry left somewhere different. **Anything asking
+"do we know where the bag goes" must check both** - checking `dropoff_spot`
+alone says no for almost every customer who has told us.
+
 **Standing orders need a scheduler or they never happen.** `npm run
 cron:recurring` books tomorrow's recurring pickups and texts each customer the
 evening before with a way to SKIP. Nothing in the app calls it — it is a Railway
 cron service running once a day. Without that, a customer can set up a weekly
 pickup, be told it is arranged, and never be collected from.
+
+**That one cron is now the whole nightly pass, and it does two things in
+order**: book tomorrow's standing orders (texting those customers as it goes),
+then remind everybody else whose pickup is tomorrow. The order matters - a
+standing order booked in the first half has already been texted, and the second
+half must not text it again. The npm script keeps its old name because that is
+what Railway's scheduler points at; renaming it would put the name in two places
+that could disagree.
 
 It calls `recurring.bookDue()` directly rather than posting to
 `/ops/cron/recurring`; same repo, same env, same database, so a URL and an admin

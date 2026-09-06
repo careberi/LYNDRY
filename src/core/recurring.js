@@ -216,6 +216,17 @@ async function bookDue({ date } = {}) {
         customer.id
       );
 
+      // THAT MESSAGE IS THE DAY-BEFORE REMINDER, so it is recorded as one.
+      // Without this the nightly pass would find the order unreminded an hour
+      // later and send a second, near-identical text the same evening.
+      await db
+        .from('orders')
+        .update({ reminder_sent_at: new Date().toISOString() })
+        .eq('id', result.order.id)
+        .then(({ error }) => {
+          if (error) console.error(`Could not record the reminder: ${error.message}`);
+        });
+
       booked.push(result.order);
     } catch (err) {
       failed.push({ customer, reason: err.message });

@@ -103,7 +103,16 @@ const GAPS = [
     // door with no idea where to leave a bag is a real problem, so it is worth
     // a button.
     blocks: false,
-    missing: (c) => !String((c.preferences || {}).dropoff_spot || '').trim(),
+    // BOTH FIELDS, exactly as run.spotOf() and the confirmation read them.
+    // This checked dropoff_spot alone and was wrong: that field is only set
+    // when somebody wants the clean laundry left somewhere DIFFERENT, which
+    // almost nobody does. The spot the driver actually needs is saved to
+    // special_instructions, so every customer who had told us exactly where
+    // to find their bag was still being offered a button to ask them again.
+    missing: (c) => {
+      const prefs = c.preferences || {};
+      return !String(prefs.dropoff_spot || prefs.special_instructions || '').trim();
+    },
     why: () => 'Nobody has said where the driver finds the bag, or where to leave it coming back.',
     // BOTH WAYS ROUND. One spot serves both legs, and asking only where to
     // FIND the bag leaves somebody expecting to be asked again about delivery.

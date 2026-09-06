@@ -1,7 +1,20 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// Book tomorrow's standing orders. Run once a day.
+// THE NIGHTLY PASS. Run once a day, in the evening. Two jobs:
+//
+//   1. Book tomorrow's standing orders, and tell those customers (with the way
+//      to SKIP in the same message).
+//   2. Remind EVERYBODY ELSE whose pickup is tomorrow that it is tomorrow, and
+//      where to leave the bag.
+//
+// In that order, and it matters: a standing order booked in step 1 has already
+// been texted, so step 2 must not text it again. recurring.bookDue() records
+// its own message as the reminder, which is what keeps them apart.
+//
+// The npm script is still called cron:recurring because that is what Railway's
+// scheduler is pointed at. Renaming it would mean a name in two places that
+// could disagree, for no gain.
 //
 // A customer who says "same time every week" has a schedule stored against
 // them, and something has to actually look at those schedules and book the
@@ -30,6 +43,7 @@
 // ---------------------------------------------------------------------------
 
 const recurring = require('../src/core/recurring');
+const reminders = require('../src/core/reminders');
 const booking = require('../src/core/booking');
 
 async function main() {
@@ -63,6 +77,37 @@ async function main() {
 
   console.log('');
   console.log(`  ${result.booked.length} booked, ${result.failed.length} not.`);
+
+  // --- 2. Everybody whose pickup is tomorrow ------------------------------
+  //
+  // Including the ones just booked above? No - those were texted as they were
+  // booked and recorded as reminded, so they are not due one. This is the
+  // people who booked days ago and have not heard from us since.
+  //
+  // Run even when the standing-order half found nothing: the two are
+  // independent, and the reminder is the half that runs every single night.
+  console.log('');
+  const reminded = await reminders.sendDue(date ? { date } : {});
+
+  console.log(`  Reminders for ${reminded.date}`);
+
+  if (reminded.sent.length) {
+    for (const one of reminded.sent) {
+      console.log(`    reminded  #${one.order.order_number}`);
+    }
+  } else {
+    console.log('    nobody to remind');
+  }
+
+  // Printed rather than swallowed. A customer skipped because their card died,
+  // or because they opted out, is worth seeing - the pass succeeded, that one
+  // person did not get a text.
+  for (const one of reminded.skipped) {
+    console.log(`    NOT reminded  #${one.order.order_number}  (${one.reason})`);
+  }
+
+  console.log('');
+  console.log(`  ${reminded.sent.length} reminded, ${reminded.skipped.length} not.`);
   console.log('');
 }
 
