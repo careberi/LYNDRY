@@ -79,12 +79,21 @@ function build() {
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    // N is required by 3.0 even for a business. The name sits in the given-name
-    // slot so a phone that builds its display name from N rather than FN still
-    // shows LYNDRY rather than a blank.
-    `N:;${site.name};;;`,
+    // THE NAME GOES IN THE FAMILY SLOT, NOT THE GIVEN ONE, and this is the bug
+    // that shipped first. N's fields are family;given;middle;prefix;suffix, so
+    // `N:;LYNDRY;;;` filed LYNDRY as a FIRST name with no surname. Combined
+    // with X-ABShowAs:COMPANY below - which tells iOS to display ORG rather
+    // than N - the card arrived on an iPhone with its name field empty and the
+    // save sheet offering "Add Name".
+    //
+    // Apple's own exported company cards put the name in the family slot, set
+    // FN, and give ORG a trailing semicolon for the empty department. All three
+    // carry the name now, so no client can end up with a blank: one that builds
+    // a display name from N gets it, one that reads FN gets it, and iOS reads
+    // ORG because of X-ABShowAs.
+    `N:${site.name};;;;`,
     `FN:${site.name}`,
-    `ORG:${site.name}`,
+    `ORG:${site.name};`,
     // Files it as a company, so iOS does not show it under a first name.
     'X-ABShowAs:COMPANY',
     `TEL;TYPE=CELL,VOICE,PREF:${site.publicPhoneLink}`,

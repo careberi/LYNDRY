@@ -364,7 +364,11 @@ const BERGEN_DESCRIPTION =
 router.get('/lyndry.vcf', (req, res) => {
   res
     .type('text/vcard; charset=utf-8')
-    .set('Content-Disposition', 'attachment; filename="LYNDRY.vcf"')
+    // INLINE, NOT ATTACHMENT. Safari treats an attachment as a download and
+    // treats an inline vCard as something to open - and opening is what puts
+    // the "Create New Contact" sheet in front of somebody. The filename still
+    // rides along for anything that does save it to disk.
+    .set('Content-Disposition', 'inline; filename="LYNDRY.vcf"')
     .set('Cache-Control', 'public, max-age=86400')
     .send(vcard.card());
 });
