@@ -671,6 +671,7 @@ GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
+POST /ops/messages/:phone/ai who answers this number: the AI, or a person
 GET  /ops/issues             everything still waiting on a person
 GET  /ops/economics          what the shape of a run earns      } models, not
 GET  /ops/planner            what one load of stops earns       } reports
@@ -1247,6 +1248,51 @@ screen ends up showing a driver something it shouldn't.
 | **Admin** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Driver** | ✓ | — | — | — | — | — |
 | **Sales** | ✓ | ✓ | ✓ | ✓ | — | — |
+
+**THE AI CAN BE SWITCHED OFF ON ONE CONVERSATION, and only a person switches
+it back on.** Neil's call. Something goes wrong in a thread, an admin wants to
+handle the customer themselves, and the AI has to get out of the way
+completely - not soften its answers, say nothing at all - until they are done.
+`ai_pauses`, one row per phone number, read by `aiPause.isPaused()` at the top
+of `answerWithBrain()`.
+
+**It is deliberately NOT the hold in `issues.js`, and confusing the two would
+undo it.** A hold is the AI admitting it is stuck: it goes quiet, texts every
+admin, and lifts ITSELF as soon as a person has replied and the customer has
+answered. That release is exactly wrong for somebody working a customer by
+hand - they would send a message, get an answer, and the AI would walk into the
+middle of their conversation. So the pause is a switch with a person at both
+ends and nothing the customer does moves it.
+
+| | |
+|---|---|
+| the hold | the AI ran out of road and is waiting to be rescued |
+| the pause | somebody has this one, hands off |
+
+**Handing it back lifts an open hold too.** The two mute the AI independently,
+so without that an admin would press the button, watch the AI stay silent, and
+reasonably conclude it was broken. It lives in `aiPause.resume()` rather than
+in the route, so a second caller cannot forget it.
+
+**`isPaused()` fails closed.** If the switch cannot be read the AI says
+nothing: talking over a person handling a complaint is worse than a message
+going unanswered for a minute, and a failure there means the database is down,
+in which case the reply was never getting written anyway.
+
+**Keyed on the phone number, like `dismissed_leads`,** because the screen it
+lives on is a list of numbers and some of them never signed up. Keying on a
+customer would lose the pause the moment a number that was never a customer
+became one.
+
+**A muted thread is badged on the conversations list and counted in a banner at
+the top of it.** The whole risk of a switch that stays where you put it is
+forgetting you put it there, and a paused thread is a customer nobody is
+answering at all.
+
+**Sending a message does not switch the AI off.** A button that quietly does a
+second thing is one nobody trusts. What it does instead is say so on the way
+back - writing to somebody while the AI is still answering them is how two of
+us reply to the same message.
 
 **The conversations screen is grouped by phone number, not by customer,** and
 that is the point: a message from someone with no account is still logged

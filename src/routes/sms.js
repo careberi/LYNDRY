@@ -11,6 +11,7 @@ const actions = require('../core/actions');
 const onboarding = require('../core/onboarding');
 const orders = require('../core/orders');
 const issues = require('../core/issues');
+const aiPause = require('../core/ai-pause');
 const recurring = require('../core/recurring');
 const { site } = require('../web/site');
 
@@ -188,6 +189,22 @@ async function handleInbound(inbound) {
 }
 
 async function answerWithBrain(customer, text, from) {
+  // --- HAS SOMEBODY SWITCHED THE AI OFF FOR THIS NUMBER? -------------------
+  //
+  // The toggle on the conversation screen. An admin dealing with a customer
+  // themselves turns it off, and the AI says NOTHING until they turn it back
+  // on - not a holding line, not an apology, nothing. To the customer that is
+  // simply a conversation with the person they were already talking to.
+  //
+  // Checked before the automatic hold below and never lifted here, because
+  // this one is a person's decision and only a person reverses it. Their
+  // message is already logged by the caller, so the admin sees it in the
+  // thread and answers it there.
+  if (await aiPause.isPaused(from)) {
+    console.warn(`PAUSED  ${from}: a person is handling this conversation. Saying nothing.`);
+    return;
+  }
+
   // --- IS A PERSON HANDLING THIS CONVERSATION? -----------------------------
   //
   // NEIL'S CALL. When the AI repeats itself it has run out of road, and

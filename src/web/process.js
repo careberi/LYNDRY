@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '3 September 2026';  // the card is charged at the laundromat's weigh-in
+const REVIEWED = '6 September 2026';  // a person can take a conversation over from the AI
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -806,6 +806,28 @@ function processBody(user) {
         yes, so it is forbidden to reason from the name of a town, to list the
         towns we cover, or to say yes before an address has been saved. It asks
         for the address; the code checks it and that answer is final.
+      </p>
+    </div>
+    <div class="pr-note" style="margin-top:26px;">
+      <h3>Two ways the AI stops talking</h3>
+      <p>
+        <strong>It gives up on its own.</strong> When it finds itself repeating
+        the same answer it has run out of road, and everything it says after
+        that makes things worse. So it goes silent, raises an issue, and every
+        admin gets a text. The customer is told nothing - to them it is a pause
+        and then a reply from LYNDRY, which is what happens at any small
+        business when somebody goes to check. It picks the conversation back up
+        by itself once a person has replied and the customer has answered.
+      </p>
+      <p>
+        <strong>Or you switch it off.</strong> On any conversation there is a
+        button that mutes the AI for that number. It then answers nothing at
+        all until somebody switches it back on - not the customer replying, not
+        a day passing. That is the difference between the two: the first is the
+        AI asking for help, the second is a person saying they have got this.
+        A muted conversation is badged on the conversations list and counted in
+        a banner at the top of it, because the whole risk of a switch that
+        stays where you put it is forgetting you put it there.
       </p>
     </div>`
   ) : ''}

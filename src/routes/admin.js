@@ -15,6 +15,7 @@ const booking = require('../core/booking');
 const billing = require('../core/billing');
 const recurring = require('../core/recurring');
 const issues = require('../core/issues');
+const aiPause = require('../core/ai-pause');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { processBody } = require('../web/process');
@@ -6442,6 +6443,14 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
 
     const leads = threads.filter(isOpenLead);
 
+    // WHICH OF THESE HAS SOMEBODY TAKEN OVER. One query for the whole list
+    // rather than a lookup per row, and the answer is used twice below: a
+    // badge on the row, and a count at the top. The count is the important
+    // one - a conversation muted on Tuesday and forgotten about is a customer
+    // nobody is answering, and nothing else in the system would ever say so.
+    const pausedPhones = await aiPause.pausedAmong(threads.map((t) => t.phone));
+    const pausedThreads = threads.filter((t) => pausedPhones.has(t.phone));
+
     const row = (t) => {
       const who = t.customer
         ? `<span style="font-weight:600;">${escapeHtml(t.customer.name || 'Unnamed')}</span>`
@@ -6452,11 +6461,15 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
           ? ` <span class="badge" style="background:var(--stain-500);color:var(--paper-050);">Opted out</span>`
           : '';
 
+      const muted = pausedPhones.has(t.phone)
+        ? ` <span class="badge" style="background:var(--sunbeam-500);">AI off</span>`
+        : '';
+
       const preview = String(t.last.body || '').replace(/\s+/g, ' ').slice(0, 90);
 
       return [
         `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">
-           ${who}${stopped}
+           ${who}${stopped}${muted}
            <div style="font-size:13px;color:var(--ink-500);font-variant-numeric:tabular-nums;">${escapeHtml(
              formatPhone(t.phone)
            )}</div>
@@ -6497,6 +6510,43 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                  ${
                    leads.length > 8
                      ? `<span style="align-self:center;font-size:14px;">and ${leads.length - 8} more</span>`
+                     : ''
+                 }
+               </div>
+             </div>`
+          : ''
+      }
+
+      ${
+        // SOMEBODY IS ON THE HOOK FOR THESE. Said at the top of the list for
+        // the same reason the leads banner is: the whole risk of a switch that
+        // stays off until a person moves it is a person forgetting they moved
+        // it, and a thread with the AI muted is one where nothing at all
+        // replies to a customer.
+        pausedThreads.length
+          ? `<div class="card" style="padding:18px 22px;margin-bottom:28px;background:var(--sunbeam-500);">
+               <p style="margin:0 0 4px;font-size:16px;">
+                 <strong>The AI is switched off on ${pausedThreads.length} ${
+                   pausedThreads.length === 1 ? 'conversation' : 'conversations'
+                 }.</strong>
+                 Nothing answers ${pausedThreads.length === 1 ? 'that number' : 'those numbers'} but a person.
+               </p>
+               <p style="margin:10px 0 0;font-size:15px;line-height:1.55;">
+                 Open the thread to reply, or switch the AI back on when you are done with them.
+               </p>
+               <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+                 ${pausedThreads
+                   .slice(0, 8)
+                   .map(
+                     (t) =>
+                       `<a class="btn btn-sm btn-outline" href="/ops/messages/${encodeURIComponent(
+                         t.phone.replace(/\D/g, '')
+                       )}">${escapeHtml(t.customer ? t.customer.name || formatPhone(t.phone) : formatPhone(t.phone))}</a>`
+                   )
+                   .join('')}
+                 ${
+                   pausedThreads.length > 8
+                     ? `<span style="align-self:center;font-size:14px;">and ${pausedThreads.length - 8} more</span>`
                      : ''
                  }
                </div>
@@ -6595,13 +6645,17 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       );
     }
 
-    const [{ data: messages, error }, { data: customer }] = await Promise.all([
+    // The pause is NOT caught and softened into "probably fine". If we cannot
+    // read the switch the AI is silent - isPaused() fails closed - and a page
+    // claiming it is answering while it says nothing is the worst of both.
+    const [{ data: messages, error }, { data: customer }, pause] = await Promise.all([
       db
         .from('messages')
         .select('direction, body, created_at, delivery_status, delivery_error')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
       db.from('customers').select('id, name, status, address_line1, city, postal_code').eq('phone', phone).maybeSingle(),
+      aiPause.stateFor(phone),
     ]);
 
     if (error) throw error;
@@ -6625,6 +6679,17 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     const latest = thread.length ? thread[thread.length - 1].created_at : null;
     const leadOpen =
       !customer && (!dismissal || (latest && isAfter(latest, dismissal.dismissed_at)));
+
+    // One shape whether there has ever been a pause row or not, so the markup
+    // below is not doing null checks three levels deep.
+    const pauseState = {
+      paused: Boolean(pause && pause.paused),
+      at: pause ? pause.paused_at : null,
+      who: pause ? pause.paused_by_name : null,
+      note: pause ? pause.note : null,
+      handedBack: pause && !pause.paused ? pause.resumed_at : null,
+      handedBackBy: pause && !pause.paused ? pause.resumed_by_name : null,
+    };
 
     const heading = customer ? customer.name || 'Unnamed customer' : formatPhone(phone);
 
@@ -6728,6 +6793,74 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
                </p>
              </div>`
           : ''
+      }
+
+      ${
+        // WHO IS ANSWERING THIS NUMBER - the AI, or you.
+        //
+        // NEIL'S CALL, and deliberately not the hold above. The hold is the AI
+        // admitting it is stuck, and it lifts ITSELF the moment the customer
+        // replies to a person. That is exactly wrong for somebody handling a
+        // customer by hand: they would send a message, get an answer back, and
+        // the AI would walk straight into the middle of their conversation. So
+        // this is a switch with a person at both ends.
+        //
+        // Shown to anybody who can read the thread, because "the AI is off" is
+        // the reason nobody has replied and that is worth knowing. The button
+        // is behind messages.send, like the box below: reading a conversation
+        // and deciding who answers it are different acts.
+        pauseState.paused
+          ? `<div class="card card-xl" style="padding:22px;margin-bottom:20px;background:var(--sunbeam-500);">
+               <p class="eyebrow" style="margin:0 0 8px;">You are handling this one</p>
+               <p style="font-size:16px;line-height:1.6;margin:0 0 8px;">
+                 <strong>The AI is switched off for this number.</strong> It will
+                 not answer anything they send, so every reply has to be written
+                 below. They have not been told anything is different - to them
+                 this is just LYNDRY texting back.
+               </p>
+               <p style="font-size:15px;line-height:1.55;margin:0 0 16px;">
+                 Switched off ${escapeHtml(timeAgo(pauseState.at))}${
+                   pauseState.who ? ` by ${escapeHtml(pauseState.who)}` : ''
+                 }${pauseState.note ? ` - ${escapeHtml(pauseState.note)}` : ''}.
+               </p>
+               ${
+                 canSend
+                   ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/ai" style="margin:0;">
+                        <input type="hidden" name="state" value="on">
+                        <button class="btn btn-ink btn-lg" type="submit">Let the AI answer again</button>
+                      </form>`
+                   : ''
+               }
+             </div>`
+          : `<div class="card" style="padding:18px 22px;margin-bottom:20px;">
+               <p style="margin:0 0 4px;font-size:16px;line-height:1.55;">
+                 <strong>The AI is answering this number.</strong> Anything you
+                 send below goes out alongside it.
+               </p>
+               ${
+                 pauseState.handedBack
+                   ? `<p style="margin:0;font-size:14px;color:var(--ink-500);">
+                        Handed back ${escapeHtml(timeAgo(pauseState.handedBack))}${
+                          pauseState.handedBackBy ? ` by ${escapeHtml(pauseState.handedBackBy)}` : ''
+                        }.
+                      </p>`
+                   : ''
+               }
+               ${
+                 canSend
+                   ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/ai"
+                            style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:14px 0 0;">
+                        <input type="hidden" name="state" value="off">
+                        <div style="flex:1 1 240px;min-width:0;">
+                          <label class="field-label" for="ai-why">Taking it over? (optional note)</label>
+                          <input class="field" id="ai-why" name="note" type="text" maxlength="200"
+                                 placeholder="complaint about a stain, calling them">
+                        </div>
+                        <button class="btn btn-outline" type="submit">Switch the AI off</button>
+                      </form>`
+                   : ''
+               }
+             </div>`
       }
 
       <div class="card card-xl" style="padding:28px;">
@@ -6858,13 +6991,74 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
     // actually sent. Nothing may text somebody without recording it.
     await notify.sendAndLog(phone, body, customer ? customer.id : null);
 
-    return res.redirect(303, `${back}?note=${encodeURIComponent('Sent.')}`);
+    // SENDING DOES NOT SWITCH THE AI OFF, on purpose - a button that quietly
+    // does a second thing is a button nobody trusts. But writing to somebody
+    // while the AI is still answering them is how two of us reply to the same
+    // message, so it says so and leaves the decision where Neil put it.
+    const stillAnswering = !(await aiPause.isPaused(phone));
+
+    return res.redirect(
+      303,
+      `${back}?note=${encodeURIComponent(
+        stillAnswering
+          ? 'Sent. The AI is still answering this number - switch it off if you are handling this yourself.'
+          : 'Sent.'
+      )}`
+    );
   } catch (err) {
     return next(err);
   }
 });
 
 // ---------------------------------------------------------------------------
+// POST /ops/messages/:phone/ai - who answers this number, the AI or a person
+//
+// Behind messages.send rather than messages.view for the same reason the box
+// above is: reading a conversation and deciding who replies to it are
+// different acts, and a driver browsing a thread should not be able to mute
+// the thing that answers customers.
+//
+// One route for both directions. A single form field says which way, so the
+// two buttons cannot drift into two implementations of the same switch.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/messages/:phone/ai', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const phone = normalisePhone(req.params.phone);
+    if (!phone) return res.redirect(303, '/ops/messages');
+
+    const back = `/ops/messages/${encodeURIComponent(phone.replace(/\D/g, ''))}`;
+    const body = req.body || {};
+
+    if (String(body.state || '') === 'on') {
+      // Lifting an automatic hold at the same time is not tidying up: the two
+      // mute the AI independently, so without it somebody would press this,
+      // watch the AI stay silent, and reasonably decide the button is broken.
+      const { liftedHold } = await aiPause.resume(phone, req.opsUser);
+
+      return res.redirect(
+        303,
+        `${back}?note=${encodeURIComponent(
+          liftedHold
+            ? 'The AI is answering this number again, and the hold it was on has been cleared.'
+            : 'The AI is answering this number again.'
+        )}`
+      );
+    }
+
+    await aiPause.pause(phone, req.opsUser, String(body.note || '').trim());
+
+    return res.redirect(
+      303,
+      `${back}?note=${encodeURIComponent(
+        'The AI is switched off for this number. Every reply is yours until you switch it back on.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // The partner directory
 //
