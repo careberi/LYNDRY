@@ -970,10 +970,11 @@ would be the one nobody remembered. What differs is the first sentence — this
 one says where we got the number, the welcome says thanks for sending it — and
 the opt-out line at the end.
 
-**It carries "Text STOP to opt out" on every version.** It is the only message
-in the system that reaches somebody who has never texted us, so it is the one
-that has to say how to stop - and a carrier reviewing the campaign looks for
-exactly that sentence on exactly that kind of message.
+**Nothing is appended to Neil's three paragraphs.** An opt-out line was added
+here unasked and taken straight back out; the message is the words he wrote and
+no more. **STOP is unaffected** — it is handled in `src/core/compliance.js`
+before the AI ever sees a message, on every number, whether or not any text
+mentions it. What went is the sentence, not the mechanism.
 
 **The offer sentence only goes out if there is an offer to honour**, and the
 count in it is read off `promotions.max_orders` rather than typed into the

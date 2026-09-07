@@ -173,8 +173,10 @@ async function fetchLeads() {
 
 // --- What we say -----------------------------------------------------------
 
-// Neil's words. Four paragraphs: who this is and why we have their number, then
-// the two that every first message shares, then the way out.
+// Neil's words, and only Neil's words. Three paragraphs: who this is and why we
+// have their number, then the two that every first message shares. Nothing is
+// appended to them - an opt-out line was added here once and taken straight
+// back out.
 //
 // ONLY THE FIRST PARAGRAPH IS WRITTEN HERE. The middle two come from
 // onboarding.whatWeDo(), which is what the canned website welcome uses too -
@@ -195,13 +197,13 @@ function leadMessage({ promo = null, opensOn = null } = {}) {
 
     ...onboarding.whatWeDo({ promo, opensOn }),
 
-    // THE OPT-OUT LINE IS ON EVERY VERSION. This is the one message in the
-    // system that reaches somebody who has never texted us, so it is the one
-    // that has to carry the way out - and a carrier reviewing the campaign
-    // looks for exactly this sentence on exactly this kind of message. STOP is
-    // handled in code in src/core/compliance.js whether we mention it or not;
-    // saying so is what makes it findable.
-    `Text STOP to opt out.`,
+    // NO OPT-OUT LINE. It was added here unasked and Neil removed it: the three
+    // paragraphs above are the message, and nothing appends to them.
+    //
+    // STOP still works exactly as it always has - it is handled in code in
+    // src/core/compliance.js before the AI ever sees a message, on every number,
+    // whether or not any text mentions it. What is gone is the sentence, not
+    // the mechanism.
   ].join('\n\n');
 }
 
