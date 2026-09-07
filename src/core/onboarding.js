@@ -45,41 +45,81 @@ const CONSENT_SOURCES = [
 
 // What we say to somebody we have never spoken to.
 //
-// One message, and it asks for both things we need at once. Two questions in
-// two texts would be a form with extra steps.
-// The canned welcome. Takes what the service is currently doing, because the
-// two situations need different last sentences.
+// It offers the thing rather than demanding details for it. Asking a stranger
+// for their name and home address in the first sentence is too forward; "tell
+// us a day that works" makes the next step obvious and is still something they
+// can ignore in favour of asking what we cost. The AI collects the rest in the
+// thread when they answer.
 //
-// OPEN: offers the thing rather than demanding details for it. Asking a
-// stranger for their name and home address in the first sentence is too
-// forward; "want to schedule a pickup?" makes the next step obvious and is
-// still a question they can ignore in favour of asking what we cost.
+// CLOSED IS A DIFFERENT MESSAGE and it must NOT offer a pickup. This goes out
+// before the AI ever sees the conversation, so it is the one reply that cannot
+// work out for itself that we are shut - and inviting somebody to book
+// something that will then be refused is a worse first impression than saying
+// so plainly.
+// ---------------------------------------------------------------------------
+// THE BODY BOTH FIRST MESSAGES SHARE.
 //
-// CLOSED: it must NOT offer a pickup. This message goes out before the AI ever
-// sees the conversation, so it is the one reply that cannot work out for itself
-// that we are shut - and inviting somebody to book something that will then be
-// refused is a worse first impression than saying so plainly.
-function welcomeMessage({ open = true, promoBlurb = null, opensOn = null } = {}) {
+// There are two of them - the canned welcome below, for somebody who typed their
+// number into our own website, and the introduction in src/core/leads.js, for
+// somebody who filled in a Facebook advert's form. Neil wrote them separately
+// and then wrote them the same: after the opening line they are word for word
+// identical, because they are both answering "what is this and what do I do
+// next" for somebody who has never spoken to us.
+//
+// So the shared half lives here and each message writes only its own first
+// paragraph. Two copies of these two paragraphs would disagree the first time
+// one of them was edited, and the one that disagreed would be the one nobody
+// noticed - which is how the price ended up in two places once already.
+//
+// Returns an array of paragraphs so a caller can put its own opener in front
+// and, in the Facebook case, the opt-out line behind.
+// ---------------------------------------------------------------------------
+function whatWeDo({ promo = null, opensOn = null } = {}) {
+  // THE OPENING DATE GOES INSIDE THE INVITATION, not left out of it. These
+  // messages go out before the AI ever sees the conversation, so they are the
+  // ones that cannot work out for themselves that the van does not run until
+  // Tuesday - and inviting somebody to name a day when the earliest we can come
+  // is next week sets up a refusal on their very next text.
+  const from = opensOn ? ` from ${booking.readableDate(opensOn)}` : '';
+
+  // THE OFFER IS THE PROMOTION'S OR IT IS NOT MADE. freeOfferLine() returns
+  // null unless something genuinely free is live, so a 30% offer can never be
+  // announced as free and a promise with a count in it can never carry a count
+  // the code is not enforcing.
+  const offer =
+    promotions.freeOfferLine(promo, { from }) ||
+    `Just tell us a day that works${from} and we will come get your laundry. ` +
+      `It is ${site.pricePerLb} a pound, weighed after we collect it.`;
+
+  return [
+    `We pick your laundry up at your door, wash and fold it, and bring it back ` +
+      `the ${site.turnaround}.`,
+
+    `${offer} Everything gets set up and scheduled right here in this text thread, ` +
+      `no app to download.`,
+  ];
+}
+
+function welcomeMessage({ open = true, promo = null, promoBlurb = null, opensOn = null } = {}) {
+  // IT IS FOUR SEGMENTS NOW, AND THAT IS A DELIBERATE CHANGE. The old wording
+  // was held to one, on the grounds that this goes to everybody and every
+  // segment is billed. Neil rewrote it anyway and the trade is different now
+  // there is paid traffic behind the number: this is the only thing a stranger
+  // reads before deciding whether to reply, and "no app to download" answers
+  // the question most of them are actually asking. Shorten it by cutting a
+  // whole idea, never by re-compressing it into the terse version - that has
+  // been tried and it reads as a robot.
+  if (open) {
+    return [
+      `Hi, thanks for sending over your number. This is ${site.name}, wash and fold ` +
+        `pickup and delivery laundry service in ${site.serviceArea}.`,
+      ...whatWeDo({ promo, opensOn }),
+    ].join('\n\n');
+  }
+
   const what =
     `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
     `it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. `;
-
-  // OPEN FOR BOOKINGS, VAN NOT RUNNING YET. This is the fourth place the
-  // service's state is written in code rather than left to the AI, and it is
-  // here for the same reason the closed sign is: this reply goes out before the
-  // model ever sees the conversation, so it is the one message that cannot work
-  // anything out for itself. Inviting somebody to "schedule a pickup" when the
-  // earliest we can come is four days away sets up a refusal on their next text.
-  //
-  // KEPT TO ONE SEGMENT. The obvious wording ran to 183 characters, which is two
-  // segments on every single signup - a real bill, and this is the message that
-  // goes to everybody. The day and the invitation both survive; the words around
-  // them were the ones doing no work.
-  if (open && opensOn) {
-    return `${what}First pickups ${booking.readableDate(opensOn)}. Want a slot?`;
-  }
-
-  if (open) return `${what}Want to schedule a pickup?`;
 
   // CLOSED. Neil's words, and longer than the open version on purpose: this is
   // the only message somebody gets after handing over their number to an
@@ -213,13 +253,17 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   // Best effort on purpose. A promotion failing to attach must never stop a
   // customer being created; they would then be unable to text us at all, which
   // is a far worse outcome than a discount somebody has to be given by hand.
-  let grantedBlurb = null;
+  // THE PROMOTION ITSELF IS KEPT, not just its blurb. The welcome now says
+  // "the first 20 orders are free" in as many words when that is true, and the
+  // sentence needs the count and the discount off the promotion - a blurb on
+  // its own cannot be checked for whether it is actually free.
+  let granted = null;
 
   try {
     const promo = await promotions.autoGrant();
     if (promo) {
       await promotions.grant(customer.id, promo.id);
-      grantedBlurb = promo.blurb;
+      granted = promo;
       console.log(`  granted "${promo.name}" to ${phone}`);
     }
   } catch (err) {
@@ -239,7 +283,15 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
 
     await sendAndLog(
       phone,
-      welcomeMessage({ open, opensOn, promoBlurb: open ? null : grantedBlurb }),
+      welcomeMessage({
+        open,
+        opensOn,
+        // Open: the message makes the offer itself, in Neil's words, and only
+        // when it is genuinely free. Closed: it cannot offer a pickup at all,
+        // so the most it can do is repeat the blurb somebody wrote.
+        promo: open ? granted : null,
+        promoBlurb: open ? null : granted && granted.blurb,
+      }),
       customer.id
     );
   }
@@ -247,4 +299,10 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   return { ok: true, customer, created: true };
 }
 
-module.exports = { startConversation, welcomeMessage, welcomeBackMessage, CONSENT_SOURCES };
+module.exports = {
+  startConversation,
+  welcomeMessage,
+  welcomeBackMessage,
+  whatWeDo,
+  CONSENT_SOURCES,
+};

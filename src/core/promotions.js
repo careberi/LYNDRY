@@ -506,6 +506,39 @@ async function redeem(grantId, orderId) {
 
 // How a promotion reads to a person. Used on the ops screens and nowhere near
 // the AI, which gets the blurb instead.
+// DOES THIS TAKE EVERYTHING OFF? The one test allowed to decide whether a
+// message may use the word "free".
+//
+// It exists because two different messages say it - the canned welcome on the
+// website and the introduction to a Facebook lead - and a 30% offer announced
+// as "free" in either of them is a bill somebody is going to argue about.
+function takesEverythingOff(promo) {
+  return Boolean(promo && promo.kind === 'PERCENT_OFF' && Number(promo.value) >= 100);
+}
+
+// THE FREE-ORDERS SENTENCE, WRITTEN ONCE.
+//
+// Both first messages say this, in Neil's words, and they must not drift: the
+// count comes off max_orders rather than being typed into a sentence, because a
+// promise with a number in it must never have two copies of the number.
+//
+// `from` is the opening date clause, when there is one - "from Tuesday 8 Sep".
+// Passed in rather than worked out here: what a van can do is booking's
+// business, and this file only knows about money.
+//
+// Returns null when there is nothing genuinely free to offer, which is the
+// caller's cue to say something else entirely rather than to soften this.
+function freeOfferLine(promo, { from = '' } = {}) {
+  if (!takesEverythingOff(promo)) return null;
+
+  return promo.max_orders
+    ? `While we are getting started the first ${promo.max_orders} orders are free. ` +
+        `If you want one of them before they run out, just tell us a day that works${from} ` +
+        `and we will come get your laundry.`
+    : `While we are getting started your first order is free. ` +
+        `Just tell us a day that works${from} and we will come get your laundry.`;
+}
+
 function describe(promo) {
   if (!promo) return '';
   const amount =
@@ -580,6 +613,8 @@ module.exports = {
   claimSlot,
   releaseSlot,
   claimedFreeOrder,
+  takesEverythingOff,
+  freeOfferLine,
   full,
   issueToAudience,
   heldBy,

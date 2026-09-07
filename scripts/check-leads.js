@@ -5,6 +5,7 @@ require('dotenv').config();
 const db = require('../src/db');
 const leads = require('../src/core/leads');
 const promotions = require('../src/core/promotions');
+const settings = require('../src/core/settings');
 const { normalisePhone, formatPhone } = require('../src/core/phone');
 const { toPlainText } = require('../src/core/notify');
 
@@ -21,9 +22,12 @@ const { toPlainText } = require('../src/core/notify');
 // message, and production would then never text them again.
 //
 // It exists because a lead that is deliberately not texted looks exactly like
-// one the system missed. Three of the first four people who filled the form in
-// left the consent box unticked, so most of the sheet is skipped on purpose,
-// and this is the screen that says so out loud.
+// one the system missed, and a lot of them are: three of the first four were
+// already on the books and had been texted the night before. This is the screen
+// that says which, and why, out loud.
+//
+// The consent column is printed because it is the thing worth knowing about a
+// lead. It does not decide anything - see src/core/leads.js.
 // ---------------------------------------------------------------------------
 
 const pad = (s, n) => String(s).padEnd(n);
@@ -134,7 +138,8 @@ async function main() {
   }
 
   // --- The message ---------------------------------------------------------
-  const text = toPlainText(leads.leadMessage({ promo: left === 0 ? null : promo }));
+  const opensOn = await settings.opensOn().catch(() => null);
+  const text = toPlainText(leads.leadMessage({ promo: left === 0 ? null : promo, opensOn }));
   const segments = text.length <= 160 ? 1 : Math.ceil(text.length / 153);
 
   console.log(`What they get (${text.length} characters, ${segments} segments):\n`);

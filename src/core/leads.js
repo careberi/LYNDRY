@@ -5,6 +5,7 @@ const { config } = require('../config');
 const { site } = require('../web/site');
 const { normalisePhone } = require('./phone');
 const onboarding = require('./onboarding');
+const settings = require('./settings');
 const promotions = require('./promotions');
 const { sendAndLog } = require('./notify');
 
@@ -31,11 +32,13 @@ const { sendAndLog } = require('./notify');
 // count is knowable before anything is sent. The AI takes over the moment they
 // reply, which is where it is good.
 //
-// IT IS SPECIFICALLY A FACEBOOK MESSAGE. Neil's point: everything in this
-// sheet came off an advert, so the opening line says so - "you filled out the
-// laundry pickup form on our Facebook ad". The canned welcome in onboarding.js
-// is for somebody who typed their number into our own website and would be the
-// wrong first sentence here, which is why this does not use it.
+// ONLY THE OPENING LINE IS ITS OWN. Neil's point: everything in this sheet came
+// off an advert, so the first sentence says so - "you filled out the laundry
+// pickup form on our Facebook ad" - where the canned welcome in onboarding.js
+// opens with "thanks for sending over your number", which would be the wrong
+// sentence to somebody who has never been on our website. Everything after that
+// is the same in both, and comes from onboarding.whatWeDo() so it stays that
+// way.
 // ---------------------------------------------------------------------------
 
 // --- Consent ---------------------------------------------------------------
@@ -170,50 +173,27 @@ async function fetchLeads() {
 
 // --- What we say -----------------------------------------------------------
 
-// The offer sentence, with the number read off the promotion rather than typed
-// here. "The first 20 orders are free" is a promise with a count in it, and the
-// count that goes out in a text has to be the same one the code is enforcing -
-// two copies of it would disagree the first time Neil changed one.
+// Neil's words. Four paragraphs: who this is and why we have their number, then
+// the two that every first message shares, then the way out.
 //
-// ONLY A GENUINELY FREE OFFER GETS THIS WORDING. The sentence says free, so the
-// test is that the promotion takes everything off. A different offer - 30% off,
-// say - falls through to the plain invitation, and the AI mentions it from the
-// promotion's own blurb when they reply, exactly as it does everywhere else.
-function offerLine(promo) {
-  if (!promo) return null;
-  if (promo.kind !== 'PERCENT_OFF' || Number(promo.value) < 100) return null;
-
-  return promo.max_orders
-    ? `While we are getting started the first ${promo.max_orders} orders are free. ` +
-        `If you want one of them, just tell us a day that works and we will come ` +
-        `get your laundry.`
-    : `While we are getting started your first order is free. ` +
-        `If you want it, just tell us a day that works and we will come get your laundry.`;
-}
-
-// Neil's words. Three paragraphs: who this is and why we have their number,
-// what the service is, and what to do next.
+// ONLY THE FIRST PARAGRAPH IS WRITTEN HERE. The middle two come from
+// onboarding.whatWeDo(), which is what the canned website welcome uses too -
+// Neil wrote the two messages separately and then wrote them identically from
+// the second paragraph on, so two copies would only be two things to edit and
+// one of them would be the one nobody remembered. The free-orders sentence and
+// the opening date both come from there, which is why neither can say something
+// different here.
 //
-// It runs to three segments, which is a real cost on every lead. That is the
-// right trade here and it is a different judgement from the canned welcome:
-// this number cost money to acquire, and a terse text to somebody who has never
-// heard of us is how that money gets wasted.
-function leadMessage({ promo = null } = {}) {
-  const offer = offerLine(promo);
-
+// It runs to four segments, which is a real cost on every lead. That is the
+// right trade: this number cost money to acquire, and a terse text to somebody
+// who has never heard of us is how that money gets wasted.
+function leadMessage({ promo = null, opensOn = null } = {}) {
   return [
     `Hi, this is ${site.name}. You filled out the laundry pickup form on our ` +
-      `Facebook ad and left this number, so we wanted to follow up.`,
+      `Facebook ad and left this number, so we wanted to follow up. We are a ` +
+      `wash and fold pickup and delivery laundry service in ${site.serviceArea}.`,
 
-    `We do wash and fold pickup and delivery in ${site.serviceArea}. We pick your ` +
-      `laundry up at your door, wash and fold it, and bring it back the next day.`,
-
-    // WITHOUT AN OFFER TO HONOUR, THE OFFER IS NOT MENTIONED. The alternative
-    // is telling lead twenty-one that the first twenty orders are free, which
-    // is a sentence that stops being true at exactly the moment it matters.
-    offer ||
-      `If you want to give us a go, just tell us a day that works and we will ` +
-        `come get your laundry.`,
+    ...onboarding.whatWeDo({ promo, opensOn }),
 
     // THE OPT-OUT LINE IS ON EVERY VERSION. This is the one message in the
     // system that reaches somebody who has never texted us, so it is the one
@@ -372,7 +352,15 @@ async function handle(row) {
   const held = await promotions.heldBy(started.customer.id).catch(() => []);
   const promo = held[0] || null;
 
-  await sendAndLog(phone, leadMessage({ promo }), started.customer.id, { kind: 'SYSTEM' });
+  // WHEN THE VAN ACTUALLY STARTS. Read here rather than left out, because this
+  // message asks them to name a day and the earliest one we can take may be
+  // next week - the same rule the canned welcome follows. A date in the past
+  // comes back null, so nobody has to remember to clear it.
+  const opensOn = await settings.opensOn().catch(() => null);
+
+  await sendAndLog(phone, leadMessage({ promo, opensOn }), started.customer.id, {
+    kind: 'SYSTEM',
+  });
 
   await record({ customer_id: started.customer.id, texted_at: new Date().toISOString() });
 
@@ -381,4 +369,4 @@ async function handle(row) {
   return { leadId, phone, texted: true, customerId: started.customer.id };
 }
 
-module.exports = { sweep, handle, fetchLeads, parseCsv, leadMessage, offerLine, sheetUrl };
+module.exports = { sweep, handle, fetchLeads, parseCsv, leadMessage, sheetUrl };
