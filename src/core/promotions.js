@@ -574,9 +574,18 @@ function describe(promo) {
 async function holders(promotionId) {
   const { data, error } = await db
     .from('customer_promotions')
+    // THE JOIN HAS TO NAME ITS FOREIGN KEY. There are two columns pointing at
+    // orders now - order_id, the order the discount actually came off, and
+    // claimed_order_id, the booking that reserved a slot on a capped promotion.
+    // A bare `orders (...)` was unambiguous while there was one, and the moment
+    // the second arrived PostgREST stopped guessing and returned an error, which
+    // reached the screen as "internal_error" on "see who has it".
+    //
+    // It is order_id we want here: this column says which order SPENT it.
     .select(
-      'id, granted_at, redeemed_at, expires_at, uses, use_limit, order_id, ' +
-        'customers (id, name, phone, status), orders (order_number, discount_cents)'
+      'id, granted_at, redeemed_at, expires_at, uses, use_limit, order_id, claimed_order_id, ' +
+        'customers (id, name, phone, status), ' +
+        'orders!customer_promotions_order_id_fkey (order_number, discount_cents)'
     )
     .eq('promotion_id', promotionId)
     .order('granted_at', { ascending: false });
