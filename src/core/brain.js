@@ -9,6 +9,9 @@ const settings = require('./settings');
 const promotions = require('./promotions');
 const recurring = require('./recurring');
 const orders = require('./orders');
+// For the introduction it sends a brand new number - the same words the website
+// and the adverts send. See systemPrompt() for why it is not typed out here.
+const onboarding = require('./onboarding');
 
 // ---------------------------------------------------------------------------
 // The brain.
@@ -399,6 +402,36 @@ const TOOLS = [
 // ---------------------------------------------------------------------------
 
 function systemPrompt(today, now, { paused = null, promo = null, opensOn = null } = {}) {
+  // THE THIRD DOOR ONTO THE SAME INTRODUCTION.
+  //
+  // There are three ways somebody hears from us first: they type their number
+  // into the website (onboarding.welcomeMessage), they fill in a Facebook advert
+  // (leads.leadMessage), or they text us out of the blue - which is this one,
+  // and it is the AI's to send because they said something and a script that
+  // ignores what they said reads as a robot.
+  //
+  // It went wrong exactly the way CLAUDE.md keeps warning about. The wording
+  // used to be typed into this prompt twice, once as an instruction and once as
+  // a worked example, so rewriting the website welcome and the advert message
+  // left the AI still reciting the old sentence - and a real number that texted
+  // "Hi" got it. The body now comes from onboarding.whatWeDo(), the same place
+  // the other two get it, so there is one copy of the words and one copy of the
+  // free-orders count.
+  //
+  // Only the opening line is its own, and it has to be: "thanks for sending
+  // over your number" is true of somebody who filled in a form on our website
+  // and false of somebody who just texted us.
+  //
+  // NOT WHEN WE ARE SHUT. The block invites them to name a day, which is the
+  // one thing a closed service must not do, so the old paused wording stands.
+  const intro = paused
+    ? null
+    : [
+        `Hi, thanks for reaching out. This is ${site.name}, wash and fold pickup ` +
+          `and delivery laundry service in ${site.serviceArea}.`,
+        ...onboarding.whatWeDo({ promo, opensOn }),
+      ].join('\n\n');
+
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
 
 Right now it is ${now.time} on ${today}, which is a ${booking.readableDate(today)}, in New Jersey.
@@ -598,10 +631,16 @@ Never send a menu, a numbered list of options, or a form to fill in. Never ask t
 
 SOMEBODY BRAND NEW
 If the profile below shows no name or no address, we know nothing about them yet. Respond to what they actually said, not to a script:
-If their first message is a greeting or a question, answer it warmly. Introduce LYNDRY in one line if the conversation is brand new ("Hey, it's LYNDRY! We pick up, wash, fold and deliver back the ${site.turnaround}, at ${site.pricePerLb} a pound")${
-  paused
-    ? ' and then say we have not opened yet. DO NOT OFFER TO SCHEDULE ANYTHING - "want to schedule a pickup?" invites a thing that cannot happen, and it is the single easiest way to waste the time of somebody who came to us early.'
-    : ' and offer the thing: "Want to schedule a pickup?"'
+${
+  intro
+    ? `If their first message is just a greeting ("hi", "hello", "hey", "yo") or asks who or what we are, send THIS INTRODUCTION WORD FOR WORD and nothing else:
+
+${intro}
+
+Send it exactly as it is written above, blank lines and all. Do not shorten it, do not reword it, do not add to it and do not put a question of your own on the end. It is the same introduction our website and our adverts send, so a person who saw one of those and then texted us gets the same story twice rather than two different ones. It is also the only place the offer is stated, and the number in it is the number the system will actually honour - you must never invent a different one, and if the block above does not mention free orders then there are none and you may not say there are.
+
+If they said something with a question in it instead ("do you do comforters?", "how much for two bags?", "can you grab my laundry tomorrow?"), answer THAT in your own words - the block is not an answer to a real question, and sending it instead of answering is the robot behaviour this whole system exists to avoid. Introduce us in one line as part of that reply.`
+    : `If their first message is a greeting or a question, answer it warmly. Introduce LYNDRY in one line if the conversation is brand new ("Hey, it's LYNDRY! We pick up, wash, fold and deliver back the ${site.turnaround}, at ${site.pricePerLb} a pound") and then say we have not opened yet. DO NOT OFFER TO SCHEDULE ANYTHING - "want to schedule a pickup?" invites a thing that cannot happen, and it is the single easiest way to waste the time of somebody who came to us early.`
 } Do NOT open by asking for their name and address; nobody gives their address to "hello".
 The moment they want a pickup, the setup is five short beats, IN THIS ORDER, and none may be skipped or invented:
   1. Name and street address, asked together in ONE message.
@@ -718,10 +757,15 @@ Read these as the house voice:
   Them: hello          (somebody we already know, with a pickup booked)
   You:  Hey! You're all set for Thursday. Anything you need before then?
 
-  Them: hello          (nobody we know yet - introduce, then offer)
-  You:  Hey, it's LYNDRY! We pick your laundry up, wash it, fold it and have it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound.${
-    paused ? ' We have not opened yet, so nothing can be booked, but you are early and we will let you know the moment we launch.' : ' Want to schedule a pickup?'
+  Them: hello          (nobody we know yet)
+  You:  ${
+    intro
+      ? 'the introduction above, word for word - not a version of it'
+      : `Hey, it's LYNDRY! We pick your laundry up, wash it, fold it and have it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. We have not opened yet, so nothing can be booked, but you are early and we will let you know the moment we launch.`
   }
+
+  Them: do you do comforters?   (nobody we know yet - a real question, so answer it)
+  You:  We do - anything that goes in a machine. It is all weighed together at ${site.pricePerLb} a pound. Want us to come and get it?
 
   Them: hey can you pick up my laundry tomorrow at 3?
   You:  Of course! That puts you in tomorrow's 2 to 4 window - just have it outside your door by 2 and we'll text you as soon as we've got it.

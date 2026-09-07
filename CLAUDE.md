@@ -2397,6 +2397,30 @@ their defaults and are changed by texting.
 | `WEB_SIGNUP` | The full signup form. Same box, same evidence |
 | `INBOUND_TEXT` | They texted first. Their own message in the `messages` table |
 
+**THERE ARE THREE DOORS ONTO THE SAME INTRODUCTION, AND ALL THREE HAVE TO KNOW.**
+Somebody hears from us first in one of three ways, and each has its own opening
+line and the same body from `onboarding.whatWeDo()`:
+
+| Door | Who sends it | Its own first line |
+|---|---|---|
+| The website form | `onboarding.welcomeMessage()` | "thanks for sending over your number" |
+| A Facebook advert | `leads.leadMessage()` | "you filled out the laundry pickup form on our Facebook ad" |
+| **They text us out of the blue** | **the AI**, from `systemPrompt()` | "thanks for reaching out" |
+
+**The third one is the one that gets missed**, and it did: the wording was typed
+into `brain.js` twice, once as an instruction and once as a worked example, so
+rewriting the other two left the AI still reciting the old sentence — and a real
+number that texted "Hi" got it, an hour after the new copy went live. The body
+is now built from `whatWeDo()` in all three, so there is one copy of the words
+and one copy of the free-orders count.
+
+**It is the AI's to send because they said something.** A brand-new number that
+says only "hi" gets the block word for word, the same way the wash question is
+sent word for word; a brand-new number that asks a real question gets that
+answered, because a script that ignores what somebody said is the robot
+behaviour this system exists to avoid. **With the shop shut none of it applies** —
+the block invites them to name a day, so the closed wording stands instead.
+
 **THE FIRST MESSAGE IS FOUR SEGMENTS NOW, AND THAT IS DELIBERATE.** The canned
 welcome was held to one segment for a long time, on the grounds that it goes to
 everybody and every segment is billed. Neil rewrote it once there was paid
