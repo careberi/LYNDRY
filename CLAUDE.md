@@ -989,10 +989,23 @@ minutes either way changes nothing; a Facebook lead has just tapped an advert
 and is holding their phone. Both timers live in `scheduler.js` so "what runs by
 itself" is still one file.
 
-**QUIET HOURS STILL APPLY, and this is the one place "immediately" and the law
-disagree.** Somebody who fills the form in at half past eleven at night is
-texted at eight the next morning. It defers rather than skipping, like a
-follow-up: an introduction is exactly as true in the morning.
+**QUIET HOURS DO NOT APPLY TO THIS ONE.** Neil's call, and his reasoning is the
+reason the rule exists rather than an exception to it: *"a new lead in the
+database is a prompt"*. The quiet-hours rule is about telephone **solicitation** —
+somebody contacted who did not ask to be — and a lead here filled in a form on an
+advert asking a laundry company to get in touch seconds earlier. Answering an
+invitation is a reply.
+
+It is the only thing on either timer they do not apply to. The nightly pass and
+the follow-up sweep are genuinely unprompted — the customer is asleep and nobody
+is waiting on us — and both still stop at 9pm. The practical half is that this is
+the whole value of the thing: somebody who has just tapped an advert is holding
+their phone, and eight hours later they have forgotten the advert existed.
+
+**What it costs, so nobody is surprised: a form filled in at three in the morning
+is answered at three in the morning.** If that ever wants a floor it is one line
+in `sweepLeads()` — and it should be a floor, not a return to deferring until
+eight.
 
 **`npm run leads` prints who is on the sheet and what would happen to them, and
 writes nothing.** It exists because a lead that is deliberately skipped looks

@@ -37,10 +37,15 @@ const leads = require('./leads');
 // so. The web app is already running every minute of every day, because an
 // inbound text has to be answered, so it can watch the clock for free.
 //
-// QUIET HOURS ARE A HARD FLOOR ON BOTH JOBS. Federal rules put texts inside
-// 8am to 9pm in the recipient's own time, and everything here is unprompted -
-// nobody has just texted us and is waiting. Late is not a reason to send at
-// midnight.
+// QUIET HOURS ARE A HARD FLOOR ON THE NIGHTLY PASS AND THE FOLLOW-UPS. Federal
+// rules put texts inside 8am to 9pm in the recipient's own time, and both of
+// those are genuinely unprompted - the customer is asleep and nobody is waiting
+// on us. Late is not a reason to send at midnight.
+//
+// THE LEAD SWEEP IS THE EXCEPTION, and deliberately so: somebody who has just
+// filled in a form asking a laundry company to contact them is owed a reply, not
+// a solicitation held until morning. See sweepLeads() below for the whole
+// argument, which is Neil's.
 //
 // A NOTE ON THE DIFFERENCE BETWEEN THEM, because it matters:
 //
@@ -111,18 +116,31 @@ async function tick({ now = null } = {}) {
 
 // The Facebook lead sweep, on its own faster timer.
 //
-// QUIET HOURS APPLY HERE TOO, and this is the one place "immediately" and the
-// law disagree. Somebody who fills the form in at half past eleven at night is
-// texted at eight the next morning, not at half past eleven - unprompted is
-// unprompted, whatever time they happened to tap the advert. It defers rather
-// than skipping, like a follow-up and unlike the nightly pass: the message is
-// an introduction and is exactly as true in the morning.
-async function sweepLeads({ now = null } = {}) {
+// QUIET HOURS DO NOT APPLY TO THIS ONE, and it is the only thing on either timer
+// that they do not apply to. Neil's call, and the reasoning is the reason the
+// rule exists rather than an exception to it: "a new lead in the database is a
+// prompt".
+//
+// The quiet-hours rule is about telephone SOLICITATION - somebody being
+// contacted who did not ask to be. A lead here has, seconds earlier, filled in a
+// form on an advert asking a laundry company to get in touch. That is an
+// invitation, and answering an invitation is a reply rather than a solicitation.
+// Every other job on these timers is genuinely unprompted - the customer is
+// asleep and nobody is waiting on us - which is why they all still stop at 9pm.
+//
+// The practical half is that this is the whole value of the thing: somebody who
+// has just tapped an advert is holding their phone, and eight and a half hours
+// later they have forgotten the advert existed.
+//
+// WHAT THIS COSTS, so nobody is surprised by it: a form filled in at three in
+// the morning is answered at three in the morning. If that ever wants a floor,
+// it is one line here - and it should be a floor rather than a return to
+// deferring until eight.
+async function sweepLeads() {
   if (sweeping) return { skipped: 'already sweeping' };
   sweeping = true;
 
   try {
-    if (inQuietHours(now || booking.nowInService())) return { quiet: true };
     return await leads.sweep();
   } finally {
     sweeping = false;
