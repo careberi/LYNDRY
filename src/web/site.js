@@ -38,9 +38,22 @@ const BUSINESS_ADDRESS = '8 The Green, Dover, DE 19901';
 //
 // This is the business number from the LYNDRY messaging account. Note that it
 // cannot actually receive customer texts until business messaging registration
-// is approved. Blank both of these out to hide the number everywhere on the
+// is approved. Unset LYNDRY_PHONE_NUMBER to hide the number everywhere on the
 // site — the pages fall back to "sign up and we'll text you" on their own.
-const PUBLIC_PHONE_DISPLAY = '(201) 554-1877';
+//
+// READ FROM THE ENVIRONMENT, NOT TYPED HERE, AND THIS IS THE WHOLE POINT.
+//
+// It used to be written out twice: LYNDRY_PHONE_NUMBER, which is the number
+// that actually sends and receives, and a pair of constants here, which is the
+// number the website, the QR code and the contact card show. They agreed, and
+// nothing kept them agreeing.
+//
+// The day that matters is the day the number changes - a port to another
+// carrier, a lost account, a second number for a second county - and that is
+// the worst possible day to find out the site is advertising a number that no
+// longer answers, or that texts are going out from a number nobody can see.
+// One value now, so a change is one value.
+const PUBLIC_PHONE_LINK = String(config.telnyx.phoneNumber || '').trim();
 
 // WHO A LAUNDROMAT CALLS, WHICH IS NOT WHO A CUSTOMER CALLS.
 //
@@ -63,7 +76,9 @@ function displayPhone(raw) {
   if (ten.length !== 10) return String(raw || '');
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
-const PUBLIC_PHONE_LINK = '+12015541877';
+// Derived from the one number above, through the same formatter every other
+// number on the site goes through. It was a second hand-typed constant.
+const PUBLIC_PHONE_DISPLAY = PUBLIC_PHONE_LINK ? displayPhone(PUBLIC_PHONE_LINK) : '';
 
 const site = Object.freeze({
   name: 'LYNDRY',
