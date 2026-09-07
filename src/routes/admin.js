@@ -3675,6 +3675,17 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
       return res.redirect(303, `${back}?problem=${encodeURIComponent(settled && settled.detail ? settled.detail : 'That could not be settled.')}`);
     }
 
+    // WHAT WE ACTUALLY BILLED ON. Declared BEFORE it is used, which it was not:
+    // the loop below read `on` and the const sat underneath it, so the moment
+    // there was an issue to close the loop threw a ReferenceError.
+    //
+    // It only fired when there was something in `open`, which is exactly the
+    // case this route exists for - a weight discrepancy always raises an issue -
+    // and it fired AFTER the money had moved. So order #1992 was priced, the
+    // card was charged for $67.20, and the person who pressed the button got
+    // {"error":"internal_error"} and an issue still sitting open.
+    const on = settled.billable != null ? settled.billable : chosen;
+
     // The issue raised at the laundromat is what put this in front of somebody.
     // Closing it here is the point - an issue that stays open after the thing
     // it was about is fixed teaches people to ignore the queue.
@@ -3692,8 +3703,6 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
 
     // Say what happened to the money, because that is the question the person
     // pressing this button is actually asking.
-    const on = settled.billable != null ? settled.billable : chosen;
-
     const outcome = settled.charged
       ? `Billed on ${on} lb and charged.`
       : settled.declined

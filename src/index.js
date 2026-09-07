@@ -13,6 +13,9 @@ const {
 } = require('./config');
 
 const assets = require('./web/assets');
+// For the phone number on the error page below - the one thing somebody staring
+// at a broken page actually needs.
+const { site } = require('./web/site');
 const web = require('./routes/web');
 const sms = require('./routes/sms');
 const ops = require('./routes/ops');
@@ -162,12 +165,81 @@ app.use('/', web.router);
 // Anything that matched nothing above.
 app.use(web.notFound);
 
-// Last line of defence. If any route throws, we log the real error for
-// ourselves and return something generic to the caller.
+// LAST LINE OF DEFENCE. If any route throws, log the real error for ourselves
+// and show the caller something that is not a stack trace.
+//
+// IT LOGS WHERE IT HAPPENED, WHICH IT DID NOT. This used to print "Unhandled
+// error:" and the message, with nothing saying which page, which method or who
+// was pressing the button - so an error reported as "it showed me a JSON thing"
+// could not be traced to a route without guessing. Two of those were reported
+// on the same morning and only one of them was ever found. The method, the
+// path and the signed-in person now go in the same line as the stack.
+//
+// The query string is included because on this site it carries the argument -
+// ?t= on a bag label, ?from=run on a driver's action, ?lang=es on a laundromat
+// page - and a bug that only happens in one language is invisible without it.
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'internal_error' });
+  const who =
+    (req.opsUser && `${req.opsUser.name} (${req.opsUser.role})`) ||
+    (req.get && req.get('x-admin-key') ? 'machine key' : 'signed out');
+
+  console.error(
+    `Unhandled error: ${req.method} ${req.originalUrl} [${who}]\n`,
+    err && err.stack ? err.stack : err
+  );
+
+  if (res.headersSent) return next(err);
+
+  // A PERSON GETS A PAGE, A SCRIPT GETS JSON. Everything used to get the JSON,
+  // including a laundromat attendant holding somebody's laundry and a driver on
+  // a doorstep - and {"error":"internal_error"} tells them nothing at all, not
+  // even who to call. The JSON stays for the ops API and the simulators, which
+  // are the only callers that can do anything with it.
+  const wantsJson =
+    req.xhr ||
+    String(req.get('accept') || '').includes('application/json') ||
+    !String(req.get('accept') || '').includes('text/html');
+
+  if (wantsJson) return res.status(500).json({ error: 'internal_error' });
+
+  return res
+    .status(500)
+    .type('html')
+    .send(errorPage(site.opsPhoneDisplay));
 });
+
+// A plain apology with a phone number on it. No layout, no stylesheet lookup
+// and nothing from the database - this renders when something has already gone
+// wrong, so it must not be able to go wrong itself.
+function errorPage(phone) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Something went wrong - LYNDRY</title>
+  <meta name="robots" content="noindex">
+  <style>
+    body { margin:0; background:#FFF8EC; color:#101210;
+           font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .box { max-width:32rem; margin:12vh auto; padding:28px; background:#FFFDF7;
+           border:2px solid #101210; border-radius:14px; box-shadow:6px 6px 0 #101210; }
+    h1 { font-size:26px; line-height:1.15; margin:0 0 14px; }
+    p { font-size:17px; line-height:1.6; margin:0 0 12px; }
+    a { color:#101210; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Something went wrong at our end.</h1>
+    <p>Nothing you just did was lost, but this page could not finish. Please go
+       back and try it again.</p>
+    <p>If it keeps happening, call us${phone ? ` on <a href="tel:${phone}">${phone}</a>` : ''}
+       and say what you were doing - it is already logged our side.</p>
+  </div>
+</body>
+</html>`;
+}
 
 // ---------------------------------------------------------------------------
 // Boot
