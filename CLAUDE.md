@@ -673,6 +673,7 @@ POST /ops/customers/:id/ask  text them for one thing we still need
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
+POST /ops/messages/new       text a number that has never texted us
 GET  /ops/issues             everything still waiting on a person
 GET  /ops/scheduled          every text queued to send on its own
                              (reached from the Admin dashboard, not the menu)
@@ -1635,6 +1636,21 @@ caused once. The pickup nudge also states the opening date when there is one.
 **There is deliberately no "confirm the order" button**, though Neil named one.
 There is exactly one confirmation - the recap, a yes, then it books - and a
 second one from the ops side is the thing he twice asked never to have.
+
+**A CONVERSATION CAN BE STARTED FROM OUR END.** Neil's ask: somebody he met at
+a laundromat, or a building manager, could not be texted at all until they
+texted first, because every other send needs a thread to send into.
+`POST /ops/messages/new` takes a number and a message.
+
+**It does NOT create a customer.** The message is logged against the number with
+a null `customer_id`, exactly like an inbound from a stranger, and the screen
+groups by number so the thread appears anyway. If they reply, the normal path
+creates the row with its consent record - which is the honest one, because THEY
+started talking. Creating a customer here would manufacture a consent record for
+somebody who has agreed to nothing.
+
+**Opted-out numbers are refused and the box is throttled**, because it is the
+one door that can reach a number nobody has ever looked at.
 
 **The conversations screen is grouped by phone number, not by customer,** and
 that is the point: a message from someone with no account is still logged

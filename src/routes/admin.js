@@ -10,6 +10,7 @@ const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const notify = require('../core/notify');
+const throttle = require('../core/throttle');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
 const billing = require('../core/billing');
@@ -6708,6 +6709,52 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
       ${sectionHeading('Everything anyone has texted us', 'Conversations', threads.length)}
 
       ${
+        // START A CONVERSATION WITH A NUMBER THAT HAS NEVER TEXTED US.
+        //
+        // Neil's ask. Every other way of sending a message needs a thread to
+        // send it into, so somebody he met at a laundromat or a building could
+        // not be texted at all without waiting for them to text first.
+        //
+        // Behind messages.send like the box on a thread, because it is the same
+        // act: words on a real phone. It lands you in the conversation
+        // afterwards rather than back here, since the next thing you want is to
+        // see what you sent and wait for the reply.
+        roles.can(req.opsUser, 'messages.send')
+          ? `<details class="card card-xl" style="padding:0;margin-bottom:28px;">
+               <summary style="padding:20px 24px;cursor:pointer;list-style:none;font-weight:700;font-size:17px;">
+                 ${icon('message-circle', '20')} Text somebody new
+               </summary>
+               <div style="padding:0 24px 24px;">
+                 <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;max-width:64ch;">
+                   For a number that has never texted us - somebody you met, or a
+                   building manager. It starts a thread like any other, and the AI
+                   picks it up when they reply.
+                 </p>
+                 <form method="post" action="/ops/messages/new"
+                       style="display:flex;flex-direction:column;gap:16px;max-width:620px;">
+                   <div>
+                     <label class="field-label" for="new_phone">Their mobile number</label>
+                     <input class="field" id="new_phone" name="phone" type="tel" required
+                            inputmode="tel" autocomplete="off" placeholder="(201) 555-0142">
+                   </div>
+                   <div>
+                     <label class="field-label" for="new_body">What to say</label>
+                     <p class="field-hint" style="margin:0 0 8px;">
+                       Plain text - no dashes or curly quotes, they cost an extra segment.
+                       They have not asked to hear from us, so say who you are.
+                     </p>
+                     <textarea class="field" id="new_body" name="body" rows="3" maxlength="600" required
+                               style="width:100%;resize:vertical;"
+                               placeholder="Hi, it's Neil from LYNDRY - we spoke at the laundromat..."></textarea>
+                   </div>
+                   <div><button class="btn btn-ink btn-lg" type="submit">Send it</button></div>
+                 </form>
+               </div>
+             </details>`
+          : ''
+      }
+
+      ${
         leads.length
           ? `<div class="card" style="padding:18px 22px;margin-bottom:28px;background:var(--sunbeam-500);">
                <p style="margin:0 0 4px;font-size:16px;">
@@ -7203,6 +7250,73 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     );
   } catch (err) {
     next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/messages/new - open a conversation with a number we have never
+// heard from
+//
+// Neil's ask. Every other send needs a thread to send into, so somebody he met
+// at a laundromat could not be texted at all until they texted first.
+//
+// IT DOES NOT CREATE A CUSTOMER. The message is logged against the number with
+// no customer_id, exactly like an inbound from a stranger, and the conversations
+// screen groups by number so the thread appears anyway. If they reply, the
+// normal path creates the row with its consent record - which is the honest one,
+// because THEY started talking. Creating a customer here would manufacture a
+// consent record for somebody who has agreed to nothing.
+//
+// THROTTLED, because this is a box that texts arbitrary numbers. Same shape as
+// the guard on the public signup form, for the same reason.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/messages/new', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const back = '/ops/messages';
+    const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
+
+    const phone = normalisePhone(body.phone);
+    const text = String(body.body || '').trim().slice(0, 600);
+
+    if (!phone) return said('problem', 'That did not look like a US mobile number. Try it with the area code.');
+    if (!text) return said('problem', 'Nothing to send.');
+
+    if (throttle.hit(`opsnew:${req.opsUser && req.opsUser.id}`, 20, 15 * 60 * 1000)) {
+      return said('problem', 'That is a lot of new numbers in a short time. Give it a few minutes.');
+    }
+
+    const { data: existing } = await db
+      .from('customers')
+      .select('id, name, status')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    // STOP is a legal instruction, not a preference. Checked here as well as on
+    // the thread screen, because this is the one door that can reach a number
+    // nobody has ever looked at.
+    if (existing && existing.status === 'UNSUBSCRIBED') {
+      return said('problem', 'That number has opted out. We cannot text them.');
+    }
+
+    await notify.sendAndLog(phone, text, existing ? existing.id : null, {
+      sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+      kind: 'PERSON',
+    });
+
+    // Land in the conversation, not back on the list: the next thing you want
+    // is to see what went and wait for the answer.
+    return res.redirect(
+      303,
+      `/ops/messages/${encodeURIComponent(phone.replace(/\D/g, ''))}?note=${encodeURIComponent(
+        existing
+          ? 'Sent. They were already on the books, so this went into their existing thread.'
+          : 'Sent. This is a new number - the AI takes over as soon as they reply.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
   }
 });
 
