@@ -456,6 +456,43 @@ null to null", and a log that is mostly noise is one nobody reads.
 swallows its own errors and logs loudly; a driver at a door must never be
 stopped by the audit trail failing.
 
+**AN ADMIN CAN CALL A PICKUP OFF, AND CANCELLING TEXTS THE CUSTOMER.** Neil's
+ask. A customer could already cancel by texting or from `/account`; nobody here
+could, so a pickup somebody rang up about sat on the board as though the van
+were still coming. `POST /ops/orders/:id/cancel`, behind `orders.override` —
+Admin only, the same line driver reassignment draws, because calling somebody's
+order off is a decision about the customer rather than a step in the round.
+
+**The text is the point.** A cancelled pickup the customer does not know about
+is somebody leaving a bag on a doorstep for a van that never comes. It is
+written in code rather than by the AI — unprompted, sent because of something WE
+did — and it does not repeat the reason back at them: the reason is for the
+change log, and an optional note is what an admin wants them to actually read.
+
+**Only while it is awaiting collection**, which is the state machine's rule
+rather than the page's. Past that the card stays and says why, because "where is
+the cancel button" is a worse question than a sentence answering it. **If the
+text fails the cancel still stands** and the screen says so — an admin who
+thinks the customer was told and was not is the worst of both.
+
+**SOMEBODY CAN BE MARKED OPTED OUT BY HAND, AND IT IS ONE WAY.** Neil's ask: a
+customer who asks to come off the list on the phone or at a door left no trace,
+and kept getting reminders. `POST /ops/customers/:id/opt-out`, behind
+`messages.send` — the people who may cause a text are the people who may stop
+one, and a driver is neither.
+
+**Nothing here opts anybody back IN.** Consent is theirs to give and they give
+it by texting START from their own handset, which is the rule every other door
+already follows. The button says so before it is pressed rather than after.
+**Nobody is texted to confirm** — they asked us to stop, and one more message
+saying we have stopped is the joke that writes itself.
+
+**How somebody came to be opted out is recorded, not just that they are**
+(migration 0076). `customers` already held how consent was GIVEN and nothing at
+all about how it was withdrawn, which survived only because STOP was the only
+door and their own message was the evidence. `unsubscribed_via` is `STOP` or
+`BY_HAND`, with the time, the person, and what they said.
+
 **Only `src/core/orders.js` may change an order's status.** The endpoints ask it
 to and turn its refusal into a 409, so a driver double-tapping cannot deliver
 an order twice or charge for it twice.
@@ -670,6 +707,8 @@ POST /ops/orders/:id/<step>  the buttons: collected, at-partner, ready,
 GET  /ops/customers          everyone, with order counts and lifetime billed
 GET  /ops/customers/:id      profile, preferences, consent record, history
 POST /ops/customers/:id/ask  text them for one thing we still need
+POST /ops/customers/:id/opt-out  they asked not to be texted (one way)
+POST /ops/orders/:id/cancel  call a pickup off, and tell them
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
