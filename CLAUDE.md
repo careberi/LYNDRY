@@ -955,14 +955,20 @@ would silently lose one. A lead we decided not to text is written down with its
 reason, because "we never saw it" and "we saw it and left it alone" are
 different answers.
 
-**The message is written in code, and it is specifically a Facebook message.**
-Same rule as the nudges: these words go to somebody who has not texted us, so
-they are words a person has read, and the segment count is knowable before
-anything is sent. The opening line says where we got the number. It does **not**
-use the canned welcome in `onboarding.js` - that one is written for somebody who
-typed their number into our own website and would be the wrong first sentence
-here. `kind = 'SYSTEM'`, so it earns no follow-up chase and is not mistaken for
-a colleague working the thread.
+**The message is written in code, not by the AI.** Same rule as the nudges:
+these words go to somebody who has not texted us, so they are words a person has
+read, and the segment count is knowable before anything is sent.
+`kind = 'SYSTEM'`, so it earns no follow-up chase and is not mistaken for a
+colleague working the thread.
+
+**ONLY THE OPENING LINE IS ITS OWN.** Everything after it comes from
+`onboarding.whatWeDo()`, which is what the canned website welcome uses too. Neil
+wrote the two messages separately and then wrote them identically from the
+second paragraph on, because they answer the same question for somebody who has
+never spoken to us. Two copies would be two things to edit, and one of them
+would be the one nobody remembered. What differs is the first sentence — this
+one says where we got the number, the welcome says thanks for sending it — and
+the opt-out line at the end.
 
 **It carries "Text STOP to opt out" on every version.** It is the only message
 in the system that reaches somebody who has never texted us, so it is the one
@@ -2390,6 +2396,27 @@ their defaults and are changed by texting.
 | `WEB_HERO` | The phone field on the home page. Ticked box, timestamp, IP |
 | `WEB_SIGNUP` | The full signup form. Same box, same evidence |
 | `INBOUND_TEXT` | They texted first. Their own message in the `messages` table |
+
+**THE FIRST MESSAGE IS FOUR SEGMENTS NOW, AND THAT IS DELIBERATE.** The canned
+welcome was held to one segment for a long time, on the grounds that it goes to
+everybody and every segment is billed. Neil rewrote it once there was paid
+traffic behind the number: it is the only thing a stranger reads before deciding
+whether to reply, and "no app to download" answers the question most of them are
+actually asking. Shorten it by cutting a whole idea, never by re-compressing it
+into the terse version — that has been tried and it reads as a robot.
+
+**The opening date goes INSIDE the invitation** — "just tell us a day that works
+from Tuesday 8 Sep" — rather than being left out of it. Both first messages go
+out before the AI ever sees the conversation, so they are the ones that cannot
+work out for themselves that the van does not run yet, and inviting somebody to
+name a day when the earliest we can come is next week sets up a refusal on their
+very next text. It disappears on its own once the date passes.
+
+**The free-orders sentence is `promotions.freeOfferLine()` and nothing else may
+write one.** It returns null unless the promotion genuinely takes everything
+off, so a 30% offer can never be announced as free, and the count comes off
+`max_orders` so a promise with a number in it can never carry a number the code
+is not enforcing.
 
 **The consent checkbox wording appears in three places and must stay identical
 in all of them** — the home page hero, `/signup`, and the blockquote on
