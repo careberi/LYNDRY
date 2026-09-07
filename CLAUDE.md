@@ -929,12 +929,25 @@ returns a sign-in page with a 200 on it**, so the status code proves nothing:
 the sweep checks the consent column is in the header and refuses the file if it
 is not.
 
-**THE TICK BOX ON THE FORM IS THE WHOLE GATE, and it is not a formality —
-three of the first four leads left it false.** Meta shows the box and sends the
-answer in its own column, so a false there is somebody who handed over their
-number and specifically declined to be texted. Those leads are recorded and
-never contacted. `consented` is stored rather than only acted on, because "why
-did we never contact this person" has to survive.
+**THE TICK BOX IS RECORDED AND DOES NOT GATE THE TEXT.** Neil's call, taken
+with the alternative in front of him: *"if they provided the number we text
+them"*. It was built as a gate first and the argument is kept in
+`src/core/leads.js` at length, because the instinct on reading that file is to
+put it back.
+
+Both halves of it: three of the first four leads left the box false, Meta's
+field is optional so a false covers both somebody who read it and declined and
+somebody who never noticed, and an unticked box is not express written consent —
+which is what a carrier asks about during 10DLC registration and what a TCPA
+complaint turns on. Against that, they typed their number into a laundry
+company's form asking about laundry pickup, which is an enquiry by any ordinary
+reading, and gating on the box throws away most of what the adverts are buying.
+
+**`consented` is still written on every row.** It is the evidence, and it has to
+survive whether or not it decides anything — "which of these people actually
+ticked it" is the first question anybody would ask if this is ever challenged.
+**A number that has texted STOP is still refused**, and that one is the law
+rather than a preference: it must never become configurable here.
 
 **Keyed on Meta's lead id, not the phone number.** The same person filling the
 form twice is two leads and both are recorded honestly; keying on the phone

@@ -83,10 +83,10 @@ async function main() {
     } else if (!phone) {
       verdict = 'SKIP - the number on the form is not usable';
       counts.skipped += 1;
-    } else if (consented !== 'true') {
-      verdict = 'SKIP - they did not tick the box to be texted';
-      counts.skipped += 1;
     } else {
+      // The tick box is shown in its own column and deliberately does not stop
+      // the send - Neil's call, recorded at the top of src/core/leads.js. It is
+      // still printed because it is the thing worth knowing about a lead.
       const { data: customer } = await db
         .from('customers')
         .select('id, name, status')

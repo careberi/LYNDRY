@@ -40,16 +40,30 @@ const { sendAndLog } = require('./notify');
 
 // --- Consent ---------------------------------------------------------------
 //
-// THE TICK BOX ON THE FORM IS THE WHOLE GATE, and it is not a formality: three
-// of the first four leads left it false. Meta shows the box, the answer comes
-// through in its own column, and a false there is somebody who gave us their
-// number and specifically declined to be texted.
+// THE TICK BOX IS RECORDED AND DOES NOT GATE THE TEXT. Neil's call, taken with
+// the alternative in front of him: "if they provided the number we text them".
 //
-// So a lead with anything other than a clear yes is recorded and never
-// contacted. That is the same standard the rest of the system already holds -
-// the website form will not submit without the box, and an opted-out number is
-// refused everywhere - and it is the answer to the question a carrier asks
-// during 10DLC registration, which is still pending.
+// It was a gate first, and the argument for that is worth keeping because the
+// obvious instinct on reading this file is to put it back. Three of the first
+// four leads left the box false; Meta's field is optional, so a false covers
+// both somebody who read it and declined and somebody who never noticed it, and
+// nothing in the data tells those apart. What is true either way is that an
+// unticked box is not express written consent, which is what a carrier asks
+// about during 10DLC registration and what a TCPA complaint turns on.
+//
+// Against that: they typed their number into a laundry company's form asking
+// about laundry pickup, which is an enquiry by any ordinary reading of it, and
+// the alternative is throwing away most of what the adverts are paying for.
+//
+// SO `consented` IS STILL STORED ON EVERY ROW, exactly as before. It is the
+// evidence, and it has to survive whether or not it decides anything - "which
+// of these people actually ticked it" is the first question anybody would ask
+// if this is ever challenged, and the answer must not be lost because the
+// policy changed.
+//
+// WHAT STILL REFUSES, and is not Neil's to waive: a number that has texted STOP.
+// That is the law rather than a preference, it is checked below, and it must
+// never become configurable here.
 const CONSENT_COLUMN = 'i_agree_to_receive_text_messages_from_lyndry';
 
 const yes = (value) => ['true', 'yes', '1', 'y'].includes(String(value || '').trim().toLowerCase());
@@ -315,8 +329,8 @@ async function handle(row) {
 
   if (!phone) return stop('the number on the form is not usable');
 
-  // THE TICK BOX. Recorded, never texted. See the note at the top of the file.
-  if (!consented) return stop('they did not tick the box to be texted');
+  // The tick box is recorded above and deliberately does not stop the send -
+  // see the note at the top of the file for why, and for what does.
 
   const { data: existing } = await db
     .from('customers')
