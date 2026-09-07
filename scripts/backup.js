@@ -31,6 +31,18 @@ const DIR = path.join(__dirname, '..', 'backups');
 // Order matters on the way back IN, so it is recorded here on the way OUT:
 // parents before children, so a restore never writes a row whose foreign key
 // has nothing to point at yet.
+//
+// EVERY TABLE THAT HOLDS A FACT GOES IN THIS LIST, and a new one is not added
+// to the database without being added here. A backup that silently misses a
+// table is the failure this file's own comment warns about, and it had already
+// happened three times: ai_pauses, facebook_leads and dismissed_leads were all
+// created after this list was written and none of them were being saved.
+//
+// TWO TABLES ARE LEFT OUT ON PURPOSE, and they are the only two:
+// ops_login_codes and customer_login_codes. They hold HMACs of six-digit
+// sign-in codes that expire in ten minutes, so a copy is worthless the moment
+// it is taken - and a file full of credential material sitting in a backup is
+// worse than worthless. Anybody restoring simply signs in again.
 const TABLES = [
   'app_settings',
   'promotions',
@@ -53,6 +65,13 @@ const TABLES = [
   'messages',
   'payment_links',
   'broadcasts',
+
+  // Keyed on a phone number rather than a customer, so they have no parent
+  // to sit behind - but they are still facts about real people: who has the
+  // AI switched off, who asked not to be chased, who came off an advert.
+  'ai_pauses',
+  'dismissed_leads',
+  'facebook_leads',
 ];
 
 // Rows are pulled in pages: a plain select stops at Supabase's row cap, and a
