@@ -2709,6 +2709,23 @@ function isAfter(a, b) {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// THE LONGEST TEXT WE WILL HAND TO THE CARRIER.
+//
+// This is the carrier's wall rather than one of ours. A concatenated SMS tops
+// out around 1600 characters and Telnyx refuses anything past it, so a longer
+// message does not arrive at all.
+//
+// IT REPLACED A 600-CHARACTER CAP THAT TRUNCATED SILENTLY. Neil hit it typing a
+// real explanation to a real customer. The number itself was arbitrary - four
+// segments, invented - but the truncation was the worse half: .slice() cut the
+// message mid-sentence and sent the front of it, so somebody could write a
+// careful paragraph, press Send it, and have the customer receive half a
+// thought with nothing anywhere saying so.
+//
+// Past this the message is REFUSED and the writer is told. Nothing is ever cut
+// down and sent.
+const SMS_MAX_CHARS = 1600;
+
 router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
     // Accepts either form: the UUID, or the number a person would actually
@@ -6752,7 +6769,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                        Plain text - no dashes or curly quotes, they cost an extra segment.
                        They have not asked to hear from us, so say who you are.
                      </p>
-                     <textarea class="field" id="new_body" name="body" rows="3" maxlength="600" required
+                     <textarea class="field" id="new_body" name="body" rows="3" required
                                style="width:100%;resize:vertical;"
                                placeholder="Hi, it's Neil from LYNDRY - we spoke at the laundromat..."></textarea>
                    </div>
@@ -7241,9 +7258,15 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
                    logged in this thread like any other. Plain text - no dashes
                    or curly quotes, they cost an extra segment.
                  </p>
+                 <p class="field-hint" style="margin:0 0 10px;">
+                   Write as much as you need. Every 153 characters is another
+                   segment and every segment is billed, so long is fine when it
+                   is worth it - past ${SMS_MAX_CHARS} the carrier will not take
+                   it at all, and we will say so rather than send half of it.
+                 </p>
                  <form method="post" id="send-message"
                        action="/ops/messages/${encodeURIComponent(digits)}/send" style="margin:0;">
-                   <textarea class="field" id="msg" name="body" rows="3" maxlength="600" required
+                   <textarea class="field" id="msg" name="body" rows="3" required
                              style="width:100%;resize:vertical;"
                              placeholder="Hi, sorry for the wait - just checking..."></textarea>
                  </form>
@@ -7287,10 +7310,20 @@ router.post('/ops/messages/new', guard, may('messages.send'), async (req, res, n
     const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
 
     const phone = normalisePhone(body.phone);
-    const text = String(body.body || '').trim().slice(0, 600);
+
+    // NOT .slice(). See SMS_MAX_CHARS.
+    const text = String(body.body || '').trim();
 
     if (!phone) return said('problem', 'That did not look like a US mobile number. Try it with the area code.');
     if (!text) return said('problem', 'Nothing to send.');
+
+    if (text.length > SMS_MAX_CHARS) {
+      return said(
+        'problem',
+        `That is ${text.length} characters and the carrier will not take more than ` +
+          `${SMS_MAX_CHARS}. Nothing was sent - shorten it and try again.`
+      );
+    }
 
     if (throttle.hit(`opsnew:${req.opsUser && req.opsUser.id}`, 20, 15 * 60 * 1000)) {
       return said('problem', 'That is a lot of new numbers in a short time. Give it a few minutes.');
@@ -7390,9 +7423,21 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
 
     const digits = phone.replace(/\D/g, '');
     const back = `/ops/messages/${encodeURIComponent(digits)}`;
-    const body = String((req.body || {}).body || '').trim().slice(0, 600);
+    // NOT .slice(). See SMS_MAX_CHARS - a message too long to send is refused
+    // and said so, never cut down and sent as if it were whole.
+    const body = String((req.body || {}).body || '').trim();
 
     if (!body) return res.redirect(303, `${back}?problem=${encodeURIComponent('Nothing to send.')}`);
+
+    if (body.length > SMS_MAX_CHARS) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent(
+          `That is ${body.length} characters and the carrier will not take more than ` +
+            `${SMS_MAX_CHARS}. Nothing was sent - shorten it and try again.`
+        )}`
+      );
+    }
 
     const { data: customer } = await db
       .from('customers')
