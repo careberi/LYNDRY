@@ -4,16 +4,28 @@ const { config } = require('../config');
 const booking = require('./booking');
 const nightly = require('./nightly');
 const followups = require('./followups');
+const leads = require('./leads');
 
 // ---------------------------------------------------------------------------
 // THE ONE CLOCK. Everything that happens without somebody pressing a button.
 //
-// Two jobs on one ten-minute tick:
+// Three jobs on two timers:
 //
 //   the nightly pass   once an evening: book tomorrow's standing orders, then
 //                      remind everybody whose pickup is tomorrow.
 //   follow-ups         all day: chase anybody the AI asked a question a day
 //                      ago who never answered.
+//   Facebook leads     every few minutes: text anybody new off the advert form.
+//
+// TWO TIMERS RATHER THAN ONE, and the second one is only worth it because of
+// what it is waiting for. The first two are waiting for the clock - an evening,
+// or a day since somebody was asked something - and ten minutes either way
+// changes nothing. A Facebook lead has just tapped an advert and is holding
+// their phone, so the gap between filling the form in and hearing from us is
+// the whole difference between a reply and being ignored.
+//
+// They are both here because "what runs by itself" should still be a question
+// somebody can answer by opening one file.
 //
 // They are separate modules because they are separate decisions; the timer is
 // here because there should be one, and because "what runs by itself" is a
@@ -44,9 +56,12 @@ const QUIET_START = 8;
 const QUIET_END = 21;
 
 const POLL_MS = Number(process.env.SCHEDULER_POLL_MINUTES || 10) * 60 * 1000;
+const LEADS_MS = Math.max(1, config.leads.pollMinutes) * 60 * 1000;
 
 let timer = null;
+let leadTimer = null;
 let ticking = false;
+let sweeping = false;
 
 // Whether this process should be the one watching the clock.
 //
@@ -94,6 +109,26 @@ async function tick({ now = null } = {}) {
   }
 }
 
+// The Facebook lead sweep, on its own faster timer.
+//
+// QUIET HOURS APPLY HERE TOO, and this is the one place "immediately" and the
+// law disagree. Somebody who fills the form in at half past eleven at night is
+// texted at eight the next morning, not at half past eleven - unprompted is
+// unprompted, whatever time they happened to tap the advert. It defers rather
+// than skipping, like a follow-up and unlike the nightly pass: the message is
+// an introduction and is exactly as true in the morning.
+async function sweepLeads({ now = null } = {}) {
+  if (sweeping) return { skipped: 'already sweeping' };
+  sweeping = true;
+
+  try {
+    if (inQuietHours(now || booking.nowInService())) return { quiet: true };
+    return await leads.sweep();
+  } finally {
+    sweeping = false;
+  }
+}
+
 function start() {
   if (!enabled()) {
     console.log(`  scheduler  : off in ${config.env} (set NIGHTLY_ENABLED=true to override)`);
@@ -116,12 +151,37 @@ function start() {
   // wait ten minutes before doing the night's work.
   tick().catch((err) => console.error(`Scheduler startup tick threw: ${err.message}`));
 
+  if (config.leads.sheetId) {
+    console.log(`  leads      : Facebook form, every ${config.leads.pollMinutes}m`);
+
+    leadTimer = setInterval(() => {
+      sweepLeads().catch((err) => console.error(`Lead sweep threw: ${err.message}`));
+    }, LEADS_MS);
+
+    if (leadTimer.unref) leadTimer.unref();
+
+    sweepLeads().catch((err) => console.error(`Lead startup sweep threw: ${err.message}`));
+  } else {
+    console.log('  leads      : off (no LEADS_SHEET_ID)');
+  }
+
   return timer;
 }
 
 function stop() {
   if (timer) clearInterval(timer);
+  if (leadTimer) clearInterval(leadTimer);
   timer = null;
+  leadTimer = null;
 }
 
-module.exports = { start, stop, tick, enabled, inQuietHours, QUIET_START, QUIET_END };
+module.exports = {
+  start,
+  stop,
+  tick,
+  sweepLeads,
+  enabled,
+  inQuietHours,
+  QUIET_START,
+  QUIET_END,
+};

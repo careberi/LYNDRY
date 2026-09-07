@@ -323,6 +323,25 @@ async function transition(order, to) {
   if (error) throw error;
   if (!data) throw new Error('That order changed while we were updating it. Try again.');
 
+  // A CANCELLED ORDER GIVES ITS FREE SLOT BACK. "The first 20 orders are free"
+  // reserves a slot when a pickup is booked, and an order that never happens
+  // must not sit on one of the twenty for ever.
+  //
+  // Here rather than at each caller because this is the one function allowed to
+  // move an order's status - the text thread, the website and the ops screens
+  // all reach it - and a release that one door forgot is a slot nobody can get
+  // back. Best effort and never awaited into the result: a cancellation must
+  // not fail because the promotion ledger did.
+  //
+  // require() inside the function: promotions.js is small and standalone today,
+  // but orders.js is required by half the system and a top-level import here is
+  // how a cycle gets introduced later without anybody noticing.
+  if (to === 'CANCELED') {
+    require('./promotions')
+      .releaseSlot(order.id)
+      .catch((err) => console.error(`Could not release a promotion slot: ${err.message}`));
+  }
+
   return data;
 }
 

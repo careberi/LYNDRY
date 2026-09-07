@@ -542,9 +542,17 @@ ${
 
 // One promotion as a campaign card rather than a row.
 function promotionCard(p, counts) {
-  const held = counts[p.id] || { granted: 0, redeemed: 0 };
+  const held = counts[p.id] || { granted: 0, claimed: 0, redeemed: 0 };
   const aud = promotionsCore.audienceOf(p.audience);
   const ended = p.status === 'ENDED';
+
+  // RUN OUT IS NOT THE SAME AS ENDED. Ended is a decision somebody took; this
+  // is an offer that did exactly what it was set up to do.
+  //
+  // COUNTED IN ORDERS, NOT PEOPLE. A capped promotion is handed to everybody
+  // and the slot is taken when a pickup is booked, so "given out" can be 200
+  // while "taken" is 20 and it has run out.
+  const gone = Boolean(p.max_orders) && held.claimed >= p.max_orders;
 
   // Only an audience that describes a group can be handed out in one go. The
   // automatic one needs no button and the by-hand one has no list to work from.
@@ -578,18 +586,35 @@ function promotionCard(p, counts) {
           ${escapeHtml(promotionsCore.describe(p))}
         </p>
         <p style="font-size:15px;margin:0 0 12px;color:var(--ink-700);">
-          For ${escapeHtml(aud.label.toLowerCase())}.
+          For ${escapeHtml(aud.label.toLowerCase())}.${
+            p.max_orders
+              ? gone
+                ? ' <strong>All gone - the next booking pays full price.</strong>'
+                : ` ${p.max_orders - held.claimed} of ${p.max_orders} free orders left.`
+              : ''
+          }
         </p>
 
-        <p style="font-size:15px;line-height:1.5;margin:0;padding:11px 14px;border:2px solid var(--ink-900);
-                  border-radius:10px;background:var(--paper-000);">
-          <span class="eyebrow" style="margin:0 8px 0 0;">The AI may say</span>
-          ${escapeHtml(p.blurb)}
-        </p>
+        ${
+          p.blurb
+            ? `<p style="font-size:15px;line-height:1.5;margin:0;padding:11px 14px;
+                         border:2px solid var(--ink-900);border-radius:10px;background:var(--paper-000);">
+                 <span class="eyebrow" style="margin:0 8px 0 0;">The AI may say</span>
+                 ${escapeHtml(p.blurb)}
+               </p>`
+            : `<p style="font-size:15px;line-height:1.5;margin:0;color:var(--ink-700);">
+                 Silent - it comes off the price and the AI is told nothing about it.
+               </p>`
+        }
       </div>
 
       <div style="display:flex;gap:26px;align-items:flex-start;">
         ${stat(held.granted, 'given out')}
+        ${
+          p.max_orders
+            ? stat(`${held.claimed}/${p.max_orders}`, 'orders booked')
+            : stat(held.claimed, 'orders booked')
+        }
         ${stat(held.redeemed, 'used')}
       </div>
     </div>
@@ -826,6 +851,21 @@ ${
 
         <select class="field" id="p_audience" name="audience">${audienceOptions}</select>
         ${audienceNotes}
+
+        <div style="margin-top:16px;">
+          <label class="field-label" for="p_cap">Stop after this many orders</label>
+          <p class="field-hint" style="margin:0 0 8px;">
+            For an offer with a number in it - "the first 20 orders are free".
+            Everybody above still gets it; what runs out is the order.
+          </p>
+          <p class="field-hint" style="margin:0 0 8px;">
+            A slot is taken <strong>the moment somebody books</strong>, so they
+            are told there and then whether theirs is one of them. Cancel the
+            pickup and the slot goes back. Blank means no limit.
+          </p>
+          <input class="field" id="p_cap" name="max_orders" type="number" min="1" step="1"
+                 placeholder="20">
+        </div>
       </div>
 
       <div style="padding-top:22px;border-top:2px solid var(--ink-100);">

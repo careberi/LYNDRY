@@ -8002,14 +8002,33 @@ router.post('/ops/settings/open', guard, may('service.manage'), async (req, res,
 
 // --- Promotions ------------------------------------------------------------
 
+// THREE NUMBERS, AND THEY ARE THREE DIFFERENT THINGS.
+//
+//   granted   how many people hold it. Never capped.
+//   claimed   how many orders have taken a slot. This is what runs out on a
+//             capped promotion, and it is claimed at booking.
+//   redeemed  how many have actually had the money come off at the weigh-in.
+//
+// A claim can be ahead of a redemption for two days, which is exactly the gap
+// the cap is decided in.
 async function promoCounts() {
-  const { data } = await db.from('customer_promotions').select('promotion_id, redeemed_at');
+  const { data } = await db
+    .from('customer_promotions')
+    .select('promotion_id, redeemed_at, claimed_order_id');
+
   const counts = {};
+
   for (const row of data || []) {
-    const c = (counts[row.promotion_id] = counts[row.promotion_id] || { granted: 0, redeemed: 0 });
+    const c = (counts[row.promotion_id] = counts[row.promotion_id] || {
+      granted: 0,
+      claimed: 0,
+      redeemed: 0,
+    });
     c.granted += 1;
+    if (row.claimed_order_id) c.claimed += 1;
     if (row.redeemed_at) c.redeemed += 1;
   }
+
   return counts;
 }
 
@@ -8138,6 +8157,17 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
       min_order_cents: dollars(body.min_order),
       max_discount_cents: dollars(body.max_discount),
       expires_days: Number.isFinite(days) && days > 0 ? Math.round(days) : null,
+      // HOW MANY ORDERS MAY EVER USE IT. Not how many people hold it: a capped
+      // promotion is given to everybody, and the ORDER takes the slot at the
+      // moment it is booked. Blank stays null - "no limit" and "a limit of
+      // nothing" are different sentences and only one is true, the same rule
+      // the minimum above follows.
+      max_orders: (() => {
+        const n = Number(body.max_orders);
+        return String(body.max_orders || '').trim() && Number.isFinite(n) && n > 0
+          ? Math.round(n)
+          : null;
+      })(),
       created_by: req.opsUser && req.opsUser.id,
     });
 
@@ -8186,7 +8216,8 @@ router.post('/ops/promotions/:id/issue', guard, may('service.manage'), async (re
       303,
       `/ops/promotions?note=${encodeURIComponent(
         `Given to ${result.given} ${result.given === 1 ? 'person' : 'people'}` +
-          `${result.already ? `, ${result.already} already had it` : ''}. ` +
+          `${result.already ? `, ${result.already} already had it` : ''}` +
+          `${result.short ? `, ${result.short} missed out - it has run out` : ''}. ` +
           'Nobody has been texted - the AI mentions it when they next get in touch.'
       )}`
     );

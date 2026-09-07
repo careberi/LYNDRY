@@ -1,0 +1,370 @@
+'use strict';
+
+const db = require('../db');
+const { config } = require('../config');
+const { site } = require('../web/site');
+const { normalisePhone } = require('./phone');
+const onboarding = require('./onboarding');
+const promotions = require('./promotions');
+const { sendAndLog } = require('./notify');
+
+// ---------------------------------------------------------------------------
+// LEADS FROM THE FACEBOOK INSTANT FORM.
+//
+// Neil runs ads on Facebook with a Meta instant form on them - somebody taps
+// the advert, their number is filled in for them, they tap send. Meta writes
+// the lead into a Google Sheet. This reads that sheet and texts anybody new.
+//
+// Neil's ask: "if a new number appears that is not already a customer, a
+// message needs to be sent to them immediately".
+//
+// WHY A GOOGLE SHEET AND NOT META'S API. The sheet is already there, Meta
+// already writes to it, and it needs no app review, no access token and no
+// second thing to renew. It is published to the web as CSV, so reading it is
+// one HTTP GET with no credentials at all - which also means there is nothing
+// here to leak. If Meta ever stops writing to it, this stops finding leads and
+// says so, rather than texting the wrong people.
+//
+// THE MESSAGE IS WRITTEN HERE, IN CODE, NOT BY THE AI. Same rule as the nudges
+// and for the same two reasons: these words go to somebody who has not texted
+// us, so they should be words a person has read and approved; and the segment
+// count is knowable before anything is sent. The AI takes over the moment they
+// reply, which is where it is good.
+//
+// IT IS SPECIFICALLY A FACEBOOK MESSAGE. Neil's point: everything in this
+// sheet came off an advert, so the opening line says so - "you filled out the
+// laundry pickup form on our Facebook ad". The canned welcome in onboarding.js
+// is for somebody who typed their number into our own website and would be the
+// wrong first sentence here, which is why this does not use it.
+// ---------------------------------------------------------------------------
+
+// --- Consent ---------------------------------------------------------------
+//
+// THE TICK BOX ON THE FORM IS THE WHOLE GATE, and it is not a formality: three
+// of the first four leads left it false. Meta shows the box, the answer comes
+// through in its own column, and a false there is somebody who gave us their
+// number and specifically declined to be texted.
+//
+// So a lead with anything other than a clear yes is recorded and never
+// contacted. That is the same standard the rest of the system already holds -
+// the website form will not submit without the box, and an opted-out number is
+// refused everywhere - and it is the answer to the question a carrier asks
+// during 10DLC registration, which is still pending.
+const CONSENT_COLUMN = 'i_agree_to_receive_text_messages_from_lyndry';
+
+const yes = (value) => ['true', 'yes', '1', 'y'].includes(String(value || '').trim().toLowerCase());
+
+// --- The sheet -------------------------------------------------------------
+
+// The published CSV of the first tab. Not a secret - the sheet is readable by
+// anybody with the link, which is what makes this work without credentials.
+function sheetUrl() {
+  const id = config.leads.sheetId;
+  return id ? `https://docs.google.com/spreadsheets/d/${id}/export?format=csv` : null;
+}
+
+// A small CSV reader, because the fields are quoted and contain commas: one
+// campaign is called "Text me first (all ads, Sep 2026)". Handles quoted
+// fields, doubled quotes inside them, and CRLF line endings. That is the whole
+// grammar Google emits, and a dependency for it would be a dependency to keep
+// up to date for one file.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      quoted = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else if (ch !== '\r') {
+      field += ch;
+    }
+  }
+
+  if (field !== '' || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  if (!rows.length) return [];
+
+  const headers = rows[0].map((h) => h.trim());
+
+  return rows
+    .slice(1)
+    .filter((r) => r.some((cell) => String(cell).trim()))
+    .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] === undefined ? '' : r[i]])));
+}
+
+// Meta prefixes its ids: a lead is "l:1385400376502562" and a phone number
+// arrives as "p:+12014068616". normalisePhone throws away everything that is
+// not a digit anyway, so the phone needs no special handling - the lead id
+// does, and is kept exactly as Meta wrote it because it is their id, not ours.
+async function fetchLeads() {
+  const url = sheetUrl();
+  if (!url) return { ok: false, reason: 'no sheet configured', rows: [] };
+
+  const res = await fetch(url, {
+    // A hanging request must never wedge the tick it is running on.
+    signal: AbortSignal.timeout(15_000),
+    redirect: 'follow',
+  });
+
+  if (!res.ok) return { ok: false, reason: `sheet returned ${res.status}`, rows: [] };
+
+  const rows = parseCsv(await res.text());
+  if (!rows.length) return { ok: true, rows: [] };
+
+  // A sheet that has stopped being shared returns a sign-in PAGE with a 200 on
+  // it, so the status code alone proves nothing. If the consent column is not
+  // in the header this is not our sheet, and nobody is getting texted off it.
+  if (!(CONSENT_COLUMN in rows[0])) {
+    return {
+      ok: false,
+      reason: 'the sheet has no consent column - check it is still shared',
+      rows: [],
+    };
+  }
+
+  return { ok: true, rows };
+}
+
+// --- What we say -----------------------------------------------------------
+
+// The offer sentence, with the number read off the promotion rather than typed
+// here. "The first 20 orders are free" is a promise with a count in it, and the
+// count that goes out in a text has to be the same one the code is enforcing -
+// two copies of it would disagree the first time Neil changed one.
+//
+// ONLY A GENUINELY FREE OFFER GETS THIS WORDING. The sentence says free, so the
+// test is that the promotion takes everything off. A different offer - 30% off,
+// say - falls through to the plain invitation, and the AI mentions it from the
+// promotion's own blurb when they reply, exactly as it does everywhere else.
+function offerLine(promo) {
+  if (!promo) return null;
+  if (promo.kind !== 'PERCENT_OFF' || Number(promo.value) < 100) return null;
+
+  return promo.max_orders
+    ? `While we are getting started the first ${promo.max_orders} orders are free. ` +
+        `If you want one of them, just tell us a day that works and we will come ` +
+        `get your laundry.`
+    : `While we are getting started your first order is free. ` +
+        `If you want it, just tell us a day that works and we will come get your laundry.`;
+}
+
+// Neil's words. Three paragraphs: who this is and why we have their number,
+// what the service is, and what to do next.
+//
+// It runs to three segments, which is a real cost on every lead. That is the
+// right trade here and it is a different judgement from the canned welcome:
+// this number cost money to acquire, and a terse text to somebody who has never
+// heard of us is how that money gets wasted.
+function leadMessage({ promo = null } = {}) {
+  const offer = offerLine(promo);
+
+  return [
+    `Hi, this is ${site.name}. You filled out the laundry pickup form on our ` +
+      `Facebook ad and left this number, so we wanted to follow up.`,
+
+    `We do wash and fold pickup and delivery in ${site.serviceArea}. We pick your ` +
+      `laundry up at your door, wash and fold it, and bring it back the next day.`,
+
+    // WITHOUT AN OFFER TO HONOUR, THE OFFER IS NOT MENTIONED. The alternative
+    // is telling lead twenty-one that the first twenty orders are free, which
+    // is a sentence that stops being true at exactly the moment it matters.
+    offer ||
+      `If you want to give us a go, just tell us a day that works and we will ` +
+        `come get your laundry.`,
+
+    // THE OPT-OUT LINE IS ON EVERY VERSION. This is the one message in the
+    // system that reaches somebody who has never texted us, so it is the one
+    // that has to carry the way out - and a carrier reviewing the campaign
+    // looks for exactly this sentence on exactly this kind of message. STOP is
+    // handled in code in src/core/compliance.js whether we mention it or not;
+    // saying so is what makes it findable.
+    `Text STOP to opt out.`,
+  ].join('\n\n');
+}
+
+// --- The sweep -------------------------------------------------------------
+
+// One pass. Returns what it did, so the caller can log it and a test can read
+// it. Never throws for one bad row: a lead with a broken number must not stop
+// the lead behind it being texted.
+async function sweep({ limit = 25 } = {}) {
+  const done = { texted: [], skipped: [], problem: null };
+
+  const { ok, reason, rows } = await fetchLeads().catch((err) => ({
+    ok: false,
+    reason: err.name === 'TimeoutError' ? 'the sheet timed out' : err.message,
+    rows: [],
+  }));
+
+  if (!ok) {
+    done.problem = reason;
+    console.error(`Facebook leads: ${reason}`);
+    return done;
+  }
+
+  if (!rows.length) return done;
+
+  // WHICH ONES HAVE WE SEEN. One query rather than one per row, and keyed on
+  // Meta's lead id: the same person filling the form twice is two leads, and
+  // both are recorded honestly even though only the first is texted.
+  const ids = rows.map((r) => String(r.id || '').trim()).filter(Boolean);
+
+  const { data: known, error } = await db
+    .from('facebook_leads')
+    .select('lead_id')
+    .in('lead_id', ids);
+
+  if (error) throw error;
+
+  const seen = new Set((known || []).map((r) => r.lead_id));
+
+  // OLDEST FIRST, so a backlog is worked through in the order people actually
+  // filled the form in. Meta writes newest first.
+  const fresh = rows
+    .filter((r) => String(r.id || '').trim() && !seen.has(String(r.id).trim()))
+    .reverse()
+    .slice(0, limit);
+
+  for (const row of fresh) {
+    try {
+      const outcome = await handle(row);
+      if (outcome.texted) done.texted.push(outcome);
+      else done.skipped.push(outcome);
+    } catch (err) {
+      console.error(`Facebook lead ${row.id} threw: ${err.message}`);
+      done.skipped.push({ leadId: row.id, reason: err.message });
+    }
+  }
+
+  return done;
+}
+
+// One lead. Recorded either way - a lead we decided not to text is exactly the
+// row somebody will want to look at later, and "we never saw it" and "we saw it
+// and left it alone" are different answers to the same question.
+async function handle(row) {
+  const leadId = String(row.id || '').trim();
+  const phone = normalisePhone(String(row.phone || '').replace(/^p:/i, ''));
+  const consented = yes(row[CONSENT_COLUMN]);
+
+  const record = async (fields) => {
+    const { error } = await db.from('facebook_leads').upsert(
+      {
+        lead_id: leadId,
+        phone: phone || String(row.phone || '').slice(0, 40),
+        created_time: row.created_time || null,
+        consented,
+        form_name: row.form_name || null,
+        campaign: row.campaign_name || null,
+        ...fields,
+      },
+      { onConflict: 'lead_id' }
+    );
+    if (error) throw error;
+  };
+
+  const stop = async (reason) => {
+    await record({ skipped: reason });
+    console.log(`Facebook lead ${leadId}: ${reason}`);
+    return { leadId, phone, texted: false, reason };
+  };
+
+  // ALREADY TEXTED IS THE END OF IT. The sweep filters seen leads out before it
+  // gets here, so this only fires when handle() is called directly - and then it
+  // matters, because everything below would find them on the books and write
+  // "already a customer" over the record of the text we actually sent. A row
+  // that says both is not evidence of anything.
+  const { data: before } = await db
+    .from('facebook_leads')
+    .select('texted_at')
+    .eq('lead_id', leadId)
+    .maybeSingle();
+
+  if (before && before.texted_at) {
+    return { leadId, phone, texted: false, reason: 'already texted' };
+  }
+
+  if (!phone) return stop('the number on the form is not usable');
+
+  // THE TICK BOX. Recorded, never texted. See the note at the top of the file.
+  if (!consented) return stop('they did not tick the box to be texted');
+
+  const { data: existing } = await db
+    .from('customers')
+    .select('id, status')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  // STOP is a legal instruction and outranks a form filled in afterwards.
+  if (existing && existing.status === 'UNSUBSCRIBED') {
+    await record({ customer_id: existing.id });
+    return stop('that number has opted out');
+  }
+
+  // Neil's rule: only numbers that are not already customers. Somebody already
+  // on the books is mid-conversation with us, and an advert introduction on top
+  // of that reads as though nobody is paying attention.
+  if (existing) {
+    await record({ customer_id: existing.id });
+    return stop('already a customer');
+  }
+
+  // Creates the row with its consent record and hands out whatever promotion is
+  // on auto-grant. sendWelcome is false because the welcome in onboarding.js is
+  // written for somebody who typed their number into our own website; this lead
+  // gets the Facebook wording above instead.
+  const started = await onboarding.startConversation({
+    phone,
+    consentSource: 'FACEBOOK_FORM',
+    sendWelcome: false,
+  });
+
+  if (!started.ok) return stop(started.reason);
+
+  // WHAT THEY ACTUALLY ENDED UP HOLDING decides what the message may promise -
+  // not what the offer is meant to be. If the twenty are gone, startConversation
+  // granted nothing and the free sentence is left out.
+  // heldBy() flattens the promotion onto the grant, so a row IS the promotion
+  // plus the grant's own expiry and limit. There is nothing to reach into.
+  const held = await promotions.heldBy(started.customer.id).catch(() => []);
+  const promo = held[0] || null;
+
+  await sendAndLog(phone, leadMessage({ promo }), started.customer.id, { kind: 'SYSTEM' });
+
+  await record({ customer_id: started.customer.id, texted_at: new Date().toISOString() });
+
+  console.log(`Facebook lead ${leadId}: texted ${phone}${promo ? ' (holding an offer)' : ''}`);
+
+  return { leadId, phone, texted: true, customerId: started.customer.id };
+}
+
+module.exports = { sweep, handle, fetchLeads, parseCsv, leadMessage, offerLine, sheetUrl };

@@ -30,7 +30,18 @@ const { site } = require('../web/site');
 // being folded into WEB_HERO because an audit asks WHICH page somebody ticked
 // the box on, and "the one we were paying to send them to" is a different
 // answer from "the home page".
-const CONSENT_SOURCES = ['WEB_SIGNUP', 'WEB_HERO', 'WEB_BERGEN', 'INBOUND_TEXT'];
+//
+// FACEBOOK_FORM is the tick box on Meta's instant form. It is its own source
+// for the same reason WEB_BERGEN is: the evidence is different. There is no IP
+// and no page of ours involved - what we hold is Meta's own record of the lead,
+// the box they ticked, and the row in facebook_leads that copied it.
+const CONSENT_SOURCES = [
+  'WEB_SIGNUP',
+  'WEB_HERO',
+  'WEB_BERGEN',
+  'INBOUND_TEXT',
+  'FACEBOOK_FORM',
+];
 
 // What we say to somebody we have never spoken to.
 //

@@ -6,6 +6,7 @@ const db = require('../db');
 const billing = require('../core/billing');
 const booking = require('../core/booking');
 const orders = require('../core/orders');
+const promotions = require('../core/promotions');
 const payments = require('../providers/payments');
 const { sendAndLog } = require('../core/notify');
 const { renderPage } = require('../web/layout');
@@ -276,9 +277,17 @@ async function handleEvent(event) {
             '.'
           : '';
 
+        // WAS THIS ONE FREE. Looked up rather than passed in, because this
+        // confirmation is sent by the webhook long after bookPickup() returned
+        // - the order was written first and the card saved afterwards, which is
+        // the whole shape of this path. Getting it wrong here would quote a
+        // price for an order that took one of the free slots.
+        const freeOrder = await promotions.claimedFreeOrder(pending.id).catch(() => false);
+
         await sendAndLog(
           customer.phone,
-          booking.confirmationMessage(customer, pending, { opener: 'Card saved' }) + alsoLine,
+          booking.confirmationMessage(customer, pending, { opener: 'Card saved', freeOrder }) +
+            alsoLine,
           customer.id
         );
         return;

@@ -613,7 +613,10 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
     // whichever door they came through.
     await sendAndLog(
       customer.phone,
-      booking.confirmationMessage(customer, result.order, { rolled: result.rolled }),
+      booking.confirmationMessage(customer, result.order, {
+        rolled: result.rolled,
+        freeOrder: result.freeOrder,
+      }),
       customer.id
     );
 

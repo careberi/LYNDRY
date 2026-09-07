@@ -21,7 +21,7 @@ const db = require('../db');
 
 const FIELDS =
   'id, name, blurb, kind, value, applies_to, audience, status, starts_at, ends_at, ' +
-  'min_order_cents, max_discount_cents, expires_days, use_limit';
+  'min_order_cents, max_discount_cents, expires_days, use_limit, max_orders';
 
 // WHO A PROMOTION IS FOR. See migration 0066 - this replaced the auto_grant
 // boolean, which could only ever say "new numbers" and had no way to say
@@ -114,9 +114,150 @@ function limitOf(promo) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// A CAPPED PROMOTION: THE FIRST N ORDERS, NOT THE FIRST N PEOPLE.
+//
+// Neil's rule, settled with the alternative in front of him: "give it to
+// everyone, but only the first 20 people who actually book and order with us
+// get it". So handing it out is free and unlimited - what runs out is the
+// ORDER, which is what the advert says anyway.
+//
+// THE SLOT IS TAKEN AT BOOKING, and that is the whole point. Everything else
+// about a promotion is decided when the order is priced, hours later at a
+// laundromat. Deciding the cap there too would mean the twenty-first customer
+// is told their pickup is booked and free, and finds out otherwise when the
+// price text arrives. Claiming at booking answers the question at the only
+// moment the customer is actually asking it.
+//
+// A claim is not a redemption. `claimed_order_id` is a reservation made when a
+// pickup is booked; `redeemed_at` and `uses` are the money actually coming off
+// at the weigh-in. An order can be claimed and then cancelled, which is why
+// releaseSlot() exists.
+// ---------------------------------------------------------------------------
+
+// HOW MANY ORDERS HAVE TAKEN A SLOT.
+//
+// A query rather than a counter on the promotion, for the reason the rest of
+// the system gives for every count it does not keep: customer_promotions IS the
+// ledger, and a number in a second place is free to disagree with it the first
+// time anything goes wrong.
+async function claimCount(promotionId) {
+  const { count, error } = await db
+    .from('customer_promotions')
+    .select('id', { count: 'exact', head: true })
+    .eq('promotion_id', promotionId)
+    .not('claimed_order_id', 'is', null);
+
+  if (error) throw error;
+  return count || 0;
+}
+
+// How many orders are left on it, or null when there is no cap.
+async function ordersLeft(promo) {
+  if (!promo || !promo.max_orders) return null;
+  return Math.max(0, promo.max_orders - (await claimCount(promo.id)));
+}
+
+// Is it all gone?
+async function full(promo) {
+  const left = await ordersLeft(promo);
+  return left !== null && left <= 0;
+}
+
+// TAKE A SLOT FOR THIS ORDER, if the customer holds a capped promotion and
+// there is one left. Returns the promotion they claimed, or null.
+//
+// Called from booking.bookPickup() - the one door both the AI and the web form
+// go through - so a slot cannot be taken by one and missed by the other.
+//
+// Uncapped promotions claim nothing. They are unlimited by definition, so a
+// claim would be a row written for no reason and a second thing to keep in step
+// with what discountFor() decides at the weigh-in.
+//
+// The count and the update are two statements with no lock between them. One
+// instance is assumed here exactly as it is for the sign-in throttles and the
+// nightly poll; losing that race costs one extra free order.
+async function claimSlot(customerId, orderId) {
+  if (!customerId || !orderId) return null;
+
+  const held = await heldBy(customerId);
+  const capped = held.filter((p) => p.max_orders && !p.claimedOrderId);
+  if (!capped.length) return null;
+
+  for (const promo of capped) {
+    if (await full(promo)) continue;
+
+    const { error } = await db
+      .from('customer_promotions')
+      .update({ claimed_order_id: orderId, claimed_at: new Date().toISOString() })
+      .eq('id', promo.grantId)
+      .is('claimed_order_id', null);
+
+    if (error) {
+      console.error(`Could not claim a promotion slot for order ${orderId}: ${error.message}`);
+      continue;
+    }
+
+    console.log(`Order ${orderId} took a slot on "${promo.name}"`);
+    return promo;
+  }
+
+  return null;
+}
+
+// GIVE THE SLOT BACK. An order that never happens must not hold one of the
+// twenty for ever.
+//
+// Only ever called for an order that is not going ahead, so it clears the claim
+// without touching redeemed_at or uses: a cancelled order was never priced, so
+// nothing was spent. Best effort - a cancellation must not fail because the
+// promotion ledger did.
+async function releaseSlot(orderId) {
+  if (!orderId) return false;
+
+  const { data, error } = await db
+    .from('customer_promotions')
+    .update({ claimed_order_id: null, claimed_at: null })
+    .eq('claimed_order_id', orderId)
+    .select('id');
+
+  if (error) {
+    console.error(`Could not release the promotion slot on order ${orderId}: ${error.message}`);
+    return false;
+  }
+
+  if (data && data.length) console.log(`Order ${orderId} gave its promotion slot back`);
+  return Boolean(data && data.length);
+}
+
+// IS THIS ORDER FREE because it took a slot on a promotion that takes
+// everything off?
+//
+// Asked by whoever is about to tell the customer what a booking costs. It has
+// to be a lookup rather than a flag on the order: the claim lives on the grant,
+// and a copy on the order would be a second version of the same fact - the rule
+// this file follows everywhere else.
+async function claimedFreeOrder(orderId) {
+  if (!orderId) return false;
+
+  const { data, error } = await db
+    .from('customer_promotions')
+    .select(`id, promotions (kind, value, status)`)
+    .eq('claimed_order_id', orderId)
+    .maybeSingle();
+
+  if (error || !data || !data.promotions) return false;
+
+  const promo = data.promotions;
+  return promo.kind === 'PERCENT_OFF' && Number(promo.value) >= 100;
+}
+
 // Give somebody a promotion. Safe to call repeatedly - the unique index means
 // a second grant is a no-op rather than a duplicate, which matters because the
 // obvious place to call this is "every time an unknown number texts".
+//
+// NOT CAPPED. A capped promotion is handed out to everybody and runs out at the
+// booking, not here - see the block above.
 async function grant(customerId, promotionId) {
   // THE EXPIRY IS STAMPED HERE AND NEVER RECOMPUTED. "Seven days from when you
   // got it" is a different date for every holder, so it belongs on the grant -
@@ -142,8 +283,24 @@ async function grant(customerId, promotionId) {
     .select('*')
     .maybeSingle();
 
-  // 23505 is "already has it", which is exactly what we want to happen.
-  if (error && error.code !== '23505') throw error;
+  // 23505 is "already has it", which is exactly what we want to happen - and
+  // the grant they already have is handed back rather than null, so a caller
+  // can ask "do they hold this" by the return value alone. That matters for the
+  // capped offers: whether to promise somebody a free order is the same
+  // question as whether this call left them holding one.
+  if (error) {
+    if (error.code !== '23505') throw error;
+
+    const { data: had } = await db
+      .from('customer_promotions')
+      .select('*')
+      .eq('customer_id', customerId)
+      .eq('promotion_id', promotionId)
+      .maybeSingle();
+
+    return had || null;
+  }
+
   return data || null;
 }
 
@@ -187,16 +344,31 @@ async function issueToAudience(promotionId) {
     eligible = eligible.filter((c) => !hasOrdered.has(c.id));
   }
 
-  let given = 0;
-  let already = 0;
+  // COUNTED FROM THE LEDGER RATHER THAN FROM THE LOOP. grant() hands back the
+  // grant somebody already had, so a truthy return no longer means "this is
+  // new" - the difference between the count before and after is the only
+  // honest answer to how many people this actually reached.
+  //
+  // A CAP DOES NOT LIMIT THIS LOOP. A capped promotion is deliberately handed
+  // to everybody; what runs out is the ORDER that claims a slot at booking.
+  // That is Neil's rule, and it is why there is nothing to check here.
+  const total = async () => {
+    const { count } = await db
+      .from('customer_promotions')
+      .select('id', { count: 'exact', head: true })
+      .eq('promotion_id', promotionId);
+    return count || 0;
+  };
+
+  const before = await total();
 
   for (const person of eligible) {
-    const row = await grant(person.id, promotionId);
-    if (row) given += 1;
-    else already += 1;
+    await grant(person.id, promotionId);
   }
 
-  return { ok: true, given, already, considered: eligible.length };
+  const given = (await total()) - before;
+
+  return { ok: true, given, already: eligible.length - given, considered: eligible.length };
 }
 
 // Everything this customer holds and has not spent.
@@ -205,7 +377,10 @@ async function heldBy(customerId) {
 
   const { data, error } = await db
     .from('customer_promotions')
-    .select(`id, granted_at, redeemed_at, expires_at, uses, use_limit, promotions (${FIELDS})`)
+    .select(
+      `id, granted_at, redeemed_at, expires_at, uses, use_limit, claimed_order_id, ` +
+        `promotions (${FIELDS})`
+    )
     .eq('customer_id', customerId)
     .is('redeemed_at', null);
 
@@ -221,6 +396,9 @@ async function heldBy(customerId) {
       // The grant's own limit wins over the promotion's. Older grants have
       // none recorded, so they fall back to what the promotion says now.
       grantLimit: row.use_limit != null ? row.use_limit : limitOf(row.promotions),
+      // WHICH ORDER, IF ANY, HAS THIS GRANT'S SLOT. Only meaningful on a capped
+      // promotion, where holding it and having it are different things.
+      claimedOrderId: row.claimed_order_id || null,
       ...row.promotions,
     }));
 }
@@ -247,6 +425,15 @@ async function discountFor(customer, order, priceCents) {
 
   const usable = held.filter((p) => {
     if (p.applies_to === 'FIRST_ORDER' && (delivered || 0) > 0) return false;
+
+    // A CAPPED PROMOTION ONLY DISCOUNTS THE ORDER THAT CLAIMED ITS SLOT.
+    //
+    // The slot is taken when the pickup is booked, so by the time anything is
+    // priced the answer is already settled and written down - which is the
+    // point: the customer was told at booking whether this one was free, and
+    // this is where that promise is kept. Somebody holding it who booked after
+    // the twenty were gone has no claim, and pays.
+    if (p.max_orders && p.claimedOrderId !== order.id) return false;
 
     // "Valid on orders over $30", checked against the price BEFORE the discount
     // comes off - otherwise a promotion could take an order under its own
@@ -388,6 +575,12 @@ module.exports = {
   find,
   autoGrant,
   grant,
+  claimCount,
+  ordersLeft,
+  claimSlot,
+  releaseSlot,
+  claimedFreeOrder,
+  full,
   issueToAudience,
   heldBy,
   holders,

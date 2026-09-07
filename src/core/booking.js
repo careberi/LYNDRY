@@ -10,6 +10,7 @@ const { config } = require('../config');
 const wash = require('./wash');
 const geocode = require('./geocode');
 const settings = require('./settings');
+const promotions = require('./promotions');
 
 // ---------------------------------------------------------------------------
 // The rules for booking a pickup, in one place.
@@ -941,10 +942,39 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
       if (error) console.error(`Could not clear the asked-for slot: ${error.message}`);
     });
 
+  // THE FREE SLOT IS TAKEN HERE, WHILE THE CUSTOMER IS STILL ASKING.
+  //
+  // "The first 20 orders are free" runs out, and the only fair moment to find
+  // out whether you were in time is the moment you book - not two days later
+  // when the price text arrives. So a capped promotion reserves its slot
+  // against this order now, and discountFor() honours that reservation at the
+  // weigh-in rather than deciding again.
+  //
+  // AWAITED, unlike the laundromat lookup above, because the confirmation this
+  // customer is about to be sent says either "nothing to pay" or "$2.00 a
+  // pound", and getting that wrong is the whole thing this avoids. It is one
+  // indexed query and an update.
+  //
+  // A failure must never fail the booking: the pickup is real either way, and
+  // the worst case is a customer who was entitled to a free order being quoted
+  // the normal price - which is a conversation, not a broken order.
+  const claimed = await promotions
+    .claimSlot(customer.id, order.id)
+    .catch((err) => {
+      console.error(`Could not claim a promotion slot for order ${order.id}: ${err.message}`);
+      return null;
+    });
+
   return {
     ok: true,
     order,
     rolled: window.date !== pickupDate,
+    // Only a promotion that takes EVERYTHING off may be described as free. A
+    // capped 30% offer claims a slot in exactly the same way and must not be
+    // announced with "nothing to pay".
+    freeOrder: Boolean(
+      claimed && claimed.kind === 'PERCENT_OFF' && Number(claimed.value) >= 100
+    ),
     needsCard: billing.needsCardOnFile(customer),
     // Empty unless somebody has deliberately set ALWAYS_BOOK_NUMBERS. It is
     // kept because the day that list comes back, the silence comes back with
@@ -976,7 +1006,11 @@ function whenLine(order) {
 // Naming the card here is load-bearing: this message is the authorisation for
 // the charge that follows, so if an order is ever disputed the message log
 // shows the customer being told which card, before any work was done.
-function confirmationMessage(customer, order, { rolled = false, opener = null } = {}) {
+function confirmationMessage(
+  customer,
+  order,
+  { rolled = false, opener = null, freeOrder = false } = {}
+) {
   const prefs = customer.preferences || {};
 
   // Where the bag changes hands, BOTH WAYS.
@@ -1027,7 +1061,17 @@ function confirmationMessage(customer, order, { rolled = false, opener = null } 
   const card = billing.describeCard(customer);
   const minimum = billing.money(config.pricing.minimumCents);
 
-  const money = card
+  // A FREE ORDER REPLACES THE PRICE SENTENCE, it does not add to it. Telling
+  // somebody their order is free and then, in the same breath, that we will
+  // take $2.00 a pound off their Visa is worse than saying nothing - and this
+  // message is already 454 characters against the 459 that three segments hold,
+  // so there is no room to say both anyway.
+  //
+  // It still says the card is on file, because it is, and because the next
+  // order will not be free.
+  const money = freeOrder
+    ? ` This one is on us - you got one of the free ones, so there is nothing to pay.`
+    : card
     ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} when we drop it back.`
     : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
 

@@ -219,6 +219,25 @@ const config = Object.freeze({
     autoAcceptUnderMinutes: Number(process.env.ROUTING_AUTO_ACCEPT_MIN || 8),
   }),
 
+  // LEADS OFF THE FACEBOOK ADVERTS.
+  //
+  // Meta's instant form writes every lead into a Google Sheet, and src/core/
+  // leads.js reads that sheet and texts anybody new. The id is not a secret -
+  // the sheet is readable by anybody with the link, which is exactly what lets
+  // this run with no Meta account, no access token and nothing to renew.
+  //
+  // Blank switches the whole thing off, which is what a fork of this codebase
+  // with no adverts running should have.
+  leads: Object.freeze({
+    sheetId: process.env.LEADS_SHEET_ID ?? '1t3IuoMGREVgQR08lJLxwIsqDQj6GVIJ3MQgdhDyXm94',
+
+    // How often the sheet is checked, in minutes. Neil asked for "immediately";
+    // a lead who has just tapped an advert is the hottest we will ever have
+    // them, so this is faster than the ten-minute tick the nightly pass runs
+    // on. Quiet hours still apply - see src/core/scheduler.js.
+    pollMinutes: Number(process.env.LEADS_POLL_MINUTES || 3),
+  }),
+
   // Wash & fold is priced by weight, so the real price of an order is not
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.

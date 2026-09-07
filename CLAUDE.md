@@ -914,6 +914,76 @@ at half seven that would never be sent then is worse than no screen.
 one where the AI is on hold.** A chase on top of a hold is the machine talking
 over the person who owes them a real answer.
 
+## Leads off the Facebook adverts
+
+**Meta's instant form writes every lead into a Google Sheet, and the app reads
+that sheet every few minutes and texts anybody new.** `src/core/leads.js`.
+Neil's ask: a number that appears and is not already a customer gets a message
+immediately.
+
+**The sheet is read as published CSV, with no credentials at all.** Meta already
+writes to it, so there is no app review, no access token and nothing to renew -
+and nothing here to leak. `LEADS_SHEET_ID` is the id out of the sheet's own URL;
+blank switches the whole thing off. **A sheet that has stopped being shared
+returns a sign-in page with a 200 on it**, so the status code proves nothing:
+the sweep checks the consent column is in the header and refuses the file if it
+is not.
+
+**THE TICK BOX ON THE FORM IS THE WHOLE GATE, and it is not a formality —
+three of the first four leads left it false.** Meta shows the box and sends the
+answer in its own column, so a false there is somebody who handed over their
+number and specifically declined to be texted. Those leads are recorded and
+never contacted. `consented` is stored rather than only acted on, because "why
+did we never contact this person" has to survive.
+
+**Keyed on Meta's lead id, not the phone number.** The same person filling the
+form twice is two leads and both are recorded honestly; keying on the phone
+would silently lose one. A lead we decided not to text is written down with its
+reason, because "we never saw it" and "we saw it and left it alone" are
+different answers.
+
+**The message is written in code, and it is specifically a Facebook message.**
+Same rule as the nudges: these words go to somebody who has not texted us, so
+they are words a person has read, and the segment count is knowable before
+anything is sent. The opening line says where we got the number. It does **not**
+use the canned welcome in `onboarding.js` - that one is written for somebody who
+typed their number into our own website and would be the wrong first sentence
+here. `kind = 'SYSTEM'`, so it earns no follow-up chase and is not mistaken for
+a colleague working the thread.
+
+**It carries "Text STOP to opt out" on every version.** It is the only message
+in the system that reaches somebody who has never texted us, so it is the one
+that has to say how to stop - and a carrier reviewing the campaign looks for
+exactly that sentence on exactly that kind of message.
+
+**The offer sentence only goes out if there is an offer to honour**, and the
+count in it is read off `promotions.max_orders` rather than typed into the
+sentence - a promise with a number in it must not have two copies of the number.
+**Only a genuinely free promotion gets that wording** (`PERCENT_OFF` at 100), so
+a different offer falls through to a plain invitation and the AI mentions it
+from the blurb when they reply, as it does everywhere else. Telling lead
+twenty-one that the first twenty orders are free is the thing this avoids.
+
+**It runs on its own faster timer, and that is the only reason there are two.**
+The nightly pass and the follow-up sweep are waiting for the clock, where ten
+minutes either way changes nothing; a Facebook lead has just tapped an advert
+and is holding their phone. Both timers live in `scheduler.js` so "what runs by
+itself" is still one file.
+
+**QUIET HOURS STILL APPLY, and this is the one place "immediately" and the law
+disagree.** Somebody who fills the form in at half past eleven at night is
+texted at eight the next morning. It defers rather than skipping, like a
+follow-up: an introduction is exactly as true in the morning.
+
+**`npm run leads` prints who is on the sheet and what would happen to them, and
+writes nothing.** It exists because a lead that is deliberately skipped looks
+exactly like one the system missed, and most of the sheet is skipped on purpose.
+It must never be tempting to "just test" the real sweep locally - the dev server
+shares the production database, so it would mark real leads as texted while the
+fake provider swallowed the message, and production would never text them again.
+Same trap as the nightly pass, and the same guard: the sweep is off outside
+production.
+
 **THE APP RUNS ITS OWN NIGHTLY PASS. There is no cron service and there does
 not need to be.** `src/core/scheduler.js` owns one ten-minute tick inside the
 running server and runs two things on it: the nightly pass in
@@ -1425,6 +1495,50 @@ and then flooring at $25 would charge the full minimum and hand the customer
 nothing while the order claimed a promotion had been used. And the price text
 names what came off - a total lower than the arithmetic the customer can do
 themselves reads as a mistake unless the reason is in the same message.
+
+**A PROMOTION CAN RUN OUT, AND THE CAP COUNTS ORDERS, NOT PEOPLE.**
+`promotions.max_orders`, set on the promotions page. Neil's offer is "the first
+20 orders are free", and his rule for it: **give it to everyone, but only the
+first 20 people who actually book and order with us get it**. So handing it out
+is free and unlimited - `grant()` is not capped and `issueToAudience()` has
+nothing to check - and what runs out is the ORDER.
+
+**THE SLOT IS CLAIMED AT BOOKING, NOT AT THE WEIGH-IN, and that is the whole
+design.** Everything else about a promotion is decided when the order is priced,
+hours later at a laundromat. Deciding the cap there too would mean the
+twenty-first customer is told their pickup is booked and free, and finds out
+otherwise when the price text arrives. `bookPickup()` calls
+`promotions.claimSlot()` - the one door both front doors go through - so the
+answer exists at the only moment the customer is actually asking.
+
+**A claim is not a redemption.** `customer_promotions.claimed_order_id` is a
+reservation taken when a pickup is booked; `redeemed_at` and `uses` are the
+money coming off at the weigh-in, which can be two days later. `discountFor()`
+refuses a capped promotion on any order that is not the one holding its claim,
+so the promise made at booking is the one kept at pricing.
+
+**A CANCELLED ORDER GIVES ITS SLOT BACK.** `orders.transition()` calls
+`releaseSlot()` on `CANCELED` - there, rather than at each caller, because it is
+the only function allowed to move a status and a release one door forgot is a
+slot nobody can ever get back. Best effort: a cancellation must never fail
+because the promotion ledger did.
+
+**The confirmation REPLACES the price sentence when the order is free**, rather
+than adding to it. "Nothing to pay" followed by "we'll take $2.00 a pound off
+your Visa" is worse than saying neither, and the message is already close to its
+three-segment ceiling. `bookPickup()` returns `freeOrder`; the Stripe webhook
+asks `promotions.claimedFreeOrder()` instead, because it confirms an order that
+was booked before the card existed. **Only a promotion that takes everything off
+may be called free** - a capped 30% offer claims a slot the same way and must
+not be announced as "nothing to pay".
+
+**The count and the update have no lock between them**, so one instance is
+assumed exactly as it is for the sign-in throttles and the nightly poll. Losing
+that race costs one extra free order.
+
+**`grant()` returns the grant somebody already had** rather than null, so "did
+this leave them holding one" is answerable from the return value. That is what
+decides whether the Facebook lead message may promise anything.
 
 **Only one promotion is auto-granted at a time**, enforced by a partial unique
 index, and creating a second stands the first down rather than failing. Two

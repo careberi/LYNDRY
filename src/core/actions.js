@@ -135,7 +135,10 @@ async function createOrder(customer, input) {
 
   // The wording lives in src/core/booking.js so that booking by text and
   // booking on the website produce the identical confirmation.
-  return booking.confirmationMessage(customer, result.order, { rolled: result.rolled });
+  return booking.confirmationMessage(customer, result.order, {
+    rolled: result.rolled,
+    freeOrder: result.freeOrder,
+  });
 }
 
 // --- check_slot -------------------------------------------------------------
