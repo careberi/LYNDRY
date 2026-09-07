@@ -1514,6 +1514,33 @@ the moment it is granted and **never recomputed** - so shortening the rule later
 cannot shorten a promise already made. `heldBy()` drops expired grants, so an
 expired promotion silently stops discounting rather than needing a sweep.
 
+**A FREE ORDER HAS A CEILING, AND IT IS A WEIGHT TO THE CUSTOMER AND MONEY TO
+THE CODE.** Neil's call: uncapped, somebody could send 100 lb and get $200 of
+wash for nothing, twenty times over. The offer is now the first 20 orders free
+**up to 30 lb each**.
+
+What the code enforces is `max_discount_cents` - $60.00, the field that already
+existed as "never take off more than". What the customer is told is 30 lb.
+**`promotions.freeAllowanceLb()` derives one from the other** rather than the
+weight being typed anywhere: two copies of one promise would disagree the day
+the price per pound changed, and the text would still say 30 lb while the code
+quietly allowed 26. It rounds DOWN, because covering more than we said is a
+rounding error in the customer's favour and covering less is a surprise bill.
+
+**THE CONFIRMATION HAS TO SAY THE CEILING, because it is sent before anybody has
+seen the laundry.** "Nothing to pay" was true while the offer was uncapped and
+became a lie the moment it was not - a booking is confirmed hours before a bag
+is weighed, so the promise is made in ignorance of what is in it. It now reads
+"this one is on us up to 30 lb, anything over that is $2.00 a pound".
+
+**The cap is read at pricing, not frozen onto the grant**, unlike the expiry and
+the use limit. So changing it changes it for everybody holding one, including
+anybody already told something different. That is the opposite of the rule those
+two follow and it is a deliberate trade: this cap arrived after four people had
+already been texted an uncapped promise, and the alternative was copying it onto
+every grant the day before launch. Four people, none of whom had booked, and
+`/ops/waive` covers it by hand if one of them sends 40 lb.
+
 **`min_order_cents` is not the order minimum.** `config.pricing.minimumCents` is
 the floor on what any order costs; this is "valid on orders over $30" and is
 checked against the price BEFORE the discount comes off - otherwise a promotion

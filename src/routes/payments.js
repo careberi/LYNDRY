@@ -282,12 +282,17 @@ async function handleEvent(event) {
         // - the order was written first and the card saved afterwards, which is
         // the whole shape of this path. Getting it wrong here would quote a
         // price for an order that took one of the free slots.
-        const freeOrder = await promotions.claimedFreeOrder(pending.id).catch(() => false);
+        const free = await promotions
+          .claimedFreeOrder(pending.id)
+          .catch(() => ({ freeOrder: false, freeUpToLb: null }));
 
         await sendAndLog(
           customer.phone,
-          booking.confirmationMessage(customer, pending, { opener: 'Card saved', freeOrder }) +
-            alsoLine,
+          booking.confirmationMessage(customer, pending, {
+            opener: 'Card saved',
+            freeOrder: free.freeOrder,
+            freeUpToLb: free.freeUpToLb,
+          }) + alsoLine,
           customer.id
         );
         return;

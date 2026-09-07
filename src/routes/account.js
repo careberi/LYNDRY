@@ -616,6 +616,7 @@ router.post('/account/book', auth.requireCustomer, async (req, res, next) => {
       booking.confirmationMessage(customer, result.order, {
         rolled: result.rolled,
         freeOrder: result.freeOrder,
+        freeUpToLb: result.freeUpToLb,
       }),
       customer.id
     );

@@ -138,6 +138,7 @@ async function createOrder(customer, input) {
   return booking.confirmationMessage(customer, result.order, {
     rolled: result.rolled,
     freeOrder: result.freeOrder,
+    freeUpToLb: result.freeUpToLb,
   });
 }
 

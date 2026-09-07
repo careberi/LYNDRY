@@ -1,6 +1,9 @@
 'use strict';
 
 const db = require('../db');
+// For the price per pound. The free allowance is a weight the customer is told
+// and a money cap the code enforces, and one has to be derived from the other.
+const { config } = require('../config');
 
 // ---------------------------------------------------------------------------
 // Promotions.
@@ -237,19 +240,24 @@ async function releaseSlot(orderId) {
 // to be a lookup rather than a flag on the order: the claim lives on the grant,
 // and a copy on the order would be a second version of the same fact - the rule
 // this file follows everywhere else.
+// Returns { freeOrder, freeUpToLb } - the same two facts bookPickup() hands
+// back, so the webhook's confirmation and the AI's say exactly the same thing.
 async function claimedFreeOrder(orderId) {
-  if (!orderId) return false;
+  const nothing = { freeOrder: false, freeUpToLb: null };
+  if (!orderId) return nothing;
 
   const { data, error } = await db
     .from('customer_promotions')
-    .select(`id, promotions (kind, value, status)`)
+    .select(`id, promotions (kind, value, status, max_discount_cents)`)
     .eq('claimed_order_id', orderId)
     .maybeSingle();
 
-  if (error || !data || !data.promotions) return false;
+  if (error || !data || !data.promotions) return nothing;
 
   const promo = data.promotions;
-  return promo.kind === 'PERCENT_OFF' && Number(promo.value) >= 100;
+  if (!takesEverythingOff(promo)) return nothing;
+
+  return { freeOrder: true, freeUpToLb: freeAllowanceLb(promo) };
 }
 
 // Give somebody a promotion. Safe to call repeatedly - the unique index means
@@ -516,6 +524,25 @@ function takesEverythingOff(promo) {
   return Boolean(promo && promo.kind === 'PERCENT_OFF' && Number(promo.value) >= 100);
 }
 
+// HOW MUCH LAUNDRY A FREE OFFER ACTUALLY COVERS, in pounds. Null when there is
+// no ceiling on it at all.
+//
+// DERIVED FROM THE MONEY, NEVER TYPED. What the code enforces is a cap in cents
+// - max_discount_cents, "never take off more than" on the promotions page - and
+// what the customer is told is a weight. Writing the weight down as well would
+// be two copies of one promise, and the day the price per pound changes they
+// would disagree: the text would still say 30 lb while the code quietly allowed
+// 26. So the sentence asks this, and this asks the cap.
+//
+// Rounded DOWN. Saying 30 lb and covering 30.4 is a rounding error in the
+// customer's favour; saying 31 and covering 30.4 is a bill they were not
+// expecting.
+function freeAllowanceLb(promo) {
+  const rate = config.pricing.perPoundCents;
+  if (!promo || !promo.max_discount_cents || !rate) return null;
+  return Math.floor(promo.max_discount_cents / rate);
+}
+
 // THE FREE-ORDERS SENTENCE, WRITTEN ONCE.
 //
 // Both first messages say this, in Neil's words, and they must not drift: the
@@ -531,12 +558,19 @@ function takesEverythingOff(promo) {
 function freeOfferLine(promo, { from = '' } = {}) {
   if (!takesEverythingOff(promo)) return null;
 
+  // "up to 30 lb each" - the weight read off the cap, never typed. Absent
+  // entirely when there is no cap, because "free" with nothing after it is the
+  // honest sentence for an offer with no ceiling on it.
+  const lb = freeAllowanceLb(promo);
+  const upTo = lb ? `, up to ${lb} lb each` : '';
+
   return promo.max_orders
-    ? `While we are getting started the first ${promo.max_orders} orders are free. ` +
+    ? `While we are getting started the first ${promo.max_orders} orders are free${upTo}. ` +
         `If you want one of them before they run out, just tell us a day that works${from} ` +
         `and we will come get your laundry.`
-    : `While we are getting started your first order is free. ` +
-        `Just tell us a day that works${from} and we will come get your laundry.`;
+    : `While we are getting started your first order is free${
+        lb ? `, up to ${lb} lb` : ''
+      }. Just tell us a day that works${from} and we will come get your laundry.`;
 }
 
 function describe(promo) {
@@ -623,6 +657,7 @@ module.exports = {
   releaseSlot,
   claimedFreeOrder,
   takesEverythingOff,
+  freeAllowanceLb,
   freeOfferLine,
   full,
   issueToAudience,

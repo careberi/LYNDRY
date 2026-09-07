@@ -972,9 +972,16 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
     // Only a promotion that takes EVERYTHING off may be described as free. A
     // capped 30% offer claims a slot in exactly the same way and must not be
     // announced with "nothing to pay".
-    freeOrder: Boolean(
-      claimed && claimed.kind === 'PERCENT_OFF' && Number(claimed.value) >= 100
-    ),
+    freeOrder: promotions.takesEverythingOff(claimed),
+
+    // HOW MUCH OF IT IS FREE, in pounds, or null for no ceiling.
+    //
+    // This is the number the confirmation cannot do without. The booking
+    // happens before anybody has seen the laundry, so "nothing to pay" is a
+    // promise made in ignorance of the weight - true for a bin bag, false for
+    // somebody's spring clean, and found out two days later in the price text.
+    // Saying the allowance at booking is what stops that being an argument.
+    freeUpToLb: promotions.freeAllowanceLb(claimed),
     needsCard: billing.needsCardOnFile(customer),
     // Empty unless somebody has deliberately set ALWAYS_BOOK_NUMBERS. It is
     // kept because the day that list comes back, the silence comes back with
@@ -1009,7 +1016,7 @@ function whenLine(order) {
 function confirmationMessage(
   customer,
   order,
-  { rolled = false, opener = null, freeOrder = false } = {}
+  { rolled = false, opener = null, freeOrder = false, freeUpToLb = null } = {}
 ) {
   const prefs = customer.preferences || {};
 
@@ -1069,8 +1076,19 @@ function confirmationMessage(
   //
   // It still says the card is on file, because it is, and because the next
   // order will not be free.
+  // AND WHEN THE FREE ORDER HAS A CEILING, THE CEILING IS IN THE SENTENCE.
+  //
+  // "Nothing to pay" was true while the offer was uncapped and became a lie the
+  // moment it was capped at 30 lb - and it is said at BOOKING, before anybody
+  // has seen the laundry. A customer told their order was free and then billed
+  // $40 two days later has been misled, whatever the small print said.
+  //
+  // The allowance comes from the promotion rather than the sentence, so the day
+  // the cap moves this moves with it.
   const money = freeOrder
-    ? ` This one is on us - you got one of the free ones, so there is nothing to pay.`
+    ? freeUpToLb
+      ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${site.pricePerLb} a pound, and we'll text you the total after we weigh it.`
+      : ` This one is on us - you got one of the free ones, so there is nothing to pay.`
     : card
     ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} when we drop it back.`
     : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
