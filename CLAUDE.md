@@ -441,6 +441,29 @@ logins would be building for somebody who does not exist.
 **Every status change texts the customer**, through `src/core/notify.js`, which
 sends and logs in one step. Nothing may send a text without recording it.
 
+**AND `notify.sendAndLog()` IS THE LAST GATE ON AN OPTED-OUT NUMBER.** STOP was
+already refused at four separate doors — the website form, an inbound
+conversation, the text blast's query, the Facebook lead sweep — and missed at the
+one place every outbound text actually passes through. So a status text, a
+pickup reminder, a price, a nudge, or an admin cancelling an order would all
+have reached a number that had said STOP. Each of those is the violation the
+four doors exist to prevent.
+
+**It reads the status off the phone number, then and there**, rather than
+trusting a customer object a caller loaded ten minutes ago — somebody can text
+STOP between a board being drawn and a button being pressed. **It fails closed**:
+if the check itself errors we do not send, because "the database was down" is
+not a defence anybody would accept for texting somebody who opted out.
+
+**The one exemption is compliance itself.** `{ compliance: true }` is passed in
+exactly one place — the STOP/START/HELP reply in `src/routes/sms.js` — because
+that confirmation has to reach somebody who became unsubscribed one line
+earlier, and it goes because THEY texted us. Nothing else may use it.
+
+**A refused send writes nothing to `messages`.** That table is the record of
+what reached a phone, and a row there would show in the thread as though we had
+texted them. The refusal goes to the server log.
+
 **Every change to an order is written to `order_events`, and the order page
 shows it.** What changed, when, who did it and why — status moves, weights and
 corrections, prices, charges, labels going on and off, which laundromat had it,
