@@ -2597,36 +2597,53 @@ function optOutControl(person, mayDo) {
 
   if (person.status === 'UNSUBSCRIBED') {
     return `
-    <div style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
-      <p class="eyebrow" style="margin:0 0 8px;">Opted out</p>
-      <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-700);">
-        Nothing will text this number - not a reminder, not an offer, not the
-        AI. Only they can undo it, by texting START from their own phone.
+    <div class="card card-xl" style="padding:26px;margin-bottom:24px;background:var(--stain-100);">
+      <p class="eyebrow" style="margin:0 0 8px;">Texting</p>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:22px;margin:0 0 12px;">
+        This number is opted out
+      </h2>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-800);max-width:62ch;">
+        Nothing will text them - not a reminder, not an offer, not a status
+        update, not the AI. Every send is refused before it reaches the carrier.
+        Only they can undo it, by texting START from their own phone.
+        ${
+          person.unsubscribed_note
+            ? `<br><br><strong>What was recorded:</strong> ${escapeHtml(person.unsubscribed_note)}`
+            : ''
+        }
       </p>
     </div>`;
   }
 
+  // A CARD, NOT A COLLAPSED TOGGLE. It was a <details> at the foot of the
+  // details card and Neil looked for it, could not find it, and reasonably
+  // concluded it had not been built. A control nobody can find is a control
+  // that does not exist - and this one gets reached for at an awkward moment,
+  // with somebody on the phone asking to be left alone.
   return `
-  <details style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
-    <summary style="cursor:pointer;list-style:none;font-weight:700;font-size:15px;">
+  <div class="card card-xl" style="padding:26px;margin-bottom:24px;">
+    <p class="eyebrow" style="margin:0 0 8px;">Texting</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:22px;margin:0 0 12px;">
       They asked not to be texted
-    </summary>
-    <p style="margin:12px 0 14px;font-size:15px;line-height:1.6;color:var(--ink-700);">
-      For somebody who told you another way - on the phone, at their door. It
-      stops everything: reminders, offers, the AI, the lot.
-      <strong>You cannot undo this from here.</strong> Only they can, by texting
-      START.
+    </h2>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;">
+      For somebody who told you another way - on the phone, at their door, by
+      email. It stops everything: reminders, offers, status texts, the AI, the
+      lot. <strong>You cannot undo this from here.</strong> Only they can, by
+      texting START from their own phone.
     </p>
     <form method="post" action="/ops/customers/${escapeHtml(person.id)}/opt-out"
-          style="display:flex;flex-direction:column;gap:12px;">
-      <div>
+          style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+      <div style="flex:1 1 320px;min-width:260px;">
         <label class="field-label" for="optout_note">How they told you</label>
-        <input class="input" type="text" id="optout_note" name="note" maxlength="200" required
-               placeholder="Called and asked to be taken off the list">
+        <input class="input input-lg" type="text" id="optout_note" name="note" maxlength="200" required
+               style="width:100%;" placeholder="Called and asked to be taken off the list">
       </div>
-      <div><button class="btn btn-outline" type="submit">Mark them opted out</button></div>
+      <div>
+        <button class="btn btn-ink btn-lg" type="submit">Mark them opted out</button>
+      </div>
     </form>
-  </details>`;
+  </div>`;
 }
 
 // CALLING A PICKUP OFF, FROM THIS END.
@@ -3469,6 +3486,14 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           : ''
       }
 
+      <!-- WHETHER WE MAY TEXT THEM AT ALL comes before everything about what
+           to text them. An opted-out customer's page otherwise opens with a
+           panel of buttons offering to send them things, which is the wrong
+           order to read it in - and the control itself was a collapsed toggle
+           at the foot of the details card, which Neil looked for, could not
+           find, and reasonably took for a missing feature. -->
+      ${optOutControl(person, roles.can(req.opsUser, 'messages.send'))}
+
       ${nudgePanel({ gaps, action: `/ops/customers/${person.id}/ask`, canSend: canAsk })}
 
       ${
@@ -3574,7 +3599,6 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
               : ''
           }
           ${showMoney ? detail('Card', card) + detail('Lifetime billed', `<strong>${money(billed)}</strong>`) : ''}
-          ${optOutControl(person, roles.can(req.opsUser, 'messages.send'))}
         </div>
 
         <div class="card card-xl" style="padding:28px;">
