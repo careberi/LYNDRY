@@ -116,8 +116,63 @@ function isFictional(phone) {
 // else - the AI's own replies, status texts, booking confirmations, the text
 // blast - because the one thing the AI needs to know is whether a colleague
 // wrote a line or it did. See migration 0062.
-async function sendAndLog(to, body, customerId, { sentBy = null, kind = null } = {}) {
+// HAS THIS NUMBER ASKED US TO STOP.
+//
+// Read here, on the phone number, rather than trusted from a customer object a
+// caller happened to load ten minutes ago. Somebody can text STOP between a
+// board being drawn and a button being pressed.
+async function hasOptedOut(phone) {
+  const { data, error } = await db
+    .from('customers')
+    .select('status')
+    .eq('phone', phone)
+    .maybeSingle();
+
+  // FAILS CLOSED. If we cannot tell whether somebody has opted out, we do not
+  // text them. A message that should have gone and did not is a delay; a
+  // message to somebody who said STOP is the one thing this system must never
+  // do, and the database being down is not a defence anybody would accept.
+  if (error) {
+    console.error(`Could not check opt-out for ${phone}, refusing to send: ${error.message}`);
+    return true;
+  }
+
+  return Boolean(data && data.status === 'UNSUBSCRIBED');
+}
+
+async function sendAndLog(to, body, customerId, { sentBy = null, kind = null, compliance = false } = {}) {
   let providerMessageId = null;
+
+  // ---------------------------------------------------------------------
+  // THE LAST GATE ON AN OPTED-OUT NUMBER, AND THE ONLY ONE THAT CATCHES
+  // EVERYTHING.
+  //
+  // STOP was already refused at four separate doors - the website form, an
+  // inbound conversation, the text blast's query, the Facebook lead sweep -
+  // and missed at the one place every outbound text actually passes through.
+  // So a status text, a pickup reminder, a price, a nudge, or an admin
+  // cancelling somebody's order would all have gone to a number that had
+  // said STOP. Every one of those is the violation the four doors exist to
+  // prevent.
+  //
+  // It is one indexed lookup per message. That is a fair price for the rule
+  // being enforced in one place instead of remembered in twenty.
+  //
+  // THE EXCEPTION IS COMPLIANCE ITSELF. The reply to STOP, START and HELP has
+  // to reach somebody who has just opted out - it is the confirmation the law
+  // expects and it is sent because THEY texted us. Only src/routes/sms.js
+  // passes this, and only for those keywords.
+  //
+  // NOTHING IS WRITTEN TO `messages` when a send is refused. That table is the
+  // record of what reached a phone, and a row there would show in the thread
+  // as though we had texted them. The refusal goes to the server log instead.
+  // ---------------------------------------------------------------------
+  if (!compliance && (await hasOptedOut(to))) {
+    console.warn(
+      `REFUSED to text ${to}: they have opted out. Message was: ${toPlainText(body).slice(0, 120)}`
+    );
+    return { sent: false, refused: 'opted_out' };
+  }
 
   // Swap typographic characters for their plain twins first, then warn about
   // anything genuinely un-plainable that is left (an emoji, say). Sending and

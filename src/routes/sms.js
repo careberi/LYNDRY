@@ -184,7 +184,17 @@ async function handleInbound(inbound) {
 
     // SYSTEM, not AI. Nobody owes us an answer to a STOP confirmation, and a
     // chase after one would be the exact opposite of what they asked for.
-    await reply(from, body, customer ? customer.id : null, { kind: 'SYSTEM' });
+    //
+    // compliance: true IS THE ONLY EXEMPTION FROM THE OPT-OUT GATE, and this is
+    // the only place that passes it. notify.sendAndLog() refuses to text an
+    // unsubscribed number - which is the whole point of it - and the reply to
+    // STOP has to reach somebody who has, one line earlier, become exactly
+    // that. It is the confirmation the law expects, and it goes because THEY
+    // texted us. Nothing else may use this.
+    await reply(from, body, customer ? customer.id : null, {
+      kind: 'SYSTEM',
+      compliance: true,
+    });
     return;
   }
 
