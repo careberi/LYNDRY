@@ -146,9 +146,31 @@ async function handleInbound(inbound) {
     const newStatus = compliance.statusFor(keyword);
 
     if (customer && newStatus && newStatus !== customer.status) {
+      // WHEN AND HOW, not just the flag. An audit asks how consent was
+      // withdrawn the same way it asks how it was given, and until migration
+      // 0076 the only trace was a status that appeared to change by itself.
+      // Their own STOP is still the evidence; this says which door it came
+      // through, because an admin can now record one by hand.
+      const changes = { status: newStatus };
+
+      if (newStatus === 'UNSUBSCRIBED') {
+        changes.unsubscribed_at = new Date().toISOString();
+        changes.unsubscribed_via = 'STOP';
+        changes.unsubscribed_by = null;
+        changes.unsubscribed_note = null;
+      } else {
+        // Opting back in clears it, so a stale withdrawal cannot be read as
+        // current a year later - the same reason reopening clears the closed
+        // sign's reason.
+        changes.unsubscribed_at = null;
+        changes.unsubscribed_via = null;
+        changes.unsubscribed_by = null;
+        changes.unsubscribed_note = null;
+      }
+
       const { error: updateError } = await db
         .from('customers')
-        .update({ status: newStatus })
+        .update(changes)
         .eq('id', customer.id);
 
       if (updateError) throw updateError;

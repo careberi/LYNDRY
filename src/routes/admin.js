@@ -2575,6 +2575,144 @@ function bagRow(order, l, total, canAct, done, parents = []) {
 // at the moment he is holding them. The count is what he looks for; the WEIGHT
 // is what proves he has it, because he can only count what he can see and the
 // bag that gets left behind is the one behind the counter.
+// RECORDING THAT SOMEBODY HAS ASKED NOT TO BE TEXTED.
+//
+// Neil's ask. A customer could already opt themselves out by texting STOP, and
+// there was no way to record one who asked any other way - on the phone, at a
+// door, by email. Until now that person kept getting reminders and offers.
+//
+// IT IS ONE WAY, AND THAT IS THE LAW RATHER THAN A DESIGN CHOICE. Nothing here
+// opts anybody back IN. Consent is theirs to give and they give it by texting
+// START from their own handset, which is the rule every other door in this
+// system already follows - the website form refuses an unsubscribed number, the
+// lead sweep refuses it, the blast excludes it in the query.
+//
+// So the button says plainly that it cannot be undone from here, because the
+// person pressing it needs to know that BEFORE they press it rather than after.
+//
+// Behind messages.send: the people who may cause a text to reach somebody are
+// the people who may stop one. A driver has neither.
+function optOutControl(person, mayDo) {
+  if (!mayDo) return '';
+
+  if (person.status === 'UNSUBSCRIBED') {
+    return `
+    <div style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
+      <p class="eyebrow" style="margin:0 0 8px;">Opted out</p>
+      <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-700);">
+        Nothing will text this number - not a reminder, not an offer, not the
+        AI. Only they can undo it, by texting START from their own phone.
+      </p>
+    </div>`;
+  }
+
+  return `
+  <details style="margin-top:22px;padding-top:20px;border-top:2px solid var(--ink-100);">
+    <summary style="cursor:pointer;list-style:none;font-weight:700;font-size:15px;">
+      They asked not to be texted
+    </summary>
+    <p style="margin:12px 0 14px;font-size:15px;line-height:1.6;color:var(--ink-700);">
+      For somebody who told you another way - on the phone, at their door. It
+      stops everything: reminders, offers, the AI, the lot.
+      <strong>You cannot undo this from here.</strong> Only they can, by texting
+      START.
+    </p>
+    <form method="post" action="/ops/customers/${escapeHtml(person.id)}/opt-out"
+          style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label class="field-label" for="optout_note">How they told you</label>
+        <input class="input" type="text" id="optout_note" name="note" maxlength="200" required
+               placeholder="Called and asked to be taken off the list">
+      </div>
+      <div><button class="btn btn-outline" type="submit">Mark them opted out</button></div>
+    </form>
+  </details>`;
+}
+
+// CALLING A PICKUP OFF, FROM THIS END.
+//
+// Neil's ask. A customer could already cancel - by texting, or from /account -
+// and nobody here could. So a pickup somebody rang up about, or one booked at
+// the wrong address, had to be talked through by a person and then left sitting
+// on the board as though the van were still coming.
+//
+// ONLY WHILE IT IS STILL AWAITING COLLECTION, and that is the state machine's
+// rule rather than this page's: once a bag is in the van there is nothing to
+// cancel, there is laundry to give back. Past that the card says so instead of
+// disappearing, because "why is there no cancel button" is a worse question
+// than a sentence answering it.
+//
+// A REASON IS REQUIRED. It goes in the change log with a name against it - the
+// same standard as an override, and for the same reason: somebody will ask in a
+// week why order #2004 never happened.
+//
+// Admin only, through orders.override. A driver may work an order and may not
+// call it off, which is a decision about the customer rather than a step in the
+// round - the same line the driver reassignment already draws.
+function cancelCard(order, mayCancel) {
+  if (!mayCancel) return '';
+  if (order.status === 'CANCELED') return '';
+
+  if (!orders.isCancellable(order.status)) {
+    return `
+  <div class="card" style="padding:20px 24px;margin-top:20px;">
+    <p class="eyebrow" style="margin:0 0 8px;">Cancelling</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-700);">
+      Too late to cancel - we already have their laundry. What is left is to
+      finish it and take it back, or to
+      <a href="/ops/orders/${escapeHtml(String(order.order_number))}#money"
+         style="font-weight:700;color:inherit;">decide not to charge for it</a>.
+    </p>
+  </div>`;
+  }
+
+  return `
+  <details class="card" style="padding:0;margin-top:20px;">
+    <summary style="padding:20px 24px;cursor:pointer;list-style:none;font-weight:700;font-size:16px;">
+      Cancel this pickup
+    </summary>
+    <div style="padding:0 24px 24px;">
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+        Takes it off the board and off the driver's round, and
+        <strong>texts the customer to say we are not coming</strong> - which is
+        the part that matters, because otherwise they leave a bag out for a van
+        that never arrives. Nothing is charged; anything already taken comes
+        back.
+      </p>
+
+      <form method="post" action="/ops/orders/${escapeHtml(order.id)}/cancel"
+            style="display:flex;flex-direction:column;gap:14px;max-width:560px;">
+        <div>
+          <label class="field-label" for="cancel_reason">Why</label>
+          <p class="field-hint" style="margin:0 0 8px;">
+            Goes in the change log with your name on it. Say what happened, not
+            "cancelled".
+          </p>
+          <input class="input input-lg" type="text" id="cancel_reason" name="reason"
+                 maxlength="200" required
+                 placeholder="Customer rang, going away this week">
+        </div>
+
+        <div>
+          <label class="field-label" for="cancel_note">Anything to add to their text</label>
+          <p class="field-hint" style="margin:0 0 8px;">
+            Optional. Goes on the end of the message they get. Leave it blank
+            and they get the plain version.
+          </p>
+          <input class="input input-lg" type="text" id="cancel_note" name="note"
+                 maxlength="200" placeholder="Give us a shout when you're back and we'll rebook you.">
+        </div>
+
+        <div>
+          <button class="btn btn-ink btn-lg" type="submit">
+            Cancel it and text them
+          </button>
+        </div>
+      </form>
+    </div>
+  </details>`;
+}
+
 function bagsCard(order, labels, canAct, { mayOverride = false, refused = false } = {}) {
   const done = ['DELIVERED', 'CANCELED'].includes(order.status);
 
@@ -2903,6 +3041,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       ${roles.can(req.opsUser, 'money.view') ? heldWeightCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
+      ${cancelCard(order, roles.can(req.opsUser, 'orders.override'))}
       <!-- THE ACTION CARDS ARE GONE FROM THIS PAGE, at Neil's request.
            pickupSequence() and workCard() rendered the legal next steps as
            full-width buttons here, which made the order page a second way to
@@ -3418,7 +3557,24 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           ${detail('Address', escapeHtml(addressOf(person)) || '—')}
           ${detail('Signed up', dateTime(person.created_at))}
           ${detail('Texting consent', person.sms_consent_at ? dateTime(person.sms_consent_at) : 'not recorded')}
+          ${
+            person.status === 'UNSUBSCRIBED'
+              ? detail(
+                  'Opted out',
+                  `${person.unsubscribed_at ? dateTime(person.unsubscribed_at) : 'date not recorded'}` +
+                    `${
+                      person.unsubscribed_via === 'BY_HAND'
+                        ? ' &middot; recorded here'
+                        : person.unsubscribed_via === 'STOP'
+                        ? ' &middot; they texted STOP'
+                        : ''
+                    }` +
+                    `${person.unsubscribed_note ? `<br><span style="color:var(--ink-700);">${escapeHtml(person.unsubscribed_note)}</span>` : ''}`
+                )
+              : ''
+          }
           ${showMoney ? detail('Card', card) + detail('Lifetime billed', `<strong>${money(billed)}</strong>`) : ''}
+          ${optOutControl(person, roles.can(req.opsUser, 'messages.send'))}
         </div>
 
         <div class="card card-xl" style="padding:28px;">
@@ -3738,6 +3894,183 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
 // cannot hand it to somebody else, which is a scheduling decision rather than a
 // step in the route. Logged like every other change, because "who was supposed
 // to collect this" is exactly the question asked after one goes missing.
+// ---------------------------------------------------------------------------
+// POST /ops/customers/:id/opt-out - they asked not to be texted
+//
+// One way only. See optOutControl() above for why: consent is the customer's to
+// give and they give it by texting START. Nothing here can put it back.
+//
+// NOBODY IS TEXTED TO CONFIRM. They asked us to stop, so sending them one more
+// message to say we have stopped is the joke that writes itself - and unlike a
+// STOP keyword, where the confirmation is legally expected in reply to their
+// own text, nothing here was prompted by anything they just sent.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = `/ops/customers/${req.params.id}`;
+    const note = String((req.body || {}).note || '').trim().slice(0, 200);
+
+    if (!note) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('Say how they told you. It is the record that this was their decision.')}`
+      );
+    }
+
+    const { data: person } = await db
+      .from('customers')
+      .select('id, name, status')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    if (person.status === 'UNSUBSCRIBED') {
+      return res.redirect(303, `${back}?done=${encodeURIComponent('They were already opted out.')}`);
+    }
+
+    const { error } = await db
+      .from('customers')
+      .update({
+        status: 'UNSUBSCRIBED',
+        unsubscribed_at: new Date().toISOString(),
+        unsubscribed_via: 'BY_HAND',
+        unsubscribed_by: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+        unsubscribed_note: note,
+      })
+      .eq('id', person.id);
+
+    if (error) throw error;
+
+    console.log(
+      `${person.name || person.id} marked opted out by ${req.opsUser ? req.opsUser.name : 'a machine key'}: ${note}`
+    );
+
+    return res.redirect(
+      303,
+      `${back}?done=${encodeURIComponent(
+        'Opted out. Nothing will text them again unless they text START themselves.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/orders/:id/cancel - call a pickup off from this end
+//
+// Neil's ask. A customer could already cancel by texting or from /account, and
+// nobody here could - so a pickup somebody rang up about sat on the board as
+// though the van were still coming.
+//
+// IT GOES THROUGH orders.transition(), like everything else. That is what makes
+// it refuse a collected order rather than this route deciding, and it is what
+// gives the promotion slot back - releaseSlot() lives in transition() precisely
+// so no caller can forget it.
+//
+// AND IT TEXTS THEM, which is the whole point. A cancelled pickup the customer
+// does not know about is somebody leaving a bag on a doorstep for a van that
+// never comes. The message is written here in code rather than by the AI: it is
+// unprompted, it goes out because of something WE did, and the words should be
+// ones a person has read - the same rule as the nudges.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/orders/:id/cancel', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const body = req.body || {};
+    const reason = String(body.reason || '').trim().slice(0, 200);
+    const note = String(body.note || '').trim().slice(0, 200);
+
+    if (!reason) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('Say why. It goes in the change log with your name on it.')}`
+      );
+    }
+
+    // Already gone, by somebody else or by a double tap. Not an error.
+    if (order.status === 'CANCELED') {
+      return res.redirect(303, `${back}?done=${encodeURIComponent('That one was already cancelled.')}`);
+    }
+
+    if (!orders.isCancellable(order.status)) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent(
+          'Too late to cancel - we already have their laundry. Finish it, or waive the charge.'
+        )}`
+      );
+    }
+
+    await orders.transition(order, 'CANCELED');
+
+    await orderEvents.record(order.id, {
+      kind: 'STATUS',
+      summary: `Cancelled by ${req.opsUser ? req.opsUser.name : 'an admin'}`,
+      reason,
+      by: { opsUser: req.opsUser },
+    });
+
+    // The minimum comes back if one was ever taken. Nothing writes a new
+    // deposit any more, but two real orders were taken under the old rules and
+    // their money has to stay refundable - see billing.refundDeposit().
+    const refund = await billing
+      .refundDeposit(order)
+      .catch((err) => {
+        console.error(`Could not refund on cancelling ${order.id}: ${err.message}`);
+        return { refunded: false };
+      });
+
+    // WHAT THEY ARE TOLD. Plain, and it does not give them the reason - "we
+    // cancelled it because you rang about being away" is us repeating their own
+    // business back at them, and the reason field is for the change log rather
+    // than for the customer. Whatever an admin wants them to read goes in the
+    // note.
+    let text =
+      `We've cancelled your pickup on ${booking.readableDate(order.pickup_date)}. ` +
+      `Nothing has been charged.`;
+
+    if (refund.refunded) {
+      text += ` The ${billing.money(refund.amountCents)} minimum is on its way back to your card.`;
+    }
+
+    text += note ? ` ${note}` : ` Text us whenever you want to book again.`;
+
+    let told = true;
+    try {
+      await notify.sendAndLog(order.customers.phone, text, order.customer_id, {
+        sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+        kind: 'SYSTEM',
+      });
+    } catch (err) {
+      // The order IS cancelled - that already happened and must not be undone
+      // because a text failed. Say so plainly instead, because an admin who
+      // thinks the customer was told and was not is the worst of both.
+      console.error(`Cancelled ${order.id} but could not text them: ${err.message}`);
+      told = false;
+    }
+
+    return res.redirect(
+      303,
+      told
+        ? `${back}?done=${encodeURIComponent('Cancelled, and they have been texted.')}`
+        : `${back}?problem=${encodeURIComponent(
+            'Cancelled - but the text did NOT go. Tell them yourself before they leave a bag out.'
+          )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, res, next) => {
   try {
     const order = await loadOrderForAction(req.params.id);
