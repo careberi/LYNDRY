@@ -6,6 +6,7 @@ const db = require('../db');
 const { config } = require('../config');
 const sms = require('../providers/sms');
 const compliance = require('../core/compliance');
+const reactions = require('../core/reactions');
 const brain = require('../core/brain');
 const actions = require('../core/actions');
 const onboarding = require('../core/onboarding');
@@ -127,6 +128,18 @@ async function handleInbound(inbound) {
   if (!String(text || '').trim()) {
     console.log(`BLANK   ${from}: nothing in the message.`);
     await replyToBlank(from, customer);
+    return;
+  }
+
+  // --- A THUMBS-UP IS NOT A MESSAGE -----------------------------------------
+  //
+  // An iPhone tapback arrives as 'Loved "..."' and the AI answered two of them
+  // in the first week - a billed segment saying "Glad that landed!" to somebody
+  // who had only tapped a heart. Recognised in code, logged, and then nothing:
+  // no reply, no AI call, and it does not touch the burst window, because a
+  // heart on our last message is not them starting to type. See reactions.js.
+  if (reactions.isReaction(text)) {
+    console.log(`TAPBACK ${from}: ${text.slice(0, 40)} - not answered.`);
     return;
   }
 
