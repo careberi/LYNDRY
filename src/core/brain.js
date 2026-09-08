@@ -433,7 +433,7 @@ function systemPrompt(today, now, { paused = null, promo = null, opensOn = null 
   // used to be typed into this prompt twice, once as an instruction and once as
   // a worked example, so rewriting the website welcome and the advert message
   // left the AI still reciting the old sentence - and a real number that texted
-  // "Hi" got it. The body now comes from onboarding.whatWeDo(), the same place
+  // "Hi" got it. The whole message now comes from onboarding.introduction(), the
   // the other two get it, so there is one copy of the words and one copy of the
   // free-orders count.
   //
@@ -445,11 +445,7 @@ function systemPrompt(today, now, { paused = null, promo = null, opensOn = null 
   // one thing a closed service must not do, so the old paused wording stands.
   const intro = paused
     ? null
-    : [
-        `Hi, thanks for reaching out. This is ${site.name}, wash and fold pickup ` +
-          `and delivery laundry service in ${site.serviceArea}.`,
-        ...onboarding.whatWeDo({ promo, opensOn }),
-      ].join('\n\n');
+    : onboarding.introduction(`Hey, thanks for reaching out.`, { promo, opensOn });
 
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
 

@@ -1105,14 +1105,19 @@ read, and the segment count is knowable before anything is sent.
 `kind = 'SYSTEM'`, so it earns no follow-up chase and is not mistaken for a
 colleague working the thread.
 
-**ONLY THE OPENING LINE IS ITS OWN.** Everything after it comes from
-`onboarding.whatWeDo()`, which is what the canned website welcome uses too. Neil
-wrote the two messages separately and then wrote them identically from the
-second paragraph on, because they answer the same question for somebody who has
-never spoken to us. Two copies would be two things to edit, and one of them
-would be the one nobody remembered. What differs is the first sentence — this
-one says where we got the number, the welcome says thanks for sending it — and
-the opt-out line at the end.
+**ONLY THE OPENING CLAUSE IS ITS OWN.** Everything after it comes from
+`onboarding.introduction()`, which is what the canned website welcome and the
+AI's own introduction both use. Neil wrote them separately and then wrote them
+identically after the first clause, because they answer the same question for
+somebody who has never spoken to us. Three copies would be three things to edit,
+and the one that disagreed would be the one nobody noticed. What differs is
+where we say we got the number — this one says the Facebook form, the welcome
+says thanks for sending it, the AI says thanks for reaching out.
+
+**This is the longest of the three openers, so it is the one that decides how
+long the shared body may be.** At 301 characters it is five short of the
+two-segment ceiling; anything added to `introduction()` has to be counted
+against this door, not against the website one.
 
 **Nothing is appended to Neil's three paragraphs.** An opt-out line was added
 here unasked and taken straight back out; the message is the words he wrote and
@@ -2542,13 +2547,14 @@ Neil's call. People text a business the way they text a friend - "hey", then
 the question, then the time, three messages in fifteen seconds - and answering
 each as it lands gives them three replies of which the first two answer half a
 sentence. `src/core/burst.js` holds an inbound reply for
-`config.replies.burstSeconds` (**20**, `SMS_REPLY_WAIT_SECONDS`), restarting the
+`config.replies.burstSeconds` (**10**, `SMS_REPLY_WAIT_SECONDS`), restarting the
 clock on each new message, then hands the AI everything they said joined with
 newlines. That is what a person reading the thread would answer.
 
 **The cost falls on somebody who sends ONE message** and waits the full window,
-which is why it is 20 and not the 30 also considered. Set it to 0 to switch the
-whole thing off; that is what the tests run with.
+which is why it is 10. It was 20 first, and 30 was considered; Neil halved it on
+8 September because a lone question sat there long enough to feel unanswered.
+Set it to 0 to switch the whole thing off; that is what the tests run with.
 
 **There is a cap, `burstMaxSeconds` (90).** Measured from the FIRST message of
 the burst, because somebody texting every fifteen seconds would otherwise reset
@@ -2601,21 +2607,27 @@ their defaults and are changed by texting.
 | `INBOUND_TEXT` | They texted first. Their own message in the `messages` table |
 
 **THERE ARE THREE DOORS ONTO THE SAME INTRODUCTION, AND ALL THREE HAVE TO KNOW.**
-Somebody hears from us first in one of three ways, and each has its own opening
-line and the same body from `onboarding.whatWeDo()`:
+Somebody hears from us first in one of three ways. Each passes its own opening
+clause to `onboarding.introduction()`, which writes everything after it:
 
-| Door | Who sends it | Its own first line |
+| Door | Who sends it | Its own opening clause |
 |---|---|---|
-| The website form | `onboarding.welcomeMessage()` | "thanks for sending over your number" |
-| A Facebook advert | `leads.leadMessage()` | "you filled out the laundry pickup form on our Facebook ad" |
-| **They text us out of the blue** | **the AI**, from `systemPrompt()` | "thanks for reaching out" |
+| The website form | `onboarding.welcomeMessage()` | "Hey, thanks for sending over your number." |
+| A Facebook advert | `leads.leadMessage()` | "Hey, you left this number on our Facebook laundry form." |
+| **They text us out of the blue** | **the AI**, from `systemPrompt()` | "Hey, thanks for reaching out." |
+
+**The clause and the first paragraph are the SAME sentence** — "Hey, thanks for
+reaching out. It's LYNDRY, wash-and-fold pickup and delivery in Bergen County."
+— which is why `introduction()` returns the finished message rather than
+paragraphs for a caller to join. A caller assembling an array with blank lines
+between could not produce that.
 
 **The third one is the one that gets missed**, and it did: the wording was typed
 into `brain.js` twice, once as an instruction and once as a worked example, so
 rewriting the other two left the AI still reciting the old sentence — and a real
-number that texted "Hi" got it, an hour after the new copy went live. The body
-is now built from `whatWeDo()` in all three, so there is one copy of the words
-and one copy of the free-orders count.
+number that texted "Hi" got it, an hour after the new copy went live. All three
+now call `introduction()`, so there is one copy of the words and one copy of the
+free-orders count.
 
 **It is the AI's to send because they said something.** A brand-new number that
 says only "hi" gets the block word for word, the same way the wash question is
@@ -2624,26 +2636,51 @@ answered, because a script that ignores what somebody said is the robot
 behaviour this system exists to avoid. **With the shop shut none of it applies** —
 the block invites them to name a day, so the closed wording stands instead.
 
-**THE FIRST MESSAGE IS FOUR SEGMENTS NOW, AND THAT IS DELIBERATE.** The canned
-welcome was held to one segment for a long time, on the grounds that it goes to
-everybody and every segment is billed. Neil rewrote it once there was paid
-traffic behind the number: it is the only thing a stranger reads before deciding
-whether to reply, and "no app to download" answers the question most of them are
-actually asking. Shorten it by cutting a whole idea, never by re-compressing it
-into the terse version — that has been tried and it reads as a robot.
+**THE FIRST MESSAGE IS TWO SEGMENTS, DOWN FROM FOUR, AND NEIL WROTE BOTH.**
+It was one segment for a long time, on the grounds that it goes to everybody and
+every segment is billed. It went to four once there was paid traffic behind the
+number, on the grounds that it is the only thing a stranger reads before
+deciding whether to reply. It came back to two on 8 September, after 34 people
+read the four-segment version and one of them ordered.
 
-**The opening date goes INSIDE the invitation** — "just tell us a day that works
-from Tuesday 8 Sep" — rather than being left out of it. Both first messages go
-out before the AI ever sees the conversation, so they are the ones that cannot
-work out for themselves that the van does not run yet, and inviting somebody to
-name a day when the earliest we can come is next week sets up a refusal on their
-very next text. It disappears on its own once the date passes.
+What changed is not the length so much as what the length is spent on. It now
+leads with the promotion and **ends on a question** — "Want us to grab your
+laundry this week?" — where the old one ended on a statement about there being
+no app.
+
+Three paragraphs, in this order, and each has a job:
+
+| | |
+|---|---|
+| who we are, and the turnaround | the only place a stranger hears "back the next day" before they book |
+| the offer | rendered from the promotion, never typed |
+| the ask | one question, answerable with a day |
+
+**What went, and do not put it back without asking.** "No app to download" cost
+a segment on every door and answers itself the moment they reply. "We pick your
+laundry up at your door" became a clause in the opening sentence rather than a
+paragraph of its own. **The turnaround stayed** and is the one thing here worth
+defending: it is the strongest single fact we have.
+
+**Shorten it by cutting a whole idea, never by re-compressing it into a terse
+version** — that has been tried and it reads as a robot.
+
+**The opening date goes in the ASK, not the offer** — "Want us to grab your
+laundry? First pickups are Monday 14 Sep." All three first messages go out
+before the AI ever sees the conversation, so they are the ones that cannot work
+out for themselves that the van does not run yet, and asking somebody about
+"this week" when the earliest we can come is next week sets up a refusal on
+their very next text. It disappears on its own once the date passes, and it
+costs a third segment while it is there.
 
 **The free-orders sentence is `promotions.freeOfferLine()` and nothing else may
 write one.** It returns null unless the promotion genuinely takes everything
-off, so a 30% offer can never be announced as free, and the count comes off
-`max_orders` so a promise with a number in it can never carry a number the code
-is not enforcing.
+off, so a 30% offer can never be announced as free; the count comes off
+`max_orders` and the weight is derived from the money cap, so a promise with a
+number in it can never carry a number the code is not enforcing. **It is the
+offer sentence only** — it used to carry the invitation too, which is why it
+took a `from` argument, and the ask is now its own paragraph in
+`introduction()`.
 
 **The consent checkbox wording appears in three places and must stay identical
 in all of them** — the home page hero, `/signup`, and the blockquote on

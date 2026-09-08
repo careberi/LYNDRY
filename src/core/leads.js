@@ -37,7 +37,7 @@ const { sendAndLog } = require('./notify');
 // pickup form on our Facebook ad" - where the canned welcome in onboarding.js
 // opens with "thanks for sending over your number", which would be the wrong
 // sentence to somebody who has never been on our website. Everything after that
-// is the same in both, and comes from onboarding.whatWeDo() so it stays that
+// is the same in both, and comes from onboarding.introduction() so it stays that
 // way.
 // ---------------------------------------------------------------------------
 
@@ -179,7 +179,7 @@ async function fetchLeads() {
 // back out.
 //
 // ONLY THE FIRST PARAGRAPH IS WRITTEN HERE. The middle two come from
-// onboarding.whatWeDo(), which is what the canned website welcome uses too -
+// onboarding.introduction(), which is what the canned website welcome uses too -
 // Neil wrote the two messages separately and then wrote them identically from
 // the second paragraph on, so two copies would only be two things to edit and
 // one of them would be the one nobody remembered. The free-orders sentence and
@@ -190,21 +190,23 @@ async function fetchLeads() {
 // right trade: this number cost money to acquire, and a terse text to somebody
 // who has never heard of us is how that money gets wasted.
 function leadMessage({ promo = null, opensOn = null } = {}) {
-  return [
-    `Hi, this is ${site.name}. You filled out the laundry pickup form on our ` +
-      `Facebook ad and left this number, so we wanted to follow up. We are a ` +
-      `wash and fold pickup and delivery laundry service in ${site.serviceArea}.`,
-
-    ...onboarding.whatWeDo({ promo, opensOn }),
-
-    // NO OPT-OUT LINE. It was added here unasked and Neil removed it: the three
-    // paragraphs above are the message, and nothing appends to them.
-    //
-    // STOP still works exactly as it always has - it is handled in code in
-    // src/core/compliance.js before the AI ever sees a message, on every number,
-    // whether or not any text mentions it. What is gone is the sentence, not
-    // the mechanism.
-  ].join('\n\n');
+  // NO OPT-OUT LINE. It was added here unasked and Neil removed it: the message
+  // is whatever introduction() returns, and nothing appends to it.
+  //
+  // STOP still works exactly as it always has - it is handled in code in
+  // src/core/compliance.js before the AI ever sees a message, on every number,
+  // whether or not any text mentions it. What is gone is the sentence, not the
+  // mechanism.
+  //
+  // "you left this number on our Facebook laundry form" rather than "you filled
+  // out the form on our Facebook ad": shorter by a dozen characters, which is
+  // what keeps this door inside two segments, and it puts THEIR action first.
+  // This is the longest of the three openers, so it is the one that decides
+  // whether the shared body can grow.
+  return onboarding.introduction(
+    `Hey, you left this number on our Facebook laundry form.`,
+    { promo, opensOn }
+  );
 }
 
 // --- The sweep -------------------------------------------------------------

@@ -57,64 +57,69 @@ const CONSENT_SOURCES = [
 // something that will then be refused is a worse first impression than saying
 // so plainly.
 // ---------------------------------------------------------------------------
-// THE BODY BOTH FIRST MESSAGES SHARE.
+// THE WHOLE OF ALL THREE FIRST MESSAGES, GIVEN ONE OPENING CLAUSE.
 //
-// There are two of them - the canned welcome below, for somebody who typed their
-// number into our own website, and the introduction in src/core/leads.js, for
-// somebody who filled in a Facebook advert's form. Neil wrote them separately
-// and then wrote them the same: after the opening line they are word for word
-// identical, because they are both answering "what is this and what do I do
-// next" for somebody who has never spoken to us.
+// Somebody hears from us first in one of three ways, and the only thing that
+// differs between them is where we got their number:
 //
-// So the shared half lives here and each message writes only its own first
-// paragraph. Two copies of these two paragraphs would disagree the first time
-// one of them was edited, and the one that disagreed would be the one nobody
-// noticed - which is how the price ended up in two places once already.
+//   the website form   "Hey, thanks for sending over your number."
+//   a Facebook advert  "Hey, you left this number on our Facebook laundry form."
+//   they texted first  "Hey, thanks for reaching out."      (sent by the AI)
 //
-// Returns an array of paragraphs so a caller can put its own opener in front
-// and, in the Facebook case, the opt-out line behind.
+// Everything after that clause is identical, so it is written once here. Three
+// copies would disagree the first time one was edited and the one that
+// disagreed would be the one nobody noticed - which is how the price ended up
+// in two places once already, and how the AI was still reciting the old
+// introduction an hour after the other two were rewritten.
+//
+// It returns the finished message rather than paragraphs to assemble, because
+// the opening clause and the first paragraph are now the SAME sentence -
+// "Hey, thanks for reaching out. It's LYNDRY, wash-and-fold pickup..." - and a
+// caller joining an array with blank lines cannot produce that.
 // ---------------------------------------------------------------------------
-function whatWeDo({ promo = null, opensOn = null } = {}) {
-  // THE OPENING DATE GOES INSIDE THE INVITATION, not left out of it. These
-  // messages go out before the AI ever sees the conversation, so they are the
-  // ones that cannot work out for themselves that the van does not run until
-  // Tuesday - and inviting somebody to name a day when the earliest we can come
-  // is next week sets up a refusal on their very next text.
-  const from = opensOn ? ` from ${booking.readableDate(opensOn)}` : '';
-
+function introduction(opening, { promo = null, opensOn = null } = {}) {
   // THE OFFER IS THE PROMOTION'S OR IT IS NOT MADE. freeOfferLine() returns
   // null unless something genuinely free is live, so a 30% offer can never be
   // announced as free and a promise with a count in it can never carry a count
   // the code is not enforcing.
   const offer =
-    promotions.freeOfferLine(promo, { from }) ||
-    `Just tell us a day that works${from} and we will come get your laundry. ` +
-      `It is ${site.pricePerLb} a pound, weighed after we collect it.`;
+    promotions.freeOfferLine(promo) ||
+    `It is ${site.pricePerLb} a pound, weighed after we collect it.`;
+
+  // THE ASK KNOWS WHEN A VAN CAN ACTUALLY COME. These messages go out before
+  // the AI ever sees the conversation, so they are the ones that cannot work
+  // out for themselves that we do not start until next week - and "this week"
+  // to somebody who cannot be collected until Tuesday sets up a refusal on
+  // their very next text. It disappears on its own once the date passes.
+  const ask = opensOn
+    ? `Want us to grab your laundry? First pickups are ${booking.readableDate(opensOn)}.`
+    : `Want us to grab your laundry this week?`;
 
   return [
-    `We pick your laundry up at your door, wash and fold it, and bring it back ` +
-      `the ${site.turnaround}.`,
-
-    `${offer} Everything gets set up and scheduled right here in this text thread, ` +
-      `no app to download.`,
-  ];
+    `${opening} It's ${site.name}, wash-and-fold pickup and delivery in ` +
+      `${site.serviceArea}. Collected at your door, back the ${site.turnaround}.`,
+    offer,
+    ask,
+  ].join('\n\n');
 }
 
 function welcomeMessage({ open = true, promo = null, promoBlurb = null, opensOn = null } = {}) {
-  // IT IS FOUR SEGMENTS NOW, AND THAT IS A DELIBERATE CHANGE. The old wording
-  // was held to one, on the grounds that this goes to everybody and every
-  // segment is billed. Neil rewrote it anyway and the trade is different now
-  // there is paid traffic behind the number: this is the only thing a stranger
-  // reads before deciding whether to reply, and "no app to download" answers
-  // the question most of them are actually asking. Shorten it by cutting a
-  // whole idea, never by re-compressing it into the terse version - that has
-  // been tried and it reads as a robot.
+  // TWO SEGMENTS NOW, DOWN FROM FOUR, AND NEIL WROTE BOTH.
+  //
+  // The four-segment version was itself a deliberate rewrite - it went long
+  // once there was paid traffic behind the number, on the grounds that this is
+  // the only thing a stranger reads before deciding whether to reply. What
+  // changed is what it spends the length on. It now leads with the promotion
+  // and ends on a question, because 34 people read the long one and one of
+  // them ordered.
+  //
+  // What went: "no app to download", which costs a segment on every door and
+  // answers itself the moment they reply, and the standalone "we pick your
+  // laundry up at your door" paragraph, folded into the opening sentence.
+  // The turnaround stayed - it is the strongest single fact we have and it is
+  // now the only place a stranger hears it before booking.
   if (open) {
-    return [
-      `Hi, thanks for sending over your number. This is ${site.name}, wash and fold ` +
-        `pickup and delivery laundry service in ${site.serviceArea}.`,
-      ...whatWeDo({ promo, opensOn }),
-    ].join('\n\n');
+    return introduction(`Hey, thanks for sending over your number.`, { promo, opensOn });
   }
 
   const what =
@@ -303,6 +308,6 @@ module.exports = {
   startConversation,
   welcomeMessage,
   welcomeBackMessage,
-  whatWeDo,
+  introduction,
   CONSENT_SOURCES,
 };

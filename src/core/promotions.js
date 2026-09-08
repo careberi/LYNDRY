@@ -555,22 +555,33 @@ function freeAllowanceLb(promo) {
 //
 // Returns null when there is nothing genuinely free to offer, which is the
 // caller's cue to say something else entirely rather than to soften this.
-function freeOfferLine(promo, { from = '' } = {}) {
+// THE OFFER SENTENCE, AND NOTHING ELSE.
+//
+// It used to carry the invitation with it - "just tell us a day that works and
+// we will come get your laundry" - so the offer and the ask were one sentence
+// and could not be separated. Neil's rewrite puts a blank line between them,
+// and the ask now lives in onboarding.introduction() where all three doors
+// share one copy of it. The `from` argument went with the invitation.
+//
+// The numbers are still read off the promotion and never typed: a promise with
+// a count in it must not have two copies of the count, and the weight is
+// derived from the money cap by freeAllowanceLb() rather than written down
+// twice. An offer with no ceiling says so by leaving the weight out.
+function freeOfferLine(promo) {
   if (!takesEverythingOff(promo)) return null;
 
-  // "up to 30 lb each" - the weight read off the cap, never typed. Absent
-  // entirely when there is no cap, because "free" with nothing after it is the
-  // honest sentence for an offer with no ceiling on it.
   const lb = freeAllowanceLb(promo);
-  const upTo = lb ? `, up to ${lb} lb each` : '';
+  const lead = `We're running a promotion right now: `;
 
-  return promo.max_orders
-    ? `While we are getting started the first ${promo.max_orders} orders are free${upTo}. ` +
-        `If you want one of them before they run out, just tell us a day that works${from} ` +
-        `and we will come get your laundry.`
-    : `While we are getting started your first order is free${
-        lb ? `, up to ${lb} lb` : ''
-      }. Just tell us a day that works${from} and we will come get your laundry.`;
+  if (promo.max_orders) {
+    return lb
+      ? `${lead}the first ${promo.max_orders} orders get their first ${lb} lb completely free.`
+      : `${lead}the first ${promo.max_orders} orders are completely free.`;
+  }
+
+  return lb
+    ? `${lead}your first ${lb} lb are completely free.`
+    : `${lead}your first order is completely free.`;
 }
 
 function describe(promo) {
