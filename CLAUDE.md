@@ -2279,7 +2279,40 @@ scripts, it has no person attached, and it gets everything.
 **The code is never stored.** `ops_login_codes` holds an HMAC of it keyed with
 `ADMIN_API_KEY`. Six digits is small enough to brute-force offline, which is
 exactly why the plaintext never lands in a row and why five wrong guesses kill
-a code regardless of its expiry. Codes are single-use and last 10 minutes.
+a code regardless of its expiry. Codes are single-use and last **5 minutes**,
+on both sign-ins. Neil's call, down from ten: a code is used within seconds of
+arriving or not at all, so the rest of the window only helps somebody who
+picked the phone up. Two different lifetimes on two sign-ins would be a thing
+somebody has to go and look up, so they moved together.
+
+**A CUSTOMER'S CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER.** Neil's ask,
+and it makes the page faster rather than slower: the send used to be awaited
+inside the request, so the sign-in form sat waiting on the carrier before the
+code page could render at all. `LOGIN_CODE_DELAY_MS`, 10 seconds, and zero
+sends immediately.
+
+**ONE PENDING SEND PER NUMBER, AND A SECOND REQUEST REPLACES THE FIRST.** This
+is what makes the delay safe rather than a new bug. `verifyCode()` accepts the
+NEWEST unconsumed code, so somebody tapping the button twice inside the window
+would otherwise get two texts of which only the second works - and the first to
+arrive is the one they would try. Cancelling the pending send means exactly one
+text per burst of taps, carrying the code that will actually be accepted. Same
+shape as `src/core/burst.js`, and rows for the superseded codes are still
+written, which is correct: they were issued.
+
+**A deploy inside the window must not swallow a code.** The row is already in
+the database, so `customerAuth.flushPendingCodes()` runs in `shutdown()`
+alongside the reply flush - without it somebody waits for a text that is never
+sent. The timer is `unref`'d so it can never hold the process open.
+
+**The code page says the code is ON ITS WAY, not that it has been sent.** For
+the first few seconds the page is up and the message is not, and "we texted you
+a code" is a sentence the phone contradicts - which reads as broken and starts
+somebody tapping.
+
+**The delay is the customer sign-in only.** The staff one still sends inside the
+request, because it writes the code to the server log when texting fails and
+that log is the way back into a dashboard nobody else can reach.
 
 **The sign-in pages are `no-store`, and that is not housekeeping.** A cached
 sign-in form is served to somebody whose session is in fact still alive; the

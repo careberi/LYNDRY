@@ -25,6 +25,7 @@ const bag = require('./routes/bag');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 const burst = require('./core/burst');
+const customerAuth = require('./core/customer-auth');
 const scheduler = require('./core/scheduler');
 const issues = require('./core/issues');
 
@@ -322,10 +323,18 @@ function shutdown(signal) {
   // deploy landing inside that window would otherwise leave somebody with no
   // reply at all. Best effort: if it does not finish inside the grace period
   // below, the process goes anyway.
-  burst
-    .flushAll()
-    .catch((err) => console.error(`Could not flush pending replies: ${err.message}`))
-    .finally(() => server.close(() => process.exit(0)));
+  // A SIGN-IN CODE IN FLIGHT GOES OUT TOO. Its row is already in the database,
+  // so a deploy landing inside the ten-second delay would otherwise leave
+  // somebody staring at a code entry box waiting for a text that will never
+  // arrive. Same reasoning as the reply flush, and both are best effort.
+  Promise.all([
+    burst
+      .flushAll()
+      .catch((err) => console.error(`Could not flush pending replies: ${err.message}`)),
+    customerAuth
+      .flushPendingCodes()
+      .catch((err) => console.error(`Could not flush pending sign-in codes: ${err.message}`)),
+  ]).finally(() => server.close(() => process.exit(0)));
   // If something hangs, don't wait forever. Raised from ten seconds when the
   // flush above was added: answering a held message means a call to the AI and
   // a call to the carrier, and cutting that off at ten would defeat the point

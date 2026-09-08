@@ -48,7 +48,9 @@ const SESSION_MS = SESSION_MINUTES * 60 * 1000;
 
 // Codes are short-lived on purpose. One sitting valid for an hour is one
 // someone can read off a lock screen long after it was needed.
-const CODE_TTL_MINUTES = 10;
+// FIVE MINUTES, DOWN FROM TEN, matching the customer sign-in. Neil's call.
+// Two different lifetimes on two sign-ins is a thing somebody has to look up.
+const CODE_TTL_MINUTES = 5;
 const MAX_CODE_ATTEMPTS = 5;
 
 function hasKey() {

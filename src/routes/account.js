@@ -127,9 +127,14 @@ function codeStep({ error = '', next = '/account', phone = '' } = {}) {
   <div class="container" style="max-width:560px;padding-top:80px;padding-bottom:72px;">
     <p class="eyebrow eyebrow-brand">Your pickups</p>
     <h1 class="display-2">Check your phone.</h1>
+    <!-- ON ITS WAY, NOT ALREADY SENT. The text is handed to a timer rather than
+         sent inside the request (see src/core/customer-auth.js), so for the
+         first few seconds this page is up and the message is not. "We texted
+         you a code" would be a sentence the phone contradicts, and somebody
+         reading it decides the site is broken and starts tapping. -->
     <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
-      We texted a six-digit code to <strong>${escapeHtml(formatPhone(phone))}</strong>.
-      It expires in ${auth.CODE_TTL_MINUTES} minutes.
+      A six-digit code is on its way to <strong>${escapeHtml(formatPhone(phone))}</strong>.
+      Give it a few seconds. It expires ${auth.CODE_TTL_MINUTES} minutes after it lands.
     </p>
   </div>
 </section>
