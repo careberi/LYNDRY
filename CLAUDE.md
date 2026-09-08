@@ -43,6 +43,27 @@ Don't add these; push back if asked too early.
 *(An admin dashboard was on this list until Neil asked for one — see "The ops
 screens" below. Everything else here still stands.)*
 
+**Four more, decided on 8 September against a written spec from another AI**
+that had read the funnel report and not the repo. Each was weighed with the
+alternative in front of Neil:
+
+- **A stored `conversation_state` column.** The re-ask bug it was meant to fix
+  is real and is fixed by deriving the next question from what is already
+  stored — see `pending_pickup` and the nudge gaps. A state column is a second
+  copy of facts the database holds, and goes stale the first time anybody
+  edits a customer by hand.
+- **Message 1 cut to two segments.** Neil rewrote it to four deliberately and
+  chose to keep it as written.
+- **"Never say Stripe."** The one customer who baulked at Stripe never saw the
+  word in a text — she met it on the hosted card page. Neil had already asked
+  for language that explains Stripe *before* that page; going quieter is the
+  opposite of the fix.
+- **A "free & clear detergent" claim.** Detergent is standard across the board,
+  Neil's call, and naming a product would invent a fact.
+
+Also declined: a four-step follow-up ladder (see follow-ups below for what was
+built instead), and any text to the 24 people holding the old 20% offer.
+
 ## Technical conventions
 
 **CommonJS (`require`), not ESM (`import`).** Chosen because it is the most
@@ -79,6 +100,14 @@ developer and has not seen this file before.
 reads files as ANSI, so a `Get-Content` / `Set-Content` round trip destroys
 every em dash and curly quote in the file. Use the editing tools, or
 `[System.IO.File]::ReadAllText` with an explicit UTF-8 encoding.
+
+**`npm test` runs Node's own test runner over `test/`.** No framework and no
+dependency — `node --test` is built in. The tests cover the pure functions
+whose bugs were found in real threads: which chase a thread earns, whether a
+weekday contradicts a date, and what counts as a tapback. Anything that
+requires `src/db.js` needs `.env` to exist to load, but nothing in `test/`
+reads or writes the database. A new rule that can be tested without a
+database should be.
 
 ## The website
 
@@ -353,6 +382,35 @@ Rules:
   straight to the phone. If that second pass comes back empty, the facts carry
   their own sentence for every refusal that has one.
 
+- **THE WEEKDAY THEY SAID IS CHECKED AGAINST THE DATE THEY SAID.** "How about
+  Mon sept 18th" — the 18th was a Friday, the AI turned it into the date, the
+  code found nothing wrong with a Friday, and she was told "Friday 18 Sep works
+  fine" and booked for a day she never asked for. `check_slot` now takes
+  `weekday_said`, the customer's own word, and `booking.weekdayMismatch()`
+  holds the two together. When they disagree it refuses with a **question
+  naming both days**, and that question is the AI's whole reply. It is the one
+  time the AI may ask which day somebody meant — the "never argue about time"
+  rule is about windows, not about a contradiction in what they typed.
+
+- **"ANYTIME" IS AN ANSWER, AND IT IS RECORDED AS ONE.** `pending_pickup` on
+  the customer is what `check_slot` writes down so the AI stops asking "when
+  would you like it picked up?" to somebody who has said. It held a date and a
+  time, and "Anytime is fine" arrived as no time — which read back as *not
+  asked yet*, so a real customer was asked again two messages later.
+  `check_slot` takes `any_time`, the row keeps it and the window a no-time
+  request lands in, and `pendingPickupLine()` in `brain.js` says so in as
+  many words. It is the one intake fact with no other home until the order
+  exists, which is why it is stored at all.
+
+- **A TAPBACK IS NOT A MESSAGE.** An iPhone heart on our text arrives as
+  `Loved "…"` and the AI answered two of them in the first week — a billed
+  segment saying "Glad that landed!". `reactions.isReaction()` recognises
+  Apple's six verbs (and only Apple's, deliberately — a looser pattern would
+  swallow real messages), `sms.js` drops them before the burst window, and the
+  follow-up sweep looks straight past them: a heart on our question is not an
+  answer to it. The row is still written to `messages`, because it is what
+  their phone sent.
+
 - `open_locker()` **takes no arguments — never change this.** The backend works
   out which compartment from the authenticated phone number's open order, and
   refuses if there isn't one. Claude cannot name a locker, a building or a
@@ -404,6 +462,20 @@ is one the people doing the washing never see.
   what they've been "set up with"; that sentence went to a real customer and
   Neil called it unacceptable. Once saved, never asked again.
 - Uncertain, or the customer is upset? `handoff_to_human` rather than guessing.
+
+  **AND A HANDOFF HAS TO REACH A PERSON, WHICH ONCE IT DID NOT.** It texts
+  every active admin with a phone plus `SUPPORT_PHONE`. On 5 September there
+  were none of either, so a customer was told "they'll come back to you
+  shortly", the issue row was created, the alert went to a `console.error`,
+  and the issue was later marked resolved without her hearing from anyone.
+  Migration 0077 records `paged_at` and `paged_to` on the issue; an open issue
+  with neither shows **Nobody was paged** in red on `/ops/issues`; the server
+  says so at boot; and `issues.repageStale()` runs on the scheduler tick —
+  an open issue fifteen minutes old that no *person* has written to the
+  customer about (an outbound with `sent_by`, not a status text) gets every
+  admin texted once more, stamped `repaged_at`, and never a third time. The
+  first page still goes the moment it is raised, whatever the hour; the
+  re-page rides the tick and so sits out quiet hours.
 - Replies sound like a competent human at a small business. Short. No emoji.
   Never "I'm an AI".
 
@@ -893,22 +965,32 @@ somebody wants the clean laundry left somewhere different. **Anything asking
 "do we know where the bag goes" must check both** - checking `dropoff_spot`
 alone says no for almost every customer who has told us.
 
-**THE AI CHASES AN UNANSWERED QUESTION ONCE, A DAY LATER.** Neil's ask: the AI
+**THE AI CHASES AN UNANSWERED QUESTION AT MOST TWICE, THEN STOPS.** Neil's ask: the AI
 asks for an address or a day, the customer never answers, and nothing in the
 system noticed - so a half-set-up customer sat there for ever.
 `src/core/followups.js` sweeps for it.
 
 | Rule | |
 |---|---|
-| The last message is the AI's own reply, 24 hours old | anything else means we are not waiting on them |
-| **One chase per silence** | a chase is written as `kind = 'FOLLOW_UP'`, so the last message is then a follow-up and the first rule can never fire again |
+| The last message is the AI's own reply, or a chase of it | anything else means we are not waiting on them |
+| **An early nudge, two hours in, only mid-setup** | somebody who said "Yes" and never gave a name has put the phone down, not lost interest; a day later the moment has gone. Mid-setup is derived from the nudge gaps — no name, address, wash or card |
+| **A final chase, a day after the question** | measured from the AI's question, not from the nudge |
+| **Two per silence, and the count is read off the thread** | both are `kind = 'FOLLOW_UP'`; one sent inside the first day was the early one. Two since their last word, or one sent after the day mark, and it is over |
 | There was a conversation | at least one message from them and two from us. "Thanks" / "no problem" is not something to chase |
 | Nothing booked | the point is getting somebody over the line; a customer with a pickup coming does not need texting |
 
-**A FOLLOW-UP TO A FOLLOW-UP IS IMPOSSIBLE, NOT DISCOURAGED**, and that is the
-whole shape of the design. Rather than counting chases in a column, the chase
-changes what the last message IS. Only the customer speaking puts an AI reply
-back at the end of the thread.
+**A THIRD CHASE IS IMPOSSIBLE, NOT DISCOURAGED**, and that is the whole shape
+of the design. Nothing counts chases in a column: `assess()` reads the thread
+since the customer's last word and works out from timestamps which chases have
+gone. Only the customer speaking starts the count again. It was one chase, not
+two, until 8 September; Neil chose the early nudge over a four-step ladder that
+would have roughly quadrupled the outbound to people who had not replied while
+the carrier registration is still pending. `FOLLOW_UP_EARLY_HOURS` and
+`FOLLOW_UP_AFTER_HOURS` are the two knobs.
+
+**The early nudge is written by the same `brain.followUpMessage()`**, told it
+has been a couple of hours rather than a day, and with the same no-tools rule.
+The thread and the follow-up list both say which of the two is coming.
 
 **`messages.kind` is what makes any of it work** - `AI`, `FOLLOW_UP`, `PERSON`,
 `SYSTEM`, and null for everything written before it existed. Only `AI` earns a
@@ -2322,6 +2404,20 @@ mandatory, so by then nothing about the amount can still change, and waiting
 until the doorstep only moved a decline to the worst possible moment: a driver
 standing on a step with an armful of clean laundry and no way to fix it.
 
+**AND THREE CUSTOMER-FACING SENTENCES STILL SAID DELIVERY.** The card ask in
+`actions.js`, `billing.setupLinkMessage()` and the nudge button all said
+"charged when we drop your laundry back" or "when we deliver it back" — true
+when the charge point was the doorstep, false since, and read by somebody
+deciding whether to hand over a card. All three say "charged after we weigh
+it" now. If the charge point moves again, grep for that phrase.
+
+**The card ask also says what they were promised.** A customer was told the
+first orders were free, then met "$2.00 a pound with a $25.00 minimum" beside a
+card link with no mention of free anywhere, and replied "I'll pass". It now
+reads `freeOrder` and `freeUpToLb` off the same `bookPickup()` result the
+confirmation text reads, so the ceiling it names is the one the pricing code
+enforces.
+
 **The customer is billed on the HIGHER of the two scales.** Inside the tolerance
 the two numbers are describing the same laundry and the gap is smaller than the
 amount either scale could be out by, so the higher one is taken and the card is
@@ -2475,6 +2571,10 @@ queue would be the alternative and CLAUDE.md rules out a job queue.
 **The pause is checked when the reply RUNS, not when the message arrives**, so
 an admin who switches the AI off during the window stops the reply that was
 already waiting. That falls out of where the check sits and is worth keeping.
+
+**A tapback never enters the burst window.** It is recognised and dropped before
+it, in `sms.js`, because a heart on our last message is not somebody starting
+to type. See "A TAPBACK IS NOT A MESSAGE" in the AI layer above.
 - `STOP` / `UNSTOP` / `START` / `HELP` are handled in code, before Claude sees
   them. These are legally required and must never depend on an AI reading them
   correctly.
