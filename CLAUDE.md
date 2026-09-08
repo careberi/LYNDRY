@@ -2605,9 +2605,25 @@ rule is only about text messages.
   before an address has been saved. Asked "do you come to Princeton?" a
   model will invent a yes, so it asks for the address and the code answers
 - **Cancellation:** free until the driver collects; not cancellable after
-- **Public contact:** neil@lyndry.com · (201) 554-1877 (the LYNDRY Telnyx
-  number). **Neil's personal number is never published on the website** — it
-  belongs in `.env` only, for `handoff_to_human`
+- **Public contact: TWO numbers doing two jobs, and one inbox.**
+  **(201) 554-1877 is texted** — the Telnyx number, how every order is placed,
+  moved and cancelled. **(201) 771-2933 is called** — a phone somebody answers
+  when a customer wants a person rather than a thread. **clean@lyndry.com** is
+  watched; it replaced an address that came off the site precisely because
+  nobody was reading it.
+
+  The texting number is read from `LYNDRY_PHONE_NUMBER` because it has to match
+  what the carrier sends from. **The call number is typed in `site.js`**, which
+  looks like a contradiction and is not: nothing in this system ever dials it,
+  so there is no second copy anywhere for it to drift from. It belongs with the
+  legal name and the tagline.
+
+  **`site.opsPhoneDisplay` is the call number now, not Neil's mobile.** It is
+  what a laundromat scanning a bag tag is told to ring, and what the driver's
+  run screen and the error page show. It used to fall back to `SUPPORT_PHONE`,
+  which is his personal number and was never meant to be read off a sticker by
+  a stranger at a counter. **Neil's personal number is still never published** —
+  it belongs in `.env` only, for `handoff_to_human`
 - **Legal entity:** none, deliberately — not forming one until the concept is
   proven. Legal pages are sole-proprietor placeholders and need a lawyer
 

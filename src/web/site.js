@@ -80,6 +80,23 @@ function displayPhone(raw) {
 // number on the site goes through. It was a second hand-typed constant.
 const PUBLIC_PHONE_DISPLAY = PUBLIC_PHONE_LINK ? displayPhone(PUBLIC_PHONE_LINK) : '';
 
+// THE LINE SOMEBODY CALLS WHEN SOMETHING IS WRONG.
+//
+// A second public number, and a second job. The one above is texted and is how
+// orders happen; this one rings and is for a person who wants a person - a
+// customer with a problem, a laundromat holding a bag, a driver stuck.
+//
+// Written here rather than read from the environment, which is the opposite of
+// the rule directly above and is deliberate. That number has to be the one the
+// carrier actually sends from, so it lives in one place and everything derives
+// from it. Nothing in this system ever dials this one - it is only ever printed
+// - so there is no second copy anywhere for it to drift from.
+//
+// Blank it and every "call us" on the site disappears rather than showing an
+// empty space, the same way the texting number behaves.
+const CALL_PHONE_LINK = '+12017712933';
+const CALL_PHONE_DISPLAY = CALL_PHONE_LINK ? displayPhone(CALL_PHONE_LINK) : '';
+
 const site = Object.freeze({
   name: 'LYNDRY',
   legalName: LEGAL_NAME,
@@ -87,22 +104,44 @@ const site = Object.freeze({
 
   tagline: 'Laundry, handled.',
 
-  // NOT PUBLISHED ON THE WEBSITE. Neil's call - the inbox is not one anybody
-  // is watching yet, and a dead address on a page is worse than none. It has
-  // no {{EMAIL}} token any more, so a page cannot render it by accident.
+  // PUBLISHED AGAIN, and it is a different address from the one that was here.
+  // It came off the site when nobody was reading the inbox, on the grounds that
+  // a dead address is worse than none; clean@lyndry.com is watched, so the
+  // {{EMAIL}} token is back and the legal pages carry it.
   //
-  // It survives here because the HELP reply is legally required to carry a
-  // contact method and carriers check that one. Put it back on the site by
-  // adding the token again, once somebody is actually reading the mail.
-  email: 'info@lyndry.com',
+  // It is also what the HELP reply uses, which is legally required to carry a
+  // contact method and is one of the things a carrier checks.
+  email: 'clean@lyndry.com',
 
   publicPhoneDisplay: PUBLIC_PHONE_DISPLAY,
-
-  // The number on partner-facing pages. Falls back to the public one so
-  // nothing shows a blank where a phone number should be.
-  opsPhoneDisplay: OPS_PHONE ? displayPhone(OPS_PHONE) : PUBLIC_PHONE_DISPLAY,
   publicPhoneLink: PUBLIC_PHONE_LINK,
   hasPublicPhone: Boolean(PUBLIC_PHONE_DISPLAY && PUBLIC_PHONE_LINK),
+
+  // THE NUMBER YOU CALL, WHICH IS NOT THE NUMBER YOU TEXT.
+  //
+  // Two public numbers doing two jobs. The one above takes texts and is how
+  // every order is placed, moved and cancelled; this one is a phone somebody
+  // answers when something has gone wrong and a customer wants a person rather
+  // than a thread.
+  //
+  // TYPED HERE, unlike the texting number, and the difference is the point:
+  // that one has to match what the carrier sends from, so it is read from the
+  // environment and there is one copy of it. Nothing in this system ever dials
+  // this one, so there is no second copy for it to disagree with - it belongs
+  // with the legal name and the tagline, which are also facts about the
+  // business rather than settings.
+  callPhoneDisplay: CALL_PHONE_DISPLAY,
+  callPhoneLink: CALL_PHONE_LINK,
+
+  // The number on partner-facing pages - the bag tag a laundromat scans, the
+  // driver's run screen, the error page.
+  //
+  // IT IS THE BUSINESS LINE NOW, NOT NEIL'S MOBILE. It used to fall back to
+  // SUPPORT_PHONE, which is his personal number and was never meant to be read
+  // off a sticker by a stranger at a counter. SUPPORT_PHONE still exists and is
+  // still where handoff_to_human reaches him; it is simply no longer what an
+  // attendant is told to ring.
+  opsPhoneDisplay: CALL_PHONE_DISPLAY || (OPS_PHONE ? displayPhone(OPS_PHONE) : PUBLIC_PHONE_DISPLAY),
 
   serviceArea: 'Bergen County',
 
@@ -154,6 +193,16 @@ const tokens = Object.freeze({
   NAME: site.name,
   PHONE: site.publicPhoneDisplay,
   SMS_LINK: site.hasPublicPhone ? `sms:${site.publicPhoneLink}` : '/#get-started',
+
+  // THE OTHER NUMBER, and the one a page has to label clearly. A visitor shown
+  // two phone numbers with no explanation will use the wrong one - so every
+  // page that prints these says which is for what.
+  CALL_PHONE: site.callPhoneDisplay,
+  CALL_LINK: site.callPhoneLink ? `tel:${site.callPhoneLink}` : '',
+
+  // Back on the site. See site.email for why it left and why it has returned.
+  EMAIL: site.email,
+  EMAIL_LINK: `mailto:${site.email}`,
   LEGAL_NAME: site.legalName,
   TAGLINE: site.tagline,
   PHONE_LINE: phoneLine(),

@@ -7,32 +7,53 @@
 </section>
 
 <section class="container" style="padding-bottom:88px;">
-  <div class="grid-2">
+  <!-- THREE WAYS, AND EACH ONE SAYS WHAT IT IS FOR.
+       There are two public numbers now - one you text, one you call - and a
+       visitor shown two numbers with no explanation will use the wrong one.
+       The headings do that work, so nobody has to read the paragraph to find
+       out which is which.
 
-    <div class="card card-xl" style="padding:36px;" data-reveal>
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+       This card used to be labelled "Email" and had the texting number in it,
+       left over from when the email address came off the site. -->
+  <div class="grid-3">
+
+    <div class="card card-xl" style="padding:32px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
         <span class="icon-tile icon-tile-52">{{ICON_MESSAGE}}</span>
-        <span class="eyebrow" style="margin:0;">Email</span>
+        <span class="eyebrow" style="margin:0;">Text</span>
       </div>
-      <h2 style="font-family:var(--font-display);font-weight:800;font-size:32px;letter-spacing:-0.03em;margin:0 0 14px;">Best for anything</h2>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;letter-spacing:-0.03em;margin:0 0 14px;">To book a pickup</h2>
       <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 26px;">
-        An order, a question, or getting LYNDRY into your building. Text us and
-        it all reaches the same place.
+        Texting is how you book, reschedule, cancel and check on an order.
+        There is nothing to download and no account to set up.
       </p>
       <a href="{{SMS_LINK}}" class="btn btn-outline">{{PHONE}}</a>
     </div>
 
-    <div class="card card-xl" style="padding:36px;" data-reveal>
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+    <div class="card card-xl" style="padding:32px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
         <span class="icon-tile icon-tile-52 icon-tile-lilac">{{ICON_TRUCK}}</span>
-        <span class="eyebrow" style="margin:0;">Text message</span>
+        <span class="eyebrow" style="margin:0;">Call</span>
       </div>
-      <h2 style="font-family:var(--font-display);font-weight:800;font-size:32px;letter-spacing:-0.03em;margin:0 0 14px;">Best once you're set up</h2>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;letter-spacing:-0.03em;margin:0 0 14px;">If something is wrong</h2>
       <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 26px;">
-        Texting is how you book, reschedule, cancel and check on an order.
-        {{CONTACT_SENTENCE}}
+        Laundry that has not turned up, something missing, anything you would
+        rather say out loud than type. A person answers.
       </p>
-      <p style="font-size:18px;font-weight:600;margin:0;">{{PHONE_LINE}}</p>
+      <a href="{{CALL_LINK}}" class="btn btn-outline">{{CALL_PHONE}}</a>
+    </div>
+
+    <div class="card card-xl" style="padding:32px;" data-reveal>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+        <span class="icon-tile icon-tile-52">{{ICON_USER}}</span>
+        <span class="eyebrow" style="margin:0;">Email</span>
+      </div>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;letter-spacing:-0.03em;margin:0 0 14px;">For anything longer</h2>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 26px;">
+        Billing questions, getting LYNDRY into your building, or anything that
+        needs more room than a text message.
+      </p>
+      <a href="{{EMAIL_LINK}}" class="btn btn-outline">{{EMAIL}}</a>
     </div>
 
   </div>
