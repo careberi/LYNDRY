@@ -124,11 +124,31 @@ async function createOrder(customer, input) {
     // and the single most common reason to abandon it is not knowing how much.
     const { url } = await billing.createSetupLink(customer);
 
+    // TWO THINGS THIS SENTENCE GOT WRONG, both found in one customer's thread.
+    //
+    // It said "charged when we drop your laundry back", which was true while
+    // the charge point was the doorstep and has been false since it moved to
+    // the laundromat's scale. And it quoted "$2.00 a pound with a $25.00
+    // minimum" to somebody who had been told three messages earlier that her
+    // order was free - the first she heard of either figure was here, beside a
+    // card link, and she replied "I'll pass".
+    //
+    // This is the message somebody reads while deciding whether to hand over a
+    // card, so when their money moves and whether any moves at all are the two
+    // facts in it that cannot be wrong. Both come off the same bookPickup()
+    // result the confirmation text reads, so the ceiling named here is the one
+    // the pricing code enforces.
+    const money = result.freeOrder
+      ? result.freeUpToLb
+        ? `This one is on us up to ${result.freeUpToLb} lb - anything over that is ` +
+          `${site.pricePerLb} a pound, charged after we weigh it. `
+        : `This one is on us, so there is nothing to pay. `
+      : `Nothing gets taken now - it's ${site.pricePerLb} a pound with a ` +
+        `${billing.money(config.pricing.minimumCents)} minimum, charged after we weigh it. `;
+
     return (
       `${booking.whenLine(result.order)} it is. One thing first: we need a card on ` +
-      `file before the driver comes out. Nothing gets taken now - it's ` +
-      `${site.pricePerLb} a pound with a ${billing.money(config.pricing.minimumCents)} minimum, ` +
-      `charged when we drop your laundry back. Our payment provider handles it and we ` +
+      `file before the driver comes out. ${money}Our payment provider handles it and we ` +
       `never see the number: ${url}`
     );
   }
@@ -160,6 +180,10 @@ async function checkSlot(customer, input = {}) {
   const result = await booking.checkSlot(customer, {
     pickupDate: input.pickup_date,
     pickupTime: input.pickup_time,
+    // Their weekday, in their own words, so the code can hold it against the
+    // date the AI worked out. See booking.weekdayMismatch() for the customer
+    // who asked for a Monday and was booked for a Friday.
+    weekdaySaid: input.weekday_said,
   });
 
   // WRITE DOWN WHAT THEY ASKED FOR. This function is the one place that knows
@@ -174,6 +198,16 @@ async function checkSlot(customer, input = {}) {
         pending_pickup: {
           date: input.pickup_date,
           time: input.pickup_time || null,
+          // "ANYTIME IS FINE" IS AN ANSWER. Until it was written down as one it
+          // was stored as no time at all, which read back to the AI as "no time
+          // named" - and a real customer was asked "When would you like it
+          // picked up?" a second time, two messages after answering it. The
+          // window a no-time request lands in is kept beside it so the
+          // read-back can name it instead of leaving that to be worked out.
+          anyTime: Boolean(input.any_time),
+          window: result.ok
+            ? `${booking.readableTime(result.window.start)} to ${booking.readableTime(result.window.end)}`
+            : null,
           bookable: Boolean(result.ok),
         },
       })

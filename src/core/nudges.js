@@ -145,7 +145,7 @@ const GAPS = [
     text: () =>
       `Before your first pickup we need a card on file. It takes a minute and it's handled by our ` +
       `payment provider, we never see the number: ${config.baseUrl}/pay/...\n\n` +
-      `${site.pricePerLb} a pound, charged when we deliver it back. Nothing recurring.`,
+      `${site.pricePerLb} a pound, charged after we weigh it. Nothing recurring.`,
     send: (c) => billing.setupLinkMessage(c),
   },
 

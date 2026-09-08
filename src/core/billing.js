@@ -156,13 +156,19 @@ async function createSetupLink(customer) {
 }
 
 // The sentence texted to someone who needs to add a card before we can book.
+// CHARGED AFTER WE WEIGH IT, NOT ON DELIVERY. This said "when we deliver it
+// back", which was true while the charge point was the doorstep and has been
+// false since it moved to the laundromat's scale. It is the sentence somebody
+// reads while deciding whether to hand over a card, so when their money moves
+// is the one fact in it that cannot be wrong. The same correction was made to
+// the card sentence in src/core/actions.js: three doors, one promise.
 async function setupLinkMessage(customer) {
   const { url } = await createSetupLink(customer);
 
   return (
     `Before your first pickup we need a card on file. It takes a minute and it's ` +
     `handled by our payment provider, we never see the number: ${url}\n\n` +
-    `${site.pricePerLb} a pound, charged when we deliver it back. Nothing recurring.`
+    `${site.pricePerLb} a pound, charged after we weigh it. Nothing recurring.`
   );
 }
 
