@@ -114,6 +114,25 @@ const TOOLS = [
           type: 'string',
           description: 'HH:MM 24-hour, the time they asked for. Leave out if they named no time.',
         },
+        // THE TWO HALVES OF WHAT THEY SAID. The date is what the model worked
+        // out; the weekday is what the customer actually typed. Handing both
+        // over is what lets the code notice when they disagree, which the
+        // model on its own never did - see booking.weekdayMismatch().
+        weekday_said: {
+          type: 'string',
+          description:
+            "The weekday the customer named, in their own words - 'Monday', 'mon', 'Tues', 'next friday'. " +
+            'Leave out if they gave only a date, or said today or tomorrow. The code checks it against ' +
+            'pickup_date and hands you the question to ask when the two do not agree.',
+        },
+        // "ANYTIME" IS AN ANSWER, and this is how it gets recorded as one. Left
+        // unrecorded it looks exactly like a time nobody asked for yet.
+        any_time: {
+          type: 'boolean',
+          description:
+            "true when they said any time works - 'anytime', 'whenever', 'doesn't matter', 'no preference'. " +
+            'That is their answer to the time question, and passing it here is what stops them being asked again.',
+        },
       },
       required: ['pickup_date'],
     },
@@ -623,10 +642,12 @@ The moment a customer names a day, or a day and a time, call check_slot with it 
 It comes back with either bookable true and the exact window, or bookable false with the reason and often the earliest day we could do instead.
 You may only name a date, a day or a window that check_slot has just approved. If it says false, tell them what it gave you and offer the earliest day it named. NEVER work out for yourself whether a day is possible, and never confirm one on your own arithmetic - a customer was told "that's tomorrow's 8 to 10 window" four days before the van started running, because the answer was guessed instead of checked.
 This is a check, not a conversation: do not tell the customer you are checking, do not say "let me look", just call it and answer.
+IF THEY NAMED A WEEKDAY, PASS IT. "Mon sept 18th", "tuesday the 9th", "next Friday" - put their weekday in weekday_said, in their own words, alongside the date you worked out. The code holds the two against each other. When they disagree it comes back bookable false with a one-line question naming both days, and that question is your ENTIRE reply: do not pick one, do not book either, do not add anything. A real customer asked for "Mon sept 18th", the 18th was a Friday, and she was told "Friday 18 Sep works fine" and booked for a day she never asked for.
+IF THEY SAID ANY TIME - "anytime", "whenever", "doesn't matter", "no preference" - call check_slot with any_time true. That writes it down as an answer, and the profile below will then say so. A real customer said "Anytime is fine" and was asked "When would you like it picked up?" again two messages later, because nothing had recorded that she had already answered.
 AN APPROVAL IS NOT A PROPOSAL. When they say yes to a recap - "good", "yep", "sounds right", "go ahead" - the day was checked when you recapped it and nothing has changed. Call create_order. Do NOT call check_slot again: they are agreeing to something you already verified, and checking it a second time is how a customer said "good" and got told "let me check that and come straight back to you" with nothing booked.
 
 NEVER READ A REQUESTED TIME BACK TO THEM. They say "7am", you say the window - and if 7am has gone, the window is the next one still open, not the one they asked for. Recapping "today at 7am" at lunchtime is a promise nobody can keep and it happened to a real customer. The line above tells you exactly which windows are left, so there is nothing to work out and no excuse for naming one that has passed.
-NEVER ARGUE ABOUT TIME. Do not offer alternatives, do not ask them to pick something else, and do not ask them to confirm which day they meant. A short "7am's gone, so..." on the way to naming the window they DID get is fine and honest; what is not fine is stopping to make them choose. Whatever they say, the booking code works out the right window, rolling to the next one or to tomorrow on its own. Your job is to book it and say which window they got.
+NEVER ARGUE ABOUT TIME. Do not offer alternatives, do not ask them to pick something else, and do not ask them to confirm which day they meant. The one exception is a weekday and a date that contradict each other - "Mon sept 18th" when the 18th is a Friday - and that question comes from check_slot, not from you. A short "7am's gone, so..." on the way to naming the window they DID get is fine and honest; what is not fine is stopping to make them choose. Whatever they say, the booking code works out the right window, rolling to the next one or to tomorrow on its own. Your job is to book it and say which window they got.
 If a time has gone by, or falls in a gap, or is after the last window, that is not a problem and not worth mentioning. They just get the next one, and the confirmation tells them which.
 
 CANCELLING
@@ -804,6 +825,43 @@ One exclamation mark in a message is plenty. Friendly, not breathless. Never say
 // What Claude gets to see about this customer
 // ---------------------------------------------------------------------------
 
+// WHAT THEY HAVE ALREADY ASKED FOR, read back as a fact. actions.checkSlot()
+// writes it down; the note there says why it is written down at all.
+//
+// THREE CASES, AND THE THIRD WAS THE BUG. A time, no time yet, and "any time".
+// "Anytime is fine" used to be stored as no time, which read back as "with no
+// time named" - and the AI, seeing no time, asked for one again two messages
+// later. It is an answer, it is now recorded as one, and this says so. The
+// no-time case is also careful to settle the DAY without forbidding the one
+// time question the setup beats are meant to ask.
+function pendingPickupLine(pending) {
+  if (!pending || !pending.date) return null;
+
+  const day = booking.readableDate(pending.date);
+
+  if (pending.time) {
+    return (
+      `THEY HAVE ALREADY ASKED FOR: ${day} at ${booking.readableTime(pending.time)}. ` +
+      `DO NOT ASK WHEN THEY WANT IT AGAIN - you have been told. Use this day and time in the recap and in create_order, unless they change it themselves.`
+    );
+  }
+
+  if (pending.anyTime) {
+    return (
+      `THEY HAVE ALREADY ASKED FOR: ${day}, and they said ANY TIME suits them` +
+      `${pending.window ? `, which puts them in the ${pending.window} window` : ''}. ` +
+      `That is their answer. DO NOT ASK WHAT TIME AGAIN, and do not ask which day again. ` +
+      `Use this day in the recap, name that window, and call create_order with no pickup_time, unless they change it themselves.`
+    );
+  }
+
+  return (
+    `THEY HAVE ALREADY ASKED FOR: ${day}, and have not yet said what time. ` +
+    `DO NOT ASK WHICH DAY AGAIN - that is settled. Ask "When would you like it picked up?" ONCE, at its beat; ` +
+    `if the answer is any time, whenever, or doesn't matter, call check_slot again with any_time true so it is written down here, and never ask again.`
+  );
+}
+
 function customerContext(customer, order, recentMessages, recentOrders, openIssue) {
   const prefs = customer.preferences || {};
 
@@ -864,11 +922,7 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     // So it is not in the prose any more. check_slot writes it down and this
     // reads it back, the same way the pickup windows and the weekday are
     // computed and handed over rather than left to be worked out.
-    customer.pending_pickup && customer.pending_pickup.date
-      ? `THEY HAVE ALREADY ASKED FOR: ${booking.readableDate(customer.pending_pickup.date)}` +
-        `${customer.pending_pickup.time ? ` at ${booking.readableTime(customer.pending_pickup.time)}` : ', with no time named'}` +
-        `. DO NOT ASK WHEN THEY WANT IT AGAIN - you have been told. Use this day and time in the recap and in create_order, unless they change it themselves.`
-      : null,
+    pendingPickupLine(customer.pending_pickup),
     prefs.water_temp && prefs.fabric_softener != null
       ? `Saved wash preferences: ${wash
           .washLines(prefs)
@@ -1198,13 +1252,19 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
 // away if it comes back long or empty, so the failure mode is silence rather
 // than a bad text.
 // ---------------------------------------------------------------------------
-async function followUpMessage({ customer, order, recentMessages, recentOrders }) {
+async function followUpMessage({ customer, order, recentMessages, recentOrders, early = false }) {
+  // How long ago we spoke, in words the instruction can use. The early chase is
+  // the one that goes a couple of hours into a stalled setup; the other is the
+  // day-later one. Same job, same rules, different sense of how long it has
+  // been - "checking back in" after two hours is fine, "it has been a day" is
+  // not.
+  const ago = early ? 'a couple of hours' : 'a day';
   const now = booking.nowInService();
   const open = booking.alwaysAllowed(customer || {}) || (await settings.takingOrders());
   const opensOn = booking.alwaysAllowed(customer || {}) ? null : await settings.opensOn();
 
   const instruction = [
-    'You said something to this customer a day ago and they have not replied.',
+    `You said something to this customer ${ago} ago and they have not replied.`,
     'Write ONE short text nudging them on THAT, and nothing else.',
     '',
     'Rules, all of them hard:',
@@ -1215,7 +1275,7 @@ async function followUpMessage({ customer, order, recentMessages, recentOrders }
     '- One sentence, two at the very most. This is a nudge, not a conversation.',
     '- Do not greet them as though the thread is new and do not re-introduce',
     '  LYNDRY. They know who we are; they were mid-conversation with us.',
-    '- No apology for the delay. It has been a day, not a month.',
+    `- No apology for the delay. It has been ${ago}, not a month.`,
     '- Plain ASCII. No emoji, no dashes, straight quotes only.',
     '- Never invent a price, a date, a window or a promotion. If you need a',
     '  fact you do not have above, ask for it instead of guessing.',

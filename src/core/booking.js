@@ -319,6 +319,56 @@ function dateProblem(iso) {
   return null;
 }
 
+// THE WEEKDAY THEY SAID, AGAINST THE DATE THEY SAID.
+//
+// "How about Mon sept 18th" - and the 18th was a Friday. The AI turned it into
+// 2026-09-18, the code found nothing wrong with a Friday, and she was told
+// "Friday 18 Sep works fine" and booked for a day she never asked for. Nobody
+// had the two halves of what she said side by side: the model had already
+// picked one, and the code only ever saw the date.
+//
+// So the AI now passes the weekday in the customer's own words and this puts
+// the two together. When they disagree the answer is a QUESTION, naming both
+// days, and not a booking - because either one could be what they meant and
+// there is no undo on a van that turned up on the wrong day. It is the one
+// time the AI is allowed to ask which day somebody meant, and the sentence is
+// written here so both front doors would ask it the same way.
+//
+// The other day offered is the nearest date that IS the weekday they named -
+// backwards or forwards, whichever is closer, never in the past. People get
+// the date right and the weekday wrong about as often as the reverse, so
+// both are offered and neither is assumed.
+//
+// Returns null when they named no weekday, or one this cannot read - a check
+// that cannot run is not a mismatch. dateProblem() has already vouched for
+// the date itself by the time this is asked.
+const DAY_PREFIX = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+function weekdayIndex(said) {
+  const key = String(said || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 3);
+  return Object.prototype.hasOwnProperty.call(DAY_PREFIX, key) ? DAY_PREFIX[key] : null;
+}
+
+function weekdayMismatch(iso, said) {
+  const want = weekdayIndex(said);
+  if (want == null) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return null;
+
+  const [y, m, d] = iso.split('-').map(Number);
+  const got = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (got === want) return null;
+
+  const forward = (want - got + 7) % 7;
+  const back = forward - 7;
+  let other = addDays(iso, Math.abs(back) < forward ? back : forward);
+  if (other < today()) other = addDays(iso, forward);
+
+  return (
+    `The ${d}${ordinal(d)} is a ${DAYS[got]}, not a ${DAYS[want]}. ` +
+    `Did you mean ${readableDate(other)}, or ${readableDate(iso)}?`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The pickup windows
 // ---------------------------------------------------------------------------
@@ -737,7 +787,7 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
 // booking.js already follow for their two front doors.
 //
 // It writes nothing and is safe to call as often as the conversation needs.
-async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule } = {}) {
+async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekdaySaid } = {}) {
   // NOT TAKING ORDERS. Checked first, before anything else, because when the
   // service is shut every other reason a booking might fail is beside the
   // point - and because this is the guard that has to hold when the AI is
@@ -765,6 +815,11 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule } = {}
 
   const detail = dateProblem(pickupDate);
   if (detail) return { ok: false, reason: 'bad_date', detail };
+
+  // A date and a weekday that contradict each other are refused with a
+  // question, not resolved by guessing. See weekdayMismatch().
+  const clash = weekdayMismatch(pickupDate, weekdaySaid);
+  if (clash) return { ok: false, reason: 'bad_date', detail: clash };
 
   // BEFORE WE OPEN. Not the closed sign - bookings are welcome, the van is
   // simply not running yet.
@@ -1147,6 +1202,7 @@ module.exports = {
   confirmationMessage,
   rescheduledMessage,
   dateProblem,
+  weekdayMismatch,
   timeProblem,
   hasAddress,
   hasName,
