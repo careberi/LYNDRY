@@ -88,7 +88,7 @@ function scheduledBody({ followUps, reminders, followUpsOn, canManage, notice, p
 
   const followUpCard = (f) =>
     card({
-      kind: 'Follow-up',
+      kind: f.stage === 'early' ? 'Early nudge' : 'Follow-up',
       tone: f.off || f.paused ? 'var(--paper-200)' : 'var(--lilac-300)',
       who: f.name || f.phoneDisplay,
       phone: f.phone,
@@ -163,8 +163,9 @@ ${
   Follow-ups
 </h2>
 <p style="font-size:15px;color:var(--ink-700);margin:0 0 16px;max-width:64ch;">
-  The AI asked something and nobody answered. It chases once, a day later, and
-  then never again unless they reply. If somebody has said they will come back
+  The AI asked something and nobody answered. It nudges once a couple of hours
+  in when somebody is part-way through setting up, chases once more a day after
+  it asked, and then never again unless they reply. If somebody has said they will come back
   to you, switch theirs off.
 </p>
 

@@ -8,25 +8,47 @@ const issues = require('./issues');
 const notify = require('./notify');
 const aiPause = require('./ai-pause');
 const settings = require('./settings');
+const nudges = require('./nudges');
+const reactions = require('./reactions');
 
 // ---------------------------------------------------------------------------
-// CHASE ONCE, THEN LEAVE THEM ALONE.
+// CHASE AT MOST TWICE, THEN LEAVE THEM ALONE.
 //
 // Neil's ask. The AI asks somebody a question - what's your address, what time
 // suits - and they never answer. Nothing in the system noticed, so a half-set-up
-// customer just sat there for ever. A day later we chase it, once.
+// customer just sat there for ever. So we chase it.
 //
-// THE RULES, and the second one is the whole point:
+// IT WAS ONCE, A DAY LATER, AND THAT WAS TOO SLOW FOR ONE CASE. People who
+// reply to us do it in one to twenty minutes; somebody who says "Yes" to a
+// pickup and then never gives a name has not lost interest, they have put the
+// phone down. A day later the moment has gone. Neil's call, with the
+// alternatives in front of him: one earlier nudge, a couple of hours in, ONLY
+// for somebody part-way through setting up - and then the day-later one, and
+// then nothing. Not the four-step ladder that was proposed, which is roughly
+// four times the outbound to people who have not replied, at a time when the
+// carrier registration is still pending.
 //
-//   1. The last message in the thread is the AI's own reply, 24 hours old.
-//   2. ONE CHASE PER SILENCE. A follow-up is written as kind FOLLOW_UP, so the
-//      last message is then a follow-up rather than an AI reply and rule 1 can
-//      never fire again. Following up on a follow-up is impossible rather than
-//      discouraged. Only the customer speaking resets it.
+// THE RULES, and the cap is the whole point:
+//
+//   1. The last thing said in the thread is ours - the AI's own reply, or a
+//      chase we already sent. A confirmation, a status text, a person typing,
+//      or the customer speaking all mean we are not waiting on them.
+//   2. AT MOST TWO CHASES PER SILENCE. The early one goes EARLY_HOURS after the
+//      AI's question, and only when the customer is mid-setup. The final one
+//      goes AFTER_HOURS after that same question. Both are written as
+//      kind FOLLOW_UP; which one a chase WAS is read off its timestamp - one
+//      sent inside the first day was the early one - so nothing is stored to
+//      say so and nothing can disagree with the thread. Two chases since
+//      their last word, or one chase sent after the day mark, and it is over.
+//      Only the customer speaking starts the count again.
 //   3. There has to have been a conversation. A single exchange - they said
 //      "thanks", we said "no problem" - is not something to chase.
 //   4. Nothing booked. The point is to get somebody over the line; a customer
 //      with a pickup coming does not need us texting them about it.
+//
+// A TAPBACK IS NOT THEM SPEAKING. Somebody who hearts our question has not
+// answered it, so reactions are looked straight past when deciding what the
+// last thing said was. See src/core/reactions.js.
 //
 // WHY THE AI WRITES THIS ONE, when the nudge buttons in src/core/nudges.js are
 // fixed sentences. Those ask for one of five known-missing things and can be
@@ -40,6 +62,7 @@ const settings = require('./settings');
 // returns nothing usable, nothing is sent.
 // ---------------------------------------------------------------------------
 
+const EARLY_HOURS = Number(process.env.FOLLOW_UP_EARLY_HOURS || 2);
 const AFTER_HOURS = Number(process.env.FOLLOW_UP_AFTER_HOURS || 24);
 
 // A conversation, not an exchange. Their side has to have spoken at least once
@@ -48,8 +71,8 @@ const AFTER_HOURS = Number(process.env.FOLLOW_UP_AFTER_HOURS || 24);
 const MIN_FROM_THEM = 1;
 const MIN_FROM_US = 2;
 
-// How far back to look for threads. A chase is due at 24 hours; if we have been
-// down for a week, a stale chase is not what needs fixing.
+// How far back to look for threads. A chase is due within a day; if we have
+// been down for a week, a stale chase is not what needs fixing.
 const WINDOW_DAYS = 7;
 
 // The hours anything unprompted may be sent, in New Jersey. The scheduler is
@@ -71,16 +94,16 @@ function serviceHour(date) {
   );
 }
 
-// When the chase for this thread will actually go out: 24 hours after the AI's
-// last word, PUSHED OUT OF QUIET HOURS.
+// When a chase will actually go out: so many hours after the AI's last word,
+// PUSHED OUT OF QUIET HOURS.
 //
 // The clamp is not cosmetic. Nothing unprompted may be sent outside 8am to 9pm,
 // so a chase falling due at 7:29am goes at 8, and one falling due at half nine
 // at night goes the next morning. The ops screen shows this number, and a
 // screen promising a text at half seven that the scheduler would never send is
 // worse than no screen - so the time shown is the time it happens.
-function dueAt(lastAt) {
-  const due = new Date(new Date(lastAt).getTime() + AFTER_HOURS * 3_600_000);
+function dueAt(lastAt, hours = AFTER_HOURS) {
+  const due = new Date(new Date(lastAt).getTime() + hours * 3_600_000);
 
   // Walk forward an hour at a time rather than doing date arithmetic across a
   // timezone. It is at most sixteen steps and it cannot get daylight saving
@@ -95,28 +118,75 @@ function dueAt(lastAt) {
   return out;
 }
 
-// Does this thread earn a chase? Takes the messages for ONE phone number,
-// oldest first. Returns null, or why it is due.
+// Does this thread earn a chase, and which one? Takes the messages for ONE
+// phone number, oldest first, and whether the customer is part-way through
+// setting up. Returns null, or { stage, hours, lastAt, dueAt }.
 //
 // Kept as a pure function so both the sweep and the ops screen ask the same
 // question of the same data - the screen says "follow-up scheduled for X" and
 // the sweep sends it, and those two must never disagree.
-function assess(thread) {
-  if (!thread.length) return null;
+//
+// midSetup only decides WHICH chase comes first, never WHETHER. So a caller can
+// ask with midSetup true to find out if a thread is a candidate at all before
+// paying for the customer lookup that answers midSetup properly.
+function assess(thread, { midSetup = false } = {}) {
+  // A heart on our question is not an answer to it.
+  const real = (thread || []).filter(
+    (m) => !(m.direction === 'INBOUND' && reactions.isReaction(m.body))
+  );
+  if (!real.length) return null;
 
-  const last = thread[thread.length - 1];
+  const last = real[real.length - 1];
+  if (last.direction !== 'OUTBOUND') return null;
 
-  // Rule 1 and rule 2 in one line. Anything other than an AI reply - a
-  // confirmation, a status text, an apology, a person's own message, or a
-  // follow-up we already sent - means we are not waiting on them.
-  if (last.direction !== 'OUTBOUND' || last.kind !== 'AI') return null;
+  // Rule 1. Only our own AI reply, or a chase of it, may be the last word.
+  // Anything else - a confirmation, a status text, a person typing, a nudge
+  // button - means we are not waiting on them.
+  if (last.kind !== 'AI' && last.kind !== 'FOLLOW_UP') return null;
 
-  const fromThem = thread.filter((m) => m.direction === 'INBOUND').length;
-  const fromUs = thread.filter((m) => m.direction === 'OUTBOUND').length;
+  // Everything since they last spoke.
+  let i = real.length - 1;
+  while (i >= 0 && real[i].direction === 'OUTBOUND') i -= 1;
+  const sinceThem = real.slice(i + 1);
 
+  // The question we are chasing: the AI's last reply since their last word.
+  const asked = [...sinceThem].reverse().find((m) => m.kind === 'AI');
+  if (!asked) return null;
+
+  // Rule 3.
+  const fromThem = real.filter((m) => m.direction === 'INBOUND').length;
+  const fromUs = real.filter((m) => m.direction === 'OUTBOUND').length;
   if (fromThem < MIN_FROM_THEM || fromUs < MIN_FROM_US) return null;
 
-  return { lastAt: last.created_at, dueAt: dueAt(last.created_at) };
+  // Rule 2. Which chases have already gone since they last spoke, and which
+  // of the two each one was - read off when it was sent, never stored.
+  const chases = sinceThem.filter((m) => m.kind === 'FOLLOW_UP');
+  const dayMark = new Date(asked.created_at).getTime() + AFTER_HOURS * 3_600_000;
+
+  const early = { stage: 'early', hours: EARLY_HOURS, lastAt: asked.created_at, dueAt: dueAt(asked.created_at, EARLY_HOURS) };
+  const final = { stage: 'final', hours: AFTER_HOURS, lastAt: asked.created_at, dueAt: dueAt(asked.created_at, AFTER_HOURS) };
+
+  if (chases.length === 0) return midSetup ? early : final;
+
+  // One chase so far. If it went inside the first day it was the early one,
+  // and the day-later one is still to come. If it went after the day mark it
+  // WAS the day-later one, and that is the end.
+  if (chases.length === 1 && new Date(chases[0].created_at).getTime() < dayMark) return final;
+
+  return null;
+}
+
+// MID-SETUP: they have started and not finished.
+//
+// Derived from the same gaps the nudge buttons show - no name, no address, no
+// wash preferences, no card - because those are the things bookPickup() will
+// refuse without, and a customer stuck on one of them is exactly who the early
+// nudge is for. A customer with all of it and nothing booked is not stuck, they
+// are deciding, and gets the day-later chase only.
+async function midSetupFor(customer) {
+  if (!customer || !customer.id) return false;
+  const gaps = await nudges.gapsFor(customer).catch(() => []);
+  return gaps.some((g) => g.blocks);
 }
 
 // Every thread in the recent window, oldest message first, keyed by phone.
@@ -149,16 +219,23 @@ async function recentThreads() {
 async function pendingFor(phone) {
   const since = new Date(Date.now() - WINDOW_DAYS * 24 * 3_600_000).toISOString();
 
-  const { data, error } = await db
-    .from('messages')
-    .select('phone, direction, kind, created_at')
-    .eq('phone', phone)
-    .gte('created_at', since)
-    .order('created_at', { ascending: true });
+  const [{ data, error }, { data: customer }] = await Promise.all([
+    db
+      .from('messages')
+      .select('phone, direction, kind, body, created_at')
+      .eq('phone', phone)
+      .gte('created_at', since)
+      .order('created_at', { ascending: true }),
+    db.from('customers').select('*').eq('phone', phone).maybeSingle(),
+  ]);
 
   if (error) throw error;
 
-  const due = assess(data || []);
+  // Cheap question first: is this thread a candidate at all? Only then pay
+  // for the gap lookup that says which chase comes first.
+  if (!assess(data || [], { midSetup: true })) return null;
+
+  const due = assess(data || [], { midSetup: await midSetupFor(customer) });
   if (!due) return null;
 
   // Still returned when it is switched off, with a flag, so the conversation
@@ -174,20 +251,36 @@ async function pendingFor(phone) {
 // list and the send cannot disagree about who is due or when.
 async function allPending() {
   const threads = await recentThreads();
+
+  // Candidates first, so the customer lookup below is one query for the few
+  // threads that matter rather than one per thread.
+  const candidates = [];
+  for (const [phone, thread] of threads) {
+    if (assess(thread, { midSetup: true })) candidates.push({ phone, thread });
+  }
+
+  const ids = [...new Set(candidates.map((c) => c.thread[c.thread.length - 1].customer_id).filter(Boolean))];
+  const { data: people } = ids.length
+    ? await db.from('customers').select('*').in('id', ids)
+    : { data: [] };
+  const byId = new Map((people || []).map((c) => [c.id, c]));
+
   const rows = [];
 
-  for (const [phone, thread] of threads) {
-    const due = assess(thread);
+  for (const { phone, thread } of candidates) {
+    const last = thread[thread.length - 1];
+    const customer = byId.get(last.customer_id) || null;
+    const due = assess(thread, { midSetup: await midSetupFor(customer) });
     if (!due) continue;
 
-    const last = thread[thread.length - 1];
     rows.push({
       phone,
       customerId: last.customer_id || null,
+      stage: due.stage,
       dueAt: due.dueAt,
       lastAt: due.lastAt,
       lastMessage: last.body || '',
-      overdue: hoursSince(due.lastAt) >= AFTER_HOURS,
+      overdue: hoursSince(due.lastAt) >= due.hours,
     });
   }
 
@@ -206,7 +299,7 @@ async function allPending() {
 
 // Ask the AI for the sentence. Null if it cannot produce a usable one, and a
 // follow-up that cannot be written is simply not sent.
-async function compose(customer, thread) {
+async function compose(customer, thread, { early = false } = {}) {
   const [order, recentOrders] = await Promise.all([
     orders.findLatestInFlight(customer.id).catch(() => null),
     Promise.resolve([]),
@@ -219,7 +312,7 @@ async function compose(customer, thread) {
     sent_by: m.sent_by || null,
   }));
 
-  const text = await brain.followUpMessage({ customer, order, recentMessages, recentOrders });
+  const text = await brain.followUpMessage({ customer, order, recentMessages, recentOrders, early });
 
   const clean = String(text || '').trim();
   if (!clean) return null;
@@ -249,9 +342,11 @@ async function sendDue({ now = null } = {}) {
   const skipped = [];
 
   for (const [phone, thread] of threads) {
-    const due = assess(thread);
-    if (!due) continue;
-    if (hoursSince(due.lastAt) < AFTER_HOURS) continue;
+    // Candidate at all? And has even the early clock run? Both answerable from
+    // the thread alone, before a single customer row is read.
+    const maybe = assess(thread, { midSetup: true });
+    if (!maybe) continue;
+    if (hoursSince(maybe.lastAt) < EARLY_HOURS) continue;
 
     const customerId = thread[thread.length - 1].customer_id;
     if (!customerId) {
@@ -270,6 +365,11 @@ async function sendDue({ now = null } = {}) {
         skipped.push({ phone, reason: 'customer gone' });
         continue;
       }
+
+      // Now the real question: which chase, and is it due yet.
+      const due = assess(thread, { midSetup: await midSetupFor(customer) });
+      if (!due) continue;
+      if (hoursSince(due.lastAt) < due.hours) continue;
 
       // STOP is a legal instruction, and it outranks everything here.
       if (customer.status === 'UNSUBSCRIBED') {
@@ -305,19 +405,19 @@ async function sendDue({ now = null } = {}) {
         continue;
       }
 
-      const body = await compose(customer, thread);
+      const body = await compose(customer, thread, { early: due.stage === 'early' });
       if (!body) {
         skipped.push({ phone, reason: 'nothing worth sending' });
         continue;
       }
 
-      // KIND FOLLOW_UP IS WHAT STOPS THE NEXT ONE. Written here rather than
+      // KIND FOLLOW_UP IS WHAT COUNTS THE CHASES. Written here rather than
       // left to a caller, because a chase logged as an ordinary AI reply would
-      // be chased again tomorrow, and again the day after.
+      // be chased again, and again the day after.
       await notify.sendAndLog(phone, body, customer.id, { kind: 'FOLLOW_UP' });
 
-      sent.push({ phone, body });
-      console.log(`FOLLOWUP ${phone}: ${body}`);
+      sent.push({ phone, stage: due.stage, body });
+      console.log(`FOLLOWUP ${phone} (${due.stage}): ${body}`);
     } catch (err) {
       skipped.push({ phone, reason: err.message });
       console.error(`Follow-up for ${phone} failed: ${err.message}`);
@@ -337,6 +437,8 @@ module.exports = {
   allPending,
   assess,
   dueAt,
+  midSetupFor,
+  EARLY_HOURS,
   AFTER_HOURS,
   MIN_FROM_THEM,
   MIN_FROM_US,
