@@ -5,6 +5,7 @@ const booking = require('./booking');
 const nightly = require('./nightly');
 const followups = require('./followups');
 const leads = require('./leads');
+const issues = require('./issues');
 
 // ---------------------------------------------------------------------------
 // THE ONE CLOCK. Everything that happens without somebody pressing a button.
@@ -13,8 +14,12 @@ const leads = require('./leads');
 //
 //   the nightly pass   once an evening: book tomorrow's standing orders, then
 //                      remind everybody whose pickup is tomorrow.
-//   follow-ups         all day: chase anybody the AI asked a question a day
-//                      ago who never answered.
+//   follow-ups         all day: chase anybody the AI asked a question and
+//                      never got an answer - once a couple of hours into a
+//                      stalled setup, and once a day later.
+//   the re-page        all day: an open issue a quarter of an hour old that no
+//                      person has written to the customer about gets every
+//                      admin texted once more. See issues.repageStale().
 //   Facebook leads     every few minutes: text anybody new off the advert form.
 //
 // TWO TIMERS RATHER THAN ONE, and the second one is only worth it because of
@@ -107,6 +112,13 @@ async function tick({ now = null } = {}) {
     done.followups = await followups
       .sendDue()
       .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
+
+    // Admins, not customers, but on this tick for the same reason the other
+    // two are: it is a thing that has to happen without anybody pressing a
+    // button, and quiet hours are a reasonable floor on paging a person twice.
+    done.issues = await issues
+      .repageStale()
+      .catch((err) => ({ paged: [], reason: err.message }));
 
     return done;
   } finally {

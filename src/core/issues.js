@@ -91,7 +91,22 @@ async function raise({ customer, order, reason, customerSaid, aiHold = false }) 
 
   if (error) throw error;
 
-  await alertAdmins({ customer, order, issue });
+  // WHO WAS TOLD IS WRITTEN ON THE ISSUE. On 5 September a customer was
+  // promised a manager, the row below was created, and the text to the
+  // admins went nowhere - there was no active team member with a phone yet
+  // and SUPPORT_PHONE was unset. The only trace was a block of console.error
+  // in a deploy log nobody was reading, and the issue was later marked
+  // resolved without her ever hearing back. paged_at being null on an open
+  // issue is now a red line on the Issues screen, and the scheduler tries
+  // again - see repageStale().
+  const told = await alertAdmins({ customer, order, issue });
+
+  if (told.length) {
+    const stamp = { paged_at: new Date().toISOString(), paged_to: told };
+    const { error: stampError } = await db.from('issues').update(stamp).eq('id', issue.id);
+    if (stampError) console.error(`Could not record who was paged: ${stampError.message}`);
+    Object.assign(issue, stamp);
+  }
 
   return { issue, isNew: true };
 }
@@ -99,12 +114,20 @@ async function raise({ customer, order, reason, customerSaid, aiHold = false }) 
 // Text every admin. Best effort: a failure here must never stop the customer
 // getting their reply, but it is shouted in the log because a silent failure
 // means nobody is coming.
-async function alertAdmins({ customer, order, issue }) {
+//
+// RETURNS WHO WAS TOLD - an empty list when nobody was, for any reason - so the
+// caller can write that down. "We texted three people" and "we texted nobody"
+// used to look identical from outside this function, and the second one
+// happened to a real customer.
+//
+// `again` is the re-page: same people, same issue, and the message says
+// plainly that it is the second time of asking.
+async function alertAdmins({ customer, order, issue, again = false }) {
   const who = customer.name || customer.phone;
   const which = order ? ` on order #${order.order_number}` : '';
 
   const body =
-    `${site.name} ISSUE${which}: ${who} (${customer.phone}). ` +
+    `${again ? 'STILL WAITING - ' : ''}${site.name} ISSUE${which}: ${who} (${customer.phone}). ` +
     `${issue.reason} ` +
     `Open it at ${config.baseUrl}/ops/issues`;
 
@@ -117,7 +140,7 @@ async function alertAdmins({ customer, order, issue }) {
       console.error('  No active admin has a phone number, and SUPPORT_PHONE is unset.');
       console.error(`  ${body}`);
       console.error('');
-      return;
+      return [];
     }
 
     // Sent to each admin individually, and logged against the customer so the
@@ -126,10 +149,97 @@ async function alertAdmins({ customer, order, issue }) {
       await sendAndLog(phone, body, null);
     }
 
-    console.log(`ISSUE raised for ${customer.phone}, ${numbers.length} admin(s) alerted.`);
+    console.log(
+      `ISSUE ${again ? 're-paged' : 'raised'} for ${customer.phone}, ${numbers.length} admin(s) alerted.`
+    );
+    return numbers;
   } catch (err) {
     console.error('Could not alert admins about an issue:', err.message);
+    return [];
   }
+}
+
+// --- The re-page --------------------------------------------------------------
+//
+// A HANDOFF IS A PROMISE, AND ONE TEXT TO AN ADMIN IS NOT KEEPING IT. The AI
+// tells the customer a manager will come back to them. If nobody has, that
+// promise is being broken in silence - and a single alert that landed at 3am,
+// or landed on a phone in a pocket, or never landed at all, is how that
+// happens. So the scheduler asks, every tick: is there an open issue older
+// than a quarter of an hour that no person has written to the customer about?
+// If so, everybody is told once more, and once only.
+//
+// ONCE ONLY, because a pager that keeps going is a pager that gets muted.
+// repaged_at is the stamp; after it, the Issues screen is the reminder.
+//
+// "A person has written" means an outbound with sent_by on it - typed on the
+// ops screen by somebody. A status text or the AI's own reply does not count,
+// because neither is the manager the customer was promised.
+//
+// It runs inside the scheduler tick, which already sits out quiet hours, so a
+// handoff at midnight is re-paged at eight. The FIRST page still goes the
+// moment the issue is raised, whatever the hour.
+const REPAGE_AFTER_MINUTES = 15;
+
+async function personHasWritten(customerId, since) {
+  const { data, error } = await db
+    .from('messages')
+    .select('id')
+    .eq('customer_id', customerId)
+    .eq('direction', 'OUTBOUND')
+    .not('sent_by', 'is', null)
+    .gt('created_at', since)
+    .limit(1);
+
+  if (error) throw error;
+  return (data || []).length > 0;
+}
+
+async function repageStale() {
+  const cutoff = new Date(Date.now() - REPAGE_AFTER_MINUTES * 60_000).toISOString();
+
+  const { data, error } = await db
+    .from('issues')
+    .select('*, customers(*), orders(order_number)')
+    .eq('status', 'OPEN')
+    .is('repaged_at', null)
+    .lt('created_at', cutoff);
+
+  if (error) throw error;
+
+  const paged = [];
+
+  for (const issue of data || []) {
+    const customer = issue.customers;
+    if (!customer) continue;
+
+    try {
+      if (await personHasWritten(customer.id, issue.created_at)) continue;
+
+      const told = await alertAdmins({ customer, order: issue.orders, issue, again: true });
+
+      // Stamped ONLY when somebody was actually told. If nobody could be, the
+      // next tick tries again - and keeps shouting in the log until a team
+      // member with a phone exists, which is the right amount of noise for
+      // "a customer is waiting on a person and there is no person".
+      if (!told.length) continue;
+
+      const stamp = {
+        repaged_at: new Date().toISOString(),
+        paged_at: issue.paged_at || new Date().toISOString(),
+        paged_to: told,
+      };
+      const { error: stampError } = await db.from('issues').update(stamp).eq('id', issue.id);
+      if (stampError) throw stampError;
+
+      paged.push({ issue: issue.id, phone: customer.phone, told: told.length });
+    } catch (err) {
+      console.error(`Could not re-page issue ${issue.id}: ${err.message}`);
+    }
+  }
+
+  if (paged.length) console.log(`Re-paged ${paged.length} issue(s) nobody had answered.`);
+  return { paged };
 }
 
 // Everything still open, newest first, with enough detail to act on.
@@ -290,4 +400,7 @@ module.exports = {
   listForDay,
   holdFor,
   personHasReplied,
+  personHasWritten,
+  repageStale,
+  REPAGE_AFTER_MINUTES,
 };

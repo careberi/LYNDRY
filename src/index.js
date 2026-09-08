@@ -26,6 +26,7 @@ const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 const burst = require('./core/burst');
 const scheduler = require('./core/scheduler');
+const issues = require('./core/issues');
 
 // ---------------------------------------------------------------------------
 // The server
@@ -266,6 +267,30 @@ async function checkDatabase() {
   }
 }
 
+// SOMEBODY HAS TO BE ON THE OTHER END OF A HANDOFF.
+//
+// When the AI hands a customer to a manager it texts every active admin with a
+// phone number, plus SUPPORT_PHONE. On 5 September there were none of either,
+// so a customer was promised a person and the promise went to a console.error
+// in a deploy log. The Issues screen now shows an unpaged issue in red and the
+// scheduler retries, but the cheapest fix is to say so the moment the server
+// starts, beside the other warnings about things that are set up wrong.
+async function warnIfNobodyCanBePaged() {
+  try {
+    const numbers = await issues.alertRecipients();
+    if (numbers.length) return;
+
+    console.error('');
+    console.error('  NOBODY CAN BE PAGED. When the AI hands a customer to a manager, the');
+    console.error('  text goes to every active team member with a phone number who can');
+    console.error('  manage issues, plus SUPPORT_PHONE - and right now that is nobody.');
+    console.error('  Add a phone number on /ops/team, or set SUPPORT_PHONE.');
+    console.error('');
+  } catch (err) {
+    console.error(`  Could not check who can be paged: ${err.message}`);
+  }
+}
+
 const server = app.listen(config.port, () => {
   console.log(`LYNDRY v${pkg.version} listening on port ${config.port}`);
   console.log(`  environment : ${config.env}`);
@@ -276,7 +301,7 @@ const server = app.listen(config.port, () => {
   warnAboutMissingEnvVars();
   warnAboutUnusableCredentials();
   warnIfNobodyCanAlwaysBook();
-  checkDatabase();
+  checkDatabase().then(warnIfNobodyCanBePaged);
 
   // WATCH THE CLOCK OURSELVES rather than depending on a cron service somebody
   // has to remember to set up in a dashboard. Standing orders, the day-before

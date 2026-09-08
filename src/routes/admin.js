@@ -6853,6 +6853,19 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
               : '<span style="font-size:14px;color:var(--ink-500);">No order attached</span>'
           }
           <span style="font-size:14px;color:var(--ink-500);">${escapeHtml(dateTime(i.created_at))}</span>
+          ${
+            // WAS ANYBODY TOLD. An open issue nobody was paged about is the
+            // worst state this screen can show - a customer promised a person
+            // and no person knows - so it is red, not a footnote. See
+            // migration 0077 for the customer it happened to.
+            i.status === 'OPEN' && !i.paged_at
+              ? '<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">Nobody was paged</span>'
+              : i.paged_at
+              ? `<span style="font-size:14px;color:var(--ink-500);">Paged ${escapeHtml(dateTime(i.paged_at))}${
+                  i.repaged_at ? `, again ${escapeHtml(dateTime(i.repaged_at))}` : ''
+                }</span>`
+              : ''
+          }
         </div>
 
         <p style="font-size:19px;line-height:1.45;margin:0 0 12px;font-weight:600;">
@@ -7556,9 +7569,10 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           //
           // Drawn where the next message would go, dashed rather than solid,
           // because it has not been sent - it is the shape of a message rather
-          // than one. The AI chases a question nobody answered exactly once,
-          // a day later; anything the customer sends cancels it, and switching
-          // the AI off for this number stops it too.
+          // than one. The AI chases a question nobody answered at most twice:
+          // a couple of hours in when they are part-way through setting up,
+          // and a day later. Anything the customer sends cancels it, and
+          // switching the AI off for this number stops it too.
           followUp && !pauseState.paused
             ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-top:20px;">
                  <div style="max-width:78%;padding:12px 16px;border:2px dashed var(--ink-400);
@@ -7572,9 +7586,13 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
                          ? `This one would have been chased on <strong>${escapeHtml(
                              dateTime(followUp.dueAt.toISOString())
                            )}</strong>. It will not be. The AI still answers them whenever they text.`
+                         : followUp.stage === 'early'
+                         ? `They are part-way through setting up, so the AI will nudge them about its last question on <strong>${escapeHtml(
+                             dateTime(followUp.dueAt.toISOString())
+                           )}</strong> unless they reply first - and once more a day after it asked, if they still have not.`
                          : `The AI will chase its last question on <strong>${escapeHtml(
                              dateTime(followUp.dueAt.toISOString())
-                           )}</strong> unless they reply first.`
+                           )}</strong> unless they reply first. That is the last time it will.`
                      }
                    </p>
                    ${
