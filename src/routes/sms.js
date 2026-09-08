@@ -10,6 +10,7 @@ const reactions = require('../core/reactions');
 const brain = require('../core/brain');
 const actions = require('../core/actions');
 const onboarding = require('../core/onboarding');
+const promocodes = require('../core/promocodes');
 const orders = require('../core/orders');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
@@ -234,19 +235,52 @@ async function handleInbound(inbound) {
   // scripted "what's your name and where should we collect from?" in response
   // to "hello" was the first thing a real tester noticed.
   if (!customer) {
+    // A PROMO CODE OFF A DOOR HANGER, IF THERE IS ONE.
+    //
+    // Read BEFORE the customer row is created, because claiming a code has to
+    // replace the automatic promotion rather than land on top of it - every new
+    // number is granted whatever is on NEW_NUMBERS, and the free-orders offer
+    // beats $10 off. Somebody scanning a card that says $10 would otherwise get
+    // their whole order free, which is the one outcome Neil ruled out.
+    //
+    // Best effort. A promotions table having a bad day must never stop a
+    // stranger being answered at all; they lose the $10, which can be put on by
+    // hand, rather than being ignored.
+    const scanned = await promocodes.findIn(text).catch((err) => {
+      console.error(`Could not check ${from} for a promo code: ${err.message}`);
+      return null;
+    });
+
+    if (scanned) console.log(`CODE    ${from} claimed "${scanned.promo.name}"`);
+
+    // THE CANNED INTRODUCTION ONLY WHEN THERE IS NOTHING TO REPLY TO.
+    //
+    // The QR types the whole message, so "Hi LYNDRY - promo D00R10" carries no
+    // question and a canned introduction is right - the same reasoning as the
+    // website form. Anything they typed themselves on top of it goes to the AI
+    // instead, because answering a script at somebody who asked a real question
+    // is the robot behaviour this system exists to avoid.
+    const canned = Boolean(scanned) && promocodes.isJustTheCode(text, scanned.code);
+
     const started = await onboarding.startConversation({
       phone: from,
-      consentSource: 'INBOUND_TEXT',
+      consentSource: scanned ? 'DOOR_HANGER' : 'INBOUND_TEXT',
       // No IP to record — this did not come through a browser. The evidence is
       // their own inbound message, not a form submission.
       consentIp: null,
-      sendWelcome: false,
+      sendWelcome: canned,
+      claimed: scanned ? scanned.promo : null,
+      opening: canned ? `Hey, thanks for scanning.` : null,
     });
 
     if (!started.ok) {
       console.log(`Could not start a conversation with ${from}: ${started.reason}`);
       return;
     }
+
+    // startConversation() has already said everything there is to say, so the AI
+    // must not answer on top of it.
+    if (canned) return;
 
     await burst.collect(from, text, (said) => answerWithBrain(started.customer, said, from));
     return;

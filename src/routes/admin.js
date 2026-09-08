@@ -63,6 +63,7 @@ const {
 } = require('../web/prelaunch-page');
 const settings = require('../core/settings');
 const promotions = require('../core/promotions');
+const promocodes = require('../core/promocodes');
 const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
@@ -8555,6 +8556,49 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
     };
     const days = Number(body.expires_days);
 
+    // A PROMOTION PEOPLE CLAIM THEMSELVES NEEDS SOMETHING TO CLAIM IT WITH.
+    //
+    // claimableByCode() ignores a row with no code, so saving one would produce
+    // a promotion that looks live on the page, is granted to nobody, and gives
+    // no sign of why - which is the worst way for a printed run of door hangers
+    // to fail. Refused here rather than left to the database, because a CHECK
+    // constraint arrives as a 500 nobody can act on.
+    //
+    // Checked in the route and not only in the markup: the form hides the box
+    // for every other audience, and a field hidden by markup whose handler still
+    // reads it is not a guard.
+    const code = String(body.code || '').trim().toUpperCase() || null;
+
+    if (audience === 'CODE') {
+      const usable = promocodes.normalise(code);
+
+      if (usable.length < promocodes.MIN_LENGTH) {
+        return res.redirect(
+          303,
+          `/ops/promotions?problem=${encodeURIComponent(
+            `A code people text needs at least ${promocodes.MIN_LENGTH} letters or ` +
+              `numbers, so it cannot turn up inside an ordinary message.`
+          )}`
+        );
+      }
+
+      // The unique index normalises the same way, so DOOR10 and D00R10 collide.
+      // Saying so beats a duplicate-key error.
+      const taken = (await promotions.claimableByCode()).find(
+        (p) => promocodes.normalise(p.code) === usable
+      );
+
+      if (taken) {
+        return res.redirect(
+          303,
+          `/ops/promotions?problem=${encodeURIComponent(
+            `"${code}" is already the code for ${taken.name}. O and 0 count as the ` +
+              `same character, so it cannot be reused with one swapped for the other.`
+          )}`
+        );
+      }
+    }
+
     // ONLY ONE AUTOMATIC PROMOTION AT A TIME. The unique index refuses a
     // second, so the old one is stood down first rather than the save failing
     // with a database error nobody can act on.
@@ -8581,6 +8625,9 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
           ? Math.max(1, Math.round(Number(body.use_limit) || 1))
           : null,
       audience,
+      // Stored as it will be printed. The matching is done on a normalised form
+      // in src/core/promocodes.js, so what is kept here is what goes on the card.
+      code: audience === 'CODE' ? code : null,
       // Kept in step for now because the column still exists; nothing reads it.
       auto_grant: audience === 'NEW_NUMBERS',
       min_order_cents: dollars(body.min_order),
@@ -8610,6 +8657,8 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
             ? ' and every new number gets it'
             : audience === 'SPECIFIC'
             ? '. Hand it out from a customer page.'
+            : audience === 'CODE'
+            ? `. Anybody who texts ${code} claims it.`
             : '. Press "give it to everyone who qualifies" when you are ready.'
         }`
       )}`

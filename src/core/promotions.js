@@ -24,7 +24,7 @@ const { config } = require('../config');
 
 const FIELDS =
   'id, name, blurb, kind, value, applies_to, audience, status, starts_at, ends_at, ' +
-  'min_order_cents, max_discount_cents, expires_days, use_limit, max_orders';
+  'min_order_cents, max_discount_cents, expires_days, use_limit, max_orders, code';
 
 // WHO A PROMOTION IS FOR. See migration 0066 - this replaced the auto_grant
 // boolean, which could only ever say "new numbers" and had no way to say
@@ -55,6 +55,15 @@ const AUDIENCES = Object.freeze([
     label: 'Only people you pick',
     detail:
       'Nobody gets this automatically. You give it to one person at a time from their own profile.',
+    automatic: false,
+  },
+  {
+    key: 'CODE',
+    label: 'Anybody who texts the code',
+    detail:
+      'For a door hanger or a flyer. They claim it themselves by texting the code, once, and it '
+      + 'replaces the automatic promotion rather than stacking on top of it. Nobody gets this '
+      + 'without asking for it.',
     automatic: false,
   },
 ]);
@@ -91,6 +100,48 @@ async function find(id) {
 }
 
 // The one promotion new numbers are given automatically, if there is one.
+// ---------------------------------------------------------------------------
+// Every promotion somebody can claim by texting a code.
+//
+// There are only ever a handful, so they are read in one go and matched in
+// memory by src/core/promocodes.js. The alternative - asking the database for
+// one normalised code - would put the O-reads-as-0 rule in two places, and the
+// day they disagreed a printed door hanger would stop working with nothing to
+// show for it in any log.
+//
+// Live means live: ended, not yet started, or switched off and it is not here,
+// so a hanger from an old run stops granting the moment the promotion does.
+// ---------------------------------------------------------------------------
+async function claimableByCode() {
+  const { data, error } = await db
+    .from('promotions')
+    .select(FIELDS)
+    .eq('audience', 'CODE')
+    .eq('status', 'ACTIVE')
+    .not('code', 'is', null);
+
+  if (error) throw error;
+
+  return (data || []).filter((p) => live(p));
+}
+
+// THE OFFER SENTENCE FOR A PROMOTION THAT IS NOT FREE.
+//
+// freeOfferLine() covers the one that takes everything off and returns null
+// for everything else, which used to leave a $10 offer falling through to the
+// plain price sentence - so somebody who had just claimed one off a door
+// hanger was introduced to LYNDRY without it being mentioned at all.
+//
+// IT IS THE BLURB, NOT A SENTENCE WRITTEN HERE. The blurb is what a person
+// typed on the promotions page, which is the same thing the AI is allowed to
+// repeat once - so there is one copy of the wording and the code never invents
+// a figure. A promotion with no blurb stays silent, exactly as it does
+// everywhere else.
+function offerLine(promo) {
+  if (!promo || !promo.blurb) return null;
+  return `${promo.blurb} is on your account, ready to use.`;
+}
+
 async function autoGrant() {
   const { data, error } = await db
     .from('promotions')
@@ -329,6 +380,17 @@ async function issueToAudience(promotionId) {
   if (promo.audience === 'SPECIFIC') return { ok: false, reason: 'that one is given out by hand' };
   if (promo.audience === 'NEW_NUMBERS') {
     return { ok: false, reason: 'that one is given out automatically' };
+  }
+
+  // A CODE PROMOTION IS CLAIMED, NEVER ISSUED, and without this line it was
+  // neither. Everything below hands the promotion to every customer who has not
+  // opted out, so the door hanger's $10 would have gone to the whole book the
+  // first time somebody pressed the button on its page - including the people
+  // it exists to bring in from outside. The audiences above are refused one by
+  // one rather than by an allowlist, so a new audience has to be considered
+  // here deliberately.
+  if (promo.audience === 'CODE') {
+    return { ok: false, reason: 'people claim that one themselves, by texting the code' };
   }
 
   // An opted-out number is never included. STOP is a legal instruction, and a
@@ -670,6 +732,8 @@ module.exports = {
   takesEverythingOff,
   freeAllowanceLb,
   freeOfferLine,
+  offerLine,
+  claimableByCode,
   full,
   issueToAudience,
   heldBy,

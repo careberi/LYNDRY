@@ -35,12 +35,17 @@ const { site } = require('../web/site');
 // for the same reason WEB_BERGEN is: the evidence is different. There is no IP
 // and no page of ours involved - what we hold is Meta's own record of the lead,
 // the box they ticked, and the row in facebook_leads that copied it.
+//
+// DOOR_HANGER is a scan off a card on somebody's front door. The evidence is
+// their own inbound message, exactly as INBOUND_TEXT - what it records is
+// WHICH door, the same reason WEB_BERGEN is not folded into WEB_HERO.
 const CONSENT_SOURCES = [
   'WEB_SIGNUP',
   'WEB_HERO',
   'WEB_BERGEN',
   'INBOUND_TEXT',
   'FACEBOOK_FORM',
+  'DOOR_HANGER',
 ];
 
 // What we say to somebody we have never spoken to.
@@ -82,8 +87,14 @@ function introduction(opening, { promo = null, opensOn = null } = {}) {
   // null unless something genuinely free is live, so a 30% offer can never be
   // announced as free and a promise with a count in it can never carry a count
   // the code is not enforcing.
+  // Three sentences in falling order of how good the news is: genuinely free,
+  // then whatever a person wrote on the promotion's blurb, then the plain
+  // price. The middle one is what a door-hanger scanner gets - freeOfferLine()
+  // returns null for $10 off, and without offerLine() they were introduced to
+  // LYNDRY without their discount being mentioned at all.
   const offer =
     promotions.freeOfferLine(promo) ||
+    promotions.offerLine(promo) ||
     `It is ${site.pricePerLb} a pound, weighed after we collect it.`;
 
   // THE ASK KNOWS WHEN A VAN CAN ACTUALLY COME. These messages go out before
@@ -103,7 +114,13 @@ function introduction(opening, { promo = null, opensOn = null } = {}) {
   ].join('\n\n');
 }
 
-function welcomeMessage({ open = true, promo = null, promoBlurb = null, opensOn = null } = {}) {
+function welcomeMessage({
+  open = true,
+  promo = null,
+  promoBlurb = null,
+  opensOn = null,
+  opening = null,
+} = {}) {
   // TWO SEGMENTS NOW, DOWN FROM FOUR, AND NEIL WROTE BOTH.
   //
   // The four-segment version was itself a deliberate rewrite - it went long
@@ -119,7 +136,13 @@ function welcomeMessage({ open = true, promo = null, promoBlurb = null, opensOn 
   // The turnaround stayed - it is the strongest single fact we have and it is
   // now the only place a stranger hears it before booking.
   if (open) {
-    return introduction(`Hey, thanks for sending over your number.`, { promo, opensOn });
+    // A door hanger passes its own opening clause - "thanks for scanning" is
+    // true of somebody standing at their front door and false of somebody who
+    // typed a number into the website.
+    return introduction(opening || `Hey, thanks for sending over your number.`, {
+      promo,
+      opensOn,
+    });
   }
 
   const what =
@@ -183,7 +206,21 @@ function welcomeBackMessage(customer, { open = true, opensOn = null } = {}) {
 //   { ok: false, reason: 'opted_out' }   they texted STOP. Do not message them.
 // ---------------------------------------------------------------------------
 
-async function startConversation({ phone, consentSource, consentIp = null, sendWelcome = true }) {
+// `claimed` is a promotion somebody has just claimed by texting a code off a
+// door hanger. It REPLACES the automatic grant rather than adding to it - which
+// is the whole reason it is threaded through here rather than granted by the
+// caller afterwards. Every new number is auto-granted whatever is on
+// NEW_NUMBERS, so a door-hanger scan that granted its $10 separately would end
+// up holding the free-orders promotion as well, and the free one wins. Somebody
+// who scanned a card offering $10 off would get their whole order free.
+async function startConversation({
+  phone,
+  consentSource,
+  consentIp = null,
+  sendWelcome = true,
+  claimed = null,
+  opening = null,
+}) {
   if (!phone) return { ok: false, reason: 'bad_phone' };
 
   if (!CONSENT_SOURCES.includes(consentSource)) {
@@ -210,6 +247,22 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   }
 
   if (existing) {
+    // ALREADY A CUSTOMER, SCANNING A DOOR HANGER. Neil's call: the $10 is a
+    // new-customer offer, so they do not get it. Said in a way that does not
+    // read as a refusal - they went out and scanned a card, and "no" is a poor
+    // thank you for that. Nothing is granted and nothing is written; the reply
+    // is the whole of it.
+    if (claimed) {
+      await sendAndLog(
+        phone,
+        `Hey, good to hear from you again. That one is for people who have not ` +
+          `used us yet, so I cannot put it on your account - but you are already ` +
+          `set up with us. Want us to grab your laundry this week?`,
+        existing.id
+      );
+      return { ok: true, customer: existing, created: false, claimed: null };
+    }
+
     // Their consent record is NOT overwritten. The first time they agreed is
     // the one that matters legally, and rewriting the timestamp every time
     // somebody retypes their number would destroy the evidence.
@@ -262,14 +315,16 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
   // "the first 20 orders are free" in as many words when that is true, and the
   // sentence needs the count and the discount off the promotion - a blurb on
   // its own cannot be checked for whether it is actually free.
+  // A CLAIMED CODE REPLACES THE AUTOMATIC GRANT, it does not join it. Neil:
+  // door-hanger people get their $10 and must not also hold the free orders.
   let granted = null;
 
   try {
-    const promo = await promotions.autoGrant();
+    const promo = claimed || (await promotions.autoGrant());
     if (promo) {
       await promotions.grant(customer.id, promo.id);
       granted = promo;
-      console.log(`  granted "${promo.name}" to ${phone}`);
+      console.log(`  granted "${promo.name}" to ${phone}${claimed ? ' (claimed by code)' : ''}`);
     }
   } catch (err) {
     console.error(`Could not grant a promotion to ${phone}: ${err.message}`);
@@ -291,6 +346,7 @@ async function startConversation({ phone, consentSource, consentIp = null, sendW
       welcomeMessage({
         open,
         opensOn,
+        opening,
         // Open: the message makes the offer itself, in Neil's words, and only
         // when it is genuinely free. Closed: it cannot offer a pickup at all,
         // so the most it can do is repeat the blurb somebody wrote.

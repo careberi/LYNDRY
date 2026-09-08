@@ -791,7 +791,12 @@ function promotionsBody({ list, counts, notice, problem }) {
 <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
   An offer belongs to a person, not to a code. Give one out and it sits on their
   account until they spend it or it runs out - there is nothing for anybody to
-  type, because the AI already knows who is texting.
+  type at booking, because the AI already knows who is texting.
+</p>
+<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
+  The one exception is a door hanger or a flyer, where we have never met them and
+  a code in their first text is the only way to know which card they picked up.
+  That code claims the offer once and is never needed again.
 </p>
 
 ${banner(notice, 'good')}
@@ -851,6 +856,22 @@ ${
 
         <select class="field" id="p_audience" name="audience">${audienceOptions}</select>
         ${audienceNotes}
+
+        <!-- Only for a promotion people claim by texting a code. Hidden rather
+             than absent so the show/hide is one line of script, the same way the
+             audience notes work. The route validates it regardless - a field
+             hidden by markup whose handler still reads it is not a guard. -->
+        <div id="p_code_row" hidden style="margin-top:16px;">
+          <label class="field-label" for="p_code">The code they text</label>
+          <p class="field-hint" style="margin:0 0 8px;">
+            Printed on the door hanger and encoded in the QR. Letters and numbers,
+            at least five of them. <strong>O and 0 count as the same character</strong>,
+            because nobody reading a card in a doorway can tell them apart.
+          </p>
+          <input class="field" id="p_code" name="code" maxlength="24"
+                 autocapitalize="characters" spellcheck="false"
+                 placeholder="D00R10" style="text-transform:uppercase;">
+        </div>
 
         <div style="margin-top:16px;">
           <label class="field-label" for="p_cap">Stop after this many orders</label>
@@ -1016,6 +1037,10 @@ ${
     for (var i = 0; i < notes.length; i += 1) {
       notes[i].hidden = notes[i].getAttribute('data-aud') !== aud.value;
     }
+
+    // The code box only means anything for a promotion people claim themselves.
+    var codeRow = $('p_code_row');
+    if (codeRow) codeRow.hidden = aud.value !== 'CODE';
   }
 
   form.addEventListener('input', paint);

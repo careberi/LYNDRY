@@ -1614,11 +1614,73 @@ somebody already told they had it.
 **A PROMOTION IS AN OBJECT ATTACHED TO A PERSON, NOT A CODE**, and it always
 was. A redesign proposal assumed otherwise and recommended building it; the
 answer is that `customer_promotions` already records who holds what, whether
-they spent it and on which order. **There is nothing for a customer to type and
-no link to click** - the AI knows who is texting, so the discount comes off by
-itself. Don't add a code field or a `?promo=` booking link: that is a worse
-version of what exists, and CLAUDE.md already records that sending customers to
-a web form was removed.
+they spent it and on which order. **There is nothing for a customer to type at
+booking and no link to click** - the AI knows who is texting, so the discount
+comes off by itself. Don't add a `?promo=` booking link: that is a worse version
+of what exists, and CLAUDE.md already records that sending customers to a web
+form was removed.
+
+**THE ONE EXCEPTION IS A DOOR HANGER, AND IT DOES NOT WEAKEN THE RULE.** Neil is
+printing cards for front doors with a QR on them offering $10 off. Scanning it
+opens the phone's messaging app with the message already typed - "Hi LYNDRY -
+promo D00R10" - and sending it claims the offer.
+
+What makes that legitimate is what the code is FOR. On a door hanger there is no
+form, no landing page and no website visit, so a phone number arriving out of
+the blue is everything we ever see: the code in that first message is the only
+way to know they came from a door in Ridgewood rather than from an advert. It is
+**attribution, not redemption**. The moment it lands the promotion attaches to
+the person exactly like every other one and is never typed again.
+
+**`src/core/promocodes.js` only reads text.** It decides whether a message
+carries a live code and which promotion that is; granting it belongs to
+`onboarding.startConversation()`, where every other "somebody new is here"
+decision already lives.
+
+**A CLAIMED CODE REPLACES THE AUTOMATIC GRANT, IT DOES NOT JOIN IT**, and this
+is the part that would have broken it silently. Every new number is granted
+whatever sits on `NEW_NUMBERS`, which is currently the first-20-orders-free
+offer - so a scan that granted its $10 separately would leave that person
+holding both, and the free one wins. Somebody who scanned a card offering $10
+off would have got their whole order free. That is why `claimed` is threaded
+through `startConversation()` rather than granted by the caller afterwards.
+
+**`issueToAudience()` refuses a `CODE` promotion**, for the same reason from the
+other direction: everything in that function hands a promotion to every customer
+who has not opted out, so pressing the button on the door hanger's page would
+have given the whole book its $10. The audiences are refused one at a time
+rather than by an allowlist, so a new audience has to be thought about here
+deliberately.
+
+**O AND 0 ARE THE SAME CHARACTER.** The code is printed beside the QR precisely
+so it works when a camera does not, and nobody reading `D00R10` off a card in a
+doorway can tell a capital O from a zero. Both sides of every comparison go
+through `promocodes.normalise()`, and the unique index in migration 0078
+normalises the same way - so two promotions cannot be coded `DOOR10` and
+`D00R10` at once, which would otherwise be decided by whichever row came back
+first.
+
+**A code is at least five characters**, because every inbound message is scanned
+for one and a three-character code would eventually appear inside a real
+sentence and hand out money on its own.
+
+**THE CANNED INTRODUCTION ONLY WHEN THERE IS NOTHING TO REPLY TO.** The QR types
+the whole message, so it carries no question and code answers it - the same
+reasoning as the website form. Anything the person typed on top of it goes to
+the AI instead, because answering a script at somebody who asked a real question
+is the behaviour this system exists to avoid. `promocodes.isJustTheCode()` draws
+that line off a filler list **written in English and normalised at
+construction** - the first version had `FOR` in it, which normalises to `F0R`
+and could never match. A word missing from that list is the safe failure: the AI
+answers, and it introduces LYNDRY anyway.
+
+**Somebody who already has an account gets a friendly reply and no promotion.**
+Neil's call - it is a new-customer offer. Nothing is granted and nothing is
+written; the reply is the whole of it, and it does not read as a refusal,
+because they went out and scanned a card.
+
+**Uncapped and with no expiry**, both his call. Stop it from the promotions page
+when the run of hangers is done.
 
 **`promotions.audience` says who gets one**, and it replaced the `auto_grant`
 boolean, which could only ever say "every new number". `NEW_NUMBERS` (automatic
@@ -2605,6 +2667,7 @@ their defaults and are changed by texting.
 | `WEB_HERO` | The phone field on the home page. Ticked box, timestamp, IP |
 | `WEB_SIGNUP` | The full signup form. Same box, same evidence |
 | `INBOUND_TEXT` | They texted first. Their own message in the `messages` table |
+| `DOOR_HANGER` | They scanned a card on their front door. Their own message again - what this records is WHICH door, the same reason `WEB_BERGEN` is not folded into `WEB_HERO` |
 
 **THERE ARE THREE DOORS ONTO THE SAME INTRODUCTION, AND ALL THREE HAVE TO KNOW.**
 Somebody hears from us first in one of three ways. Each passes its own opening
@@ -2615,6 +2678,14 @@ clause to `onboarding.introduction()`, which writes everything after it:
 | The website form | `onboarding.welcomeMessage()` | "Hey, thanks for sending over your number." |
 | A Facebook advert | `leads.leadMessage()` | "Hey, you left this number on our Facebook laundry form." |
 | **They text us out of the blue** | **the AI**, from `systemPrompt()` | "Hey, thanks for reaching out." |
+| A door hanger, scanned | `onboarding.startConversation()` | "Hey, thanks for scanning." |
+
+**The fourth one carries a different offer, and it renders itself.** A
+door-hanger scanner holds $10 off rather than the free orders, so
+`introduction()` falls through `freeOfferLine()` to `promotions.offerLine()`,
+which is the promotion's own blurb. Without that middle sentence they were
+introduced to LYNDRY with the plain price and no mention of the discount they
+had just claimed.
 
 **The clause and the first paragraph are the SAME sentence** — "Hey, thanks for
 reaching out. It's LYNDRY, wash-and-fold pickup and delivery in Bergen County."
