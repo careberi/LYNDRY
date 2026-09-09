@@ -181,14 +181,24 @@ function navBar(currentPath) {
           ${links}
         </nav>
 
-        <a href="/#get-started" class="btn btn-primary btn-sm">Get started</a>
+        <!-- THE SAME DOOR AS THE PURPLE BUTTON ON THE HOME PAGE. Neil's call.
+             It used to point at /#get-started, the phone-number box in the hero,
+             which is the door for somebody who would rather text. The button in
+             the bar is the one people press when they have decided, and what
+             they have decided to do is book a pickup.
+
+             ITS TWIN IN THE MOBILE MENU BELOW MOVES WITH IT. The header button
+             is hidden under 900px and the hamburger takes over, so leaving one
+             behind would mean a phone and a laptop sending the same person to
+             two different places. -->
+        <a href="/account/login" class="btn btn-primary btn-sm">Book a Pickup</a>
 
         <!-- Mobile menu. Built on <details> so it needs no JavaScript. -->
         <details class="nav-toggle">
           <summary class="btn btn-primary btn-sm" aria-label="Menu">Menu</summary>
           <div class="nav-panel">
             ${mobileLinks}
-            <a href="/#get-started">Get started</a>
+            <a href="/account/login">Book a Pickup</a>
           </div>
         </details>
       </div>
