@@ -509,6 +509,46 @@ router.post('/bergen/join', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// APPLE PAY, AND WHY THIS FILE HAS TO BE HERE.
+//
+// Neil: "what happened to apple pay". It disappeared the day the card field
+// moved onto our own page, and the reason is worth writing down because it is
+// not obvious: a wallet button only appears on a domain Stripe has verified,
+// and the only verified domain on this account was checkout.stripe.com. The
+// hosted card page was ON that domain, so Apple Pay came free. lyndry.com is
+// somebody else's domain as far as Apple is concerned.
+//
+// Verifying it means serving a file Apple gives us, at exactly this path, over
+// https, with no redirect. Stripe fetches it, Apple checks it, and the wallet
+// buttons start appearing in the Payment Element.
+//
+// THE FILE IS A PUBLIC CLAIM ABOUT WHO OWNS THIS DOMAIN, not a secret. It is
+// fetched by Apple from every site that supports Apple Pay, so it lives in the
+// repo like any other static asset rather than in an environment variable.
+//
+// Served explicitly rather than from a static directory because only
+// public/css and public/og are mounted - see src/index.js - and a rule that
+// exposes a whole new directory to reach one file is a worse trade than a
+// route that serves exactly the one file.
+//
+// NO FILE, NO ROUTE. A 404 is the honest answer before it is set up, and it is
+// what Stripe's verification will report, which is a much clearer failure than
+// an empty 200 that Apple would silently reject.
+// ---------------------------------------------------------------------------
+router.get('/.well-known/apple-developer-merchantid-domain-association', (req, res) => {
+  const file = path.join(__dirname, '..', '..', 'public', 'well-known', 'apple-developer-merchantid-domain-association');
+
+  return res.sendFile(file, { headers: { 'Content-Type': 'text/plain' } }, (err) => {
+    if (!err) return null;
+
+    // Not there yet. Say so plainly in the log, because the only person who
+    // will ever see this failing is somebody halfway through setting it up.
+    console.warn('Apple Pay domain file requested but not present at public/well-known/');
+    return res.status(404).type('text/plain').send('Not found');
+  });
+});
+
 router.get('/robots.txt', (req, res) => {
   // /ops is the internal tool. It is behind a sign-in anyway, but there is no
   // reason for a crawler to be knocking on it.

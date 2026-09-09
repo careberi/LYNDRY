@@ -1600,7 +1600,7 @@ function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
     <p class="eyebrow" style="margin-bottom:6px;">Payment method</p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
       Nothing is charged now. We keep this on file and charge it once, after we
-      weigh your laundry. We never see the number.
+      weigh your laundry.
     </p>
 
     <form id="card-form">
