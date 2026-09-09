@@ -17,6 +17,7 @@ const assets = require('./web/assets');
 // at a broken page actually needs.
 const { site } = require('./web/site');
 const web = require('./routes/web');
+const locations = require('./routes/locations');
 const sms = require('./routes/sms');
 const ops = require('./routes/ops');
 const admin = require('./routes/admin');
@@ -34,6 +35,49 @@ const issues = require('./core/issues');
 // ---------------------------------------------------------------------------
 
 const app = express();
+
+// Express announces itself in a header on every response. It tells an attacker
+// which stack to try first and tells a visitor nothing at all.
+app.disable('x-powered-by');
+
+// ---------------------------------------------------------------------------
+// SECURITY HEADERS. Four of them, and one is worth a paragraph.
+//
+// nosniff        - stop a browser guessing that a .txt is really a script.
+// frame-ancestors- nothing on this site should ever be inside somebody else's
+//                  iframe. CSP rather than X-Frame-Options because the header
+//                  is deprecated and this is the one every current browser
+//                  reads; both are set, since old browsers only know the old
+//                  one.
+// Referrer-Policy- a customer clicking a link out of /account should not hand
+//                  the destination the URL they were on.
+//
+// STRICT-TRANSPORT-SECURITY IS THE ONE THAT IS HARD TO TAKE BACK. It tells a
+// browser to refuse plain http to this domain for the length of the max-age,
+// and the browser remembers it whatever we do afterwards - so a mistake here
+// cannot be fixed by removing the header, only by waiting it out.
+//
+// So: one year, which is what makes it worth having, but NO preload and NO
+// includeSubDomains. Preload is a list you get onto easily and off slowly.
+// includeSubDomains would apply to every subdomain that ever exists, including
+// ones nobody has set up yet, and https on all of them is a promise nobody has
+// made. Both can be added later; neither can be taken back quickly.
+//
+// Only in production, because a laptop serving http would lock itself out of
+// localhost for a year.
+// ---------------------------------------------------------------------------
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+
+  if (config.env === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  }
+
+  return next();
+});
 
 // Railway and most hosts sit behind a proxy. This makes req.ip report the
 // real visitor address instead of the proxy's — we need that to be correct,
@@ -104,7 +148,31 @@ app.use(
 
 // Health check. Hosting platforms ping this to decide whether the app is
 // alive; you can also just open it in a browser to confirm things work.
+// ---------------------------------------------------------------------------
+// /health - a pulse for anybody, the detail for us.
+//
+// It answered everything to everybody: which AI model, which SMS vendor,
+// whether Stripe was on live keys, whether the scheduler was running. Every
+// one of those is genuinely useful and none of them is anybody else's
+// business - together they are a map of what to try attacking and a list of
+// which vendors to phone pretending to be us.
+//
+// So the public answer is a pulse. The detail is behind the machine key that
+// already guards /ops, compared the same way, so the question 'is production
+// on test Stripe keys' is still answerable in one request by somebody who
+// should be able to ask it.
+//
+// Railway only needs the 200.
+// ---------------------------------------------------------------------------
 app.get('/health', (req, res) => {
+  const key = req.get('x-admin-key') || '';
+  const known =
+    config.adminApiKey &&
+    key.length === config.adminApiKey.length &&
+    require('crypto').timingSafeEqual(Buffer.from(key), Buffer.from(config.adminApiKey));
+
+  if (!known) return res.json({ ok: true });
+
   res.json({
     status: 'ok',
     service: 'lyndry',
@@ -162,7 +230,15 @@ app.use('/', account.router);
 app.use('/', bag);
 
 // The public website and the signup form.
-app.use('/', web.router);
+app.use('/', web.router);
+
+// LAST, AND IT HAS TO BE. The town pages sit at the root - /tenafly, not
+// /locations/tenafly - so this router ends in a catch-all on /:slug. It calls
+// next() for anything that is not one of the 70 towns, but mounting it ahead
+// of a real route would still be asking for trouble the day somebody adds a
+// page whose path happens to be a town name. Everything above gets first
+// refusal, and the 404 handler below still gets the last word.
+app.use('/', locations.router);
 
 // Anything that matched nothing above.
 app.use(web.notFound);

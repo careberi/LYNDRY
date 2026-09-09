@@ -47,6 +47,9 @@ const { config } = require('../config');
 const NAV_LINKS = [
   { href: '/how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
+  // The county hub. Named for what somebody is looking for rather than for the
+  // county, because half the people reading it will not know Bergen by name.
+  { href: '/locations', label: 'Areas' },
   { href: '/faq', label: 'Questions' },
   { href: '/partners', label: 'Partners' },
   { href: '/contact', label: 'Contact' },
@@ -231,6 +234,7 @@ function footer() {
           <div style="display:flex;flex-direction:column;gap:10px;">
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
+            <a href="/locations">Areas</a>
             <a href="/faq">Questions</a>
             <a href="/#get-started">Get started</a>
           </div>
@@ -274,6 +278,19 @@ function footer() {
              carrier review for business texting, someone opens this page and
              checks that the company on the registration appears on the site.
              If it doesn't, the campaign is rejected. -->
+        <!-- NAME, ADDRESS, PHONE - the three things every local directory and
+             every search engine cross-checks against a listing, in one place and
+             the same on every page. The address is the county rather than a
+             street, because there is no shopfront and inventing one would be
+             worse than saying where the van actually goes. -->
+        <p class="footer-legal" style="margin-bottom:14px;">
+          <strong>${site.name}</strong><br>
+          ${site.serviceArea}, New Jersey<br>
+          Text <a href="${site.publicPhoneLink ? 'sms:' + site.publicPhoneLink : '#'}">${site.publicPhoneDisplay}</a>
+          &middot; Call <a href="tel:${site.callPhoneLink}">${site.callPhoneDisplay}</a><br>
+          <a href="mailto:${site.email}">${site.email}</a>
+        </p>
+
         <p class="footer-legal">
           ${site.name} is a service of ${site.legalName}<br>
           &copy; ${year} ${site.legalName} &middot; Message and data rates may apply. Reply STOP to end.<br>
@@ -318,8 +335,21 @@ function renderPage({
   bare = false,
   head = '',
   ogImage = null,
+  // A PAGE MAY OWN ITS WHOLE TITLE. Most pages want "Pricing — LYNDRY" built
+  // for them, which is why that is still the default; the search-facing pages
+  // want a sentence with the county in it and no room left for a suffix, and
+  // pinning those to a pattern is how a 60-character budget gets spent on the
+  // brand name twice.
+  fullTitle: ownTitle = null,
 }) {
-  const fullTitle = path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`;
+  const fullTitle =
+    ownTitle || (path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`);
+
+  // CANONICAL ON EVERY PAGE, ALWAYS THE PATH WITHOUT A QUERY STRING. The same
+  // page is reachable with ?saved=, ?error=, utm tags off an advert and a
+  // trailing slash, and each of those is a separate URL to a crawler. One of
+  // them is the real one and this says which.
+  const canonical = `${config.baseUrl}${path}`;
 
   const html = `<!doctype html>
 <html lang="en">
@@ -332,10 +362,12 @@ function renderPage({
   <meta property="og:title" content="${fullTitle}">
   <meta property="og:description" content="${description}">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="${config.baseUrl}${path}">
+  <meta property="og:url" content="${canonical}">
+  <link rel="canonical" href="${canonical}">
   ${
-    ogImage
-      ? `<meta property="og:image" content="${config.baseUrl}${ogImage}">
+    (ogImage || site.ogImage)
+      ? `<meta property="og:image" content="${config.baseUrl}${ogImage || site.ogImage}">
+  <meta name="twitter:image" content="${config.baseUrl}${ogImage || site.ogImage}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">`
@@ -501,4 +533,12 @@ ${bare ? '' : footer()}
   return fillTokens(html, { ...ICON_TOKENS, ...extra });
 }
 
-module.exports = { renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE };
+// The favicon shape, as the markup rather than as a data: URL, so the <head>
+// above and the /favicon.ico route in src/routes/web.js serve one drawing.
+// Browsers still ask for /favicon.ico whatever the head says, and that had
+// been a 404 on every page load since launch.
+const FAVICON_SVG = decodeURIComponent(
+  "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 22 L9.6 30.6 L16 24' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Crect x='2.3' y='10' width='27.4' height='16' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.3'/%3E%3Cpath d='M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Cpath d='M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6' fill='none' stroke='%23101210' stroke-width='2.1' stroke-linecap='route'/%3E%3C/svg%3E"
+);
+module.exports = {
+  FAVICON_SVG, renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE };

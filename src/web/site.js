@@ -104,6 +104,16 @@ const site = Object.freeze({
 
   tagline: 'Laundry, handled.',
 
+  // THE PICTURE THAT SHOWS WHEN A LINK IS PASTED ANYWHERE - iMessage, Slack,
+  // Facebook. Without one a shared link is a line of grey text, which is what
+  // every link to this site was until now.
+  //
+  // It lives in public/og rather than public/css because it must NOT be
+  // fingerprinted: a share card is cached by Facebook and Apple for a long
+  // time against the URL they first saw, so a URL that changes whenever a
+  // stylesheet changes would leave half of them pointing at nothing.
+  ogImage: '/og/lyndry-bergen.png',
+
   // PUBLISHED AGAIN, and it is a different address from the one that was here.
   // It came off the site when nobody was reading the inbox, on the grounds that
   // a dead address is worse than none; clean@lyndry.com is watched, so the

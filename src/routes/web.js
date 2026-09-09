@@ -12,7 +12,13 @@ const wash = require('../core/wash');
 const throttle = require('../core/throttle');
 const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
-const { renderPage } = require('../web/layout');
+const { renderPage, FAVICON_SVG } = require('../web/layout');
+const towns = require('../web/towns');
+const structured = require('../web/schema');
+
+// The hub path only, so the sitemap and the router cannot disagree about where
+// it lives. Requiring the router itself would be circular; this will not.
+const LOCATIONS_HUB = '/locations';
 const bergen = require('../web/bergen');
 const vcard = require('../web/vcard');
 
@@ -33,19 +39,61 @@ const PAGES = [
     path: '/',
     file: 'home.html',
     title: 'Home',
-    description: `Laundry pickup and delivery in ${site.serviceArea}. Wash, dry and fold at ${site.pricePerLb} a pound, back at your door the ${site.turnaround}.`,
+    fullTitle: 'Laundry Pickup & Delivery in Bergen County, NJ | LYNDRY',
+    head: () => structured.tags([structured.localBusiness(), structured.service()]),
+    description: `Wash and fold pickup in ${site.serviceArea}. ${site.pricePerLb}/lb, $25 minimum, next-day return. Text to book, no app. Houses and apartments.`,
   },
   {
     path: '/how-it-works',
     file: 'how-it-works.html',
     title: 'How it works',
-    description: `How LYNDRY works: text us, leave your bag out, and it comes back washed and folded the ${site.turnaround}. You never need to be home.`,
+    fullTitle: 'How Laundry Pickup Works in Bergen County | LYNDRY',
+    head: () =>
+      structured.tags([
+        structured.faqPage([
+          [
+            'Do I need my own bag?',
+            'Any bag works. Use whatever you have: a laundry sack, a duffel, a sturdy tote.',
+          ],
+          [
+            'How do I pay?',
+            `Before your first pickup we text you a secure link to save a card. It is handled by Stripe, our payment processor. The card number never touches this website. Saving it does not charge it: nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged.`,
+          ],
+          [
+            'What if I need to cancel?',
+            'Text us. Canceling is free right up until your bag is picked up. Once it is with us it is already being processed, so it cannot be canceled after that.',
+          ],
+        ]),
+      ]),
+    description: `Text LYNDRY, leave the bag, get it back the ${site.turnaround}. ${site.pricePerLb}/lb wash and fold. Nobody needs to be home.`,
   },
   {
     path: '/pricing',
     file: 'pricing.html',
     title: 'Pricing',
-    description: `${site.pricePerLb} per pound for wash, dry and fold. No subscription, no minimum, pickup and delivery included.`,
+    fullTitle: 'Wash & Fold Pricing, $2/lb Pickup in Bergen County | LYNDRY',
+    head: () =>
+      structured.tags([
+        structured.faqPage([
+          [
+            'When exactly am I charged?',
+            'Once, and you are told as it happens. Nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged: the text with the weight and the total comes at the same time.',
+          ],
+          [
+            'Do you charge for pickup or delivery?',
+            'No. Pickup and delivery are in the price. There is no other fee.',
+          ],
+          [
+            'Is there a subscription?',
+            'No. There is no membership and no minimum number of pickups. You pay for the laundry you send.',
+          ],
+        ]),
+      ]),
+    // CHARGED AFTER WE WEIGH IT, not on delivery. The brief this came from said
+    // "charged once on delivery", which is the model that was replaced when the
+    // charge point moved to the laundromat's scale - and the same brief says not
+    // to change the charge rule. The rule wins over the sentence describing it.
+    description: `${site.pricePerLb} a pound, $25 minimum. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
   },
   {
     path: '/faq',
@@ -62,6 +110,7 @@ const PAGES = [
   // pickup - was still two clicks away and unmentioned.
   {
     path: '/start/sent',
+    noindex: true,
     file: 'start-sent.html',
     title: 'Check your phone',
     description: 'We have texted you. Reply with your name and address and you are set up.',
@@ -82,13 +131,14 @@ const PAGES = [
     path: '/sms-terms',
     file: 'sms-terms.html',
     title: 'Messaging terms',
-    description: 'Terms for the LYNDRY text messaging programme, including how to opt out.',
+    description: 'Terms for the LYNDRY text messaging program, including how to opt out.',
   },
   {
     path: '/contact',
     file: 'contact.html',
     title: 'Contact',
-    description: `Get in touch with LYNDRY. Text us on ${site.publicPhoneDisplay}, or ask about offering LYNDRY in your building.`,
+    fullTitle: 'Contact LYNDRY, Text (201) 554-1877 | Bergen County Laundry',
+    description: `Book by text at ${site.publicPhoneDisplay}. Support call ${site.callPhoneDisplay}. Email ${site.email}.`,
   },
   {
     // The page Neil SENDS to a laundromat he has already met, as opposed to
@@ -97,19 +147,22 @@ const PAGES = [
     path: '/for-laundromats',
     file: 'for-laundromats.html',
     title: 'For laundromats',
+    fullTitle: 'Laundromat Partners, Wash and Fold Work from LYNDRY',
     description:
-      'How working with LYNDRY works if you run a laundromat: we collect, ' +
+      'How working with LYNDRY works if you run a laundromat: we pick up, ' +
       'you wash, we deliver and bill. No app, no drivers and no customer calls.',
   },
   {
     path: '/partners',
     file: 'partners.html',
     title: 'Partners',
+    fullTitle: 'Partner with LYNDRY, Laundromats & Buildings in Bergen County',
     description:
       'Work with LYNDRY. Laundromats with spare capacity, and property managers who want laundry offered to their residents.',
   },
   {
     path: '/partners/thanks',
+    noindex: true,
     file: 'partners-thanks.html',
     title: 'Thanks',
     description: 'We have your details and will come back to you.',
@@ -217,6 +270,17 @@ function render(res, page, extra = {}, status = 200) {
       path: page.path,
       body: readPageBody(page.file),
       extra,
+      // A page may say it is not worth finding. The sitemap reads the same
+      // flag, so a page can never be listed for crawling and told not to be
+      // crawled at the same time.
+      noindex: Boolean(page.noindex),
+      // A page may add structured data. Built here rather than written into the
+      // HTML file because every figure in it comes from config and site.js.
+      head: page.head ? page.head() : '',
+      // And a page may own its whole <title> rather than having the brand
+      // appended, which is what the search-facing pages need: sixty
+      // characters does not stretch to saying LYNDRY twice.
+      fullTitle: page.fullTitle || null,
     })
   );
 }
@@ -549,6 +613,15 @@ router.get('/.well-known/apple-developer-merchantid-domain-association', (req, r
   });
 });
 
+router.get('/favicon.ico', (req, res) => {
+  res
+    .type('image/svg+xml')
+    // A year, because this drawing has not changed since the site launched and
+    // will not change without the file it lives in changing too.
+    .set('Cache-Control', 'public, max-age=31536000, immutable')
+    .send(FAVICON_SVG);
+});
+
 router.get('/robots.txt', (req, res) => {
   // /ops is the internal tool. It is behind a sign-in anyway, but there is no
   // reason for a crawler to be knocking on it.
@@ -558,13 +631,29 @@ router.get('/robots.txt', (req, res) => {
   res
     .type('text/plain')
     .send(
-      `User-agent: *\nAllow: /\nDisallow: /ops\nDisallow: /account\nDisallow: /bergen\nSitemap: ${config.baseUrl}/sitemap.xml\n`
+      `User-agent: *\nAllow: /\nDisallow: /ops\nDisallow: /account\nDisallow: /bergen\nDisallow: /health\nSitemap: ${config.baseUrl}/sitemap.xml\n`
     );
 });
 
+// ---------------------------------------------------------------------------
+// The sitemap: every public marketing page, plus the county hub and all 70
+// town pages.
+//
+// WHAT IS DELIBERATELY NOT IN IT. /ops and /account are somebody's business and
+// somebody's address and are Disallowed anyway. /bergen is a paid advert with a
+// pixel on it, not a page to be found by searching. The thank-you screens have
+// no content of their own and carry noindex, so listing them would be asking
+// for a page to be indexed and telling it not to be in the same breath.
+// ---------------------------------------------------------------------------
 router.get('/sitemap.xml', (req, res) => {
-  const urls = PAGES
-    .map((p) => `  <url><loc>${config.baseUrl}${p.path}</loc></url>`)
+  const paths = [
+    ...PAGES.filter((p) => !p.noindex && p.path !== '/bergen').map((p) => p.path),
+    LOCATIONS_HUB,
+    ...towns.TOWNS.map((t) => `/${t.slug}`),
+  ];
+
+  const urls = paths
+    .map((path) => `  <url><loc>${config.baseUrl}${path}</loc></url>`)
     .join('\n');
 
   res
