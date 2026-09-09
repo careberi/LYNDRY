@@ -11,6 +11,9 @@ const wash = require('./wash');
 const geocode = require('./geocode');
 const settings = require('./settings');
 const promotions = require('./promotions');
+// Required lazily inside the call rather than here: order-alerts needs
+// booking's own whenLine(), so requiring it at the top would be a cycle.
+const orderAlerts = require('./order-alerts');
 
 // ---------------------------------------------------------------------------
 // The rules for booking a pickup, in one place.
@@ -1028,6 +1031,31 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
       console.error(`Could not claim a promotion slot for order ${order.id}: ${err.message}`);
       return null;
     });
+
+  // ---------------------------------------------------------------------
+  // TELL THE OFFICE. Neil's ask: an admin should get a text when somebody
+  // places an order, rather than finding out by opening the board.
+  //
+  // HERE, not in the two routes, because this function is the one door both
+  // front doors go through - the AI's create_order and the website form. A
+  // third door added later gets the alert for free; two copies in two routes
+  // would not.
+  //
+  // NOT AWAITED, and that is deliberate. The customer is waiting on a
+  // confirmation and an admin's text is not worth a second of that wait. It
+  // swallows its own errors, so nothing here can fail a booking that has
+  // already been written.
+  // ---------------------------------------------------------------------
+  orderAlerts
+    .newOrder({
+      customer,
+      order,
+      booking: module.exports,
+      needsCard: billing.needsCardOnFile(customer),
+      freeOrder: promotions.takesEverythingOff(claimed),
+      fromSchedule,
+    })
+    .catch((err) => console.error(`Order alert threw: ${err.message}`));
 
   return {
     ok: true,
