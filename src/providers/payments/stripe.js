@@ -97,6 +97,67 @@ async function createSetupLink({ stripeCustomerId, lyndryCustomerId, returnUrl, 
 }
 
 // After the customer finishes the page, this reads back which card they saved.
+// A CARD FIELD ON OUR OWN PAGE INSTEAD OF A PAGE OF STRIPE'S.
+//
+// createSetupLink() above builds a whole hosted checkout page and hands back a
+// URL to send somebody to. This does the same job - save a card, take no money
+// - without the page: it returns a client secret, which is the one-time ticket
+// the browser needs to talk to Stripe directly about this one card.
+//
+// A SETUP INTENT TAKES NOTHING, exactly like the hosted version. mode:'setup'
+// there and setupIntents here are the same promise: we are storing a card to
+// charge later, and nothing moves today.
+//
+// The client secret is safe to put in the page. It authorises attaching a card
+// to this one intent and nothing else - it cannot charge, read a card, or
+// reach any other customer.
+async function createSetupIntent({ stripeCustomerId, lyndryCustomerId }) {
+  const intent = await stripe.setupIntents.create({
+    customer: stripeCustomerId,
+
+    // Charged later, with nobody at a keyboard. Telling Stripe that now is what
+    // makes the card usable at the weigh-in two days later, and it is also what
+    // decides which cards Stripe will accept here at all.
+    usage: 'off_session',
+
+    // Same as the hosted page: not listing types leaves Stripe to offer
+    // whatever suits the device, cards always plus Apple or Google Pay.
+    automatic_payment_methods: { enabled: true },
+
+    metadata: { lyndry_customer_id: lyndryCustomerId },
+  });
+
+  return { setupIntentId: intent.id, clientSecret: intent.client_secret };
+}
+
+// The card off a finished setup intent, for the path above. Its twin below
+// reads the same thing off a hosted checkout session; both end up at the same
+// two lines, because a payment method is a payment method however it arrived.
+async function getSavedPaymentMethodFromSetup(setupIntentId) {
+  const intent = await stripe.setupIntents.retrieve(setupIntentId);
+  if (!intent || !intent.payment_method) return null;
+
+  return describeAndDefault(intent.payment_method, intent.customer);
+}
+
+// Read the card, and make it the one we charge from now on so we never have to
+// remember which of several a customer meant.
+async function describeAndDefault(paymentMethodId, stripeCustomerId) {
+  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+  const card = paymentMethod.card || {};
+
+  await stripe.customers.update(stripeCustomerId, {
+    invoice_settings: { default_payment_method: paymentMethodId },
+  });
+
+  return {
+    paymentMethodId,
+    // Display only - "Visa", "4242". Not enough to charge anything.
+    brand: card.brand || null,
+    last4: card.last4 || null,
+  };
+}
+
 async function getSavedPaymentMethod(sessionId) {
   const session = await stripe.checkout.sessions.retrieve(sessionId, {
     expand: ['setup_intent'],
@@ -108,21 +169,7 @@ async function getSavedPaymentMethod(sessionId) {
 
   if (!paymentMethodId) return null;
 
-  const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-  const card = paymentMethod.card || {};
-
-  // Make this the card we charge from now on, so we never have to remember
-  // which of several a customer meant.
-  await stripe.customers.update(session.customer, {
-    invoice_settings: { default_payment_method: paymentMethodId },
-  });
-
-  return {
-    paymentMethodId,
-    // Display only — "Visa", "4242". Not enough to charge anything.
-    brand: card.brand || null,
-    last4: card.last4 || null,
-  };
+  return describeAndDefault(paymentMethodId, session.customer);
 }
 
 // Charge a saved card while the customer is nowhere near a browser.
@@ -216,7 +263,9 @@ module.exports = {
   name: 'stripe',
   createCustomer,
   createSetupLink,
+  createSetupIntent,
   getSavedPaymentMethod,
+  getSavedPaymentMethodFromSetup,
   chargeOffSession,
   refund,
   verifyWebhook,

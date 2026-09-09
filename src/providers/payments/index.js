@@ -85,7 +85,9 @@ module.exports = {
 
   createCustomer: driver.createCustomer,
   createSetupLink: driver.createSetupLink,
+  createSetupIntent: driver.createSetupIntent,
   getSavedPaymentMethod: driver.getSavedPaymentMethod,
+  getSavedPaymentMethodFromSetup: driver.getSavedPaymentMethodFromSetup,
   chargeOffSession: driver.chargeOffSession,
   verifyWebhook: driver.verifyWebhook,
 };

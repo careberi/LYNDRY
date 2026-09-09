@@ -138,8 +138,17 @@ const config = Object.freeze({
   // The secret key starts sk_test_ in test mode and sk_live_ in live mode, and
   // that prefix is the ONLY thing that decides whether real money moves. There
   // is no separate switch to forget to flip.
+  // The PUBLISHABLE key is the exception to "nothing outside the provider may
+  // read these", and it is not really an exception: it is not a secret. It goes
+  // into the page source of every site that draws a Stripe card field, it can
+  // only create a payment attempt, and it cannot read, charge or refund
+  // anything. Its prefix follows the secret key's - pk_test_ beside sk_test_.
+  //
+  // Without it there is no card field on our own page, only the hosted one we
+  // send people away to.
   stripe: Object.freeze({
     secretKey: process.env.STRIPE_SECRET_KEY || '',
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
   }),
 

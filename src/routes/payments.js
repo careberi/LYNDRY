@@ -206,103 +206,130 @@ router.post('/webhooks/stripe', express.raw({ type: 'application/json' }), async
   }
 });
 
+// ---------------------------------------------------------------------------
+// A CARD WAS SAVED. Two doors reach this and neither may have its own copy.
+//
+// It was written once, inside the hosted-page case, and the card field on our
+// own page would have needed all of it again: the settle for anything already
+// owed, the booking it finishes, the wording of the text. Two copies of a
+// sentence sent to a customer is the drift this repo keeps warning about, and
+// the money half is worse than the words.
+// ---------------------------------------------------------------------------
+async function linkFor(match) {
+  const { data, error } = await db
+    .from('payment_links')
+    .select('*, customers(*)')
+    .match(match)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!data) {
+    console.warn(`Payment webhook for an unknown link: ${JSON.stringify(match)}`);
+    return null;
+  }
+
+  // Already handled by the return page. Not an error - the browser and the
+  // webhook race every time and either one winning is fine.
+  return data.completed_at ? null : data;
+}
+
+async function cardWasSaved(link) {
+  const customer = await billing.recordSavedCard(link);
+  if (!customer) return;
+
+  const card = billing.describeCard(customer);
+
+  // Anything they already owe gets settled now, without them having to
+  // do anything else.
+  const settled = await billing.retryOutstanding(customer);
+
+  if (settled.length > 0) {
+    await sendAndLog(
+      customer.phone,
+      `Card saved: ${card}. We've settled the ${billing.money(
+        settled.reduce((sum, s) => sum + s.order.price_cents, 0)
+      )} outstanding. Thanks.`,
+      customer.id
+    );
+    return;
+  }
+
+  // Finish the booking they were in the middle of.
+  //
+  // Somebody adding a card is almost always partway through arranging a
+  // pickup. Before this, they got "card saved" and nothing else, and the
+  // pickup they had just asked for was left unconfirmed with no sign that
+  // anything was missing. That happened to a real customer.
+  // Every booking they are waiting on, not just the soonest. A customer
+  // can have several now, and one card covers all of them - confirming one
+  // and quietly leaving the rest unconfirmed would keep them off the
+  // driver's run sheet with nothing to say why.
+  const allPending = await orders.findAllAwaitingCollection(customer.id);
+  const pending = allPending[0] || null;
+
+  // Nothing is charged here. The card being on file is the whole of what
+  // was missing, so saving it confirms the booking outright and the money
+  // waits for the scale like every other order.
+  if (pending) {
+    // The confirmation names the card itself, so the opener must not name
+    // it again - a real customer got the card number twice in one text.
+    //
+    // The others go in the SAME message rather than one text each. A card
+    // covers all of them, and three texts arriving at once for one action
+    // is both a bill and a complaint waiting to happen.
+    const rest = allPending.slice(1);
+    const alsoLine = rest.length
+      ? ' Your other pickup' +
+        (rest.length === 1 ? ' is' : 's are') +
+        ' booked too: ' +
+        rest.map((o) => booking.readableDate(o.pickup_date)).join(', ') +
+        '.'
+      : '';
+
+    // WAS THIS ONE FREE. Looked up rather than passed in, because this
+    // confirmation is sent by the webhook long after bookPickup() returned
+    // - the order was written first and the card saved afterwards, which is
+    // the whole shape of this path. Getting it wrong here would quote a
+    // price for an order that took one of the free slots.
+    const free = await promotions
+      .claimedFreeOrder(pending.id)
+      .catch(() => ({ freeOrder: false, freeUpToLb: null }));
+
+    await sendAndLog(
+      customer.phone,
+      booking.confirmationMessage(customer, pending, {
+        opener: 'Card saved',
+        freeOrder: free.freeOrder,
+        freeUpToLb: free.freeUpToLb,
+      }) + alsoLine,
+      customer.id
+    );
+    return;
+  }
+
+  await sendAndLog(
+    customer.phone,
+    `Card saved: ${card}. Text us whenever you want a pickup.`,
+    customer.id
+  );
+  return;
+}
+
 async function handleEvent(event) {
   switch (event.type) {
-    // The customer finished the card page.
+    // The customer finished the hosted card page.
     case 'checkout.session.completed': {
-      const sessionId = event.data.object.id;
+      const link = await linkFor({ stripe_session_id: event.data.object.id });
+      if (link) await cardWasSaved(link);
+      return;
+    }
 
-      const { data: link, error } = await db
-        .from('payment_links')
-        .select('*, customers(*)')
-        .eq('stripe_session_id', sessionId)
-        .maybeSingle();
-
-      if (error) throw error;
-      if (!link) {
-        console.warn(`Payment webhook for an unknown session: ${sessionId}`);
-        return;
-      }
-      if (link.completed_at) return; // Already handled by the return page.
-
-      const customer = await billing.recordSavedCard(link);
-      if (!customer) return;
-
-      const card = billing.describeCard(customer);
-
-      // Anything they already owe gets settled now, without them having to
-      // do anything else.
-      const settled = await billing.retryOutstanding(customer);
-
-      if (settled.length > 0) {
-        await sendAndLog(
-          customer.phone,
-          `Card saved: ${card}. We've settled the ${billing.money(
-            settled.reduce((sum, s) => sum + s.order.price_cents, 0)
-          )} outstanding. Thanks.`,
-          customer.id
-        );
-        return;
-      }
-
-      // Finish the booking they were in the middle of.
-      //
-      // Somebody adding a card is almost always partway through arranging a
-      // pickup. Before this, they got "card saved" and nothing else, and the
-      // pickup they had just asked for was left unconfirmed with no sign that
-      // anything was missing. That happened to a real customer.
-      // Every booking they are waiting on, not just the soonest. A customer
-      // can have several now, and one card covers all of them - confirming one
-      // and quietly leaving the rest unconfirmed would keep them off the
-      // driver's run sheet with nothing to say why.
-      const allPending = await orders.findAllAwaitingCollection(customer.id);
-      const pending = allPending[0] || null;
-
-      // Nothing is charged here. The card being on file is the whole of what
-      // was missing, so saving it confirms the booking outright and the money
-      // waits for the scale like every other order.
-      if (pending) {
-        // The confirmation names the card itself, so the opener must not name
-        // it again - a real customer got the card number twice in one text.
-        //
-        // The others go in the SAME message rather than one text each. A card
-        // covers all of them, and three texts arriving at once for one action
-        // is both a bill and a complaint waiting to happen.
-        const rest = allPending.slice(1);
-        const alsoLine = rest.length
-          ? ' Your other pickup' +
-            (rest.length === 1 ? ' is' : 's are') +
-            ' booked too: ' +
-            rest.map((o) => booking.readableDate(o.pickup_date)).join(', ') +
-            '.'
-          : '';
-
-        // WAS THIS ONE FREE. Looked up rather than passed in, because this
-        // confirmation is sent by the webhook long after bookPickup() returned
-        // - the order was written first and the card saved afterwards, which is
-        // the whole shape of this path. Getting it wrong here would quote a
-        // price for an order that took one of the free slots.
-        const free = await promotions
-          .claimedFreeOrder(pending.id)
-          .catch(() => ({ freeOrder: false, freeUpToLb: null }));
-
-        await sendAndLog(
-          customer.phone,
-          booking.confirmationMessage(customer, pending, {
-            opener: 'Card saved',
-            freeOrder: free.freeOrder,
-            freeUpToLb: free.freeUpToLb,
-          }) + alsoLine,
-          customer.id
-        );
-        return;
-      }
-
-      await sendAndLog(
-        customer.phone,
-        `Card saved: ${card}. Text us whenever you want a pickup.`,
-        customer.id
-      );
+    // The customer saved a card in OUR page rather than on one of Stripe's.
+    // Same event as far as this system is concerned, so it is the same code.
+    case 'setup_intent.succeeded': {
+      const link = await linkFor({ stripe_setup_intent_id: event.data.object.id });
+      if (link) await cardWasSaved(link);
       return;
     }
 

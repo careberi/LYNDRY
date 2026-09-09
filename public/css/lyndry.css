@@ -951,7 +951,26 @@ button {
    and the fact rail above it: the bubble layer is POSITIONED and this was not,
    and a positioned element paints over an unpositioned one whatever order they
    are written in - so bubbles drifted across the front of the button. */
-.order-online { position: relative; z-index: 1; }
+.order-online {
+  position: relative;
+  z-index: 1;
+
+  /* THE PRICING BAND'S TREATMENT, ON THE ONE BUTTON. Neil's ask, twice: the
+     same dot grid, and the same purple under it. So both values are the ones
+     .dotfield uses rather than a second set that could drift from them - there
+     is one purple on this page and one texture, not two of each.
+
+     NOT the .dotfield class itself, because it also draws a rule across the
+     top and bottom. That is right for a full-width band and wrong inside a
+     card that already has an ink outline all the way round.
+
+     And not .card-lilac either: that is --lilac-300, a deeper purple than the
+     band's --lilac-100. The class comes off the element in home.html so this
+     rule is the only thing setting the fill and the two cannot fight. */
+  background-color: var(--lilac-100);
+  background-image: radial-gradient(var(--ink-200) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+}
 /* Rising soap bubbles. Decorative, so the layer is aria-hidden and cannot be
    clicked through. Each bubble starts with a NEGATIVE animation delay, which
    is what makes the field already full when the page loads instead of

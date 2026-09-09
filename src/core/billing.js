@@ -155,6 +155,41 @@ async function createSetupLink(customer) {
   };
 }
 
+// THE SAME THING WITHOUT THE HOSTED PAGE. Neil: "Don't make add a card its
+// own page. That's why it feels like a surprise bill."
+//
+// createSetupLink() above mints a page of Stripe's and a lyndry.com link to
+// send somebody to. This mints the ticket for a card field drawn INSIDE our
+// own page. Everything else is identical - the same payment_links row, the
+// same webhook, the same code that records the card and finishes the booking -
+// because it is the same act.
+//
+// A ROW IS WRITTEN EITHER WAY, and it has to be: the webhook arrives knowing
+// only Stripe's id, and this row is the only thing that turns that id back
+// into a customer of ours.
+async function createInlineCardSetup(customer) {
+  const stripeCustomerId = await ensureProviderCustomer(customer);
+  const token = crypto.randomBytes(18).toString('base64url');
+
+  const intent = await payments.createSetupIntent({
+    stripeCustomerId,
+    lyndryCustomerId: customer.id,
+  });
+
+  const { error } = await db.from('payment_links').insert({
+    token,
+    customer_id: customer.id,
+    stripe_setup_intent_id: intent.setupIntentId,
+  });
+
+  if (error) throw error;
+
+  // The client secret is what the page needs and is safe to put in it: it
+  // authorises attaching a card to this one intent and nothing else. It cannot
+  // charge, read a card, or reach another customer.
+  return { clientSecret: intent.clientSecret, token };
+}
+
 // The sentence texted to someone who needs to add a card before we can book.
 // CHARGED AFTER WE WEIGH IT, NOT ON DELIVERY. This said "when we deliver it
 // back", which was true while the charge point was the doorstep and has been
@@ -179,8 +214,18 @@ async function setupLinkMessage(customer) {
 // Called by the provider's webhook, and again if the customer lands back on
 // our page first. Writing the same thing twice is harmless; missing it is not,
 // so both paths call this rather than trusting one of them to happen.
+// TWO WAYS IN, ONE WAY THROUGH. A card saved on the hosted page and a card
+// saved in our own page are the same card on the same account, so everything
+// after this line - the record, the authorisation timestamp, killing the link,
+// confirming the booking, the text - happens once, here, for both.
+//
+// The row says which it was: a hosted checkout leaves a session id, our own
+// page leaves a setup intent id.
 async function recordSavedCard(paymentLink) {
-  const saved = await payments.getSavedPaymentMethod(paymentLink.stripe_session_id);
+  const saved = paymentLink.stripe_setup_intent_id
+    ? await payments.getSavedPaymentMethodFromSetup(paymentLink.stripe_setup_intent_id)
+    : await payments.getSavedPaymentMethod(paymentLink.stripe_session_id);
+
   if (!saved) return null;
 
   const { data: customer, error } = await db
@@ -437,6 +482,7 @@ module.exports = {
   describeCard,
   consentText,
   createSetupLink,
+  createInlineCardSetup,
   setupLinkMessage,
   recordSavedCard,
   chargeOrder,
