@@ -394,7 +394,21 @@ function summaryCards(customer, { needsCardNow = false } = {}) {
   // THE BUTTON SAYS "UPDATE" AND NOTHING ELSE. Neil's call: the heading two
   // lines above it already says which card this is, so repeating it is a longer
   // label that only makes the three disagree about how tall they are.
-  const card = (href, title, value) => `
+  // ONE OF THE THREE UPDATE BUTTONS IS NOT A LINK, and it cannot be.
+  //
+  // Neil: pressing Update on the payment card should go straight to Stripe
+  // rather than to a page of ours with another button on it. The catch is that
+  // the Stripe URL does not exist until we ask for it - a checkout session is
+  // created per visit and expires - so there is nothing to put in an href.
+  //
+  // A form solves it with no page in between: the browser posts, the route
+  // mints the session and answers with a redirect straight to Stripe. One hop,
+  // nothing of ours rendered on the way, and no JavaScript involved.
+  //
+  // It is styled as the same button as the other two on purpose. Three cards in
+  // a row where one control looks different reads as a mistake, and to the
+  // person pressing it there is no difference worth showing.
+  const card = (href, title, value, { post = false } = {}) => `
     <div class="card card-xl"
          style="display:flex;flex-direction:column;padding:24px;height:100%;">
       <p class="eyebrow" style="margin-bottom:6px;">On file</p>
@@ -402,7 +416,13 @@ function summaryCards(customer, { needsCardNow = false } = {}) {
         ${escapeHtml(title)}
       </h3>
       <p style="flex:1;font-size:15px;line-height:1.5;color:var(--ink-700);margin:0 0 18px;">${value}</p>
-      <a href="${href}" class="btn btn-outline btn-full" style="text-decoration:none;">Update</a>
+      ${
+        post
+          ? `<form method="post" action="${href}" style="margin:0;">
+               <button type="submit" class="btn btn-outline btn-full">Update</button>
+             </form>`
+          : `<a href="${href}" class="btn btn-outline btn-full" style="text-decoration:none;">Update</a>`
+      }
     </div>`;
 
   if (booking.hasAddress(customer)) {
@@ -428,20 +448,22 @@ function summaryCards(customer, { needsCardNow = false } = {}) {
   if (customer.card_last4) {
     cards.push(
       card(
-        '/account/payment',
+        '/account/card',
         'Payment method',
         `${escapeHtml(String(customer.card_brand || 'Card'))} ending ${escapeHtml(
           String(customer.card_last4)
-        )}`
+        )}`,
+        { post: true }
       )
     );
   } else if (needsCardNow) {
     cards.push(
       card(
-        '/account/payment',
+        '/account/card',
         'Payment method',
         '<span style="color:var(--stain-600);">No card on file. The driver cannot come ' +
-          'out until there is one.</span>'
+          'out until there is one.</span>',
+        { post: true }
       )
     );
   }

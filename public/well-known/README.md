@@ -1,36 +1,59 @@
 # public/well-known
 
-One file goes in here and it has no extension:
+One file lives here, and it deliberately has no extension:
 
     apple-developer-merchantid-domain-association
 
 ## What it is
 
-Apple's proof that we own lyndry.com. Every site that offers Apple Pay serves
-one. It is a public claim, not a secret — Apple fetches it from every such site
-— so it belongs in the repo like any other static asset.
+Apple's proof that Stripe is allowed to take Apple Pay on this domain. Every
+site that offers Apple Pay serves one. It is a public claim rather than a
+secret — Apple fetches it from every such site — so it belongs in the repo like
+any other static asset.
+
+Decoded, it is hex-encoded JSON with four keys: `pspId`, `version`, `createdOn`
+and `signature`. **Nothing in it names a domain**, which is the thing worth
+knowing: it is tied to Stripe's Apple merchant identity, not to lyndry.com, so
+the one file works for every domain registered under our Stripe account.
 
 ## Why it is needed at all
 
-A wallet button only appears on a domain Stripe has verified. Until the card
+A wallet button only appears on a domain Apple has verified. Until the card
 field moved onto our own page, the only verified domain on the account was
 `checkout.stripe.com`, and the hosted card page was on it — so Apple Pay came
 free and nobody had to think about this. lyndry.com is a different domain as
 far as Apple is concerned.
 
-## Getting it
+## Where it came from
 
-1. https://dashboard.stripe.com/settings/payment_method_domains
-2. Add domain, `lyndry.com`
-3. Stripe offers the file to download. Save it into this folder, keeping the
-   name exactly as it is with no `.txt` on the end
-4. Commit and deploy
-5. Back in Stripe, press verify
+Stripe publishes it at the same path on its own verified domain:
 
-It is served by the route in `src/routes/web.js` at
-`/.well-known/apple-developer-merchantid-domain-association`. Until the file is
-here that path returns 404, which is the honest answer and is what Stripe's
-verification will report.
+    https://checkout.stripe.com/.well-known/apple-developer-merchantid-domain-association
 
-**Test and live mode are registered separately.** Doing it in one does not do
-the other.
+That is the same bytes the dashboard offers as a download, which is why there
+was no download link to find. To refresh it:
+
+```bash
+curl -s -o public/well-known/apple-developer-merchantid-domain-association \
+  https://checkout.stripe.com/.well-known/apple-developer-merchantid-domain-association
+```
+
+**If Apple Pay ever stops appearing, refresh this file first.** Stripe can
+rotate it, and a stale copy fails silently — the button simply does not draw,
+with nothing in any log to say why.
+
+## How it is served
+
+By an explicit route in `src/routes/web.js`, not a static mount: only
+`public/css` and `public/og` are mounted, and exposing a whole directory to
+reach one file is a worse trade than a route serving exactly that file.
+
+With no file present the route returns a plain 404, which is the honest answer
+and is what Stripe's verification reports — a much clearer failure than an
+empty 200 that Apple would silently reject.
+
+## The other half
+
+Serving the file is not enough on its own. The domain also has to be added
+under **Settings → Payments → Payment method domains** in the Stripe dashboard,
+and **test and live mode are separate** — doing one does not do the other.

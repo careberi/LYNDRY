@@ -1007,12 +1007,31 @@ router.post('/account/repeat/stop', auth.requireCustomer, async (req, res, next)
   }
 });
 
-router.post('/account/card', auth.requireCustomer, async (req, res, next) => {
+// STRAIGHT TO STRIPE, NOTHING OF OURS IN BETWEEN. This is what the Update
+// button on the payment card posts to: it mints the session and redirects, so
+// the next thing the customer sees is the card page itself.
+//
+// A FAILURE COMES BACK HERE RATHER THAN TO THE ERROR PAGE. It used to call
+// next(err), which is right for a bug and wrong for this: somebody pressed a
+// button on their own account and the honest answer is a sentence on the page
+// they were just on, not a generic apology screen with no way forward. The
+// details still go to the server log, where they are of use to somebody.
+router.post('/account/card', auth.requireCustomer, async (req, res) => {
   try {
-    const { url } = await billing.createSetupLink(req.customer);
-    return res.redirect(303, url);
+    // providerUrl, not url. `url` is lyndry.com/pay/<token>, which exists for
+    // links we TEXT: a carrier scores a message partly by the domain in it, so
+    // every texted link is on our own. In a browser that indirection buys
+    // nothing and costs a hop - and the session was minted a millisecond ago,
+    // so the one thing /pay/<token> adds, re-minting an expired session,
+    // cannot apply. The row is still written, so the webhook still resolves.
+    const { providerUrl } = await billing.createSetupLink(req.customer);
+    return res.redirect(303, providerUrl);
   } catch (err) {
-    return next(err);
+    console.error('Could not open the card page:', err.message);
+    return back(
+      res,
+      `?error=${encodeURIComponent('We could not open the card page just then. Try again in a moment.')}`
+    );
   }
 });
 
