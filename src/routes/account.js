@@ -1520,11 +1520,24 @@ function stepPage({ customer, step, given, error = '', opensOn = null, guest = f
 // dead CDN or an old browser leaves somebody with a working link instead of a
 // grey box. Same fail-safe rule the scroll reveal follows.
 // ---------------------------------------------------------------------------
+// The spot is stored the way it is shown on its own line - "Front door" - and
+// reads wrong dropped into the middle of a sentence. Only the first letter
+// moves, so a spot somebody typed themselves keeps whatever case they used.
+function midSentence(text) {
+  const s = String(text || '').trim();
+  return s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+}
+
 function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
   const when = whenLineMdy(order);
   const where = [customer.address_line1, customer.address_line2, customer.city]
     .filter(Boolean)
     .join(', ');
+
+  // Through setup.spotOf(), which reads dropoff_spot and then the older
+  // special_instructions - the same order run.spotOf() uses. Reading only one
+  // of the two says nothing for almost every customer who has told us.
+  const spot = setup.spotOf(customer);
 
   // Everything the page hands to the script goes through JSON.stringify rather
   // than being dropped between quotes. It is the same reason escapeHtml() is
@@ -1540,37 +1553,54 @@ function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
   return `
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
-    <p class="eyebrow eyebrow-brand">Place an order &middot; payment</p>
-    <h1 class="display-2" style="margin-bottom:10px;">Last step.</h1>
+    <p class="eyebrow eyebrow-brand">Place an order &middot; where</p>
+    <h1 class="display-2" style="margin-bottom:10px;">Where should we pick up?</h1>
     <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
-      Nothing is charged now. We weigh your laundry after pickup and charge then.
+      Address, and where to leave the bag.
     </p>
   </div>
 </section>
 
 <section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
 
-  <!-- WHAT THEY JUST CONFIRMED, said back before they are asked for a card.
-       Neil's sequence: the address is confirmed, THEN the payment panel opens.
-       A card field with no reminder of what it is for is the surprise bill. -->
+  <!-- THE SAME SCREEN, NOT THE NEXT ONE. Neil, twice: Continue must not take
+       you anywhere, it reveals the payment underneath.
+
+       So the heading above is the heading they were already reading, and the
+       address they just typed is still the first thing on the page - ticked
+       now rather than gone. What changed is that a panel opened below it. -->
   <div class="card card-xl" style="padding:26px 30px;">
-    <p class="eyebrow" style="margin-bottom:14px;">Your pickup</p>
-    <p style="font-size:19px;line-height:1.45;font-weight:600;color:var(--ink-900);margin:0 0 6px;">
-      ${escapeHtml(when)}
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px;">
+      <span class="eyebrow" style="margin:0;">Address</span>
+      <span class="badge" style="background:var(--suds-500);">Confirmed</span>
+    </div>
+
+    <p style="font-size:17px;line-height:1.5;color:var(--ink-900);margin:0 0 4px;font-weight:600;">
+      ${escapeHtml(customer.name || '')}
     </p>
-    <p style="font-size:16px;line-height:1.45;color:var(--ink-600);margin:0;">
+    <p style="font-size:16px;line-height:1.5;color:var(--ink-700);margin:0;">
       ${escapeHtml(where)}
     </p>
+    <p style="font-size:16px;line-height:1.5;color:var(--ink-700);margin:8px 0 0;">
+      ${escapeHtml(spot ? 'Bag at the ' + midSentence(spot) : 'Bag outside your door')}
+    </p>
+
+    <div style="border-top:1px solid var(--ink-100);margin-top:18px;padding-top:16px;">
+      <p class="eyebrow" style="margin:0 0 6px;">Pickup</p>
+      <p style="font-size:17px;line-height:1.45;font-weight:600;color:var(--ink-900);margin:0;">
+        ${escapeHtml(when)}
+      </p>
+    </div>
   </div>
 
-  <!-- THE PANEL THAT OPENS UNDERNEATH. Sunken rather than another white card,
-       so it reads as a drawer that opened under the pickup rather than a
-       second page stacked on the first. -->
+  <!-- THE PANEL THAT OPENED. Sunken grey rather than another white card, so it
+       reads as a drawer under the address rather than a second page stacked on
+       the first. -->
   <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
     <p class="eyebrow" style="margin-bottom:6px;">Payment method</p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      We keep this on file and charge it once, after we weigh your laundry.
-      We never see the number.
+      Nothing is charged now. We keep this on file and charge it once, after we
+      weigh your laundry. We never see the number.
     </p>
 
     <form id="card-form">
