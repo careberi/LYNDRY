@@ -240,7 +240,20 @@ function codeStep({ error = '', next = '/account', phone = '' } = {}) {
 
 router.get('/account/login', (req, res) => {
   if (auth.isSignedIn(req)) return res.redirect(302, safeNext(req.query.next));
-  accountPage(res, { title: 'Sign in', body: phoneStep({ next: safeNext(req.query.next) }) });
+
+  // THEIR OWN NUMBER, OUT OF THEIR OWN COOKIE. Somebody part-way through an
+  // order who presses Back on the first screen lands here, and an empty box
+  // reads as having lost their place. It reveals nothing: the cookie is signed
+  // by this server and holds the number they typed into this form minutes ago.
+  // Shown the way the box asks for it, not the way it is stored: the
+  // placeholder beside it reads (201) 555-0142, and +12015550166 sitting in a
+  // field that asks for that is a format nobody typed.
+  const phone = formatPhone(auth.readGuest(req) || '');
+
+  accountPage(res, {
+    title: 'Sign in',
+    body: phoneStep({ next: safeNext(req.query.next), phone }),
+  });
 });
 
 router.post('/account/login', async (req, res, next) => {
@@ -1208,7 +1221,78 @@ function withAnswers(customer, given) {
   };
 }
 
-// What the booking still needs, in the order it is asked for.
+// ---------------------------------------------------------------------------
+// THE SCREENS, IN ORDER. CONTINUE GOES TO THE NEXT ONE. BACK GOES TO THE ONE
+// BEFORE. Neither of them looks at what has been answered to decide WHERE to
+// go, and that is the fix.
+//
+// It used to work out the next screen by asking what was still missing, which
+// is right when you arrive and wrong the moment you walk backwards: press Back
+// twice, press Continue, and the answers you already gave made the screen you
+// had just come from look answered, so it was skipped. Continue jumped over
+// "when" and, from there, straight past "where" into booking the order.
+//
+// A SCREEN IS SKIPPED ONLY WHEN ITS ANSWER IS ON THE CUSTOMER'S ROW - saved,
+// permanently, from a previous order. That is the "we ask once" rule and it is
+// the only reason a screen may be missed out.
+//
+// The two middle screens are never skipped, because they are about THIS
+// pickup: how often, and which day. An answer in the form is this booking's
+// answer, not a saved setting, and must never take its own screen away.
+//
+// A GUEST HAS NO ROW, so a guest walks all four, always, in the same order
+// every time.
+const ORDER = ['wash', 'repeat', 'when', 'address'];
+
+function alreadySaved(step, customer) {
+  if (step === 'wash') return booking.hasPreferences(customer);
+  if (step === 'address') {
+    return setup.hasName(customer) && booking.hasAddress(customer) && Boolean(setup.spotOf(customer));
+  }
+  return false;
+}
+
+// The next screen they have not been shown, or 'book' when there are none left.
+// 'book' is not a screen: reaching it is what writes the order.
+function nextStep(from, customer) {
+  for (let i = ORDER.indexOf(from) + 1; i < ORDER.length; i += 1) {
+    if (!alreadySaved(ORDER[i], customer)) return ORDER[i];
+  }
+  return 'book';
+}
+
+// The mirror of it, so Back cannot land on a screen Continue would have
+// skipped. Null means there is nothing behind this one inside the wizard.
+function previousStep(from, customer) {
+  for (let i = ORDER.indexOf(from) - 1; i >= 0; i -= 1) {
+    if (!alreadySaved(ORDER[i], customer)) return ORDER[i];
+  }
+  return null;
+}
+
+// WHAT THIS SCREEN STILL NEEDS BEFORE IT MAY BE LEFT. Continue used to be
+// unable to skip a blank screen only because the next-screen calculation was
+// the same one that noticed the blank. Now that they are separate, the check
+// has to be written down.
+function unanswered(step, given) {
+  if (step === 'repeat' && given.regular === undefined) {
+    return 'Please choose whether this is a regular pickup.';
+  }
+
+  if (step === 'when') {
+    if (given.regular === 'yes' && !String(given.weekdays || '').trim()) {
+      return 'Please pick at least one day.';
+    }
+    if (given.regular !== 'yes' && !given.pickup_date) return 'Please pick a day.';
+    if (!given.pickup_time) return 'Please pick a time.';
+  }
+
+  return null;
+}
+
+// Where somebody ARRIVING at the wizard starts: the first thing still missing.
+// This is the one place it is right to ask, because they have not been shown
+// anything yet.
 function bookingStep(customer, given) {
   if (!booking.hasPreferences(customer)) return 'wash';
 
@@ -1254,8 +1338,6 @@ const ANSWERS = [
 //
 // Nor is it history.back(): every screen here arrives as the response to a POST,
 // so the browser would meet it with a "confirm form resubmission" page.
-const BEFORE = { wash: null, repeat: 'wash', when: 'repeat', address: 'when' };
-
 const ASKED_ON = {
   wash: ['water_temp', 'fabric_softener'],
   repeat: ['regular'],
@@ -1322,9 +1404,19 @@ function consentTick() {
 // have not filled in yet - that is the whole reason they are going back. The
 // button sits OUTSIDE the form and is tied to it by id, the same way the Send
 // it button on an ops thread is, because the markup around it is not the form.
-function backControl(step) {
-  const previous = BEFORE[step];
-  if (!previous) return '<a href="/account">Cancel</a>';
+function backControl(step, guest, customer) {
+  // A GUEST HAS NOTHING SAVED, so no screen behind them was skipped. The
+  // customer object here is the synthetic one built from the form, and asking
+  // IT what is saved would say the wash screen had been skipped the moment they
+  // answered it - putting Back out of the wizard from screen two.
+  const previous = previousStep(step, guest ? { preferences: {} } : customer);
+
+  // THE FIRST SCREEN GOES BACK TOO, and where it goes depends on who is
+  // standing on it. A guest arrived from the number box, so that is what Back
+  // means to them - and their number is drawn back into it, because being sent
+  // back to an empty field is being asked the question a second time. Somebody
+  // signed in came from their account.
+  if (!previous) return `<a href="${guest ? '/account/login' : '/account'}">Back</a>`;
 
   return `<button type="submit" form="wizard" name="back" value="${previous}" formnovalidate
                   class="btn-link" style="background:none;border:0;padding:0;font:inherit;
@@ -1396,7 +1488,7 @@ function stepPage({ customer, step, given, error = '', opensOn = null, guest = f
 <section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
   ${error ? banner(escapeHtml(error)) : ''}
   <div class="card card-xl" style="padding:30px;">${form}</div>
-  <p style="margin:22px 0 0;">${backControl(step)}</p>
+  <p style="margin:22px 0 0;">${backControl(step, guest, customer)}</p>
 </section>`;
 }
 
@@ -1729,7 +1821,7 @@ router.post('/account/book', async (req, res, next) => {
     // refuse to let them leave. Back means "show me that screen again", nothing
     // more; every answer they HAVE given rides along in the form and is drawn
     // back onto whichever screen they land on.
-    if (form.back && BEFORE[form.back] !== undefined) return reshow(form.back);
+    if (form.back && ORDER.includes(form.back)) return reshow(form.back);
 
     // WHATEVER THIS STEP ANSWERED IS SAVED BEFORE ANYTHING ELSE - for somebody
     // who has an account. They abandon the booking halfway and we have still
@@ -1831,14 +1923,21 @@ router.post('/account/book', async (req, res, next) => {
       form.weekdays = weekdaysFrom(form).join(',');
     }
 
-    // Still something to ask? Ask it, carrying what we have so far.
-    const step = bookingStep(customer, form);
-    if (step !== 'book') {
-      if (step === 'when' && form.step === 'when' && form.regular === 'yes' && !form.weekdays) {
-        return reshow('when', 'Please pick at least one day.');
-      }
-      return reshow(step);
+    // ONE SCREEN FORWARD FROM THE ONE THEY WERE ON. See ORDER above for why
+    // this is not "the first thing still missing" any more.
+    //
+    // Anything that is not one of the four screens - a link straight into the
+    // wizard, a stale form - falls back to asking what is missing, which is the
+    // right question for somebody arriving rather than continuing.
+    const from = ORDER.includes(form.step) ? form.step : null;
+
+    if (from) {
+      const blank = unanswered(from, form);
+      if (blank) return reshow(from, blank);
     }
+
+    const step = from ? nextStep(from, who.customer) : bookingStep(customer, form);
+    if (step !== 'book') return reshow(step);
 
     // A STANDING ORDER IS SET UP BEFORE ITS FIRST PICKUP IS BOOKED, because the
     // schedule is what decides which day that pickup falls on. A one-off books
