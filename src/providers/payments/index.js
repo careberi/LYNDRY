@@ -83,6 +83,19 @@ module.exports = {
   isConfigured: driver !== disabled,
   mode: driver === disabled ? 'off' : isLive ? 'live' : 'test',
 
+  // THE ONE KEY THAT IS NOT A SECRET, handed out rather than hidden.
+  //
+  // Every other Stripe value stays inside this folder because it moves money.
+  // This one only lets a browser DRAW a card field: it goes in the page source
+  // of every site that has one, and it cannot read, charge or refund anything.
+  //
+  // It comes through here rather than being read from config at the page,
+  // so config.stripe still has exactly one reader and the day the vendor
+  // changes there is still one file to edit. The page that uses it does know
+  // whose field it is drawing - that is unavoidable, because the field is the
+  // vendor's own iframe - but nothing else in the app is told.
+  publishableKey: config.stripe.publishableKey,
+
   createCustomer: driver.createCustomer,
   createSetupLink: driver.createSetupLink,
   createSetupIntent: driver.createSetupIntent,

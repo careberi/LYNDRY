@@ -3,6 +3,9 @@
 const express = require('express');
 
 const db = require('../db');
+// baseUrl only. The Stripe keys stay behind src/providers/payments - see the
+// note on publishableKey there.
+const { config } = require('../config');
 const orders = require('../core/orders');
 const booking = require('../core/booking');
 const settings = require('../core/settings');
@@ -1493,6 +1496,177 @@ function stepPage({ customer, step, given, error = '', opensOn = null, guest = f
 }
 
 // ---------------------------------------------------------------------------
+// STEP: the card, on the screen the address was on.
+//
+// Neil: "Don't make add a card its own page. That's why it feels like a
+// surprise bill. On US checkout, address and card live in one flow."
+//
+// So Continue on the address screen sends nobody anywhere. The pickup is
+// written, said back to them at the top, and a panel opens underneath with
+// Stripe's own card field in it. Finishing that goes to the confirmation,
+// which is the only page change in the whole sequence.
+//
+// THE FIELD IS STRIPE'S, DRAWN INSIDE OUR PAGE. It is an iframe served from
+// js.stripe.com, so a card number still never touches this server or this
+// markup - the same guarantee the hosted page gave, without the hop. What we
+// hand it is a client secret, which authorises attaching a card to this one
+// setup and nothing else: it cannot charge, read a card, or reach another
+// customer.
+//
+// AND IF THE SCRIPT NEVER LOADS THERE IS STILL A WAY THROUGH. The panel ships
+// with a plain link to the hosted page, and the script removes that link only
+// once the field has actually mounted - on the element's own ready event,
+// rather than hopefully, one line after asking for it. A blocked script, a
+// dead CDN or an old browser leaves somebody with a working link instead of a
+// grey box. Same fail-safe rule the scroll reveal follows.
+// ---------------------------------------------------------------------------
+function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
+  const when = whenLineMdy(order);
+  const where = [customer.address_line1, customer.address_line2, customer.city]
+    .filter(Boolean)
+    .join(', ');
+
+  // Everything the page hands to the script goes through JSON.stringify rather
+  // than being dropped between quotes. It is the same reason escapeHtml() is
+  // used everywhere else: an apostrophe in an address would otherwise end the
+  // string it is sitting in and take the whole script with it.
+  const js = {
+    key: JSON.stringify(payments.publishableKey),
+    secret: JSON.stringify(clientSecret),
+    returnUrl: JSON.stringify(`${config.baseUrl}/account/booked/${token}`),
+    done: JSON.stringify(`/account/booked/${token}`),
+  };
+
+  return `
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
+    <p class="eyebrow eyebrow-brand">Place an order &middot; payment</p>
+    <h1 class="display-2" style="margin-bottom:10px;">Last step.</h1>
+    <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
+      Nothing is charged now. We weigh your laundry after pickup and charge then.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+
+  <!-- WHAT THEY JUST CONFIRMED, said back before they are asked for a card.
+       Neil's sequence: the address is confirmed, THEN the payment panel opens.
+       A card field with no reminder of what it is for is the surprise bill. -->
+  <div class="card card-xl" style="padding:26px 30px;">
+    <p class="eyebrow" style="margin-bottom:14px;">Your pickup</p>
+    <p style="font-size:19px;line-height:1.45;font-weight:600;color:var(--ink-900);margin:0 0 6px;">
+      ${escapeHtml(when)}
+    </p>
+    <p style="font-size:16px;line-height:1.45;color:var(--ink-600);margin:0;">
+      ${escapeHtml(where)}
+    </p>
+  </div>
+
+  <!-- THE PANEL THAT OPENS UNDERNEATH. Sunken rather than another white card,
+       so it reads as a drawer that opened under the pickup rather than a
+       second page stacked on the first. -->
+  <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
+    <p class="eyebrow" style="margin-bottom:6px;">Payment method</p>
+    <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
+      We keep this on file and charge it once, after we weigh your laundry.
+      We never see the number.
+    </p>
+
+    <form id="card-form">
+      <div id="payment-element"></div>
+
+      <p id="card-error" role="alert" hidden
+         style="font-size:15px;line-height:1.5;font-weight:600;color:var(--stain-500);margin:14px 0 0;"></p>
+
+      <button id="card-submit" type="submit" class="btn btn-primary btn-lg btn-full"
+              style="margin-top:22px;">
+        Save card and finish {{ICON_ARROW}}
+      </button>
+    </form>
+
+    <p id="card-fallback" style="font-size:15px;line-height:1.55;margin:18px 0 0;">
+      <a href="${escapeHtml(hostedUrl)}">Add your card on our secure payment page</a>
+    </p>
+  </div>
+
+  <p style="margin:22px 0 0;font-size:15px;color:var(--ink-500);">
+    Your pickup is held. It is confirmed the moment a card is saved.
+  </p>
+</section>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+(function () {
+  var form = document.getElementById('card-form');
+  var submit = document.getElementById('card-submit');
+  var errorBox = document.getElementById('card-error');
+  var fallback = document.getElementById('card-fallback');
+
+  // No Stripe.js, no card field. The form goes and the link stays, rather than
+  // leaving a button that does nothing.
+  if (typeof Stripe !== 'function') { form.hidden = true; return; }
+
+  var stripe = Stripe(${js.key});
+  var elements = stripe.elements({
+    clientSecret: ${js.secret},
+    // Their field, our page. Matching the ink outline and the radius is what
+    // stops it reading as somebody else's form dropped into the middle of ours.
+    appearance: {
+      theme: 'flat',
+      variables: {
+        colorPrimary: '#0EA47A',
+        colorBackground: '#FFFFFF',
+        colorText: '#101210',
+        colorDanger: '#E8412F',
+        borderRadius: '12px'
+      },
+      rules: {
+        '.Input': { border: '2px solid #101210', boxShadow: 'none' },
+        '.Input:focus': { border: '2px solid #101210', boxShadow: '0 0 0 3px #C9A7F5' },
+        '.Label': { fontWeight: '700', fontSize: '13px', letterSpacing: '0.06em' }
+      }
+    }
+  });
+
+  var payment = elements.create('payment', { layout: 'tabs' });
+  payment.mount('#payment-element');
+  payment.on('ready', function () { if (fallback) fallback.remove(); });
+
+  var busy = false;
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) return;
+    busy = true;
+
+    submit.disabled = true;
+    submit.textContent = 'Saving...';
+    errorBox.hidden = true;
+
+    stripe.confirmSetup({
+      elements: elements,
+      confirmParams: { return_url: ${js.returnUrl} }
+    }).then(function (result) {
+      // A card that needed no extra step never leaves this page, so we move
+      // ourselves. One that did has already gone to the bank and comes back to
+      // the return_url on its own.
+      if (result.error) {
+        errorBox.textContent = result.error.message || 'That card could not be saved. Please try again.';
+        errorBox.hidden = false;
+        submit.disabled = false;
+        submit.textContent = 'Save card and finish';
+        busy = false;
+        return;
+      }
+      window.location = ${js.done};
+    });
+  });
+})();
+</script>`;
+}
+
+// ---------------------------------------------------------------------------
 // STEP: just this once, or regularly?
 //
 // Neil's ask, and it comes before the day because the answer changes what the
@@ -2030,19 +2204,55 @@ router.post('/account/book', async (req, res, next) => {
     // card second. Somebody who is sent away to pay before their booking
     // exists comes back to nothing.
     if (result.needsCard) {
+      // THE LINK STILL GOES BY TEXT. The card field below is the fast way
+      // through for somebody sitting on the page; the text is what they have
+      // an hour later on the sofa, and it is the only way back in if the
+      // browser is closed on this screen.
       await billing
         .setupLinkMessage(customer)
         .then((text) => sendAndLog(customer.phone, text, customer.id))
         .catch((err) => console.error('Could not send a card link:', err.message));
 
+      // THE CARD OPENS UNDERNEATH, IT DOES NOT LEAD ANYWHERE. Neil's sequence:
+      // details in, Continue, the address confirmed, then a panel with the
+      // card field in it - all on one screen. Sending somebody to a page
+      // headed "One last thing" is what made this read as a surprise bill.
+      //
+      // A HOSTED LINK IS MINTED ALONGSIDE IT, and that is not waste: it is
+      // what the panel falls back to when Stripe's script does not load, and
+      // it costs one API call on the one screen where somebody is waiting for
+      // a card field anyway.
+      //
+      // IF ANY OF THIS FAILS WE STILL HAVE A BOOKED ORDER, so the old page is
+      // where we land rather than an error. The pickup is real either way and
+      // the text with the link has already gone.
+      // NO PUBLISHABLE KEY, NO CARD FIELD. It is the one Stripe value that
+      // lives in the environment rather than in the code, so it can be absent -
+      // it is absent on a laptop right now - and Stripe('') throws. Checking
+      // for it here means a missing key costs the inline panel and nothing
+      // else: the hosted page still works and the text has already gone.
+      if (!payments.publishableKey) {
+        return res.redirect(303, `/account/payment?booked=${result.order.order_number}`);
+      }
 
-      // ON TO THE CARD, WHICH IS THE LAST STEP OF PLACING AN ORDER RATHER THAN
-      // a separate errand. This used to bounce back to the dashboard with the
-      // news in the red error banner - good news, in the colour the design
-      // system reserves for things having gone wrong, next to no way to act on
-      // it. The link still goes by text as well, because the website never
-      // touches card details and somebody may rather do it on their phone.
-      return res.redirect(303, `/account/payment?booked=${result.order.order_number}`);
+      try {
+        const inline = await billing.createInlineCardSetup(customer);
+        const hosted = await billing.createSetupLink(customer);
+
+        return accountPage(res, {
+          title: 'Payment method',
+          body: cardStep({
+            customer,
+            order: result.order,
+            clientSecret: inline.clientSecret,
+            token: inline.token,
+            hostedUrl: hosted.url,
+          }),
+        });
+      } catch (err) {
+        console.error('Could not open the card field:', err.message);
+        return res.redirect(303, `/account/payment?booked=${result.order.order_number}`);
+      }
     }
 
 
@@ -2064,6 +2274,144 @@ router.post('/account/book', async (req, res, next) => {
     return next(err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// GET /account/booked/:token - the confirmation, and the only page change in
+// the whole sequence.
+//
+// Neil's step 5. Stripe sends a card that needed a bank check back here on its
+// own; a card that needed none never left the page and the script sends itself
+// here. Both arrive at the same screen.
+//
+// IT READS THE CARD BACK ITSELF rather than waiting for the webhook. The
+// webhook is what makes this reliable - it arrives whatever the browser did -
+// but it can be seconds late, and a confirmation page that says "no card yet"
+// about a card the customer just typed in is a page that gets reported as
+// broken. Whichever gets there first wins; the loser sees completed_at and
+// does nothing, which is the same race the hosted return page already runs.
+// ---------------------------------------------------------------------------
+router.get('/account/booked/:token', auth.requireCustomer, async (req, res, next) => {
+  try {
+    const { token } = req.params;
+
+    const { data: link, error } = await db
+      .from('payment_links')
+      .select('*, customers(*)')
+      .eq('token', token)
+      // SCOPED TO THE PERSON SIGNED IN. The token is unguessable, but a link is
+      // still a link: without this, one forwarded to somebody else would show
+      // them another customer's pickup and card.
+      .eq('customer_id', req.customer.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!link) return res.redirect(303, '/account');
+
+    let customer = req.customer;
+
+    if (!link.completed_at) {
+      const updated = await billing.recordSavedCard(link).catch((err) => {
+        console.error('Could not read back the saved card:', err.message);
+        return null;
+      });
+      if (updated) customer = updated;
+    }
+
+    const saved = billing.hasPaymentMethod(customer);
+
+    // The pickups this card just confirmed. Plural, because one card covers
+    // every one of them and confirming only the soonest would leave the rest
+    // off the driver's run sheet with nothing on screen to say why.
+    const waiting = await orders.findAllAwaitingCollection(customer.id).catch(() => []);
+
+    return accountPage(res, {
+      title: saved ? 'Pickup confirmed' : 'Card not saved',
+      body: bookedPage({ customer, orders: waiting, saved }),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+function bookedPage({ customer, orders: waiting, saved }) {
+  const card = billing.describeCard(customer);
+
+  const rows = (waiting || [])
+    .map(
+      (o) => `
+      <div style="display:flex;justify-content:space-between;gap:18px;padding:16px 0;border-bottom:1px solid var(--ink-100);">
+        <span style="font-size:16px;font-weight:600;color:var(--ink-900);">#${o.order_number}</span>
+        <span style="font-size:16px;color:var(--ink-700);text-align:right;">${escapeHtml(whenLineMdy(o))}</span>
+      </div>`
+    )
+    .join('');
+
+  // NOT SAVED IS NOT AN ERROR PAGE. They may have closed the card field or
+  // changed their mind, and the pickup is still theirs - it simply is not
+  // confirmed until a card is on it. Saying so plainly, with the way back, is
+  // better than a red banner about something they did on purpose.
+  if (!saved) {
+    return `
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
+    <p class="eyebrow eyebrow-brand">Place an order</p>
+    <h1 class="display-2" style="margin-bottom:10px;">No card was saved.</h1>
+    <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
+      Nothing was charged and nothing was stored. Your pickup is still held.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+  <div class="card card-xl" style="padding:30px;">
+    <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
+      We need a card on file before the driver comes out. It is confirmed the
+      moment one is saved.
+    </p>
+    <a href="/account/payment" class="btn btn-primary btn-lg btn-full">Add a card {{ICON_ARROW}}</a>
+  </div>
+  <p style="margin:22px 0 0;"><a href="/account">Back to your account</a></p>
+</section>`;
+  }
+
+  return `
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
+    <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
+    <h1 class="display-2" style="margin-bottom:10px;">You're booked.</h1>
+    <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
+      We have texted you the details. Leave the bag out and we will do the rest.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+
+  <div class="card card-xl" style="padding:26px 30px;">
+    <p class="eyebrow" style="margin-bottom:6px;">${(waiting || []).length === 1 ? 'Your pickup' : 'Your pickups'}</p>
+    ${rows || '<p style="font-size:16px;color:var(--ink-700);margin:12px 0 0;">Nothing booked yet.</p>'}
+  </div>
+
+  <!-- THE THREE THINGS SOMEBODY WANTS TO KNOW after handing over a card, and
+       the middle one is the point: nothing has been taken. -->
+  <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
+    <div style="display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;">
+      <span style="font-size:16px;color:var(--ink-700);">Charged today</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);">$0.00</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;">
+      <span style="font-size:16px;color:var(--ink-700);">Card on file</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);">${escapeHtml(card || 'saved')}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:18px;">
+      <span style="font-size:16px;color:var(--ink-700);">You are charged</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);text-align:right;">after we weigh it</span>
+    </div>
+  </div>
+
+  <p style="margin:26px 0 0;"><a href="/account">Back to your account</a></p>
+</section>`;
+}
 
 router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) => {
   try {
