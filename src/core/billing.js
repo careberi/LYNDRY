@@ -123,7 +123,14 @@ async function ensureProviderCustomer(customer) {
 // The token is 24 random bytes. Nothing but its unguessability protects the
 // page, because there is no login here — so it must not be short, sequential,
 // or derived from anything about the customer.
-async function createSetupLink(customer) {
+// WHERE THEY LAND AFTERWARDS DEPENDS ON WHERE THEY STARTED. Somebody who
+// followed a texted link has no session and belongs on the standalone "card
+// saved" page; somebody who pressed a button inside their own account belongs
+// back in their account. Both still record the card the same way.
+//
+// The placeholder is filled in here because the token does not exist until
+// this function makes it, so a caller cannot build the URL itself.
+async function createSetupLink(customer, { returnTo = '/pay/{token}/done' } = {}) {
   const stripeCustomerId = await ensureProviderCustomer(customer);
   const token = crypto.randomBytes(18).toString('base64url');
 
@@ -132,7 +139,7 @@ async function createSetupLink(customer) {
     lyndryCustomerId: customer.id,
     // Where the provider sends them when they're done. Our own page, so we
     // control what they read after typing their card in.
-    returnUrl: `${config.baseUrl}/pay/${token}/done`,
+    returnUrl: `${config.baseUrl}${returnTo.replace('{token}', token)}`,
     consentText: consentText(),
   });
 

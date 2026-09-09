@@ -1007,6 +1007,62 @@ router.post('/account/repeat/stop', auth.requireCustomer, async (req, res, next)
   }
 });
 
+// ---------------------------------------------------------------------------
+// GET /account/card/done/:token - back from Stripe, into their own account.
+//
+// Neil: "after you enter your information, it takes you back to your account
+// page." Somebody who pressed a button inside their account belongs back in it,
+// not on the standalone "card saved" page that a texted link lands on. Both
+// still record the card the same way; only the destination differs.
+//
+// IT READS THE CARD BACK ITSELF rather than waiting for the webhook. The
+// webhook is what makes this reliable - it arrives whatever the browser did -
+// but it can be seconds late, and an account page still showing "no card on
+// file" straight after saving one is a page that gets reported as broken.
+// Whichever gets there first wins; the loser sees completed_at and does
+// nothing.
+// ---------------------------------------------------------------------------
+router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, next) => {
+  try {
+    const { data: link, error } = await db
+      .from('payment_links')
+      .select('*, customers(*)')
+      .eq('token', req.params.token)
+      // SCOPED TO THE PERSON SIGNED IN. The token is unguessable, but a link is
+      // still a link: without this, one forwarded to somebody else would put a
+      // card on an account that is not theirs.
+      .eq('customer_id', req.customer.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!link) return back(res, '');
+
+    let customer = req.customer;
+
+    if (!link.completed_at) {
+      // They may have closed the page rather than finished, in which case there
+      // is no card to read and this quietly returns null.
+      const updated = await billing.recordSavedCard(link).catch((err) => {
+        console.error('Could not read back the saved card:', err.message);
+        return null;
+      });
+      if (updated) customer = updated;
+    }
+
+    // NOT SAVED IS NOT AN ERROR. They changed their mind or closed the tab, and
+    // the pickup is still theirs - it simply is not confirmed until a card is
+    // on it. The dashboard already says so on its own card, in red, so there is
+    // nothing to add here.
+    if (!billing.hasPaymentMethod(customer)) return back(res, '');
+
+    return back(
+      res,
+      `?saved=${encodeURIComponent(`${billing.describeCard(customer)} saved. Nothing has been charged.`)}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 // STRAIGHT TO STRIPE, NOTHING OF OURS IN BETWEEN. This is what the Update
 // button on the payment card posts to: it mints the session and redirects, so
 // the next thing the customer sees is the card page itself.
@@ -1024,7 +1080,11 @@ router.post('/account/card', auth.requireCustomer, async (req, res) => {
     // nothing and costs a hop - and the session was minted a millisecond ago,
     // so the one thing /pay/<token> adds, re-minting an expired session,
     // cannot apply. The row is still written, so the webhook still resolves.
-    const { providerUrl } = await billing.createSetupLink(req.customer);
+    // Back into their account afterwards rather than onto the standalone page
+    // a texted link lands on. See createSetupLink() for how the token gets in.
+    const { providerUrl } = await billing.createSetupLink(req.customer, {
+      returnTo: "/account/card/done/{token}",
+    });
     return res.redirect(303, providerUrl);
   } catch (err) {
     console.error('Could not open the card page:', err.message);
@@ -1547,7 +1607,7 @@ function midSentence(text) {
   return s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
 }
 
-function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
+function cardStep({ customer, order }) {
   const when = whenLineMdy(order);
   const where = [customer.address_line1, customer.address_line2, customer.city]
     .filter(Boolean)
@@ -1558,16 +1618,6 @@ function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
   // of the two says nothing for almost every customer who has told us.
   const spot = setup.spotOf(customer);
 
-  // Everything the page hands to the script goes through JSON.stringify rather
-  // than being dropped between quotes. It is the same reason escapeHtml() is
-  // used everywhere else: an apostrophe in an address would otherwise end the
-  // string it is sitting in and take the whole script with it.
-  const js = {
-    key: JSON.stringify(payments.publishableKey),
-    secret: JSON.stringify(clientSecret),
-    returnUrl: JSON.stringify(`${config.baseUrl}/account/booked/${token}`),
-    done: JSON.stringify(`/account/booked/${token}`),
-  };
 
   return `
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
@@ -1614,7 +1664,19 @@ function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
 
   <!-- THE PANEL THAT OPENED. Sunken grey rather than another white card, so it
        reads as a drawer under the address rather than a second page stacked on
-       the first. -->
+       the first.
+
+       A BUTTON TO STRIPE, NOT STRIPE'S FIELD IN OUR PAGE. Neil's call after
+       seeing the embedded version: it arrived carrying Link, Cash App, Klarna
+       and a second form asking for an email and a mobile number to make a Link
+       account, none of which we asked for and none of which we can turn off
+       from here. The hosted page is the same card capture without the shop
+       floor, and it comes with Apple Pay and Google Pay already working
+       because Stripe's own domain is the one Apple has verified.
+
+       What we give up is the hop. What we get back is a page we are not
+       fighting. createInlineCardSetup() and the setup_intent webhook stay in
+       place, tested, for the day that trade looks different. -->
   <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
     <p class="eyebrow" style="margin-bottom:6px;">Payment method</p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
@@ -1622,97 +1684,21 @@ function cardStep({ customer, order, clientSecret, token, hostedUrl }) {
       weigh your laundry.
     </p>
 
-    <form id="card-form">
-      <div id="payment-element"></div>
-
-      <p id="card-error" role="alert" hidden
-         style="font-size:15px;line-height:1.5;font-weight:600;color:var(--stain-500);margin:14px 0 0;"></p>
-
-      <button id="card-submit" type="submit" class="btn btn-primary btn-lg btn-full"
-              style="margin-top:22px;">
-        Save card and finish {{ICON_ARROW}}
+    <form method="post" action="/account/card" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        Add payment method {{ICON_ARROW}}
       </button>
     </form>
 
-    <p id="card-fallback" style="font-size:15px;line-height:1.55;margin:18px 0 0;">
-      <a href="${escapeHtml(hostedUrl)}">Add your card on our secure payment page</a>
+    <p style="font-size:14px;line-height:1.55;color:var(--ink-500);margin:16px 0 0;">
+      Handled by Stripe, our payment provider. We never see the number.
     </p>
   </div>
 
   <p style="margin:22px 0 0;font-size:15px;color:var(--ink-500);">
     Your pickup is held. It is confirmed the moment a card is saved.
   </p>
-</section>
-
-<script src="https://js.stripe.com/v3/"></script>
-<script>
-(function () {
-  var form = document.getElementById('card-form');
-  var submit = document.getElementById('card-submit');
-  var errorBox = document.getElementById('card-error');
-  var fallback = document.getElementById('card-fallback');
-
-  // No Stripe.js, no card field. The form goes and the link stays, rather than
-  // leaving a button that does nothing.
-  if (typeof Stripe !== 'function') { form.hidden = true; return; }
-
-  var stripe = Stripe(${js.key});
-  var elements = stripe.elements({
-    clientSecret: ${js.secret},
-    // Their field, our page. Matching the ink outline and the radius is what
-    // stops it reading as somebody else's form dropped into the middle of ours.
-    appearance: {
-      theme: 'flat',
-      variables: {
-        colorPrimary: '#0EA47A',
-        colorBackground: '#FFFFFF',
-        colorText: '#101210',
-        colorDanger: '#E8412F',
-        borderRadius: '12px'
-      },
-      rules: {
-        '.Input': { border: '2px solid #101210', boxShadow: 'none' },
-        '.Input:focus': { border: '2px solid #101210', boxShadow: '0 0 0 3px #C9A7F5' },
-        '.Label': { fontWeight: '700', fontSize: '13px', letterSpacing: '0.06em' }
-      }
-    }
-  });
-
-  var payment = elements.create('payment', { layout: 'tabs' });
-  payment.mount('#payment-element');
-  payment.on('ready', function () { if (fallback) fallback.remove(); });
-
-  var busy = false;
-
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (busy) return;
-    busy = true;
-
-    submit.disabled = true;
-    submit.textContent = 'Saving...';
-    errorBox.hidden = true;
-
-    stripe.confirmSetup({
-      elements: elements,
-      confirmParams: { return_url: ${js.returnUrl} }
-    }).then(function (result) {
-      // A card that needed no extra step never leaves this page, so we move
-      // ourselves. One that did has already gone to the bank and comes back to
-      // the return_url on its own.
-      if (result.error) {
-        errorBox.textContent = result.error.message || 'That card could not be saved. Please try again.';
-        errorBox.hidden = false;
-        submit.disabled = false;
-        submit.textContent = 'Save card and finish';
-        busy = false;
-        return;
-      }
-      window.location = ${js.done};
-    });
-  });
-})();
-</script>`;
+</section>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -2275,33 +2261,14 @@ router.post('/account/book', async (req, res, next) => {
       // IF ANY OF THIS FAILS WE STILL HAVE A BOOKED ORDER, so the old page is
       // where we land rather than an error. The pickup is real either way and
       // the text with the link has already gone.
-      // NO PUBLISHABLE KEY, NO CARD FIELD. It is the one Stripe value that
-      // lives in the environment rather than in the code, so it can be absent -
-      // it is absent on a laptop right now - and Stripe('') throws. Checking
-      // for it here means a missing key costs the inline panel and nothing
-      // else: the hosted page still works and the text has already gone.
-      if (!payments.publishableKey) {
-        return res.redirect(303, `/account/payment?booked=${result.order.order_number}`);
-      }
-
-      try {
-        const inline = await billing.createInlineCardSetup(customer);
-        const hosted = await billing.createSetupLink(customer);
-
-        return accountPage(res, {
-          title: 'Payment method',
-          body: cardStep({
-            customer,
-            order: result.order,
-            clientSecret: inline.clientSecret,
-            token: inline.token,
-            hostedUrl: hosted.url,
-          }),
-        });
-      } catch (err) {
-        console.error('Could not open the card field:', err.message);
-        return res.redirect(303, `/account/payment?booked=${result.order.order_number}`);
-      }
+      // NOTHING IS CREATED AT STRIPE HERE ANY MORE. The screen is the address
+      // said back to them and a button; the session is minted when they press
+      // it, in POST /account/card. Minting one now would burn a checkout
+      // session on every booking, including everyone who closes the tab.
+      return accountPage(res, {
+        title: 'Payment method',
+        body: cardStep({ customer, order: result.order }),
+      });
     }
 
 
