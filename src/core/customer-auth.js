@@ -105,6 +105,65 @@ function clearSessionCookie(res) {
   res.clearCookie(COOKIE_NAME, { path: '/account' });
 }
 
+// ---------------------------------------------------------------------------
+// THE GUEST COOKIE: a number we are part-way through taking an order for.
+//
+// Neil's flow. Somebody who is not a customer yet does not get a text - they
+// place the order in the browser, and the account is created at the end, when
+// they have given a name, an address and ticked the box. Until then there is no
+// customer row, so there is nothing to sign in to and nothing to point a
+// session at. This cookie is what carries them across those screens.
+//
+// IT IS SIGNED, and that is not ceremony. Without a signature anybody could set
+// this cookie to somebody else's number and walk it through to the end, and the
+// account created at the bottom would be in that person's name against their
+// phone. The signature means the only numbers that reach the last step are ones
+// this server put in the cookie itself.
+//
+// IT IS NOT A SESSION AND MUST NEVER BE TREATED AS ONE. It proves a number was
+// typed into our form, nothing more - nobody has verified they hold that phone.
+// So it may only ever do what a stranger may do: fill in an order that has not
+// been placed. requireCustomer() does not look at it, and no page that shows
+// somebody's orders, address or card may accept it.
+// ---------------------------------------------------------------------------
+const GUEST_COOKIE = 'ly_guest';
+
+// Long enough to fill in an order without being hurried, short enough that a
+// shared computer does not offer the next person a half-finished one.
+const GUEST_MINUTES = 60;
+
+function setGuestCookie(res, phone) {
+  const expiresAt = Date.now() + GUEST_MINUTES * 60 * 1000;
+  const value = `${phone}.${expiresAt}.${hmac(`guest.${phone}.${expiresAt}`)}`;
+
+  res.cookie(GUEST_COOKIE, value, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: config.env === 'production',
+    path: '/account',
+    maxAge: GUEST_MINUTES * 60 * 1000,
+  });
+}
+
+// The number, or null. Same shape as readSession() and just as strict.
+function readGuest(req) {
+  const parts = String(readCookie(req, GUEST_COOKIE) || '').split('.');
+  if (parts.length !== 3) return null;
+
+  const [phone, expiresAt, signature] = parts;
+
+  const expiry = Number(expiresAt);
+  if (!Number.isFinite(expiry) || expiry < Date.now()) return null;
+
+  if (!sameSecret(signature, hmac(`guest.${phone}.${expiresAt}`))) return null;
+
+  return phone;
+}
+
+function clearGuestCookie(res) {
+  res.clearCookie(GUEST_COOKIE, { path: '/account' });
+}
+
 // --- Throttling -------------------------------------------------------------
 
 const buckets = new Map();
@@ -258,7 +317,11 @@ async function verifyCode(rawPhone, rawCode, req) {
 
   const { data: customer } = await db
     .from('customers')
-    .select('id, name, status')
+    // THE WHOLE ROW, NOT THREE COLUMNS. The caller decides where to send
+    // somebody next from what is on their account - an address, wash
+    // preferences, a card - and a partial select made every one of those look
+    // missing, so a fully set-up customer was walked through setup again.
+    .select('*')
     .eq('phone', phone)
     .maybeSingle();
 
@@ -298,6 +361,34 @@ async function verifyCode(rawPhone, rawCode, req) {
 // --- The check routes use ---------------------------------------------------
 
 // Loads the signed-in customer onto the request, or sends them to sign in.
+// LOAD THE SESSION IF THERE IS ONE, AND DO NOTHING IF THERE IS NOT.
+//
+// requireCustomer() is a guard: no session and it redirects. This is the same
+// lookup without the verdict, for the one page that serves both a customer and
+// somebody who has no account yet - the order flow. That page decides for
+// itself what to do about a visitor with neither.
+//
+// It sets req.customer or leaves it undefined. It never redirects, never sends
+// a response, and applies the same rule requireCustomer() does: the row is
+// re-read every time and an unsubscribed customer is not signed in.
+async function attachCustomer(req) {
+  if (!hasKey()) return null;
+
+  const customerId = readSession(readCookie(req, COOKIE_NAME));
+  if (!customerId) return null;
+
+  const { data: customer } = await db
+    .from('customers')
+    .select('*')
+    .eq('id', customerId)
+    .maybeSingle();
+
+  if (!customer || customer.status !== 'ACTIVE') return null;
+
+  req.customer = customer;
+  return customer;
+}
+
 async function requireCustomer(req, res, next) {
   if (!hasKey()) {
     return res.status(503).type('text/plain').send('The server is not configured for sign-in.');
@@ -343,7 +434,11 @@ module.exports = {
   flushPendingCodes,
   verifyCode,
   requireCustomer,
+  attachCustomer,
   isSignedIn,
   setSessionCookie,
   clearSessionCookie,
+  setGuestCookie,
+  readGuest,
+  clearGuestCookie,
 };

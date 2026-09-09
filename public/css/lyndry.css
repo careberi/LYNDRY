@@ -947,6 +947,11 @@ button {
 }
 .fact-rail span:last-child::after { display: none; }
 
+/* The lilac bar under the hero. It needs the same lift off the page as the row
+   and the fact rail above it: the bubble layer is POSITIONED and this was not,
+   and a positioned element paints over an unpositioned one whatever order they
+   are written in - so bubbles drifted across the front of the button. */
+.order-online { position: relative; z-index: 1; }
 /* Rising soap bubbles. Decorative, so the layer is aria-hidden and cannot be
    clicked through. Each bubble starts with a NEGATIVE animation delay, which
    is what makes the field already full when the page loads instead of
@@ -1518,4 +1523,31 @@ button {
 
 @media (max-width: 900px) {
   .sms-fallback { display: block; }
+}
+
+/* --- The pickup spot, and the box that only matters sometimes -------------
+
+   The portal asks where the driver should find the bag from a short list, with
+   "Somewhere else" at the end and a text box under it. The box is only useful
+   for that one choice, so it is hidden for the others.
+
+   NO JAVASCRIPT, AND IT FAILS SAFE. Both rules live inside the @supports, so a
+   browser without :has() never applies the display:none either and shows both
+   fields - which is mildly untidy and always usable. Hiding it unconditionally
+   and revealing it conditionally would leave anyone on an older browser with a
+   field they can never fill in.
+
+   option:checked tracks the live selection, so this updates as the menu
+   changes with no script involved. */
+@supports selector(:has(*)) {
+  .spot-group .spot-other { display: none; }
+  .spot-group:has(select[name="spot"] option[value="OTHER"]:checked) .spot-other { display: block; }
+}
+
+/* How often, which only matters once "Yes" is chosen. Same shape as the
+   .spot-group rule above and the same reason for the @supports: a browser
+   that cannot reveal it must not hide it either. */
+@supports selector(:has(*)) {
+  .repeat-group .repeat-cadence { display: none; }
+  .repeat-group:has(input[name="regular"][value="yes"]:checked) .repeat-cadence { display: flex; }
 }

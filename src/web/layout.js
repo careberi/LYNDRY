@@ -27,16 +27,36 @@ const { config } = require('../config');
 
 // /account is deliberately NOT here.
 //
-// Booking happens in the text thread; putting "Schedule online" in the nav
-// invites people to go and find a form instead, which is the opposite of the
-// product. The page still works for anyone who has the link, exactly like
-// /signup — unlinked rather than removed, so it stays available as a fallback
-// if texting is ever down.
+// THE PORTAL IS LINKED NOW, AND IT DELIBERATELY WAS NOT BEFORE.
+//
+// The old note here said that putting a booking form in the nav "invites
+// people to go and find a form instead, which is the opposite of the product",
+// and left /account and /signup reachable only by anyone who already had the
+// address. That was right while the text thread was the only way in.
+//
+// Neil's call, 8 September: there is a customer portal now, people are meant
+// to use it, and a portal nobody can navigate to is not one. What has NOT
+// changed is which door is the loud one - "Get started" is still the primary
+// button and still goes to the phone box on the home page, because texting us
+// is still how most people should start. Sign in is a quiet nav link, for
+// somebody who already has an account and wants their own orders.
+//
+// ONE LINK FOR BOTH STATES. It points at /account/login, which redirects
+// straight to /account for anybody already signed in - so the nav needs to
+// know nothing about the session, and no page has to be rendered two ways.
 const NAV_LINKS = [
   { href: '/how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
+  { href: '/faq', label: 'Questions' },
   { href: '/partners', label: 'Partners' },
   { href: '/contact', label: 'Contact' },
+
+  // ALWAYS "ACCOUNT", SIGNED IN OR NOT. Neil's call. It briefly said "Sign in"
+  // and swapped to "Account" once a session existed, which meant threading the
+  // session through every page render to change one word. /account/login sends
+  // anybody already signed in straight on to /account, so the one label is true
+  // both ways: it is where your account is, whether or not you are in yet.
+  { href: '/account/login', label: 'Account' },
 ];
 
 // Replaces every {{TOKEN}} in a chunk of HTML with its value.
@@ -141,14 +161,16 @@ const ICON_TOKENS = Object.freeze({
 // Sticky ink header. The design system pins exactly one thing on the site and
 // this is it — 68px of ink, and the hero is sized to fill what's left.
 function navBar(currentPath) {
-  const links = NAV_LINKS.map(({ href, label }) => {
-    const current = href === currentPath ? ' aria-current="page"' : '';
-    return `<a href="${href}"${current}>${label}</a>`;
-  }).join('\n          ');
+  const links = NAV_LINKS
+    .map(({ href, label }) => {
+      const current = href === currentPath ? ' aria-current="page"' : '';
+      return `<a href="${href}"${current}>${label}</a>`;
+    })
+    .join('\n          ');
 
-  const mobileLinks = NAV_LINKS.map(
-    ({ href, label }) => `<a href="${href}">${label}</a>`
-  ).join('\n            ');
+  const mobileLinks = NAV_LINKS
+    .map(({ href, label }) => `<a href="${href}">${label}</a>`)
+    .join('\n            ');
 
   return `
     <header class="site-header">
@@ -199,7 +221,21 @@ function footer() {
           <div style="display:flex;flex-direction:column;gap:10px;">
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
+            <a href="/faq">Questions</a>
             <a href="/#get-started">Get started</a>
+          </div>
+        </div>
+
+        <!-- BOTH DOORS, NAMED. The header carries one quiet "Sign in"; this is
+             where somebody who has not signed up yet is told the account exists
+             at all. /signup had no link anywhere on the site. -->
+        <!-- ONE ENTRY, because there is one screen. It used to offer "Sign in"
+             and "Create an account" side by side, which is a choice nobody can
+             make before they have typed a number. -->
+        <div>
+          <p class="footer-head">Your account</p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <a href="/account/login">Sign in or sign up</a>
           </div>
         </div>
 

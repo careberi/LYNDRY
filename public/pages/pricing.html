@@ -9,7 +9,7 @@
 <section class="container" style="padding:88px 40px 48px;">
   <p class="eyebrow eyebrow-brand">Pricing</p>
   <h1 class="display-2">One price. No surprises.</h1>
-  <p class="lead" style="max-width:44ch;">Weighed after pickup, texted to you straight away, charged when we bring it back.</p>
+  <p class="lead" style="max-width:44ch;">Weighed after pickup, texted to you right away, charged once we weigh it.</p>
 </section>
 
 <!-- ===================================================================== -->
@@ -26,7 +26,7 @@
       <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;">
         <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
           <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Pickup from your door, whenever you need it — no fixed route days</span>
+          <span>Pickup from your door, whenever you need it, no fixed route days</span>
         </li>
         <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
           <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
@@ -42,7 +42,7 @@
         </li>
         <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
           <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Free cancellation right up until your bag is collected</span>
+          <span>Free cancellation right up until your bag is picked up</span>
         </li>
       </ul>
     </div>
@@ -63,10 +63,10 @@
         <span style="font-size:15px;font-weight:600;">per pound</span>
       </div>
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:20px 0 26px;">
-        {{MINIMUM}} minimum per pickup &mdash; that's the first {{MINIMUM_LB}}.
-        Nothing is charged when you book. We weigh your bag after pickup and
-        charge once on delivery, and anything over the minimum is just {{PRICE_PER_LB}} a
-        pound. A typical bag runs {{ESTIMATE_RANGE}}.
+        {{MINIMUM}} minimum per pickup. That's the first {{MINIMUM_LB}}.
+        Nothing is charged when you book. We weigh your bag after pickup, text
+        you the total, and charge once. Anything over the minimum is just
+        {{PRICE_PER_LB}} a pound. A typical bag runs {{ESTIMATE_RANGE}}.
       </p>
       <a href="/#get-started" class="btn btn-ink btn-full">Get started {{ICON_ARROW_SM}}</a>
     </div>
@@ -119,7 +119,7 @@
       <span class="amount">Included</span>
     </div>
     <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Cancelling before collection</span>
+      <span style="font-size:16px;color:var(--ink-800);">Cancel before pickup</span>
       <span class="amount">Free</span>
     </div>
     <div class="price-row">
@@ -158,19 +158,19 @@
       </div>
       <div class="qa">
         <h3>How do I know what I'll be charged?</h3>
-        <p>We weigh your laundry after collecting it and multiply by {{PRICE_PER_LB}}. A typical {{BAG_WEIGHT}} bag works out around {{ESTIMATE_RANGE}}. You get the exact figure by text before the charge lands.</p>
+        <p>We weigh your laundry after picking it up and multiply by {{PRICE_PER_LB}}. A typical {{BAG_WEIGHT}} bag works out around {{ESTIMATE_RANGE}}. You get the exact figure by text before the charge goes through.</p>
       </div>
       <div class="qa">
         <h3>How do I pay?</h3>
-        <p>Before your first pickup we text you a secure link to add a card. It's handled by Stripe, our payment processor — the card number never touches this website and we never see it.</p>
+        <p>Before your first pickup we text you a secure link to add a card. It's handled by Stripe, our payment processor. The card number never touches this website and we never see it.</p>
       </div>
       <div class="qa">
         <h3>When exactly am I charged?</h3>
-        <p>Twice, and you're told both times. The {{MINIMUM}} minimum is charged when you book — that covers the first {{MINIMUM_LB}}. After we weigh your laundry, anything above the minimum is charged when we deliver it back, and you get a text with the weight and the total before that happens. You are only ever charged for a pickup, never for having an account. If you set up a repeating pickup we text you the day before each one, so nothing is ever charged without warning.</p>
+        <p>Once, and you are told as it happens. Nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged: the text with the weight and the total comes at the same time. You are only ever charged for a pickup, never for having an account. If you set up a repeating pickup we text you the evening before each one, so nothing is ever charged without warning.</p>
       </div>
       <div class="qa">
         <h3>What if my laundry weighs less than {{MINIMUM_LB}}?</h3>
-        <p>The {{MINIMUM}} minimum is the price. A small load still gets a full pickup, a full wash and fold, and a full delivery, which is what the minimum covers. Cancel before we collect and the {{MINIMUM}} comes straight back to your card.</p>
+        <p>The {{MINIMUM}} minimum is the price. A small load still gets a full pickup, a full wash and fold, and a full delivery, which is what the minimum covers. Cancel before we pick up and there is nothing to pay.</p>
       </div>
       <div class="qa">
         <h3>Do you charge for pickup or delivery?</h3>
@@ -178,7 +178,7 @@
       </div>
       <div class="qa" style="border-bottom:none;">
         <h3>What if something needs special handling?</h3>
-        <p>Mention it when you book and we'll take care of it. If it's something we can't do, we'll tell you before we collect — not after.</p>
+        <p>Mention it when you book and we'll take care of it. If it's something we can't do, we'll tell you before we pick up, not after.</p>
       </div>
     </div>
 

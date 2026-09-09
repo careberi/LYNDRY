@@ -285,6 +285,51 @@ async function addSchedule(customer, { cadence, weekday, timeOfDay = null }) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// BOOK THE NEXT ONE, NOW, WITHOUT SAYING ANYTHING.
+//
+// Neil's ask: the moment a standing pickup is collected, the following one
+// should appear in their upcoming orders. Before this the nightly pass booked
+// it the evening before, so somebody on a weekly pickup saw an empty board for
+// six days out of seven and had no way to tell the arrangement was still live.
+//
+// IT SENDS NOTHING. bookDue() texts as it books, because there it books the
+// day before and the message says "tomorrow". This runs a week early, where
+// that sentence would be a lie - so the customer hears about it in the ordinary
+// evening reminder instead, which now carries the SKIP line for any pickup a
+// schedule made.
+//
+// SAFE TO RUN TWICE. bookPickup() refuses a second pickup on a day that
+// already has one, so this and the nightly pass cannot double-book between
+// them - whichever gets there first wins and the other is a no-op.
+// `after` is the date of the pickup that has just been collected. The next one
+// is counted from the DAY AFTER it, not from today: a Thursday pickup collected
+// on Thursday morning is still "today", so counting from today would land on the
+// same Thursday and book a second pickup for a day the van has already been to.
+// Nothing refuses that either, because the first one is no longer awaiting
+// collection - it is in the van.
+async function bookNext(customer, { after = null } = {}) {
+  const schedules = await forCustomer(customer.id);
+  const booked = [];
+  const from = after ? addDays(after, 1) : booking.today();
+
+  for (const schedule of schedules) {
+    const date = nextDate(schedule, from);
+    if (!date) continue;
+
+    const result = await booking.bookPickup(customer, {
+      pickupDate: date,
+      pickupTime:
+        schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
+      fromSchedule: true,
+    });
+
+    if (result.ok) booked.push(result.order);
+  }
+
+  return booked;
+}
+
 // End one schedule, or all of them when no id is given - "stop the weekly
 // pickups" from somebody with two means both.
 async function stop(customer, scheduleId = null) {
@@ -331,6 +376,7 @@ module.exports = {
   dueOn,
   bookDue,
   addSchedule,
+  bookNext,
   stop,
   pauseUntil,
 };

@@ -35,7 +35,7 @@
 // is gone is any option that charges, not the ability to have one.
 const OPTIONS = Object.freeze({
   fabric_softener: Object.freeze({
-    label: 'Softener',
+    label: 'Fabric softener',
     default: 'STANDARD',
     // A yes and a no, and the SHORT names say exactly that. "Softener:
     // Softener or No Softener" is what building the question out of the full
@@ -54,7 +54,7 @@ const OPTIONS = Object.freeze({
   }),
 
   water_temp: Object.freeze({
-    label: 'Water',
+    label: 'Water temperature',
     default: 'COLD',
     choices: Object.freeze([
       Object.freeze({ value: 'COLD', label: 'Cold', cents: 0 }),
@@ -165,8 +165,8 @@ function describeSaved(prefs) {
   const lines = washLines(prefs);
   if (!lines.length) return '';
 
-  const water = lines.find(([k]) => k === 'Water');
-  const softener = lines.find(([k]) => k === 'Softener');
+  const water = lines.find(([k]) => k === OPTIONS.water_temp.label);
+  const softener = lines.find(([k]) => k === OPTIONS.fabric_softener.label);
 
   // The detergent is not mentioned. It is the same for everybody, so reading it
   // back as though they had chosen it is telling somebody what they have been
@@ -242,9 +242,9 @@ const QUESTION = (() => {
   return [
     'How would you like your laundry washed?',
     '',
-    `Water: ${list(OPTIONS.water_temp.choices)}`,
+    `${OPTIONS.water_temp.label}: ${list(OPTIONS.water_temp.choices)}`,
     '',
-        `Softener: ${list(OPTIONS.fabric_softener.choices)}`,
+    `${OPTIONS.fabric_softener.label}: ${list(OPTIONS.fabric_softener.choices)}`,
   ].join('\n');
 })();
 

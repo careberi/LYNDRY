@@ -7,6 +7,8 @@ const express = require('express');
 const db = require('../db');
 const notify = require('../core/notify');
 const onboarding = require('../core/onboarding');
+const wash = require('../core/wash');
+
 const throttle = require('../core/throttle');
 const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
@@ -46,17 +48,18 @@ const PAGES = [
     description: `${site.pricePerLb} per pound for wash, dry and fold. No subscription, no minimum, pickup and delivery included.`,
   },
   {
-    path: '/signup',
-    file: 'signup.html',
-    title: 'Get started',
-    description: 'Set up your LYNDRY account once, then book laundry pickups by text message.',
+    path: '/faq',
+    file: 'faq.html',
+    title: 'Questions',
+    description:
+      'Common questions about LYNDRY laundry pickup and delivery: no app, you do not need to be home, how the price works and what bags you can use.',
   },
-  {
-    path: '/signup/thanks',
-    file: 'signup-thanks.html',
-    title: "You're all set",
-    description: 'Your LYNDRY account is ready.',
-  },
+  // /signup is a redirect now, not a page - see the route below. Creating an
+  // account and signing in are one screen.
+  // /signup/thanks is gone. Creating an account now ends on the code page and
+  // then in the portal, so a confirmation screen in between was a page telling
+  // somebody their account existed while the thing they came to do - book a
+  // pickup - was still two clicks away and unmentioned.
   {
     path: '/start/sent',
     file: 'start-sent.html',
@@ -179,21 +182,16 @@ function errorBanner(message, heading = "We couldn't create your account") {
   </section>`;
 }
 
-// The values the signup form needs in order to redisplay what someone typed.
-function signupTokens(form = {}, errorMessage = '') {
-  return {
-    FORM_ERROR: errorMessage ? errorBanner(errorMessage) : '',
-    V_NAME: escapeHtml(form.name),
-    V_PHONE: escapeHtml(form.phone),
-    V_EMAIL: escapeHtml(form.email),
-    V_ADDRESS1: escapeHtml(form.address_line1),
-    V_ADDRESS2: escapeHtml(form.address_line2),
-    V_CITY: escapeHtml(form.city),
-    V_STATE: escapeHtml(form.state || 'NJ'),
-    V_ZIP: escapeHtml(form.postal_code),
-    V_INSTRUCTIONS: escapeHtml(form.special_instructions),
-  };
-}
+// The two values the signup form needs in order to keep what someone typed.
+//
+// It used to carry eight - an address, a town, a state, a ZIP, a spot - back
+// when this form asked for all of it. Those are collected in the portal now,
+// so the tokens went with the fields. FORM_ERROR stays for the case where
+// somebody reaches /signup?phone=... with something unusable in it; a real
+// validation failure is rendered by signupStep() in src/routes/account.js,
+// which is where the handler lives.
+// signupTokens() is gone with public/pages/signup.html. /signup is a redirect
+// to /account/login now, and that page is rendered by src/routes/account.js.
 
 // The values the partner form needs in order to redisplay what someone typed.
 function partnerTokens(form = {}, errorMessage = '') {
@@ -232,7 +230,7 @@ async function extraTokensFor(page, req) {
   // The home page's hero form hands the number over here, so someone who
   // typed it there doesn't have to type it again. It is only ever prefilled —
   // consent still has to be given on this page, with the unticked box.
-  if (page.path === '/signup') return signupTokens({ phone: req.query.phone });
+
 
   // The partner form needs empty values for its fields on a fresh visit.
   if (page.path === '/partners') return partnerTokens();
@@ -525,7 +523,7 @@ router.get('/robots.txt', (req, res) => {
 });
 
 router.get('/sitemap.xml', (req, res) => {
-  const urls = PAGES.filter((p) => p.path !== '/signup/thanks')
+  const urls = PAGES
     .map((p) => `  <url><loc>${config.baseUrl}${p.path}</loc></url>`)
     .join('\n');
 
@@ -625,115 +623,9 @@ router.post('/start', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// The signup form handler.
-//
-// Two jobs, both of which matter:
-//   1. Save the customer profile, so SMS never has to ask about preferences
-//   2. Record consent to be texted — the timestamp and the IP address are our
-//      legal proof that this person opted in, and carriers ask to see it
+// Creating an account lives in src/routes/account.js, on the same screen as
+// signing in. /signup redirects there; see the route above.
 // ---------------------------------------------------------------------------
-
-const SIGNUP_PAGE = PAGES.find((p) => p.path === '/signup');
-
-router.post('/signup', async (req, res, next) => {
-  const form = req.body || {};
-
-  const fail = (message) =>
-    render(res, SIGNUP_PAGE, signupTokens(form, message), 400);
-
-  try {
-    // --- Consent. Checked first, because nothing else matters without it. ---
-    if (form.sms_consent !== 'yes') {
-      return fail(
-        'Please tick the box agreeing to receive text messages. LYNDRY works over ' +
-          'text, so we cannot set up an account without it.'
-      );
-    }
-
-    // --- Required fields ---
-    const name = String(form.name || '').trim();
-    const email = String(form.email || '').trim();
-    const addressLine1 = String(form.address_line1 || '').trim();
-    const city = String(form.city || '').trim();
-    const state = String(form.state || '').trim().toUpperCase();
-    const postalCode = String(form.postal_code || '').trim();
-
-    if (!name) return fail('Please tell us your name.');
-    if (!looksLikeEmail(email)) return fail('That email address does not look right.');
-    if (!addressLine1 || !city || !state || !postalCode) {
-      return fail('Please give us a full pickup address, including city, state and ZIP code.');
-    }
-    if (!/^\d{5}$/.test(postalCode)) return fail('Please enter a five-digit ZIP code.');
-    if (!/^[A-Z]{2}$/.test(state)) return fail('Please enter a two-letter state, for example NJ.');
-
-    const phone = normalisePhone(form.phone);
-    if (!phone) {
-      return fail('Please enter a valid 10-digit US mobile number, for example (201) 555-0142.');
-    }
-
-    // --- Is this number already registered? ---
-    //
-    // We deliberately do NOT overwrite an existing record. Anyone can type any
-    // phone number into this form, so allowing an update here would let a
-    // stranger change a real customer's delivery address.
-    const { data: existing, error: lookupError } = await db
-      .from('customers')
-      .select('id')
-      .eq('phone', phone)
-      .maybeSingle();
-
-    if (lookupError) throw lookupError;
-
-    if (existing) {
-      return fail(
-        `That mobile number is already registered with LYNDRY. If it's yours and you ` +
-          `need to change something, just text us and we'll sort it out.`
-      );
-    }
-
-    // --- Save ---
-    const { error: insertError } = await db.from('customers').insert({
-      phone,
-      name,
-      email,
-      address_line1: addressLine1,
-      address_line2: String(form.address_line2 || '').trim() || null,
-      city,
-      state,
-      postal_code: postalCode,
-
-      preferences: {
-        water_temp: ['COLD', 'WARM', 'HOT'].includes(form.water_temp) ? form.water_temp : 'COLD',
-        detergent: ['STANDARD', 'HYPOALLERGENIC', 'CUSTOMER_PROVIDED'].includes(form.detergent)
-          ? form.detergent
-          : 'STANDARD',
-        fabric_softener: form.fabric_softener === 'yes',
-        default_pickup_method:
-          form.default_pickup_method === 'HAND_TO_DRIVER' ? 'HAND_TO_DRIVER' : 'LEAVE_OUTSIDE',
-        special_instructions: String(form.special_instructions || '').trim(),
-      },
-
-      // Legal proof of opt-in. req.ip is the visitor's real address because
-      // index.js sets 'trust proxy' — without that we would record the
-      // hosting platform's proxy instead, which would be worthless.
-      sms_consent_at: new Date().toISOString(),
-      sms_consent_ip: req.ip,
-      // Which door they came through. See migration 0012 — an audit asks how
-      // consent was obtained, not just whether it was.
-      sms_consent_source: 'WEB_SIGNUP',
-
-      status: 'ACTIVE',
-    });
-
-    if (insertError) throw insertError;
-
-    // Redirect rather than rendering directly, so refreshing the confirmation
-    // page doesn't try to sign the customer up a second time.
-    return res.redirect(303, '/signup/thanks');
-  } catch (err) {
-    return next(err);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // The partner form.
@@ -745,6 +637,26 @@ router.post('/signup', async (req, res, next) => {
 // the durable record, and the text is a best-effort nudge. If texting is down —
 // which it is until carrier registration clears — the enquiry is still safe.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// /signup IS ONE DOOR WITH /account/login NOW.
+//
+// Neil's call. There were two screens and a person had to know which of the two
+// they were before they could start - a stranger to /signup, a customer to
+// sign-in. They do not care which they are; they want to place an order. The
+// number decides now, on one screen.
+//
+// THE URL STAYS ALIVE because it is not only ours: it is in the HELP reply
+// every carrier requires, on the messaging terms page, and in whatever anybody
+// has already bookmarked or written down. A 301 keeps every one of those
+// working and tells a search engine the page moved for good.
+router.get('/signup', (req, res) => {
+  const phone = String(req.query.phone || '').trim();
+  return res.redirect(
+    301,
+    phone ? `/account/login?phone=${encodeURIComponent(phone)}` : '/account/login'
+  );
+});
 
 const PARTNERS_PAGE = PAGES.find((p) => p.path === '/partners');
 

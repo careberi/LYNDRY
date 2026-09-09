@@ -480,9 +480,18 @@ function taskCard(run, user = null) {
   //
   // Only the two door steps carry it. On the tag, weigh, clip and load steps
   // the bag is already in his hands and repeating it would be furniture.
+  // HOW TO GET TO IT, UNDER WHERE IT IS. The customer saves this once on their
+  // account - a gate code, a doorman to ask, which path - and without it here
+  // it would be a box on a form that nothing ever read. It rides with the spot
+  // because both answer the same question at the same doorstep.
   const where =
     task && task.spot
-      ? stopLine('Where', escapeHtml(task.spot), 'stop-line-plain')
+      ? stopLine('Where', escapeHtml(task.spot), 'stop-line-plain') +
+        (task.access
+          ? '<p style="margin:6px 0 0;font-size:15px;line-height:1.45;color:var(--ink-700);">' +
+            escapeHtml(task.access) +
+            '</p>'
+          : '')
       : '<div style="height:6px;"></div>';
 
   // THE SAME TWO LABELLED LINES AS THE CARD BEFORE IT. He taps "I'm here" and

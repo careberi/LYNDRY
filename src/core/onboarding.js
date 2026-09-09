@@ -95,7 +95,7 @@ function introduction(opening, { promo = null, opensOn = null } = {}) {
   const offer =
     promotions.freeOfferLine(promo) ||
     promotions.offerLine(promo) ||
-    `It is ${site.pricePerLb} a pound, weighed after we collect it.`;
+    `It is ${site.pricePerLb} a pound, weighed after we pick it up.`;
 
   // THE ASK KNOWS WHEN A VAN CAN ACTUALLY COME. These messages go out before
   // the AI ever sees the conversation, so they are the ones that cannot work
@@ -108,7 +108,7 @@ function introduction(opening, { promo = null, opensOn = null } = {}) {
 
   return [
     `${opening} It's ${site.name}, wash-and-fold pickup and delivery in ` +
-      `${site.serviceArea}. Collected at your door, back the ${site.turnaround}.`,
+      `${site.serviceArea}. Picked up at your door, back the ${site.turnaround}.`,
     offer,
     ask,
   ].join('\n\n');

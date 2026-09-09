@@ -497,8 +497,8 @@ const ES = Object.freeze({
 
   // Wash fields, so the instructions themselves are readable
   'Detergent': 'Detergente',
-  'Softener': 'Suavizante',
-  'Water': 'Agua',
+  'Fabric softener': 'Suavizante',
+  'Water temperature': 'Temperatura del agua',
   'Standard scented': 'Con aroma normal',
   // The detergent line is a STANDARD now, not a choice, so its value is the
   // bare word rather than one of the old option labels.

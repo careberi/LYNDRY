@@ -70,8 +70,8 @@ function reminderMessage(order) {
   const spot = spotOf(order);
 
   const head = when
-    ? `Reminder: we're collecting your laundry tomorrow, ${when}.`
-    : `Reminder: we're collecting your laundry tomorrow.`;
+    ? `Reminder: we're picking up your laundry tomorrow, ${when}.`
+    : `Reminder: we're picking up your laundry tomorrow.`;
 
   // Handed over in person, so there is no bag to leave anywhere.
   const where =
@@ -81,7 +81,19 @@ function reminderMessage(order) {
       ? `Please have the bag out at the ${spot}.`
       : `Please have the bag out ready for us.`;
 
-  return `${head} ${where} Text us if anything changes.`;
+  // THE WAY OUT RIDES WITH THE REMINDER FOR A STANDING ORDER.
+  //
+  // It used to be attached to the booking instead - recurring.bookDue() booked
+  // tomorrow and texted "reply SKIP" in the same breath. Now that a standing
+  // pickup is booked as soon as the previous one is collected, that message
+  // would go out a week early saying "tomorrow", so the way out moved here,
+  // onto the message that actually lands the night before. Every pickup a
+  // schedule made carries it, however far ahead it was written.
+  const out = order.from_schedule
+    ? ` Reply SKIP if you don't need it this week and we'll cancel it, no charge.`
+    : '';
+
+  return `${head} ${where} Text us if anything changes.${out}`;
 }
 
 // Everything due a reminder for `date`, sent, and stamped as it goes.

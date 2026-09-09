@@ -83,6 +83,7 @@ async function tasksForCollect(order) {
       // plumbing, not his instruction.
       detail: null,
       spot: spotOf(order),
+      access: accessOf(order),
       spotLabel: 'The bags are here',
       done: Boolean(order.collected_at),
     },
@@ -401,6 +402,7 @@ async function tasksAfterPickup(order) {
     // the same sentence twice on one screen.
     detail: 'Photograph them where you leave them. This charges the card.',
     spot: spotOf(order),
+      access: accessOf(order),
     spotLabel: 'Leave them here',
     done: order.status === 'DELIVERED',
     blockedBy: scan.allScanned ? null : 'scan',
@@ -461,6 +463,7 @@ async function tasksForDeliver(order) {
             : `Drop ${carrying} bag${carrying === 1 ? '' : 's'} off`,
         detail: 'Photograph them where you leave them.',
         spot: spotOf(order),
+      access: accessOf(order),
         spotLabel: 'Leave them here',
         done: Boolean(order.delivered_at),
       },
@@ -514,6 +517,7 @@ async function tasksForDeliver(order) {
       title: 'Drop the bags off',
       detail: 'Photograph them where you leave them.',
       spot: spotOf(order),
+      access: accessOf(order),
       spotLabel: 'Leave them here',
       done: Boolean(order.delivered_at),
       blockedBy: stripped ? null : 'strip',
@@ -536,15 +540,30 @@ async function tasksForDeliver(order) {
 //
 // The order's own snapshot wins over the customer row for the same reason it
 // does everywhere else: this is what THIS order was booked with.
-function spotOf(order) {
+function prefsOf(order) {
   const own = order.preferences && Object.keys(order.preferences).length ? order.preferences : null;
-  const prefs = own || (order.customers && order.customers.preferences) || {};
+  return own || (order.customers && order.customers.preferences) || {};
+}
+
+function spotOf(order) {
+  const prefs = prefsOf(order);
 
   const spot = String(prefs.dropoff_spot || prefs.special_instructions || '').trim();
   if (!spot) return null;
 
   // Customers type "front door", not "Front door", and this is read at a run.
   return spot.charAt(0).toUpperCase() + spot.slice(1);
+}
+
+// HOW TO GET TO THE SPOT. The gate code, the doorman, which path - saved once
+// on the customer rather than typed into every booking, and shown to the
+// driver beside the spot itself. It is the difference between knowing which
+// door and being able to reach it.
+//
+// It never reaches the laundromat: /o/<code> is built from an allowlist in
+// wash.washLines(), so nothing added to preferences can turn up there.
+function accessOf(order) {
+  return String(prefsOf(order).access_notes || '').trim() || null;
 }
 
 // Is this stop finished?

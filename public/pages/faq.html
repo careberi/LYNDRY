@@ -1,0 +1,145 @@
+<!-- The customer FAQ. Handled by the PAGES table in src/routes/web.js.
+
+     Neil's ask, and it is the page a stranger opens before deciding whether we
+     are real. The four he named come first - app, being home, price, bags -
+     because those are the ones people actually ask, and three of them are a
+     one-word answer.
+
+     THE SHORT ANSWER IS THE HEADING'S JOB. "Do I need an app? No." reads in one
+     glance; the paragraph under it is for somebody who wants the detail. A FAQ
+     where every answer is a paragraph is a FAQ nobody finishes.
+
+     Every figure here is a placeholder token from src/web/site.js. Nothing about the
+     price, the area or the turnaround is typed on this page, so there is one
+     copy of each and it cannot drift from what the code actually does - which
+     is exactly how "charged when we deliver" survived here for weeks after the
+     charge point moved to the scale. -->
+
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:760px;padding-top:88px;padding-bottom:72px;">
+    <p class="eyebrow eyebrow-brand">Help</p>
+    <h1 class="display-2" style="margin-bottom:14px;">Questions.</h1>
+    <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:46ch;margin:0;">
+      The things people ask before their first pickup. Anything else, just text
+      us on <a href="{{SMS_LINK}}">{{PHONE}}</a>.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="max-width:760px;padding-top:64px;padding-bottom:40px;">
+
+  <div class="qa">
+    <h3>Do I need an app?</h3>
+    <p>
+      No. There is nothing to download and no account to remember. You book by
+      text message, or from your account on this website if you would rather
+      tap than type. Both do the same thing.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>Do I have to be home?</h3>
+    <p>
+      No. Leave the bag where you tell us to leave it: the front door, a side
+      gate, with a doorman. That is where we pick it up and where we bring it
+      back. We text you when it has been picked up, and again
+      with a photo when it is back at your door.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>How does the price work?</h3>
+    <p>
+      {{PRICE_PER_LB}} a pound, weighed after we pick it up. There is no
+      subscription and no delivery fee.
+    </p>
+    <p>
+      <strong>Nothing is charged when you book.</strong> Before your first
+      pickup we text you a secure link to save a card. Saving it takes
+      nothing. Your laundry is weighed at the laundromat, and that is the moment
+      your card is charged. We text you the weight and the total at the same
+      time, so you are told the figure every time.
+    </p>
+    <p>
+      A typical bag is {{BAG_WEIGHT}}, which comes to about
+      {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we
+      take up to {{MAX_ORDER}} in one pickup. See <a href="/pricing">pricing</a>.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>What bags can I put it in?</h3>
+    <p>
+      Any bag at all. A laundry sack, a duffel, a tote, a trash bag, whatever
+      you have. You do not need to buy anything.
+    </p>
+    <p>
+      It comes back to you in a fresh plastic bag, and anything reusable you sent
+      it in comes back with it.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>How long does it take?</h3>
+    <p>
+      Back to you the {{TURNAROUND}}. Picked up one day, returned the next.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>What if I need to cancel?</h3>
+    <p>
+      Free, right up until your bag is picked up. Cancel by text, or from your
+      account. Once it is with us it is already being washed, so it cannot be
+      cancelled after that.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>How is it washed?</h3>
+    <p>
+      You choose the water temperature and whether you want fabric softener. We
+      ask once, when you set up, and then never again. Every order uses the
+      same until you tell us otherwise.
+    </p>
+    <p>
+      Detergent is the same for everybody, so there is nothing to choose there,
+      and everything is tumble dried. We wash, dry and fold only. No dry
+      cleaning, pressing or alterations.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>Do you serve my area?</h3>
+    <p>
+      We cover {{SERVICE_AREA}}. Sign up even if you are just outside it and we
+      will tell you when we reach you.
+    </p>
+  </div>
+
+  <div class="qa">
+    <h3>Can I have a regular pickup?</h3>
+    <p>
+      Yes. Pick the days that suit you and we come every week, or every other
+      week, at the same time. We text you the evening before each one, and you
+      can skip a week or stop it whenever you like.
+    </p>
+  </div>
+
+</section>
+
+<section class="container" style="max-width:760px;padding-bottom:104px;">
+  <div class="card card-xl" style="padding:34px;">
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:28px;margin:0 0 10px;">
+      Still wondering something?
+    </h2>
+    <p style="font-size:17px;line-height:1.55;color:var(--ink-700);margin:0 0 24px;max-width:52ch;">
+      Text us on <a href="{{SMS_LINK}}">{{PHONE}}</a> and a person will answer.
+      There is no queue and no phone tree.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;">
+      <a href="/#get-started" class="btn btn-primary btn-lg">Get started {{ICON_ARROW}}</a>
+      <a href="/how-it-works" class="btn btn-outline btn-lg">How it works</a>
+    </div>
+  </div>
+</section>

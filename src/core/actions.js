@@ -260,7 +260,7 @@ async function getOrderStatus(customer) {
     case 'ASSIGNED':
       return `You're down for ${when} and your locker's ready.`;
     case 'DEPOSITED':
-      return `Got your laundry in the locker, it's on the next collection.`;
+      return `Got your laundry in the locker, it's on the next pickup.`;
     case 'IN_PROCESS':
       return `Got it, it's being washed now. Back with you the ${site.turnaround}.`;
     // AT_PARTNER and READY were missing entirely, so both fell through to
@@ -278,7 +278,7 @@ async function getOrderStatus(customer) {
       return `That one's back with you already.${cost} Want another pickup?`;
     }
     case 'CANCELED':
-      return `That one was cancelled. Want me to book a new one?`;
+      return `That one was canceled. Want me to book a new one?`;
     default:
       return `Let me check on that and come back to you.`;
   }
@@ -333,7 +333,7 @@ async function rescheduleOrder(customer, input) {
   if (!order) {
     const inFlight = await orders.findLatestInFlight(customer.id);
     if (inFlight) {
-      return `That one's already been collected, so I can't move it. Want to book your next pickup instead?`;
+      return `That one's already been picked up, so I can't move it. Want to book your next pickup instead?`;
     }
     return `You haven't got a pickup booked to move. What day would suit you?`;
   }
@@ -394,7 +394,7 @@ async function cancelOrder(customer, input = {}) {
   if (!order) {
     const inFlight = await orders.findLatestInFlight(customer.id);
     if (inFlight) {
-      return `Your laundry is already with us, so that one can't be cancelled. It'll be back the ${site.turnaround}.`;
+      return `Your laundry is already with us, so that one can't be canceled. It'll be back the ${site.turnaround}.`;
     }
     return `You haven't got anything booked to cancel.`;
   }
@@ -408,12 +408,12 @@ async function cancelOrder(customer, input = {}) {
 
   if (refund.refunded) {
     return (
-      `Cancelled, and the ${billing.money(refund.amountCents)} minimum is on its way back to your card. ` +
+      `Canceled, and the ${billing.money(refund.amountCents)} minimum is on its way back to your card. ` +
       `Text me whenever you want to book again.`
     );
   }
 
-  return `Cancelled, no charge. Text me whenever you want to book again.`;
+  return `Canceled, no charge. Text me whenever you want to book again.`;
 }
 
 // --- open_locker ------------------------------------------------------------
@@ -425,7 +425,7 @@ async function openLocker(customer) {
 
   if (!order || !order.locker_id) {
     return (
-      `You haven't got a locker assigned. We collect from your door at the moment. ` +
+      `You haven't got a locker assigned. We pick up from your door at the moment. ` +
       `Say when you'd like a pickup and I'll book it.`
     );
   }
@@ -619,10 +619,8 @@ async function saveDetails(customer, input) {
       prefsChanged = true;
     }
   }
-  if (['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'].includes(input.pickup_method)) {
-    prefs.default_pickup_method = input.pickup_method;
-    prefsChanged = true;
-  }
+  // pickup_method is no longer a tool parameter, so nothing can arrive here.
+  // The bag is always left out - see PICKUP_METHODS in src/core/booking.js.
   if (clean(input.pickup_spot, 200)) {
     prefs.special_instructions = clean(input.pickup_spot, 200);
     prefsChanged = true;
@@ -637,7 +635,7 @@ async function saveDetails(customer, input) {
   if (prefsChanged) changes.preferences = prefs;
 
   if (!Object.keys(changes).length) {
-    return `Sorry, I didn't catch that. What's your name and the address we should collect from?`;
+    return `Sorry, I didn't catch that. What's your name and the address we should pick up from?`;
   }
 
   // Fill in the state once there is an address to attach it to, so a customer
@@ -869,7 +867,7 @@ async function setPickupSchedule(customer, input) {
 
   const weekday = Number(input.weekday);
   if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
-    return `Which day suits you?`;
+    return `Which day works for you?`;
   }
 
   const saved = await recurring.addSchedule(customer, {

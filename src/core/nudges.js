@@ -68,12 +68,12 @@ const GAPS = [
       const hasAddress = booking.hasAddress(c);
 
       if (!hasName && !hasAddress) {
-        return `Hi, it's ${site.name}. To get you set up, what's your name and what address should we collect from?`;
+        return `Hi, it's ${site.name}. To get you set up, what's your name and what address should we pick up from?`;
       }
       if (!hasName) {
         return `Hi, it's ${site.name}. One thing missing from your setup - what name should we put on it?`;
       }
-      return `Hi ${name}, it's ${site.name}. What address should we be collecting from?`;
+      return `Hi ${name}, it's ${site.name}. What address should we pick up from?`;
     },
   },
 
@@ -165,7 +165,7 @@ const GAPS = [
     // opening date was added to stop.
     text: (c, ctx) => {
       const name = String(c.name || '').trim();
-      const from = ctx.opensOnLabel ? ` We start collecting on ${ctx.opensOnLabel}.` : '';
+      const from = ctx.opensOnLabel ? ` We start pickups on ${ctx.opensOnLabel}.` : '';
       return (
         `${name ? `Hi ${name}, it's` : `Hi, it's`} ${site.name}.${from} ` +
         `When would suit for a pickup? Just say the day and roughly what time.`

@@ -751,12 +751,21 @@ function timeProblem(value) {
   if (value === undefined || value === null || value === '') return null;
 
   const clean = normaliseTime(value);
-  if (!clean) return "I didn't catch what time you meant. Roughly when suits you?";
+  if (!clean) return "I didn't catch what time you meant. Roughly when works for you?";
 
   return null;
 }
 
-const PICKUP_METHODS = ['LEAVE_OUTSIDE', 'HAND_TO_DRIVER'];
+// THE BAG IS ALWAYS LEFT OUT. Neil's call: handing it to the driver was a
+// choice on the booking form and in the AI's tools, and it is not a choice we
+// actually offer - the whole service is built on nobody having to be home.
+//
+// The COLUMN keeps both values and so does its CHECK constraint, exactly like
+// the fourth sticker on an old bag tag: no order in the database has ever used
+// HAND_TO_DRIVER, but a constraint is a sanity bound and this list is the
+// business rule. Tightening the database would only make a historical row
+// impossible to write back.
+const PICKUP_METHODS = ['LEAVE_OUTSIDE'];
 
 // ---------------------------------------------------------------------------
 // Book a pickup.
@@ -859,7 +868,7 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
         reason: 'before_opening',
         opensOn: opens,
         detail:
-          `We start collecting on ${readableDate(opens)}. ` +
+          `We start pickups on ${readableDate(opens)}. ` +
           `Happy to get you booked in for then or any day after - which suits?`,
       };
     }
@@ -1086,6 +1095,7 @@ function confirmationMessage(
 
   let handover;
   if (order.pickup_method === 'HAND_TO_DRIVER') {
+    // Only reachable for an order written before the option was removed.
     handover = `We'll knock when we arrive, and again when we bring it back.`;
   } else if (dropoffSpot && dropoffSpot !== pickupSpot) {
     handover =
@@ -1145,7 +1155,7 @@ function confirmationMessage(
       ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${site.pricePerLb} a pound, and we'll text you the total after we weigh it.`
       : ` This one is on us - you got one of the free ones, so there is nothing to pay.`
     : card
-    ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} when we drop it back.`
+    ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} then.`
     : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
 
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';

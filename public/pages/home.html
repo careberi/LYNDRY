@@ -200,17 +200,17 @@
               <div class="phone-day">Today 7:42 PM</div>
 
               <div class="bubble bubble-out">laundry tomorrow</div>
-              <div class="bubble bubble-in">Booked for tomorrow. Leave the bag outside your door — you don't need to be in.</div>
+              <div class="bubble bubble-in">Booked for tomorrow. Leave the bag outside your door, you don't need to be in.</div>
               <div class="bubble bubble-out">make it monday</div>
               <div class="bubble bubble-in">Moved to Monday.</div>
               <!-- 18.5 lb at the real rate. If the price changes, this figure
                    has to change with it — it is the one number on the site
                    that a token can't fill in. -->
-              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so the total is $37.00 at {{PRICE_PER_LB}} a pound. You've paid $25.00, and the remaining $12.00 comes off your Visa ending 4242 on delivery.</div>
+              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so the total is $37.00 at {{PRICE_PER_LB}} a pound. Charged to your Visa ending 4242.</div>
               <div class="bubble bubble-out">can you skip the softener</div>
-              <div class="bubble bubble-in">Done, and saved — we'll leave it out every time from now on.</div>
+              <div class="bubble bubble-in">Done, and saved. We'll leave it out every time from now on.</div>
               <div class="bubble bubble-out">where is it</div>
-              <div class="bubble bubble-in">Folded and on the van — back this evening. We'll text a photo when it's down.</div>
+              <div class="bubble bubble-in">Folded and on the van, back this evening. We'll text a photo when it's down.</div>
 
               <div class="phone-receipt">Delivered</div>
               <div class="phone-home"></div>
@@ -220,6 +220,34 @@
       </div>
 
     </div>
+
+    <!-- THE OTHER WAY IN, AND IT IS DELIBERATELY THE SECOND ONE.
+
+         The box above is still the loud path: type a number, we text you,
+         and the whole thing happens in the thread. That is the product and it
+         is what the adverts point at.
+
+         This is for somebody who would rather tap than type - and for every
+         customer coming back, who until now had to know the address of
+         /account to find it. Lilac rather than suds so it reads as the
+         alternative rather than a second first choice, and ink on lilac
+         because white on any brand colour is a bug.
+
+         /account/login serves both people Neil named: it is the sign-in page,
+         it carries the link to create an account, and it sends anybody
+         already signed in straight through to their orders. -->
+    <!-- NO BUTTON INSIDE IT. The whole bar is the link, so a button drawn on
+         top of a link is a second target for one destination - and it made the
+         bar read as a banner with a control rather than as one thing you press.
+         Centred, so the words are the button. -->
+    <a href="/account/login" class="card card-xl card-lilac order-online"
+       style="display:block;padding:26px 30px;margin:56px 0 0;text-align:center;text-decoration:none;">
+      <span class="eyebrow" style="display:block;margin-bottom:6px;">Rather not text?</span>
+      <span style="display:block;font-family:var(--font-display);font-weight:900;
+                   font-size:clamp(24px,4vw,32px);line-height:1.1;color:var(--ink-900);">
+        Place an order online
+      </span>
+    </a>
 
     <!-- Pinned to the bottom of the green. -->
     <div class="fact-rail">
@@ -293,7 +321,7 @@
       <h2 class="display-3">{{PRICE_PER_LB}} a pound.</h2>
       <p style="font-size:18px;line-height:1.55;color:var(--ink-800);max-width:38ch;margin:0 0 28px;">
         {{MINIMUM}} minimum per pickup, then {{PRICE_PER_LB}} a pound weighed
-        after collection. A typical bag runs {{ESTIMATE_RANGE}}. No membership,
+        after pickup. A typical bag runs {{ESTIMATE_RANGE}}. No membership,
         no delivery fee, no surprise numbers.
       </p>
       <a href="/pricing" class="btn btn-ink btn-lg">
@@ -307,8 +335,8 @@
     <div class="card card-lg card-xl card-accent" style="padding:34px;" data-parallax="0.05">
       <span class="icon icon-message-circle icon-30" aria-hidden="true"></span>
       <p style="font-family:var(--font-display);font-weight:800;font-size:27px;line-height:1.15;letter-spacing:-0.02em;color:var(--ink-900);margin:18px 0 0;">
-        No app to download. No account to log into. No time slot to pick from a
-        dropdown. Text and it's booked.
+        No app to download. No account to log into. Text and it's booked, or
+        place an order online in about a minute.
       </p>
       <p class="eyebrow" style="margin:20px 0 0;color:var(--ink-700);">That is the whole product</p>
     </div>

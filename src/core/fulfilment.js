@@ -105,6 +105,36 @@ async function collect(order, { bagCount, by = {} } = {}) {
 
   if (!result.ok) return result;
 
+  // THE NEXT ONE IS BOOKED THE MOMENT THIS ONE IS IN THE VAN.
+  //
+  // Neil's ask: an upcoming order should appear as soon as the current one
+  // becomes current, so somebody on a weekly pickup can always see that the
+  // arrangement is still live. The nightly pass used to be the only thing that
+  // booked them, one day ahead, which left the board empty six days a week.
+  //
+  // BEST EFFORT, AND SILENT. A driver at a door must never be stopped by the
+  // booking of a pickup a week away, and recurring.bookNext() deliberately
+  // sends no text - the customer hears about it in the ordinary evening
+  // reminder, which carries the SKIP line for anything a schedule booked.
+  if (result.order && result.order.from_schedule) {
+    // The row, not just the id: bookPickup() reads the address, the preferences
+    // and the schedules off it.
+    const { data: customer } = order.customers
+      ? { data: order.customers }
+      : await db.from('customers').select('*').eq('id', order.customer_id).maybeSingle();
+
+    if (customer) {
+      await recurring
+        .bookNext(customer, { after: result.order.pickup_date })
+        .then((made) => {
+          for (const next of made) {
+            console.log(`  standing order: booked #${next.order_number} for ${next.pickup_date}`);
+          }
+        })
+        .catch((err) => console.error(`Could not book the next standing pickup: ${err.message}`));
+    }
+  }
+
   // Named `count`, not `bags` — that is the label module now, and a shadowed
   // import is the kind of thing that works until somebody adds a line.
   const count = Number(bagCount) || order.bag_count || null;
@@ -449,9 +479,9 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   if (owed === 0) {
     settlement = `You've already paid that, so there's nothing more to pay.`;
   } else if (card) {
-    settlement = `We'll take it off your ${card} when we drop it back.`;
+    settlement = `We'll take it off your ${card}.`;
   } else {
-    settlement = `We'll settle up when we drop it back.`;
+    settlement = `We'll settle up with you.`;
   }
 
   const message = `${howPriced} ${settlement}`;
@@ -1187,8 +1217,8 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
       // Payments switched off, or the charge threw. Say what they were always
       // told rather than inventing a problem they cannot act on.
       money_ = card
-        ? ` We'll take it off your ${card} when we drop it back.`
-        : ` We'll settle up when we drop it back.`;
+        ? ` We'll take it off your ${card}.`
+        : ` We'll settle up with you.`;
     }
 
     await sendAndLog(customer.phone, `${howPriced}${money_}`, customer.id);

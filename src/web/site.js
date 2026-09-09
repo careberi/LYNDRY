@@ -184,7 +184,7 @@ function contactSentence() {
   if (site.hasPublicPhone) {
     return `Text us at ${site.publicPhoneDisplay}.`;
   }
-  return `Sign up below and we'll text you the moment our number goes live — carrier registration is still being approved.`;
+  return `Sign up below and we'll text you the moment our number goes live. Carrier registration is still being approved.`;
 }
 
 // The tokens available inside public/pages/*.html files. Write

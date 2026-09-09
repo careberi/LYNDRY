@@ -41,14 +41,14 @@ function consentText() {
     // The trading name in brackets only when it differs from the legal one.
     // No legal entity has been formed yet, so both are "LYNDRY" today and
     // "LYNDRY (LYNDRY)" on a payment page reads like a bug.
-    `You're authorising ${site.legalName}${
+    `You're authorizing ${site.legalName}${
       site.legalName === site.name ? '' : ` (${site.name})`
     } to save this card and charge it for ` +
     `each pickup you book. Nothing is taken today and nothing is taken when you book. ` +
     `Wash and fold is ${site.pricePerLb} a pound with a ${money(config.pricing.minimumCents)} minimum, ` +
     `and your card is charged once, when we deliver your laundry back. We weigh your bag ` +
-    `after pickup and text you the weight and the total straight away, so you always know ` +
-    `the amount before it is taken. Cancel before we collect and there is nothing to ` +
+    `after pickup and text you the weight and the total right away, so you always know ` +
+    `the amount before it is taken. Cancel before we pick up and there is nothing to ` +
     `cancel: no money has moved. ` +
     // A standing order takes the minimum on a repeating basis, so the old
     // "no recurring charge" was about to become false. It is not a
