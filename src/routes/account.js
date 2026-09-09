@@ -2156,7 +2156,11 @@ router.post('/account/book', async (req, res, next) => {
 
       const started = await onboarding.startConversation({
         phone: who.customer.phone,
-        consentSource: 'WEB_SIGNUP',
+        // WEB_ORDER, not WEB_SIGNUP. They ticked the box on the address step
+        // of an order they were placing, which is a different door from the
+        // signup form that used to exist - and telling the two apart is the
+        // whole point of recording a source at all. See migration 0081.
+        consentSource: 'WEB_ORDER',
         consentIp: req.ip,
         // No canned welcome. They are mid-order and about to get a real
         // confirmation; an introduction alongside it is two texts where one

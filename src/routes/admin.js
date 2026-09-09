@@ -3495,7 +3495,14 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
            find, and reasonably took for a missing feature. -->
       ${optOutControl(person, roles.can(req.opsUser, 'messages.send'))}
 
-      ${nudgePanel({ gaps, action: `/ops/customers/${person.id}/ask`, canSend: canAsk })}
+      <!-- THE ASK BUTTONS MOVED TO THE CONVERSATION. Neil's call: sending
+           somebody a text belongs where the rest of the texts are, not on the
+           profile. Every one of these puts a message in a thread, and pressing
+           them here meant writing into a conversation you could not see.
+
+           They are still one function - src/web/nudge-panel.js - rendered on
+           the thread and in the side column of an order. What is gone is the
+           third copy, not the feature. -->
 
       ${
         // AN OFFER IS A THING THEY HOLD, not a code they type. Said on the
@@ -3582,6 +3589,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           ${detail('Email', `<a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email || '—')}</a>`)}
           ${detail('Address', escapeHtml(addressOf(person)) || '—')}
           ${detail('Signed up', dateTime(person.created_at))}
+          ${detail('How they found us', signedUpVia(person))}
           ${detail('Texting consent', person.sms_consent_at ? dateTime(person.sms_consent_at) : 'not recorded')}
           ${
             person.status === 'UNSUBSCRIBED'
@@ -3922,6 +3930,45 @@ router.post('/ops/orders/:id/settle-weight', guard, may('orders.override'), asyn
 // ---------------------------------------------------------------------------
 // POST /ops/customers/:id/opt-out - they asked not to be texted
 //
+// ---------------------------------------------------------------------------
+// HOW SOMEBODY CAME TO BE A CUSTOMER, in words rather than in a database value.
+//
+// Neil's ask: "was it via Facebook? was it via place an online order, or was it
+// through the regular, they gave us their number?" The answer has always been
+// recorded - customers.sms_consent_source, written at the moment consent was
+// given - and has never been on the screen. The date was; the door was not.
+//
+// IT IS ALSO THE EVIDENCE. An audit or a carrier asks HOW consent was obtained,
+// not merely whether it was, and this is the sentence that answers it. So each
+// label says what the person actually DID, not which form our code ran.
+//
+// A null is honest rather than blank: rows written before the column existed
+// genuinely do not know, and saying so is better than implying a door.
+// ---------------------------------------------------------------------------
+const CONSENT_SOURCES = {
+  WEB_HERO: 'Typed their number on the home page',
+  WEB_ORDER: 'Placed an order online',
+  WEB_BERGEN: 'The Facebook advert landing page',
+  FACEBOOK_FORM: 'A Facebook advert form',
+  INBOUND_TEXT: 'They texted us first',
+  DOOR_HANGER: 'Scanned a door hanger',
+
+  // The form at /signup, which no longer exists. Anything recorded this way is
+  // from before the online order took over the value - see migration 0081.
+  WEB_SIGNUP: 'The old website signup form',
+};
+
+function signedUpVia(person) {
+  const source = person.sms_consent_source;
+  if (!source) return 'not recorded';
+
+  const label = CONSENT_SOURCES[source] || source;
+
+  // The raw value beside the sentence, small. The sentence is for reading; the
+  // value is what somebody would grep the database for.
+  return `${escapeHtml(label)} <span style="color:var(--ink-400);">&middot; ${escapeHtml(source)}</span>`;
+}
+
 // One way only. See optOutControl() above for why: consent is the customer's to
 // give and they give it by texting START. Nothing here can put it back.
 //
@@ -7319,7 +7366,11 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         .select('direction, body, created_at, delivery_status, delivery_error')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
-      db.from('customers').select('id, name, status, address_line1, city, postal_code').eq('phone', phone).maybeSingle(),
+      // THE WHOLE ROW, NOT SIX COLUMNS. nudges.gapsFor() asks the same
+      // questions checkSlot() refuses on - a name, an address, wash
+      // preferences, a card, a spot - so it needs all of them. A partial
+      // select would have reported every customer as missing everything.
+      db.from('customers').select('*').eq('phone', phone).maybeSingle(),
       aiPause.stateFor(phone),
       // IS A CHASE COMING, AND WHEN. Neil's ask: nothing should text a
       // customer at a time nobody could have predicted, so the thread says so
@@ -7349,6 +7400,17 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     const thread = messages || [];
     const digits = phone.replace(/\D/g, '');
     const canSend = roles.can(req.opsUser, 'messages.send');
+
+    // WHAT IS STILL MISSING FOR THIS PERSON, if they are a customer at all.
+    //
+    // Derived every time from the same predicates checkSlot() refuses on -
+    // never stored - so it cannot disagree with what a booking would actually
+    // do. See the note in src/core/nudges.js.
+    //
+    // A number with no customer row has no gaps rather than every gap: they
+    // have told us nothing because there is nothing to tell yet, and offering
+    // to text a stranger for their wash preferences is not a thing to do.
+    const nudgeGaps = customer ? await nudges.gapsFor(customer).catch(() => []) : [];
 
     // STOP is a legal instruction, not a preference, so the message box is
     // absent entirely for an opted-out number - a box that lets somebody type
@@ -7614,6 +7676,28 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
                    }
                  </div>
                  <span style="font-size:12px;color:var(--ink-400);">Only ever one, and only if they stay quiet</span>
+               </div>`
+            : ''
+        }
+
+        ${
+          // WHAT IS STILL MISSING, WHERE THE MESSAGES ARE. Neil's call.
+          //
+          // These buttons each send a fixed sentence asking for one thing we
+          // still need, and the reply lands in this thread - so this is where
+          // they belong. On the profile they were writing into a conversation
+          // you could not see while pressing them.
+          //
+          // Absent for somebody with nothing missing, and for a customer we
+          // have no row for at all: a number that has only ever texted us has
+          // no name, no address and nothing to chase.
+          nudgeGaps.length && canWrite
+            ? `<div style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-100);">
+                 ${nudgePanel({
+                   gaps: nudgeGaps,
+                   action: `/ops/customers/${customer.id}/ask?thread=${encodeURIComponent(digits)}`,
+                   canSend: canWrite,
+                 })}
                </div>`
             : ''
         }
@@ -8036,10 +8120,18 @@ router.post('/ops/customers/:id/ask', guard, may('messages.send'), async (req, r
     // and is checked for digits before it is used - anything else and they
     // land on the profile, because a redirect built out of whatever was
     // posted is an open redirector on our own domain.
+    // Back where they came from. The order number or the thread's digits ride
+    // in the query string and are checked before they are used - anything else
+    // and they land on the profile, because a redirect built out of whatever
+    // was posted is an open redirector on our own domain.
     const from = String((req.query || {}).order || '');
+    const thread = String((req.query || {}).thread || '');
+
     const back = /^\d+$/.test(from)
       ? `/ops/orders/${from}`
-      : `/ops/customers/${req.params.id}`;
+      : /^\d{10,15}$/.test(thread)
+        ? `/ops/messages/${thread}`
+        : `/ops/customers/${req.params.id}`;
 
     const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
 
