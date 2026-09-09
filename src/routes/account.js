@@ -10,6 +10,7 @@ const orders = require('../core/orders');
 const booking = require('../core/booking');
 const settings = require('../core/settings');
 const billing = require('../core/billing');
+const cardSaved = require('../core/card-saved');
 const auth = require('../core/customer-auth');
 const payments = require('../providers/payments');
 const { sendAndLog } = require('../core/notify');
@@ -1008,6 +1009,74 @@ router.post('/account/repeat/stop', auth.requireCustomer, async (req, res, next)
 });
 
 // ---------------------------------------------------------------------------
+// The screen after the card is saved.
+//
+// Neil: "after the payment details are entered it should take you to a screen
+// that says a confirmation was sent to you via text."
+//
+// IT ONLY SAYS THAT BECAUSE IT IS NOW TRUE. The route above sends the text
+// through the one shared path before rendering this - it did not, until today:
+// the return page saved the card and sent nothing, the webhook saw the card
+// already saved and also sent nothing, and whichever arrived first decided
+// whether the customer heard anything. A screen promising a text that never
+// left would be the worst version of that bug rather than a fix for it.
+// ---------------------------------------------------------------------------
+function confirmedPage({ customer, orders: waiting }) {
+  const card = billing.describeCard(customer);
+
+  const rows = (waiting || [])
+    .map(
+      (o) => `
+      <div style="display:flex;justify-content:space-between;gap:18px;padding:16px 0;border-bottom:1px solid var(--ink-100);">
+        <span style="font-size:16px;font-weight:600;color:var(--ink-900);">#${o.order_number}</span>
+        <span style="font-size:16px;color:var(--ink-700);text-align:right;">${escapeHtml(whenLineMdy(o))}</span>
+      </div>`
+    )
+    .join('');
+
+  return `
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
+    <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
+    <h1 class="display-2" style="margin-bottom:10px;">You're booked.</h1>
+    <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
+      We have texted your confirmation to
+      <strong>${escapeHtml(formatPhone(customer.phone))}</strong>.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+
+  <div class="card card-xl" style="padding:26px 30px;">
+    <p class="eyebrow" style="margin-bottom:6px;">${
+      (waiting || []).length === 1 ? 'Your pickup' : 'Your pickups'
+    }</p>
+    ${rows || '<p style="font-size:16px;color:var(--ink-700);margin:12px 0 0;">Nothing booked yet.</p>'}
+  </div>
+
+  <!-- THE THREE THINGS SOMEBODY WANTS TO KNOW after handing over a card, and
+       the first one is the point: nothing has been taken. -->
+  <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
+    <div style="display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;">
+      <span style="font-size:16px;color:var(--ink-700);">Charged today</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);">$0.00</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;">
+      <span style="font-size:16px;color:var(--ink-700);">Card on file</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);">${escapeHtml(card || 'saved')}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:18px;">
+      <span style="font-size:16px;color:var(--ink-700);">You are charged</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);text-align:right;">after we weigh it</span>
+    </div>
+  </div>
+
+  <p style="margin:26px 0 0;"><a href="/account">Back to your account</a></p>
+</section>`;
+}
+
+// ---------------------------------------------------------------------------
 // GET /account/card/done/:token - back from Stripe, into their own account.
 //
 // Neil: "after you enter your information, it takes you back to your account
@@ -1040,10 +1109,17 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
     let customer = req.customer;
 
     if (!link.completed_at) {
+      // THE WHOLE JOB, THROUGH THE ONE PATH BOTH OTHER DOORS USE. It records
+      // the card, settles anything owed, confirms the booking that was waiting
+      // on it and sends the text. It used to call recordSavedCard() alone,
+      // which saves the card and sends nothing - and the webhook then saw
+      // completed_at and stayed quiet, so whoever got here first decided
+      // whether the customer heard anything at all.
+      //
       // They may have closed the page rather than finished, in which case there
       // is no card to read and this quietly returns null.
-      const updated = await billing.recordSavedCard(link).catch((err) => {
-        console.error('Could not read back the saved card:', err.message);
+      const updated = await cardSaved.cardWasSaved(link).catch((err) => {
+        console.error('Could not finish saving the card:', err.message);
         return null;
       });
       if (updated) customer = updated;
@@ -1055,10 +1131,12 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
     // nothing to add here.
     if (!billing.hasPaymentMethod(customer)) return back(res, '');
 
-    return back(
-      res,
-      `?saved=${encodeURIComponent(`${billing.describeCard(customer)} saved. Nothing has been charged.`)}`
-    );
+    const waiting = await orders.findAllAwaitingCollection(customer.id).catch(() => []);
+
+    return accountPage(res, {
+      title: 'Pickup confirmed',
+      body: confirmedPage({ customer, orders: waiting }),
+    });
   } catch (err) {
     return next(err);
   }
@@ -2239,14 +2317,11 @@ router.post('/account/book', async (req, res, next) => {
     // card second. Somebody who is sent away to pay before their booking
     // exists comes back to nothing.
     if (result.needsCard) {
-      // THE LINK STILL GOES BY TEXT. The card field below is the fast way
-      // through for somebody sitting on the page; the text is what they have
-      // an hour later on the sofa, and it is the only way back in if the
-      // browser is closed on this screen.
-      await billing
-        .setupLinkMessage(customer)
-        .then((text) => sendAndLog(customer.phone, text, customer.id))
-        .catch((err) => console.error('Could not send a card link:', err.message));
+      // NO TEXT YET, AND THIS IS THE WHOLE OF NEIL'S POINT. The card button is
+      // on the very next thing they see, so a text telling them to add a card
+      // arrives while they are adding one. src/core/card-chase.js sends it half
+      // an hour later, and only if there is still no card by then - which for
+      // most people there will be, so most of these texts now never happen.
 
       // THE CARD OPENS UNDERNEATH, IT DOES NOT LEAD ANYWHERE. Neil's sequence:
       // details in, Continue, the address confirmed, then a panel with the

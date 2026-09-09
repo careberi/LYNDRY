@@ -3,6 +3,7 @@
 const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
+const cardChase = require('./card-chase');
 const booking = require('./booking');
 const issues = require('./issues');
 const recurring = require('./recurring');
@@ -123,6 +124,11 @@ async function createOrder(customer, input) {
     // link inside a booking conversation assumes they are being asked to pay,
     // and the single most common reason to abandon it is not knowing how much.
     const { url } = await billing.createSetupLink(customer);
+
+    // STAMPED HERE BECAUSE THE LINK IS GOING OUT HERE, in the sentence below.
+    // Without this the half-hour sweep in src/core/card-chase.js would find the
+    // order unchased and send a second copy of something they already have.
+    await cardChase.stamp(result.order && result.order.id);
 
     // TWO THINGS THIS SENTENCE GOT WRONG, both found in one customer's thread.
     //

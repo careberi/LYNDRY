@@ -4,6 +4,7 @@ const { config } = require('../config');
 const booking = require('./booking');
 const nightly = require('./nightly');
 const followups = require('./followups');
+const cardChase = require('./card-chase');
 const leads = require('./leads');
 const issues = require('./issues');
 
@@ -110,6 +111,15 @@ async function tick({ now = null } = {}) {
       .catch((err) => ({ ran: false, reason: err.message }));
 
     done.followups = await followups
+      .sendDue()
+      .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
+
+    // The card link for a booking that still has no card on it. It rides this
+    // tick rather than a timer of its own for the same reason everything else
+    // here does: the web app is already running every minute of every day, so
+    // it can watch the clock for free, and quiet hours are the right floor on
+    // a message nobody just asked for.
+    done.cardChase = await cardChase
       .sendDue()
       .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
 
