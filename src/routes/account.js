@@ -2262,6 +2262,9 @@ router.post('/account/book', async (req, res, next) => {
     await sendAndLog(
       customer.phone,
       booking.confirmationMessage(customer, result.order, {
+        // Placed on the website, so no conversational opener. See DOORS in
+        // src/core/booking.js.
+        source: booking.DOORS.WEB,
         rolled: result.rolled,
         freeOrder: result.freeOrder,
         freeUpToLb: result.freeUpToLb,
@@ -2447,7 +2450,11 @@ router.post('/account/reschedule', auth.requireCustomer, async (req, res, next) 
       actor: 'customer',
     });
 
-    await sendAndLog(customer.phone, booking.rescheduledMessage(updated), customer.id);
+    await sendAndLog(
+      customer.phone,
+      booking.rescheduledMessage(updated, { source: booking.DOORS.WEB }),
+      customer.id
+    );
 
     return back(res, '?moved=1');
   } catch (err) {

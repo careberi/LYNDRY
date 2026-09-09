@@ -1077,10 +1077,32 @@ function whenLine(order) {
 // Naming the card here is load-bearing: this message is the authorisation for
 // the charge that follows, so if an order is ever disputed the message log
 // shows the customer being told which card, before any work was done.
+// ---------------------------------------------------------------------------
+// WHICH DOOR THE ORDER CAME THROUGH DECIDES THE VOICE OF THE TEXT.
+//
+// Neil, reading a confirmation for an order he had placed on the website:
+// "there should have never been an 'of course'".
+//
+// He is right, and it is not a wording preference. "Of course!" is an ANSWER.
+// Over text it is exactly right: they asked for a pickup, we said of course.
+// On the website nobody said anything - they filled in a form and pressed a
+// button - so a text that opens by agreeing is answering a question that was
+// never asked. It is the tell that nothing on the other end read anything.
+//
+// THREAD is the default because the AI is the caller that must never have to
+// remember, and its replies are always answers. WEB is passed by the two
+// routes in src/routes/account.js.
+//
+// The message is otherwise IDENTICAL from both doors, which is the whole
+// point of it living here: what a customer is told about their order cannot
+// depend on where they typed it. Only the opening clause knows.
+// ---------------------------------------------------------------------------
+const DOORS = Object.freeze({ THREAD: 'THREAD', WEB: 'WEB' });
+
 function confirmationMessage(
   customer,
   order,
-  { rolled = false, opener = null, freeOrder = false, freeUpToLb = null } = {}
+  { rolled = false, opener = null, source = DOORS.THREAD, freeOrder = false, freeUpToLb = null } = {}
 ) {
   const prefs = customer.preferences || {};
 
@@ -1161,11 +1183,15 @@ function confirmationMessage(
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 
   // "Today's routes are done" is a fact about the van, not a negotiation.
-  // `opener` lets the payment webhook lead with "Card saved" without naming
-  // the card twice in one text, which a real customer got.
+  //
+  // `opener` still wins over both, because it is not a greeting: it is the
+  // payment webhook saying "Card saved" so the card is not named twice in one
+  // text, which a real customer got. That is true whichever door they used.
+  const greeting = opener ? `${opener}! ` : source === DOORS.WEB ? '' : 'Of course! ';
+
   const lead = rolled
-    ? `${opener || 'Of course'}! Today's routes are finished, so order #${order.order_number} is in for the earliest we can do:`
-    : `${opener || 'Of course'}! Order #${order.order_number} is booked:`;
+    ? `${greeting}Today's routes are finished, so order #${order.order_number} is in for the earliest we can do:`
+    : `${greeting}Order #${order.order_number} is booked:`;
 
   // THE CONFIRMATION IS THE ONE COMPLETE DOCUMENT of the order: number, day
   // and window, address, handover, wash, money, turnaround. Every later text
@@ -1191,11 +1217,16 @@ function confirmationMessage(
     `Back with you the ${site.turnaround}.`
   );
 }
-function rescheduledMessage(order) {
-  return `No problem at all, we've moved it to ${whenLine(order)}.`;
+// Same rule. "No problem at all" answers somebody who asked to move it; on
+// the website they moved it themselves and there was no problem to have.
+function rescheduledMessage(order, { source = DOORS.THREAD } = {}) {
+  return source === DOORS.WEB
+    ? `Your pickup has moved to ${whenLine(order)}.`
+    : `No problem at all, we've moved it to ${whenLine(order)}.`;
 }
 
 module.exports = {
+  DOORS,
   BERGEN_ZIPS,
   SERVICE_TZ,
   addDays,

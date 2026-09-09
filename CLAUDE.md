@@ -2960,6 +2960,24 @@ wording itself comes from `booking.confirmationMessage()` / `rescheduledMessage(
 rather than being written out at each call site, so the two doors cannot produce
 two different sentences for the same event. They already had, briefly.
 
+**WHICH DOOR AN ORDER CAME THROUGH DECIDES THE VOICE OF ITS TEXT.** Neil, on
+reading the confirmation for an order he had just placed on the website:
+*"there should have never been an of course"*. He is right, and it is not a
+wording preference. "Of course!" is an ANSWER - over text it is exactly right,
+they asked and we agreed - but on the website nobody said anything, so a text
+that opens by agreeing is answering a question nobody asked. It is the tell
+that nothing on the other end read anything.
+
+`booking.DOORS` is `THREAD` or `WEB`, and **THREAD is the default** because the
+AI is the caller that must never have to remember. `src/routes/account.js`
+passes `WEB` at both of its doors. **Everything else in the message is
+identical**, which is the whole point of it living in `booking.js`: what a
+customer is told about their pickup cannot depend on where they typed it, and
+a test asserts the two are the same document once the greeting is stripped.
+
+`opener` still beats both, because it is not a greeting - it is the payment
+webhook saying "Card saved" so the card is not named twice in one text.
+
 **Nothing here writes an order status directly** — cancelling goes through
 `orders.transition()` exactly as the ops endpoints do.
 
