@@ -217,6 +217,11 @@ async function create({
   fromSchedule,
   preferences,
   surchargeCents,
+  // Which door the order came through, and who typed it if a person did.
+  // booking.bookPickup() is the only caller that fills these in; everything
+  // here just writes down what it was handed.
+  placedVia,
+  placedBy,
 }) {
   const { data, error } = await db
     .from('orders')
@@ -255,6 +260,11 @@ async function create({
       // taken. Stored beside the rate so changing what an option costs cannot
       // re-price work already quoted.
       surcharge_cents: Math.max(0, Number(surchargeCents) || 0),
+
+      // HOW IT GOT HERE. Null means an order written before the column
+      // existed: unknown, rather than assumed to be any particular door.
+      placed_via: placedVia || null,
+      placed_by: placedBy || null,
 
       // Both halves of the price are recorded on the order itself, so that
       // changing either later never silently re-prices work already done.

@@ -39,13 +39,29 @@ const { site } = require('../web/site');
 // DOOR_HANGER is a scan off a card on somebody's front door. The evidence is
 // their own inbound message, exactly as INBOUND_TEXT - what it records is
 // WHICH door, the same reason WEB_BERGEN is not folded into WEB_HERO.
+// EVERY WAY SOMEBODY CAN COME TO BE A CUSTOMER, and this list has to match the
+// CHECK constraint on customers.sms_consent_source exactly. It is the second
+// copy of that list, which is a thing to be uncomfortable about: the database
+// refuses a bad value with a constraint error nobody can read, so this refuses
+// it first with a sentence naming the source. The cost is that adding a source
+// in a migration and not here throws "Unknown consent source" from a route that
+// looked fine in review - which is precisely how WEB_ORDER and PHONE_CALL both
+// arrived here late.
 const CONSENT_SOURCES = [
   'WEB_SIGNUP',
+  // Placed an order on the website. Its own value since migration 0081,
+  // because the deleted /signup form used to share WEB_SIGNUP with it.
+  'WEB_ORDER',
   'WEB_HERO',
   'WEB_BERGEN',
   'INBOUND_TEXT',
   'FACEBOOK_FORM',
   'DOOR_HANGER',
+  // They rang us and a person typed it in. Migration 0083. The only source
+  // whose evidence is a member of staff saying so rather than a ticked box or
+  // the customer's own message, which is why customers.sms_consent_by records
+  // who that was.
+  'PHONE_CALL',
 ];
 
 // What we say to somebody we have never spoken to.

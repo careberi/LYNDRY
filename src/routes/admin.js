@@ -61,6 +61,8 @@ const {
   broadcastBody,
   AUDIENCES,
 } = require('../web/prelaunch-page');
+const wash = require('../core/wash');
+const onboarding = require('../core/onboarding');
 const leads = require('../core/leads');
 const leadOutreach = require('../core/lead-outreach');
 const settings = require('../core/settings');
@@ -3387,7 +3389,13 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
     headings.push('Status');
 
     const body = `
-      ${sectionHeading('Everyone', 'Customers', (people || []).length)}
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;justify-content:space-between;">
+        <div>${sectionHeading('Everyone', 'Customers', (people || []).length)}</div>
+        <!-- The way in for a phone call. It sits here rather than on the Admin
+             dashboard because this is the screen you are already on when
+             somebody rings and you go looking for them. -->
+        <a class="btn btn-primary" href="/ops/customers/new" style="margin-bottom:20px;">Add a customer</a>
+      </div>
       ${table(headings, rows)}`;
 
     res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
@@ -3399,6 +3407,495 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
 // ---------------------------------------------------------------------------
 // GET /ops/customers/:id — one profile, with their whole order history
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// TAKING AN ORDER OVER THE PHONE
+//
+// Neil, 10 September: "I'm gonna start taking phone calls. So somebody doesn't
+// have to answer by text or go on the website. They can just literally call my
+// number and place an order."
+//
+// It is the same setup the customer does themselves, typed by somebody else
+// while they talk. Name, address, where the bag goes, how it is washed, then a
+// pickup. Nothing here is a new way to book: the form posts to
+// booking.bookPickup(), which is the one door the AI and the website already
+// go through, so the closed sign, the opening date, the service area, the
+// weekday check and the windows all apply exactly as they do everywhere else.
+//
+// THE ONE THING THAT IS NOT ON THIS FORM IS A CARD, and that is not an
+// oversight - it is the rule. No card number is ever typed into this system by
+// anybody. Saving the customer texts them the same /pay link the AI and the
+// website send, and they enter it on their own phone. Neil asked for exactly
+// this, and CLAUDE.md would have refused anything else.
+//
+// EXPRESS TAKES THE FIRST ROUTE THAT MATCHES, NOT THE MOST SPECIFIC, so
+// /ops/customers/new is mounted above /ops/customers/:id. Without that, "new"
+// is read as a customer id and this page 404s - the same trap
+// /ops/partners/enquiries fell into.
+// ---------------------------------------------------------------------------
+
+// The state is not asked for. Every address we serve is in Bergen County, the
+// service-area check is a list of NJ zips, and a free-text state field on a
+// form filled in at speed during a phone call is a typo waiting to reach a
+// driver's satnav.
+const PHONE_ORDER_STATE = 'NJ';
+
+// The house banner, same markup the order page uses. Not imported because the
+// two that exist are both local consts inside other functions and neither is
+// exported; a third small copy beats reaching into a page module for it.
+const phoneBanner = (text) => `
+  <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
+            background:var(--stain-100);font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+
+
+function phoneCustomerForm({ values = {}, problem = null } = {}) {
+  const v = (k) => escapeHtml(String(values[k] || ''));
+
+  // BUILT FROM wash.OPTIONS, never typed out. The wash question in the text
+  // thread is built from the same object, so a choice added or a price changed
+  // there moves this form too. Two lists of options is how a customer gets
+  // offered something the laundromat is never told about.
+  const washField = (key) => {
+    const option = wash.OPTIONS[key];
+    return `
+      <div style="margin-bottom:18px;">
+        <label class="field-label">${escapeHtml(option.label)}</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          ${option.choices
+            .map(
+              (c) => `
+            <label class="btn btn-sm ${
+              String(values[key] || option.default) === c.value ? 'btn-primary' : 'btn-outline'
+            }" style="cursor:pointer;">
+              <input type="radio" name="${key}" value="${c.value}"
+                     ${String(values[key] || option.default) === c.value ? 'checked' : ''}
+                     style="margin-right:6px;">
+              ${escapeHtml(c.label)}
+            </label>`
+            )
+            .join('')}
+        </div>
+      </div>`;
+  };
+
+  return `
+    <p class="eyebrow" style="margin:0 0 8px;">On the phone</p>
+    <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">New customer</h1>
+    <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
+      Everything the customer would fill in themselves, typed while you talk.
+      Saving this texts them a link to add their card, which is the one thing
+      you cannot enter for them.
+    </p>
+
+    ${problem ? phoneBanner(problem) : ''}
+
+    <form method="post" action="/ops/customers/new" class="card card-xl" style="padding:26px;max-width:640px;">
+      <label class="field-label" for="phone">Their cell number</label>
+      <input class="field" id="phone" name="phone" type="tel" required maxlength="20"
+             value="${v('phone')}" placeholder="(201) 555-0123" style="width:100%;margin-bottom:6px;">
+      <p style="font-size:13px;color:var(--ink-500);margin:0 0 18px;">
+        This is their account and where every text goes. Read it back to them before you save.
+      </p>
+
+      <label class="field-label" for="name">Name</label>
+      <input class="field" id="name" name="name" type="text" required maxlength="80"
+             value="${v('name')}" style="width:100%;margin-bottom:18px;">
+
+      <label class="field-label" for="address_line1">Street address</label>
+      <input class="field" id="address_line1" name="address_line1" type="text" required maxlength="120"
+             value="${v('address_line1')}" style="width:100%;margin-bottom:10px;">
+
+      <label class="field-label" for="address_line2">Apartment or unit, if any</label>
+      <input class="field" id="address_line2" name="address_line2" type="text" maxlength="80"
+             value="${v('address_line2')}" style="width:100%;margin-bottom:10px;">
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+        <div style="flex:2;min-width:180px;">
+          <label class="field-label" for="city">Town</label>
+          <input class="field" id="city" name="city" type="text" required maxlength="80"
+                 value="${v('city')}" style="width:100%;">
+        </div>
+        <div style="flex:1;min-width:120px;">
+          <label class="field-label" for="postal_code">Zip</label>
+          <input class="field" id="postal_code" name="postal_code" type="text" required maxlength="10"
+                 value="${v('postal_code')}" style="width:100%;">
+        </div>
+      </div>
+
+      <label class="field-label" for="spot">Where does the bag go?</label>
+      <input class="field" id="spot" name="spot" type="text" required maxlength="200"
+             value="${v('spot')}" placeholder="front porch, in the driveway, with the doorman"
+             style="width:100%;margin-bottom:6px;">
+      <p style="font-size:13px;color:var(--ink-500);margin:0 0 22px;">
+        One spot for both legs: where the driver finds it, and where the clean laundry goes back.
+      </p>
+
+      ${washField('water_temp')}
+      ${washField('fabric_softener')}
+
+      <div style="border-top:2px solid var(--ink-100);margin:8px 0 20px;padding-top:20px;">
+        <!-- THE CONSENT RECORD FOR A PHONE CALL IS A PERSON SAYING SO, and
+             this box is that person saying it. Every other way somebody
+             becomes a customer leaves evidence anybody can look at later - a
+             ticked box with a timestamp and an IP, or their own inbound
+             message. A call leaves neither, so what goes on the row is who
+             took it and that they were asked. Required, because a customer we
+             cannot show consent for is one we should not be texting. -->
+        <label style="display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.5;cursor:pointer;">
+          <input type="checkbox" name="consent" value="yes" required style="margin-top:4px;">
+          <span>
+            <strong>I asked, and they agreed we can text them</strong> about their laundry.
+            This is the only record of their consent, and it goes on their profile with your name against it.
+          </span>
+        </label>
+      </div>
+
+      <div style="margin-bottom:24px;">
+        <label style="display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.5;cursor:pointer;">
+          <input type="checkbox" name="send_card" value="yes" checked style="margin-top:4px;">
+          <span>
+            <strong>Text them a link to add their card now</strong>, while you are still on the call.
+            Nothing is charged; it saves a card so the driver can come out.
+          </span>
+        </label>
+      </div>
+
+      <button class="btn btn-primary btn-lg" type="submit">Save and text them</button>
+      <a class="btn btn-ghost btn-lg" href="/ops/customers">Cancel</a>
+    </form>`;
+}
+
+router.get('/ops/customers/new', guard, withIssues, may('customers.view'), (req, res) => {
+  res.type('html').send(
+    adminPage({
+      title: 'New customer',
+      active: '/ops/customers',
+      body: phoneCustomerForm(),
+      user: req.opsUser,
+      openIssues: req.openIssues,
+      serviceClosed: req.serviceClosed,
+    })
+  );
+});
+
+router.post('/ops/customers/new', guard, may('customers.view'), async (req, res, next) => {
+  const form = req.body || {};
+
+  const reshow = (problem) =>
+    res.type('html').send(
+      adminPage({
+        title: 'New customer',
+        active: '/ops/customers',
+        body: phoneCustomerForm({ values: form, problem }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+
+  try {
+    const phone = normalisePhone(String(form.phone || ''));
+    if (!phone) return reshow('That does not look like a usable cell number.');
+
+    if (String(form.consent || '') !== 'yes') {
+      return reshow('Tick the consent box. It is the only record we have that they agreed to be texted.');
+    }
+
+    // ALREADY ON THE BOOKS IS NOT AN ERROR, it is the commonest thing that will
+    // happen here: a customer rings back. Sending them to their own page is
+    // more useful than refusing, and it is the only thing that stops a second
+    // row being made for somebody who already has orders and a card.
+    const { data: existing } = await db
+      .from('customers')
+      .select('id, name, status')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    if (existing) {
+      const who = existing.name ? `${existing.name} is` : 'That number is';
+      return res.redirect(
+        303,
+        `/ops/customers/${existing.id}?note=${encodeURIComponent(
+          `${who} already a customer, so nothing new was created. Add their order from here.`
+        )}`
+      );
+    }
+
+    for (const key of wash.KEYS) {
+      if (!wash.isValid(key, String(form[key] || ''))) {
+        return reshow(`Pick a ${wash.OPTIONS[key].label.toLowerCase()}.`);
+      }
+    }
+
+    const spot = String(form.spot || '').trim();
+    if (!spot) return reshow('We need somewhere to leave the bag.');
+
+    // Creates the row and its consent record, and hands out whatever promotion
+    // is on auto-grant. sendWelcome is false on purpose: the canned welcome
+    // opens by thanking somebody for sending their number over, which is the
+    // wrong sentence to read thirty seconds after putting the phone down.
+    const started = await onboarding.startConversation({
+      phone,
+      consentSource: 'PHONE_CALL',
+      // No IP. This did not come through a browser, and recording ours would
+      // suggest evidence that does not exist.
+      consentIp: null,
+      sendWelcome: false,
+    });
+
+    if (!started.ok) {
+      return reshow(
+        started.reason === 'unsubscribed'
+          ? 'That number has opted out of our texts. They have to text START themselves before we can contact them again.'
+          : `We could not set that up: ${started.reason}.`
+      );
+    }
+
+    const { error } = await db
+      .from('customers')
+      .update({
+        name: String(form.name || '').trim().slice(0, 80) || null,
+        address_line1: String(form.address_line1 || '').trim().slice(0, 120) || null,
+        address_line2: String(form.address_line2 || '').trim().slice(0, 80) || null,
+        city: String(form.city || '').trim().slice(0, 80) || null,
+        state: PHONE_ORDER_STATE,
+        postal_code: String(form.postal_code || '').trim().slice(0, 10) || null,
+        preferences: {
+          water_temp: String(form.water_temp),
+          fabric_softener: String(form.fabric_softener),
+          special_instructions: spot.slice(0, 200),
+        },
+        // WHO SAYS THEY AGREED. The whole audit trail for a customer created
+        // this way is a name and a timestamp, so it is written at the same
+        // moment as everything else rather than left for later.
+        sms_consent_by: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+      })
+      .eq('id', started.customer.id);
+
+    if (error) throw error;
+
+    // The card link, while they are still on the call. Through the same
+    // billing.setupLinkMessage() the AI, the website and the nudge button all
+    // use, so there is one wording and one /pay token minting path.
+    let note = 'Customer created.';
+    if (String(form.send_card || '') === 'yes') {
+      try {
+        const { data: fresh } = await db
+          .from('customers')
+          .select('*')
+          .eq('id', started.customer.id)
+          .single();
+
+        await notify.sendAndLog(phone, await billing.setupLinkMessage(fresh), fresh.id);
+        note = 'Customer created, and the card link has been texted to them.';
+      } catch (err) {
+        // THE CUSTOMER IS REAL WHETHER OR NOT THE TEXT WENT, so this never
+        // undoes the row. Saying so is the point: an admin who thinks the link
+        // was sent and it was not is the worst of both.
+        console.error(`Could not text the card link to ${phone}: ${err.message}`);
+        note = 'Customer created, but the card link did NOT send. Try the button on their profile.';
+      }
+    }
+
+    return res.redirect(303, `/ops/customers/${started.customer.id}?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// An order, taken over the phone, for somebody already on the books.
+//
+// This is deliberately thin. Everything that decides whether a pickup can
+// happen lives in booking.checkSlot(), and bookPickup() runs it again before
+// it writes - so this route asks for a day and a time and hands them over. If
+// it ever starts deciding anything itself, that is the drift CLAUDE.md warns
+// about between the front doors.
+// ---------------------------------------------------------------------------
+function phoneOrderForm({ customer, values = {}, problem = null }) {
+  const v = (k) => escapeHtml(String(values[k] || ''));
+  const prefs = customer.preferences || {};
+  const spot = prefs.dropoff_spot || prefs.special_instructions || null;
+
+  return `
+    <p class="eyebrow" style="margin:0 0 8px;">On the phone</p>
+    <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">
+      Book a pickup for ${escapeHtml(customer.name || formatPhone(customer.phone))}
+    </h1>
+
+    ${problem ? phoneBanner(problem) : ''}
+
+    <div class="card" style="padding:20px 22px;margin-bottom:22px;max-width:640px;">
+      <p class="eyebrow" style="margin:0 0 8px;">What we already have</p>
+      <div style="font-size:15px;line-height:1.7;">
+        ${escapeHtml(customer.address_line1 || 'NO ADDRESS ON FILE')}${
+          customer.address_line2 ? `, ${escapeHtml(customer.address_line2)}` : ''
+        }${customer.city ? `, ${escapeHtml(customer.city)}` : ''}<br>
+        Bag goes: ${spot ? escapeHtml(spot) : '<strong>not recorded</strong>'}<br>
+        Wash: ${escapeHtml(wash.describeSaved(prefs) || 'not set')}<br>
+        Card: ${
+          customer.default_payment_method_id
+            ? `${escapeHtml(customer.card_brand || 'card')} ending ${escapeHtml(customer.card_last4 || '')}`
+            : '<strong>none on file</strong>, so this will not be confirmed until they add one'
+        }
+      </div>
+    </div>
+
+    <form method="post" action="/ops/customers/${customer.id}/order" class="card card-xl" style="padding:26px;max-width:640px;">
+      <label class="field-label" for="pickup_date">Which day?</label>
+      <input class="field" id="pickup_date" name="pickup_date" type="date" required
+             value="${v('pickup_date')}" style="width:100%;margin-bottom:18px;">
+
+      <label class="field-label" for="pickup_time">What time did they ask for?</label>
+      <input class="field" id="pickup_time" name="pickup_time" type="time"
+             value="${v('pickup_time')}" style="width:100%;margin-bottom:6px;">
+      <p style="font-size:13px;color:var(--ink-500);margin:0 0 18px;">
+        Optional. They get the window that covers whatever time they say, and
+        leaving it blank means the first window of the working day rather than
+        the crack of dawn. Windows: ${escapeHtml(booking.listWindows())}.
+      </p>
+
+      <label class="field-label" for="notes">Anything they mentioned</label>
+      <input class="field" id="notes" name="notes" type="text" maxlength="500"
+             value="${v('notes')}" placeholder="two bags, one is bedding"
+             style="width:100%;margin-bottom:24px;">
+
+      <button class="btn btn-primary btn-lg" type="submit">Book it and text them</button>
+      <a class="btn btn-ghost btn-lg" href="/ops/customers/${customer.id}">Cancel</a>
+    </form>`;
+}
+
+router.get('/ops/customers/:id/order', guard, withIssues, may('customers.view'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
+
+    const { data: customer, error } = await db
+      .from('customers')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!customer) return notFoundPage(res, 'There is no customer with that id.');
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Book a pickup',
+        active: '/ops/customers',
+        body: phoneOrderForm({ customer }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req, res, next) => {
+  const form = req.body || {};
+
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
+
+    const { data: customer, error } = await db
+      .from('customers')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!customer) return notFoundPage(res, 'There is no customer with that id.');
+
+    const reshow = (problem) =>
+      res.type('html').send(
+        adminPage({
+          title: 'Book a pickup',
+          active: '/ops/customers',
+          body: phoneOrderForm({ customer, values: form, problem }),
+          user: req.opsUser,
+          openIssues: req.openIssues,
+          serviceClosed: req.serviceClosed,
+        })
+      );
+
+    // THE ONE DOOR. Every rule about whether this pickup can happen - the
+    // closed sign, the opening date, the county, the wash preferences, the
+    // windows, a day already booked - is inside here and is the same code the
+    // AI and the website hit. Nothing above re-decides any of it.
+    const result = await booking.bookPickup(customer, {
+      pickupDate: String(form.pickup_date || ''),
+      pickupTime: String(form.pickup_time || ''),
+      notes: String(form.notes || '').trim().slice(0, 500) || null,
+      placedVia: booking.DOORS.PHONE,
+      // The whole row, not the id: order_events needs the name to put against
+      // the change. See the note on placedBy in booking.js.
+      placedBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser : null,
+    });
+
+    if (!result.ok) {
+      // WRITTEN FOR WHOEVER IS HOLDING THE PHONE, not for the customer. The
+      // web form's version of this map explains a refusal to the person it
+      // happened to; here somebody has to say something out loud in the next
+      // two seconds, so each one says what to tell them.
+      const message = {
+        not_taking_orders: result.detail
+          ? `We are not taking orders right now. ${result.detail}`
+          : 'We are not taking orders right now. Turn it back on under Taking orders, or tell them we will call back.',
+        no_address: 'No address on file for them. Add it on their profile first.',
+        out_of_area: `That address is outside ${site.serviceArea}. Tell them we do not reach them yet.`,
+        no_preferences: 'No wash preferences on file. Ask how they want it washed and add it to their profile.',
+        bad_date: result.detail,
+        bad_time: result.detail,
+        before_opening: result.detail,
+        already_booked:
+          'They already have a pickup booked for that day. Move that one rather than adding a second.',
+        time_unavailable: result.say,
+      }[result.reason];
+
+      return reshow(message || 'That pickup could not be booked.');
+    }
+
+    // Confirm by text, from the same function every other door uses, so the
+    // messages table reads the same whichever way the order arrived. The only
+    // difference is the opener: they rang us, so it thanks them for calling.
+    try {
+      await notify.sendAndLog(
+        customer.phone,
+        booking.confirmationMessage(customer, result.order, {
+          source: booking.DOORS.PHONE,
+          rolled: result.rolled,
+          freeOrder: result.freeOrder,
+          freeUpToLb: result.freeUpToLb,
+        }),
+        customer.id
+      );
+    } catch (err) {
+      // THE ORDER IS REAL WHETHER OR NOT THE TEXT WENT. Never undo it here -
+      // a booking the customer was promised out loud and that then vanished
+      // because a carrier hiccupped is far worse than one they were not texted
+      // about, and the next screen says which happened.
+      console.error(`Order #${result.order.order_number} booked but not confirmed by text: ${err.message}`);
+      return res.redirect(
+        303,
+        `/ops/orders/${result.order.order_number}?problem=${encodeURIComponent(
+          'Booked, but the confirmation text did NOT send. Tell them on the call.'
+        )}`
+      );
+    }
+
+    return res.redirect(
+      303,
+      `/ops/orders/${result.order.order_number}?done=${encodeURIComponent(
+        'Booked, and confirmed by text.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 
 router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async (req, res, next) => {
   try {
@@ -3484,6 +3981,11 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
               )}" class="btn btn-outline btn-sm">Read the thread</a>`
             : ''
         }
+        <!-- FOR SOMEBODY WHO RANG UP. Every rule about whether the pickup can
+             happen lives behind this in booking.bookPickup(), so the button is
+             offered to anybody and the refusal, if there is one, is a sentence
+             on the next screen rather than a control that is missing here. -->
+        <a href="/ops/customers/${person.id}/order" class="btn btn-primary btn-sm">Book a pickup</a>
       </div>
 
       ${

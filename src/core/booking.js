@@ -924,7 +924,30 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
   return { ok: true, window, pickupDate, pickupTime, waived };
 }
 
-async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagCount, notes, fromSchedule } = {}) {
+async function bookPickup(
+  customer,
+  {
+    pickupDate,
+    pickupTime,
+    pickupMethod,
+    bagCount,
+    notes,
+    fromSchedule,
+    // WHICH DOOR THIS CAME THROUGH, recorded on the order rather than only
+    // used to pick a greeting. `source` already decides the voice of the
+    // confirmation at send time and nothing kept it; "how did this order get
+    // here" outlives that sentence, and it is the only way to answer whether
+    // taking phone calls is working. Defaults to null rather than THREAD -
+    // unknown is honest for a caller that has not been taught to say.
+    placedVia = null,
+    // The ops user who took the call, as the WHOLE ROW rather than an id.
+    // orders.placed_by needs the id and order_events needs the name, and
+    // events.record() reads that off by.opsUser - handing it an id alone logs
+    // the change against nobody, which is the opposite of the point. PHONE
+    // only; there is nobody to name on the other two doors.
+    placedBy = null,
+  } = {}
+) {
   // Every rule lives in checkSlot, so the thing the AI is told and the thing
   // that writes the order can never disagree about what is possible.
   const checked = await checkSlot(customer, { pickupDate, pickupTime, fromSchedule });
@@ -961,15 +984,28 @@ async function bookPickup(customer, { pickupDate, pickupTime, pickupMethod, bagC
       : prefs.default_pickup_method || 'LEAVE_OUTSIDE',
     bagCount,
     notes,
+    placedVia: DOORS[placedVia] || null,
+    placedBy: placedVia === DOORS.PHONE && placedBy ? placedBy.id : null,
   });
 
   await events.record(order.id, {
     kind: 'CREATED',
     summary: fromSchedule
       ? `Booked automatically from a standing order for ${window.date}`
-      : `Booked for ${window.date}`,
+      : placedVia === DOORS.PHONE
+        ? `Booked for ${window.date}, taken over the phone`
+        : `Booked for ${window.date}`,
     became: window.date,
-    by: { actor: fromSchedule ? 'system' : 'customer' },
+    // WHO PLACED IT, and a phone order is the one case where that is neither
+    // the customer nor the system: somebody here typed it while they talked.
+    // The change log should say so, because "the customer asked for Friday" and
+    // "we wrote down Friday" are different claims if the day is ever disputed.
+    by:
+      fromSchedule
+        ? { actor: 'system' }
+        : placedVia === DOORS.PHONE && placedBy
+          ? { opsUser: placedBy }
+          : { actor: 'customer' },
     reason: window.date !== pickupDate ? `Asked for ${pickupDate}, rolled to the next slot` : null,
   });
 
@@ -1125,7 +1161,18 @@ function whenLine(order) {
 // point of it living here: what a customer is told about their order cannot
 // depend on where they typed it. Only the opening clause knows.
 // ---------------------------------------------------------------------------
-const DOORS = Object.freeze({ THREAD: 'THREAD', WEB: 'WEB' });
+// WHICH DOOR THE ORDER CAME THROUGH, which decides the voice of its text.
+//
+// THREAD is the default because the AI is the caller that must never have to
+// remember. WEB says nothing at the front, because on a form nobody asked us
+// anything and a text that opens by agreeing is answering a question that was
+// never put.
+//
+// PHONE is Neil taking a call, added 10 September. They DID ask, out loud, and
+// they put the phone down thirty seconds ago - so "Of course!" is nearly right
+// and still slightly wrong, because it answers a message rather than a call.
+// Thanking them for ringing is the sentence a person would actually write.
+const DOORS = Object.freeze({ THREAD: 'THREAD', WEB: 'WEB', PHONE: 'PHONE' });
 
 function confirmationMessage(
   customer,
@@ -1215,7 +1262,13 @@ function confirmationMessage(
   // `opener` still wins over both, because it is not a greeting: it is the
   // payment webhook saying "Card saved" so the card is not named twice in one
   // text, which a real customer got. That is true whichever door they used.
-  const greeting = opener ? `${opener}! ` : source === DOORS.WEB ? '' : 'Of course! ';
+  const greeting = opener
+    ? `${opener}! `
+    : source === DOORS.WEB
+      ? ''
+      : source === DOORS.PHONE
+        ? 'Thanks for calling! '
+        : 'Of course! ';
 
   const lead = rolled
     ? `${greeting}Today's routes are finished, so order #${order.order_number} is in for the earliest we can do:`
