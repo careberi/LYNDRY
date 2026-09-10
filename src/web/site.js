@@ -178,6 +178,39 @@ const site = Object.freeze({
 
   turnaround: 'next day',
 
+  // ---------------------------------------------------------------------
+  // THE GUARANTEE.
+  //
+  // Neil's ask, and it answers the exact sentence that lost the only two
+  // customers who ever reached the card. Kellie: "I never heard of stripe
+  // checkout I'll pass but thank you". Trisha: "just not enough info to make
+  // me feel confident". Both walked at the moment of handing over a card and
+  // a home address, and neither was refusing the price.
+  //
+  // WHAT IT COVERS IS THE WASH, CAPPED AT THE ORDER, and that scope is
+  // deliberate rather than vague. Neil's call, taken with the alternatives in
+  // front of him. "You get a full refund" is heard one way by somebody
+  // missing a sock and another way by somebody holding a ruined coat, and the
+  // second reading is an unbounded promise made by a business with no entity
+  // and no insurance behind it yet. So the sentence says what it means: you
+  // do not pay for that order.
+  //
+  // "we'll sort it out" is the deliberate second half. It is warm, it invites
+  // them to say something, and it promises a conversation rather than a sum -
+  // which is honest, because a person decides what happens next, not the AI
+  // and not this string.
+  //
+  // ONE COPY, HERE, because it is a promise. The AI repeats it, and if it
+  // ever goes on the website or into the card ask those read it from here.
+  // Two copies of a guarantee is how a customer ends up quoting back a
+  // version we stopped offering.
+  //
+  // PLAIN ASCII, like everything else in this object that reaches a text
+  // message: straight apostrophes, no dashes. See the note on estimateRange.
+  guarantee:
+    "If anything comes back damaged or missing, you don't pay for that order. " +
+    "Just tell us and we'll sort it out.",
+
   legalUpdated: 'August 2026',
 });
 
