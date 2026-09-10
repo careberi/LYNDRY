@@ -8338,6 +8338,32 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
       ).length,
     };
 
+    // HOW MANY PEOPLE ARE WAITING FOR A PHONE CALL.
+    //
+    // Counted here the same way /ops/leads counts them - through
+    // leadOutreach.stateOf() - rather than with a second rule that could
+    // disagree with the screen the card links to. A card promising three to
+    // ring that opens onto five is worse than no card.
+    //
+    // Caught rather than awaited into a failure, like the follow-up counts
+    // above: a dashboard card is not worth taking the whole page down for.
+    const leadCounts = await (async () => {
+      const { data: leadRows } = await db
+        .from('facebook_leads')
+        .select('lead_id, skipped');
+
+      // The same test /ops/leads uses: a lead the sweep refused because the
+      // number opted out or was already a customer is not somebody to ring.
+      const callable = (l) => !l.skipped || l.skipped === leads.HELD_FOR_A_PERSON;
+      const list = (leadRows || []).filter(callable);
+
+      const attempts = await leadOutreach.forLeads(list.map((l) => l.lead_id));
+      const count = (state) =>
+        list.filter((l) => leadOutreach.stateOf(attempts[l.lead_id]) === state).length;
+
+      return { toRing: count('NEW'), tried: count('TRIED'), reached: count('REACHED') };
+    })().catch(() => ({}));
+
     return res.type('html').send(
       adminPage({
         title: 'Admin dashboard',
@@ -8355,6 +8381,7 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
           },
           openIssues: req.openIssues,
           orderCounts,
+          leads: leadCounts,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),

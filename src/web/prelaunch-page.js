@@ -58,6 +58,19 @@ function scheduledLine({ chases = 0, reminders = 0 } = {}) {
   return bits.length ? `${bits.join(', ')} queued` : 'Nothing queued';
 }
 
+// WHAT THE LEADS CARD SAYS. The number to ring leads, because that is the only
+// one that asks anything of you - "12 reached" is a fact about the past and
+// belongs after it, not in front of it.
+function leadsLine({ toRing = 0, tried = 0, reached = 0 } = {}) {
+  if (!toRing && !tried && !reached) return 'Nothing off the adverts yet';
+
+  const bits = [];
+  if (toRing) bits.push(`${toRing} to ring`);
+  if (tried) bits.push(`${tried} tried`);
+  if (reached) bits.push(`${reached} reached`);
+  return bits.join(', ');
+}
+
 function adminDashboardBody({
   settings,
   limits,
@@ -65,6 +78,7 @@ function adminDashboardBody({
   openIssues = 0,
   orderCounts = {},
   scheduled = {},
+  leads = {},
   notice,
   problem,
 }) {
@@ -164,6 +178,16 @@ ${banner(problem, 'bad')}
       line: running.length ? running.map((p) => p.name).join(', ') : 'Nothing running',
     },
     {
+      // SECOND, BESIDE PROMOTIONS, at Neil's request. It belongs with the rest
+      // of what an owner works rather than under Tools: everything here is a
+      // decision about who hears from us, and since 10 September the adverts
+      // say nothing on their own - somebody has to ring these people.
+      href: '/ops/leads',
+      eyebrow: 'Off the Facebook adverts',
+      title: 'Leads',
+      line: leadsLine(leads),
+    },
+    {
       href: '/ops/broadcast',
       eyebrow: 'Everybody at once',
       title: 'Text blast',
@@ -205,7 +229,11 @@ ${banner(problem, 'bad')}
       href: '/ops/weights',
       eyebrow: 'How far apart is too far',
       title: 'Weight thresholds',
-      line: `Normal to ${limits.weight_normal_pct}%, exception past ${limits.weight_acceptable_pct}%`,
+      // settings.weightLimits() returns camelCase, and this read the column
+      // names - so the card said "Normal to undefined%, exception past
+      // undefined%" on a live screen. The values were never wrong; only this
+      // sentence about them was.
+      line: `Normal to ${limits.normalPct}%, exception past ${limits.acceptablePct}%`,
     },
   ]
     .map(card)
