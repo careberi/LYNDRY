@@ -14,6 +14,7 @@ const promocodes = require('../core/promocodes');
 const orders = require('../core/orders');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
+const pausedAlerts = require('../core/paused-alerts');
 const burst = require('../core/burst');
 const recurring = require('../core/recurring');
 const { site } = require('../web/site');
@@ -341,6 +342,22 @@ async function answerWithBrain(customer, text, from) {
   // thread and answers it there.
   if (await aiPause.isPaused(from)) {
     console.warn(`PAUSED  ${from}: a person is handling this conversation. Saying nothing.`);
+
+    // BUT TELL SOMEBODY, which is Neil's ask and the missing half of the
+    // pause. Everything else about a muted thread is PULL - a badge on the
+    // conversations list, a count in a banner - and it only works if you go
+    // and look. This is the push.
+    //
+    // IT SITS HERE, AFTER THE BURST WINDOW, ON PURPOSE. Somebody who fires off
+    // three messages in fifteen seconds is one person starting a conversation,
+    // and this runs once for the lot of them rather than three times. The
+    // hourly ceiling in paused-alerts.js is the backstop for the slower
+    // version of the same thing.
+    //
+    // Awaited, because we are already off the webhook's response path - the
+    // burst window put us here - and it swallows its own errors, so nothing it
+    // does can turn "the AI stayed quiet" into "the webhook threw".
+    await pausedAlerts.customerTexted({ phone: from, customer, said: text });
     return;
   }
 
