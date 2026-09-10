@@ -62,7 +62,23 @@ async function main() {
   const promo = await promotions.autoGrant();
   const left = await promotions.ordersLeft(promo);
 
+  // DOES THE SWEEP STILL TEXT ANYBODY. Off since 10 September, Neil's call.
+  //
+  // This script reimplements the decision rather than calling leads.handle(),
+  // deliberately - handle() writes rows and sends texts, and this must do
+  // neither. The cost of that is exactly this kind of drift, so anything that
+  // changes what the sweep DOES has to be reflected here in the same commit or
+  // the dry run quietly starts lying about it.
+  const autoText = await settings.leadAutoText();
+
   const counts = { texted: 0, would: 0, skipped: 0 };
+
+  if (!autoText) {
+    console.log(
+      'AUTOMATIC TEXTING IS OFF. New leads are recorded and held for somebody to\n' +
+        'ring from /ops/leads. Nothing on this sheet will be texted by the sweep.\n'
+    );
+  }
 
   console.log(pad('NUMBER', 16) + pad('TICKED', 8) + pad('AD', 22) + 'WHAT HAPPENS');
   console.log('-'.repeat(94));
@@ -103,8 +119,15 @@ async function main() {
       } else if (customer) {
         verdict = `SKIP - already a customer${customer.name ? ` (${customer.name})` : ''}`;
         counts.skipped += 1;
-      } else {
+      } else if (autoText) {
         verdict = 'WOULD TEXT on the next sweep';
+        counts.would += 1;
+      } else {
+        // Recorded, not texted, and put in front of a person instead. Says
+        // "held" rather than "skipped" because those are different lists on
+        // /ops/leads and must not read as one here either: a number that
+        // opted out is finished with, and this one is waiting for a call.
+        verdict = 'HELD for a call - /ops/leads';
         counts.would += 1;
       }
     }
@@ -119,7 +142,8 @@ async function main() {
 
   console.log('-'.repeat(94));
   console.log(
-    `${rows.length} on the sheet: ${counts.would} waiting to be texted, ` +
+    `${rows.length} on the sheet: ${counts.would} ` +
+      `${autoText ? 'waiting to be texted' : 'waiting for a call'}, ` +
       `${counts.texted} already texted, ${counts.skipped} skipped.\n`
   );
 

@@ -61,6 +61,8 @@ const {
   broadcastBody,
   AUDIENCES,
 } = require('../web/prelaunch-page');
+const leads = require('../core/leads');
+const leadOutreach = require('../core/lead-outreach');
 const settings = require('../core/settings');
 const promotions = require('../core/promotions');
 const promocodes = require('../core/promocodes');
@@ -336,6 +338,15 @@ const OPS_MENUS = Object.freeze([
       // whose route still fires is exactly what this codebase says not to
       // mistake for a guard.
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
+      // BESIDE CUSTOMERS, because a Facebook lead is a person you are trying to
+      // turn into one - which is the question this group answers. It is not
+      // under Business with the promotions and the text blast: those are things
+      // you set up and leave running, and this is a list you work through with
+      // a phone in your hand.
+      //
+      // Not to be confused with /ops/partners/enquiries, which is the website
+      // form and is a pile of laundromats and landlords rather than customers.
+      { href: '/ops/leads', label: 'Leads', permission: 'customers.view' },
       // "Messages" at Neil's request. It was called Conversations to make the
       // point that the screen is one row per phone NUMBER and holds people who
       // never became customers - which is still true and still the reason it is
@@ -9089,6 +9100,344 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
         openIssues: req.openIssues, serviceClosed: req.serviceClosed,
       })
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /ops/leads — the Facebook call list
+//
+// Neil, 10 September: "stop doing automated outreach to the Facebook ads...
+// create a portal where numbers that are generated from Facebook are populated
+// in a table there, and we could see if we've reached out to them or not. And
+// I should have the option to click reached out and then click a method."
+//
+// THE SCREEN IS A CALL LIST, WHICH DECIDES EVERY DECISION ON IT. It is sorted
+// newest first because a lead who tapped the advert twenty minutes ago is the
+// one most likely to pick up; the number is a tel: link because the next thing
+// that happens after reading a row is a phone ringing; and the four buttons
+// are the four things that can happen when you try, not a status somebody has
+// to translate into one.
+//
+// WHAT COUNTS AS REACHED IS DERIVED, not stored. lead-outreach.js reads the
+// attempts and answers NEW, TRIED or REACHED, so the count in the header and
+// the group a row sits in cannot disagree - the same rule the nudge gaps and
+// the board's BOOKED badge already follow.
+//
+// A LEAD THE OLD SWEEP AUTO-TEXTED IS NOT REACHED, and that is deliberate.
+// Seventeen of these were texted automatically before this decision was taken;
+// counting that as contact would hide exactly the people this screen exists to
+// put back in front of somebody. The row says it was auto-texted, in grey, as
+// history rather than as an outcome.
+// ---------------------------------------------------------------------------
+
+const LEAD_GROUPS = Object.freeze([
+  {
+    state: 'NEW',
+    eyebrow: 'Ring these',
+    heading: 'Nobody has tried yet',
+    tone: 'var(--sunbeam-500)',
+    blurb: 'Newest first, because somebody who tapped the advert this morning is the one most likely to answer.',
+  },
+  {
+    state: 'TRIED',
+    eyebrow: 'Try again',
+    heading: 'Tried, not spoken to',
+    tone: 'var(--lilac-300)',
+    blurb: 'A voicemail or a number that did not pick up. Worth another go at a different time of day.',
+  },
+  {
+    state: 'REACHED',
+    eyebrow: 'Done',
+    heading: 'Reached',
+    tone: 'var(--suds-300)',
+    blurb: 'Somebody has actually spoken to them or texted them by hand.',
+  },
+]);
+
+router.get('/ops/leads', guard, withIssues, may('customers.view'), async (req, res, next) => {
+  try {
+    const [{ data: rows, error }, autoText] = await Promise.all([
+      db.from('facebook_leads').select('*').order('created_time', { ascending: false }),
+      settings.leadAutoText().catch(() => false),
+    ]);
+
+    if (error) throw error;
+
+    const all = rows || [];
+
+    // ONE QUERY EACH for the attempts and for who has since become a customer,
+    // rather than two per row. Both are keyed lookups the page reads many
+    // times, and a screen that fires a query per lead gets slower every time
+    // the adverts work - which is the wrong way round.
+    const attempts = await leadOutreach.forLeads(all.map((l) => l.lead_id)).catch(() => ({}));
+
+    const phones = [...new Set(all.map((l) => l.phone).filter(Boolean))];
+    const { data: known } = phones.length
+      ? await db.from('customers').select('id, phone, name, status').in('phone', phones)
+      : { data: [] };
+    const customerFor = Object.fromEntries((known || []).map((c) => [c.phone, c]));
+
+    // WHICH LEADS ARE FOR CALLING AT ALL. A lead the sweep refused because the
+    // number had opted out, or was unusable, or was already on the books is not
+    // a gap in the call list - it is a decision that was made correctly and
+    // must not be undone by putting the row back in front of somebody. Those
+    // sit in their own section at the foot, greyed, so "why is this one not in
+    // my list" is answerable without a query.
+    const callable = (l) => !l.skipped || l.skipped === leads.HELD_FOR_A_PERSON;
+
+    const forCalling = all.filter(callable);
+    const setAside = all.filter((l) => !callable(l));
+
+    const stateOf = (l) => leadOutreach.stateOf(attempts[l.lead_id]);
+    const inState = (s) => forCalling.filter((l) => stateOf(l) === s);
+
+    // --- one row ------------------------------------------------------------
+    const rowFor = (lead) => {
+      const tried = attempts[lead.lead_id] || [];
+      const customer = customerFor[lead.phone];
+      const digits = String(lead.phone || '').replace(/\D/g, '');
+
+      const history = tried.length
+        ? `<div style="margin:0 0 14px;padding-left:14px;border-left:3px solid var(--ink-200);">
+             ${tried
+               .map(
+                 (a) => `<div style="font-size:14px;color:var(--ink-600);margin-bottom:4px;">
+                     <strong style="color:var(--ink-900);">${escapeHtml(leadOutreach.METHODS[a.method] || a.method)}</strong>
+                     &middot; ${dateTime(a.at)}
+                     ${a.ops_users && a.ops_users.name ? `&middot; ${escapeHtml(a.ops_users.name)}` : ''}
+                     ${a.note ? `<br><span style="color:var(--ink-800);">${escapeHtml(a.note)}</span>` : ''}
+                   </div>`
+               )
+               .join('')}
+           </div>`
+        : '';
+
+      // Grey, small, and after the fact: this is what the old automatic sweep
+      // did, not something anybody decided.
+      const auto = lead.texted_at
+        ? `<span style="font-size:13px;color:var(--ink-500);">Auto-texted ${dateTime(lead.texted_at)}</span>`
+        : '';
+
+      const became = customer
+        ? `<a class="badge" style="background:var(--suds-300);text-decoration:none;" href="/ops/customers/${customer.id}">Now a customer${
+            customer.status === 'UNSUBSCRIBED' ? ', opted out' : ''
+          }</a>`
+        : '';
+
+      return `
+        <div class="card" style="padding:20px 22px;margin-bottom:14px;">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:6px;">
+            <a href="tel:${escapeHtml(lead.phone)}"
+               style="font-family:var(--font-display);font-weight:900;font-size:26px;letter-spacing:-0.02em;">
+              ${escapeHtml(formatPhone(lead.phone))}
+            </a>
+            ${became}
+            ${
+              lead.consented
+                ? '<span class="badge" title="Ticked the consent box on the form">Consented</span>'
+                : '<span class="badge" style="background:var(--paper-200);" title="Left the consent box unticked. Recorded, and it does not stop you calling them.">Box unticked</span>'
+            }
+          </div>
+
+          <p style="font-size:14px;color:var(--ink-600);margin:0 0 14px;">
+            Filled the form ${timeAgo(lead.created_time)} &middot; ${dateTime(lead.created_time)}
+            ${lead.campaign ? `&middot; ${escapeHtml(lead.campaign)}` : ''}
+            ${auto ? `&middot; ${auto}` : ''}
+            ${digits ? `&middot; <a href="/ops/messages/${digits}">Open the thread</a>` : ''}
+          </p>
+
+          ${history}
+
+          <!-- NO PERMISSION CHECK ON THESE BUTTONS, and that is not an
+               oversight. The route above is guarded by customers.view and so is
+               the POST, so everybody who can read this page can also mark a
+               call - which is right, because recording that you rang somebody
+               is the same act as being trusted with their number in the first
+               place. A Sales user working the list is exactly who this is for.
+               Rendering a check that can never be false would only suggest
+               there is a role it hides from. -->
+          <form method="post" action="/ops/leads/${encodeURIComponent(lead.lead_id)}/outreach" style="margin:0;">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+              <button class="btn btn-sm btn-primary" name="method" value="CALL">Spoke to them</button>
+              <button class="btn btn-sm btn-outline" name="method" value="VOICEMAIL">Left voicemail</button>
+              <button class="btn btn-sm btn-outline" name="method" value="NO_ANSWER">No answer</button>
+              <button class="btn btn-sm btn-outline" name="method" value="TEXT">Texted them</button>
+              <input type="text" name="note" maxlength="200" placeholder="Note, optional"
+                     style="flex:1;min-width:180px;height:36px;font-size:14px;">
+              ${
+                tried.length
+                  ? '<button class="btn btn-sm btn-ghost" name="method" value="UNDO" title="Remove the most recent attempt">Undo last</button>'
+                  : ''
+              }
+            </div>
+          </form>
+        </div>`;
+    };
+
+    const group = (g) => {
+      const list = inState(g.state);
+      if (!list.length) return '';
+      return `<section style="margin-bottom:48px;">
+                ${sectionHeading(g.eyebrow, g.heading, list.length)}
+                <p style="font-size:15px;color:var(--ink-600);margin:-12px 0 20px;max-width:60ch;">${g.blurb}</p>
+                ${list.map(rowFor).join('')}
+              </section>`;
+    };
+
+    // --- the switch ---------------------------------------------------------
+    //
+    // ON THE PAGE IT AFFECTS, and saying which way it is set in words rather
+    // than as a control somebody has to interpret. The whole risk of a switch
+    // that stays where you put it is forgetting you put it there, which is the
+    // same reason a muted thread is badged and a closed shop banners every
+    // page.
+    const switchCard = `
+      <div class="card card-xl" style="padding:24px 26px;margin-bottom:44px;${
+        autoText ? 'box-shadow:6px 6px 0 var(--sunbeam-500);' : ''
+      }">
+        <p class="eyebrow" style="margin:0 0 8px;">Automatic texting</p>
+        <p style="font-size:17px;line-height:1.5;margin:0 0 14px;max-width:64ch;">
+          ${
+            autoText
+              ? '<strong>New leads are being texted automatically.</strong> They get the advert introduction within a few minutes of filling the form, and land here already contacted.'
+              : '<strong>New leads are not texted.</strong> They arrive here within a few minutes of filling the form and wait for you to ring them. Nothing goes out on its own.'
+          }
+        </p>
+        ${
+          roles.can(req.opsUser, 'service.manage')
+            ? `<form method="post" action="/ops/leads/auto-text" style="margin:0;">
+                 <button class="btn btn-sm ${autoText ? 'btn-outline' : 'btn-primary'}"
+                         name="on" value="${autoText ? 'no' : 'yes'}">
+                   ${autoText ? 'Stop texting new leads automatically' : 'Start texting new leads automatically'}
+                 </button>
+               </form>`
+            : ''
+        }
+      </div>`;
+
+    const body = `
+      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:32px;">
+        ${statCard('To ring', inState('NEW').length, inState('NEW').length ? 'var(--sunbeam-500)' : 'var(--paper-050)')}
+        ${statCard('Tried', inState('TRIED').length)}
+        ${statCard('Reached', inState('REACHED').length)}
+        ${statCard('Set aside', setAside.length)}
+      </div>
+
+      ${switchCard}
+
+      ${
+        forCalling.length
+          ? LEAD_GROUPS.map(group).join('')
+          : `<div class="card card-xl" style="padding:32px;margin-bottom:44px;">
+               ${sectionHeading('Leads', 'Nothing to ring yet')}
+               <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0;max-width:62ch;">
+                 Numbers from the Facebook advert form land here within a few
+                 minutes of somebody filling it in. Nothing has come through yet.
+               </p>
+             </div>`
+      }
+
+      ${
+        setAside.length
+          ? `<section>
+               ${sectionHeading('Not for calling', 'Set aside', setAside.length)}
+               <p style="font-size:15px;color:var(--ink-600);margin:-12px 0 20px;max-width:62ch;">
+                 The sweep left these alone and was right to. They are here so
+                 that a number missing from the list above is never a mystery.
+               </p>
+               <div class="card" style="padding:6px 22px;">
+                 ${setAside
+                   .map(
+                     (l) => `<div style="padding:12px 0;border-bottom:1px solid var(--ink-100);display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;">
+                          <span style="font-weight:700;">${escapeHtml(formatPhone(l.phone))}</span>
+                          <span style="font-size:14px;color:var(--ink-600);">${escapeHtml(l.skipped)}</span>
+                          <span style="font-size:13px;color:var(--ink-400);margin-left:auto;">${dateTime(l.created_time)}</span>
+                        </div>`
+                   )
+                   .join('')}
+               </div>
+             </section>`
+          : ''
+      }`;
+
+    res.type('html').send(
+      adminPage({
+        title: 'Leads',
+        active: '/ops/leads',
+        body,
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/leads/:leadId/outreach — "I rang them"
+//
+// Behind customers.view rather than messages.send, and the difference is the
+// point: this causes no text and reaches no phone. It records something a
+// person already did in the world, which is the one thing this system cannot
+// work out for itself.
+// ---------------------------------------------------------------------------
+router.post('/ops/leads/:leadId/outreach', guard, may('customers.view'), async (req, res, next) => {
+  try {
+    const leadId = String(req.params.leadId || '');
+    const method = String((req.body || {}).method || '');
+
+    // The lead has to exist. Without this an id typed into the URL would write
+    // an attempt against nothing, and the foreign key would refuse it with a
+    // 500 rather than a sentence.
+    const { data: lead, error } = await db
+      .from('facebook_leads')
+      .select('lead_id')
+      .eq('lead_id', leadId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!lead) return notFoundPage(res, 'There is no lead with that id.');
+
+    if (method === 'UNDO') {
+      await leadOutreach.undoLast(leadId);
+      return res.redirect(303, '/ops/leads');
+    }
+
+    if (!leadOutreach.isMethod(method)) {
+      return notFoundPage(res, 'That is not a way of reaching somebody.');
+    }
+
+    await leadOutreach.record({
+      leadId,
+      method,
+      byUserId: req.opsUser ? req.opsUser.id : null,
+      note: (req.body || {}).note,
+    });
+
+    // Redirect rather than render, so a refresh does not record it twice.
+    return res.redirect(303, '/ops/leads');
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/leads/auto-text — turn the automatic message on or off
+//
+// service.manage, like the closed sign and the text blast. Causing every
+// future lead to be texted the moment they arrive is the same class of decision
+// as giving money away or texting the whole book, and it is not a driver's or
+// a salesperson's to make.
+// ---------------------------------------------------------------------------
+router.post('/ops/leads/auto-text', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    const on = String((req.body || {}).on || '') === 'yes';
+    await settings.setLeadAutoText(on, req.opsUser ? req.opsUser.id : null);
+    return res.redirect(303, '/ops/leads');
   } catch (err) {
     return next(err);
   }

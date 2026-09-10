@@ -325,9 +325,45 @@ async function setWeightLimits(
   return row;
 }
 
+// DOES THE ADVERT FORM TEXT PEOPLE BY ITSELF.
+//
+// Neil's call on 10 September, and the one switch in this file whose safe
+// default is OFF rather than on. Every other setting here defaults to the
+// system behaving as configured; this one defaults to silence, because texting
+// somebody who has never spoken to us is the act that needs a decision behind
+// it, and a read error is not a decision.
+//
+// It gates ONE thing: the message. The sweep still reads the sheet on the same
+// timer and still records every lead, because those rows are what fills
+// /ops/leads, which is the screen this switch exists to make useful.
+async function leadAutoText() {
+  const s = await read();
+  return s.lead_auto_text === true;
+}
+
+async function setLeadAutoText(on, opsUserId) {
+  const { data, error } = await db
+    .from('app_settings')
+    .update({
+      lead_auto_text: Boolean(on),
+      updated_at: new Date().toISOString(),
+      updated_by: opsUserId || null,
+    })
+    .eq('id', true)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+
+  cached = data;
+  cachedAt = Date.now();
+  return data;
+}
+
 module.exports = {
   serviceBase,
   setServiceBase,
   weightLimits,
   setWeightLimits, read, takingOrders, pausedReason, setTakingOrders,
-  opensOn, setOpensOn, markNightlyRan, followUpsOn, setFollowUps, CACHE_MS };
+  opensOn, setOpensOn, markNightlyRan, followUpsOn, setFollowUps,
+  leadAutoText, setLeadAutoText, CACHE_MS };

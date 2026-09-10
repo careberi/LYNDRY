@@ -69,6 +69,17 @@ const { sendAndLog } = require('./notify');
 // never become configurable here.
 const CONSENT_COLUMN = 'i_agree_to_receive_text_messages_from_lyndry';
 
+// WHAT `skipped` SAYS WHEN THE ONLY REASON IS THAT WE STOPPED AUTO-TEXTING.
+//
+// It is a sentinel, not a sentence to read: /ops/leads matches on it exactly to
+// tell "waiting for somebody to ring them" apart from the reasons that mean
+// leave this one alone - an opted-out number, a bad number, somebody already on
+// the books. Those are different lists and must not be one.
+//
+// Exported so the screen can compare against this constant rather than retype
+// the string, which is how the two would drift.
+const HELD_FOR_A_PERSON = 'auto-texting is off, held for a person';
+
 const yes = (value) => ['true', 'yes', '1', 'y'].includes(String(value || '').trim().toLowerCase());
 
 // --- The sheet -------------------------------------------------------------
@@ -336,6 +347,36 @@ async function handle(row) {
     return stop('already a customer');
   }
 
+  // THE ADVERTS NO LONGER TEXT ANYBODY, AND THIS IS WHERE THAT STOPS.
+  //
+  // Neil, 10 September: "let's stop doing automated outreach to the Facebook
+  // ads... I need a call with these people." The numbers behind it: fifteen
+  // leads auto-texted, two replies, and three rounds of re-texting on top that
+  // produced no orders and one STOP. The two web doors reply at fifty percent
+  // on the same adverts.
+  //
+  // NOTE WHERE THIS SITS. Everything above still runs: the row is recorded, a
+  // bad number is still refused, an opted-out number is still refused, and an
+  // existing customer is still left alone. What stops is the send and
+  // everything that only exists to support it. The sweep's job is now to fill
+  // /ops/leads, and a screen with nothing in it would be the opposite of what
+  // was asked for.
+  //
+  // AND NO CUSTOMER ROW IS CREATED. startConversation() below writes the
+  // customer, stamps a consent record and hands out a promotion - all three of
+  // which are side effects of STARTING A CONVERSATION. Nobody has been texted,
+  // so no conversation started: a row here would manufacture consent evidence
+  // for somebody who has heard nothing from us, and burn one of the twenty free
+  // orders on a person who does not know they hold it. Same reasoning as
+  // POST /ops/messages/new, which has never created a customer either.
+  //
+  // The lead row is the record until they actually engage. When Neil rings and
+  // they say yes, texting them from the ops screens creates the customer down
+  // the normal path, with the honest consent source.
+  if (!(await settings.leadAutoText().catch(() => false))) {
+    return stop(HELD_FOR_A_PERSON);
+  }
+
   // Creates the row with its consent record and hands out whatever promotion is
   // on auto-grant. sendWelcome is false because the welcome in onboarding.js is
   // written for somebody who typed their number into our own website; this lead
@@ -373,4 +414,4 @@ async function handle(row) {
   return { leadId, phone, texted: true, customerId: started.customer.id };
 }
 
-module.exports = { sweep, handle, fetchLeads, parseCsv, leadMessage, sheetUrl };
+module.exports = { sweep, handle, fetchLeads, parseCsv, leadMessage, sheetUrl, HELD_FOR_A_PERSON };
