@@ -56,24 +56,50 @@ test('the guarantee fits in one segment', () => {
   );
 });
 
-test('the guarantee promises the ORDER back, never the item', () => {
-  // Neil's scope decision, taken with the alternatives in front of him: the
-  // wash, capped at that pickup. The version that covers the value of the
-  // clothes is an unbounded promise from a business with no entity and no
-  // insurance behind it yet, and it must not creep in through a reword.
+test('the guarantee promises MONEY BACK, never the value of their clothes', () => {
+  // Neil widened this on 10 September from "damaged or missing" to anybody who
+  // is not happy. What did NOT widen is what comes back: the money they paid
+  // us for that pickup. A promise to replace the contents of the bag is
+  // unbounded, and it must not creep in through a reword.
   const said = site.guarantee.toLowerCase();
 
-  ['replace', 'replacement', 'value of', 'compensat', 'cover the cost of your'].forEach((phrase) => {
+  ['replace', 'replacement', 'value of', 'compensat'].forEach((phrase) => {
     assert.ok(
       !said.includes(phrase),
-      `the guarantee says "${phrase}", which promises the item rather than the order`
+      `the guarantee says "${phrase}", which promises the item rather than the money`
     );
   });
 
   assert.ok(
-    said.includes("don't pay") || said.includes('do not pay') || said.includes('no charge'),
-    'the guarantee should say plainly that they do not pay for that order'
+    said.includes('refund') || said.includes("don't pay") || said.includes('do not pay'),
+    'the guarantee should say plainly that they get their money back'
   );
+});
+
+test('"no questions asked" is a promise the AI is told to keep', () => {
+  // The phrase is in the sentence customers read, so the behaviour behind it
+  // has to be in the prompt. An AI that answers "so sorry, what went wrong?"
+  // has just asked a question, and the guarantee is worth nothing the first
+  // time somebody has to argue for it.
+  const p = prompt();
+
+  assert.ok(
+    /NO QUESTIONS ASKED MEANS YOU DO NOT ASK/.test(p),
+    'the prompt should carry the rule that stops the AI interrogating a claim'
+  );
+  assert.ok(
+    /do not ask what went wrong/i.test(p),
+    'the prompt should forbid asking what went wrong'
+  );
+
+  // If the customer-facing sentence promises it, the prompt must too. This
+  // catches the two being edited apart.
+  if (/no questions asked/i.test(site.guarantee)) {
+    assert.ok(
+      /no questions asked/i.test(p),
+      'the guarantee promises "no questions asked" but the prompt never mentions it'
+    );
+  }
 });
 
 test('the AI is told the guarantee, word for word', () => {

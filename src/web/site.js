@@ -200,12 +200,21 @@ const site = Object.freeze({
   // which is honest, because a person decides what happens next, not the AI
   // and not this string.
   //
-  // THE NAME IS WIDER THAN THE PROMISE, and that is worth knowing rather than
-  // fixing quietly. "Satisfaction guarantee" is ordinarily heard as "if you
-  // are not happy you do not pay", where this covers damage and loss. Neil
-  // named it; the sentence is the thing that is actually promised, and the
-  // sentence is what the AI says. If the promise ever widens to cover somebody
-  // who simply did not like the fold, it widens HERE and nowhere else.
+  // IT COVERS BEING UNHAPPY, NOT JUST DAMAGE, and Neil widened it deliberately
+  // on 10 September having been shown the narrower version first. The earlier
+  // wording named damaged or missing items; this one asks nothing about why.
+  //
+  // WHAT "NO QUESTIONS ASKED" ACTUALLY COMMITS US TO, because it is the part
+  // that will be tested: we do not get to decide whether somebody's
+  // disappointment is reasonable. Somebody who says the fold was sloppy gets
+  // the same answer as somebody whose shirt came back torn. That is the whole
+  // value of the sentence to a first-time customer, and it stops being worth
+  // anything the first time we argue with one.
+  //
+  // WHAT IT IS STILL NOT: the value of their clothes. A full refund is the
+  // money they paid us for that pickup. It is not a jacket. The prompt says so
+  // separately, because "full refund" is exactly the phrase somebody holding a
+  // ruined coat will read as covering the coat.
   //
   // ONE COPY, HERE, because it is a promise. The AI repeats it, and if it
   // ever goes on the website or into the card ask those read it from here.
@@ -215,8 +224,8 @@ const site = Object.freeze({
   // PLAIN ASCII, like everything else in this object that reaches a text
   // message: straight apostrophes, no dashes. See the note on estimateRange.
   guarantee:
-    "If anything comes back damaged or missing, you don't pay for that order. " +
-    "Just tell us and we'll sort it out.",
+    "If you're not happy with the service, we have a satisfaction guarantee: " +
+    'full refund, no questions asked.',
 
   legalUpdated: 'August 2026',
 });
