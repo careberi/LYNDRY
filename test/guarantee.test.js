@@ -91,7 +91,7 @@ test('the AI is told that saying the guarantee is not granting one', () => {
   const p = prompt();
 
   assert.ok(
-    /SAYING THE GUARANTEE IS NOT GRANTING ONE/.test(p),
+    /SAYING THE SATISFACTION GUARANTEE IS NOT GRANTING ONE/.test(p),
     'the prompt has lost the rule that stops the AI settling a claim itself'
   );
 
@@ -115,7 +115,7 @@ test('damage still goes to a person, guarantee or not', () => {
     'damage should still route to a manager'
   );
   assert.ok(
-    /THE GUARANTEE DOES NOT CHANGE THIS/.test(p),
+    /THE SATISFACTION GUARANTEE DOES NOT CHANGE THIS/.test(p),
     'the handoff section should say the guarantee does not override it'
   );
 });

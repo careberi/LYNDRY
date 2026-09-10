@@ -179,7 +179,7 @@ const site = Object.freeze({
   turnaround: 'next day',
 
   // ---------------------------------------------------------------------
-  // THE GUARANTEE.
+  // THE SATISFACTION GUARANTEE. Neil's name for it.
   //
   // Neil's ask, and it answers the exact sentence that lost the only two
   // customers who ever reached the card. Kellie: "I never heard of stripe
@@ -199,6 +199,13 @@ const site = Object.freeze({
   // them to say something, and it promises a conversation rather than a sum -
   // which is honest, because a person decides what happens next, not the AI
   // and not this string.
+  //
+  // THE NAME IS WIDER THAN THE PROMISE, and that is worth knowing rather than
+  // fixing quietly. "Satisfaction guarantee" is ordinarily heard as "if you
+  // are not happy you do not pay", where this covers damage and loss. Neil
+  // named it; the sentence is the thing that is actually promised, and the
+  // sentence is what the AI says. If the promise ever widens to cover somebody
+  // who simply did not like the fold, it widens HERE and nowhere else.
   //
   // ONE COPY, HERE, because it is a promise. The AI repeats it, and if it
   // ever goes on the website or into the card ask those read it from here.
