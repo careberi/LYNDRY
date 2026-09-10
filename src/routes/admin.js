@@ -338,15 +338,18 @@ const OPS_MENUS = Object.freeze([
       // whose route still fires is exactly what this codebase says not to
       // mistake for a guard.
       { href: '/ops/customers', label: 'Customers', permission: 'customers.view' },
-      // BESIDE CUSTOMERS, because a Facebook lead is a person you are trying to
-      // turn into one - which is the question this group answers. It is not
-      // under Business with the promotions and the text blast: those are things
-      // you set up and leave running, and this is a list you work through with
-      // a phone in your hand.
+      // LEADS IS NOT LISTED HERE, at Neil's request, and it is a card on the
+      // Admin dashboard instead - the same treatment Promotions, the text
+      // blast, customer follow-up and the weight report already get. He asked
+      // for it "like promotions", and Promotions has never been in a menu.
+      //
+      // THIS IS A MENU RULE, NOT ACCESS CONTROL. /ops/leads still answers to
+      // anybody holding customers.view, exactly as before; hiding a page whose
+      // route still fires is the thing this codebase says not to mistake for a
+      // guard. What changed is where you go looking for it.
       //
       // Not to be confused with /ops/partners/enquiries, which is the website
       // form and is a pile of laundromats and landlords rather than customers.
-      { href: '/ops/leads', label: 'Leads', permission: 'customers.view' },
       // "Messages" at Neil's request. It was called Conversations to make the
       // point that the screen is one row per phone NUMBER and holds people who
       // never became customers - which is still true and still the reason it is
