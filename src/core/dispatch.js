@@ -200,6 +200,9 @@ const BOARD_FIELDS =
   // Whether that laundromat was CHOSEN BY A PERSON, in which case the route
   // follows it even when another is cheaper. See dropoffGroups().
   'partner_pinned_at, ' +
+  // Where a person put this order's laundromat stop in the day. See
+  // orderDropStops().
+  'dropoff_rank, ' +
   // WHERE THE CUSTOMER SAID TO LEAVE THE BAGS. Both copies: the order's own
   // snapshot of what it was booked with, and the customer's current answer as
   // the fallback - the same pair, in the same order of precedence, that
@@ -696,6 +699,39 @@ function dropoffGroups(orders, partnerRows, liveChoice) {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// THE ORDER THE LAUNDROMATS ARE DRIVEN IN.
+//
+// Neil, 11 September, on the round: "drop off order #2059 before #1975". The
+// shortest order put Fancy K first; he wanted Best Wash first, and a person
+// deciding the order of a round they are driving is not something to argue with.
+//
+// A stop whose orders carry a dropoff_rank (migration 0088) goes first, lowest
+// rank first. Every other stop follows, in the shortest order from where the
+// ranked ones finish. No ranks anywhere is exactly the old behaviour.
+//
+// Pure: `sequence` is handed in, so this is tested without a map.
+// ---------------------------------------------------------------------------
+function orderDropStops(stops, { from, onward, sequence }) {
+  const rankOf = (stop) => {
+    const ranks = (stop.orders || [])
+      .map((o) => o.dropoff_rank)
+      .filter((r) => r != null)
+      .map(Number);
+    return ranks.length ? Math.min(...ranks) : null;
+  };
+
+  const ranked = (stops || []).filter((s) => rankOf(s) != null).sort((a, b) => rankOf(a) - rankOf(b));
+  const rest = (stops || []).filter((s) => rankOf(s) == null);
+
+  for (const stop of ranked) stop.orderedByHand = true;
+
+  const lastRanked = [...ranked].reverse().find((s) => s.at);
+  const tail = rest.length > 1 ? sequence(rest, lastRanked ? lastRanked.at : from, onward) : rest;
+
+  return [...ranked, ...tail];
+}
+
 // Writes the plan onto the order. Separate from choosing it so a caller can
 // re-plan without writing, and so a failed write cannot lose a booking.
 async function savePlannedPartner(order, customer) {
@@ -1093,10 +1129,14 @@ async function board(dateIso, fromTime, driverId = null) {
   const orderedCollect = sequenceLeg(collectStops, base, firstDrop ? firstDrop.at : null);
 
   // SEVERAL LAUNDROMATS ARE DRIVEN IN THE SHORTEST ORDER from the last door,
-  // finishing towards wherever the van goes next. One is just one.
+  // finishing towards wherever the van goes next - unless a person has put
+  // them in order, which wins. One is just one. See orderDropStops().
   const lastDoor = [...orderedCollect].reverse().find((s) => s.at);
-  const partnerStops =
-    dropStops.length > 1 ? sequenceLeg(dropStops, lastDoor ? lastDoor.at : base, onward) : dropStops;
+  const partnerStops = orderDropStops(dropStops, {
+    from: lastDoor ? lastDoor.at : base,
+    onward,
+    sequence: sequenceLeg,
+  });
 
   // Collecting finished bags happens at whichever laundromat actually has them,
   // which is recorded on the order and is not a choice to make.
@@ -1543,6 +1583,7 @@ module.exports = {
   board,
   chooseLaundromat,
   dropoffGroups,
+  orderDropStops,
   planPartnerFor,
   savePlannedPartner,
   perMile,

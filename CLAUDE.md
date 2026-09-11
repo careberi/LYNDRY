@@ -1513,6 +1513,14 @@ each order's own laundromat, and the run and routing screens say "chosen by
 hand". A pin to a laundromat that is no longer active is ignored. There is no
 button for it yet; #1975 was pinned by hand.
 
+**A PERSON CAN SET THE ORDER OF THE LAUNDROMAT STOPS, AND THAT WINS TOO.** Neil,
+on the round the same evening: "drop off order #2059 before #1975", where the
+shortest order had Fancy K first. `orders.dropoff_rank` (migration 0088), lower
+first: `dispatch.orderDropStops()` puts ranked stops first in rank order and
+sequences the rest by distance from where they finish. No ranks is exactly the
+old behaviour. It only matters while an order is heading to a laundromat. No
+button yet; #2059 and #1975 were ranked by hand, with a NOTE in each change log.
+
 **THE PLAN MADE AT BOOKING GOES STALE, AND IT USED TO BE WHAT GOT RECORDED.**
 #1975 was planned on 5 Sep, before Best Wash existed, and moving the order
 never re-planned it. The route navigated to Best Wash while the run's
