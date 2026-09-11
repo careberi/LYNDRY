@@ -2038,6 +2038,18 @@ the top of it.** The whole risk of a switch that stays where you put it is
 forgetting you put it there, and a paused thread is a customer nobody is
 answering at all.
 
+**THE BANNER CAN BE CLEARED; THE BADGE CANNOT.** Neil's ask, 11 September: the
+one thread in it was somebody already dealt with who had since opted out, and a
+warning that never goes away is one nobody reads. **Clear this** (behind
+`messages.send`) stamps `ai_pauses.banner_cleared_at` (migration 0086) on the
+threads the banner named. The AI stays off and the row keeps its "AI off"
+badge. **A timestamp, not a flag**, the same as `dismissed_leads`: the thread
+comes back into the banner if the customer texts after it was cleared, or the
+AI is switched off again after it. The rule is `aiPause.stillInBanner()` and a
+test pins both ways back. Our own replies do not bring it back, because a
+person writing to them is somebody dealing with it. A customer writing to a
+muted thread still texts an admin, so clearing the banner cannot hide one.
+
 **COMING BACK ON IS PICKING UP SOMEBODY ELSE'S CONVERSATION, and the AI has
 to be told whose words are whose.** It was already handed the last ten messages
 before every reply - that part was never missing. What was missing is that

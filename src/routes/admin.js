@@ -7562,12 +7562,19 @@ function groupIntoThreads(messages) {
         // Messages arrive newest first, so the first one seen for a number is
         // the latest — which is what the list is sorted and previewed on.
         last: m,
+        // The newest thing THEY said, which is what brings a cleared muted
+        // thread back into the banner. Our own replies must not: a person
+        // writing to them is somebody dealing with it.
+        lastInboundAt: null,
       };
       threads.set(m.phone, thread);
     }
 
     thread.total += 1;
-    if (m.direction === 'INBOUND') thread.inbound += 1;
+    if (m.direction === 'INBOUND') {
+      thread.inbound += 1;
+      if (!thread.lastInboundAt) thread.lastInboundAt = m.created_at;
+    }
 
     // A number can text before signing up and again afterwards. Whichever
     // message carries the customer wins, so the row shows a name.
@@ -7618,7 +7625,18 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     // one - a conversation muted on Tuesday and forgotten about is a customer
     // nobody is answering, and nothing else in the system would ever say so.
     const pausedPhones = await aiPause.pausedAmong(threads.map((t) => t.phone));
-    const pausedThreads = threads.filter((t) => pausedPhones.has(t.phone));
+
+    // THE BADGE IS EVERY MUTED THREAD; THE BANNER IS THE ONES NOBODY HAS
+    // CLEARED SINCE THERE WAS SOMETHING NEW. The rule is stillInBanner() in
+    // ai-pause.js, so it has one home.
+    const bannerState = await aiPause.bannerStateAmong([...pausedPhones]);
+    const pausedThreads = threads.filter((t) => {
+      const state = bannerState.get(t.phone);
+      return (
+        pausedPhones.has(t.phone) &&
+        (!state || aiPause.stillInBanner({ ...state, lastInboundAt: t.lastInboundAt }))
+      );
+    });
 
     const row = (t) => {
       const who = t.customer
@@ -7748,6 +7766,11 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                </p>
                <p style="margin:10px 0 0;font-size:15px;line-height:1.55;">
                  Open the thread to reply, or switch the AI back on when you are done with them.
+                 ${
+                   roles.can(req.opsUser, 'messages.send')
+                     ? 'Clearing this keeps the AI off and hides the warning until they text again.'
+                     : ''
+                 }
                </p>
                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
                  ${pausedThreads
@@ -7765,6 +7788,19 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                      : ''
                  }
                </div>
+               ${
+                 // EVERY THREAD THE BANNER NAMES, INCLUDING "AND 8 MORE", AND
+                 // NOTHING ELSE. The numbers ride in the form so a thread muted
+                 // by somebody else after this page loaded is not cleared unseen.
+                 roles.can(req.opsUser, 'messages.send')
+                   ? `<form method="post" action="/ops/messages/paused/clear" style="margin:14px 0 0;">
+                        ${pausedThreads
+                          .map((t) => `<input type="hidden" name="phone" value="${escapeHtml(t.phone)}">`)
+                          .join('')}
+                        <button class="btn btn-sm btn-ink" type="submit">Clear this</button>
+                      </form>`
+                   : ''
+               }
              </div>`
           : ''
       }
@@ -8320,6 +8356,34 @@ router.post('/ops/messages/new', guard, may('messages.send'), async (req, res, n
           : 'Sent. This is a new number - the AI takes over as soon as they reply.'
       )}`
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/messages/paused/clear - take these out of the "AI is off" banner
+//
+// Neil's ask. Hides the warning, never the switch: the AI stays off on every
+// one of them. The rule for when a thread comes back is stillInBanner() in
+// src/core/ai-pause.js.
+//
+// Behind messages.send, the same people who may switch the AI off and write to
+// the customer, because clearing the warning is deciding the thread is handled.
+// Two literal segments, so it cannot be mistaken for /ops/messages/:phone/...,
+// and "paused" is not a phone number either way.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/messages/paused/clear', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const raw = (req.body || {}).phone;
+    const phones = (Array.isArray(raw) ? raw : [raw])
+      .map((p) => normalisePhone(String(p || '')))
+      .filter(Boolean)
+      .slice(0, 200);
+
+    await aiPause.clearBanner(phones, req.opsUser);
+    return res.redirect(303, '/ops/messages');
   } catch (err) {
     return next(err);
   }

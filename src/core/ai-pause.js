@@ -103,6 +103,69 @@ async function pausedAmong(phones) {
   return new Set((data || []).map((r) => r.phone));
 }
 
+// ---------------------------------------------------------------------------
+// THE BANNER ON THE CONVERSATIONS LIST, AND CLEARING IT.
+//
+// Neil, 11 September: "i should have the ability to clear this notification".
+// The banner counts every muted thread so a switch left off is not forgotten,
+// but a thread somebody has already dealt with - his was a customer who had
+// since opted out - sat in it for ever, and a warning that never goes away is
+// one nobody reads. The leads banner learned the same lesson first.
+//
+// CLEARING HIDES THE WARNING, NOT THE SWITCH. The AI stays off and the row
+// keeps its badge. It is a timestamp rather than a flag, so it means "seen as
+// of now", and the thread comes back when there is something new to see:
+//
+//   the customer texts after it was cleared    they are waiting on a person
+//   the AI was switched off again after it     a new decision, a new warning
+//
+// A customer writing to a muted thread also still texts an admin
+// (paused-alerts.js), so clearing the banner cannot hide one.
+// ---------------------------------------------------------------------------
+function stillInBanner({ pausedAt, clearedAt, lastInboundAt }) {
+  if (!clearedAt) return true;
+  const cleared = new Date(clearedAt).getTime();
+  const later = (at) => Boolean(at) && new Date(at).getTime() > cleared;
+  return later(pausedAt) || later(lastInboundAt);
+}
+
+// When each of these muted numbers was paused and last cleared from the
+// banner. One query for the list, like pausedAmong().
+async function bannerStateAmong(phones) {
+  const wanted = [...new Set((phones || []).filter(Boolean))];
+  if (!wanted.length) return new Map();
+
+  const { data, error } = await db
+    .from('ai_pauses')
+    .select('phone, paused_at, banner_cleared_at')
+    .eq('paused', true)
+    .in('phone', wanted);
+
+  if (error) throw error;
+  return new Map(
+    (data || []).map((r) => [r.phone, { pausedAt: r.paused_at, clearedAt: r.banner_cleared_at }])
+  );
+}
+
+// Clear these numbers out of the banner. Only the ones still muted: clearing a
+// thread whose AI is back on would stamp a row for a warning nobody was shown.
+// The numbers come from the form, which lists exactly what the banner said, so
+// a thread muted by somebody else a second later is not cleared unseen.
+async function clearBanner(phones, opsUser) {
+  const wanted = [...new Set((phones || []).filter(Boolean))];
+  if (!wanted.length) return 0;
+
+  const { data, error } = await db
+    .from('ai_pauses')
+    .update({ banner_cleared_at: new Date().toISOString(), banner_cleared_by: actorId(opsUser) })
+    .eq('paused', true)
+    .in('phone', wanted)
+    .select('phone');
+
+  if (error) throw error;
+  return (data || []).length;
+}
+
 // IS THE AI ALLOWED TO CHASE THIS ONE.
 //
 // Neil's case: the customer said "Not yet. Will LYK. Thanks!" and a chase was
@@ -263,6 +326,9 @@ module.exports = {
   isPaused,
   stateFor,
   pausedAmong,
+  stillInBanner,
+  bannerStateAmong,
+  clearBanner,
   pause,
   resume,
   followUpsOff,
