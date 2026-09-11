@@ -11,6 +11,7 @@ const booking = require('../core/booking');
 const settings = require('../core/settings');
 const billing = require('../core/billing');
 const cardSaved = require('../core/card-saved');
+const promotions = require('../core/promotions');
 const auth = require('../core/customer-auth');
 const adAttribution = require('../core/ad-attribution');
 const payments = require('../providers/payments');
@@ -1167,6 +1168,30 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
 
     const waiting = await orders.findAllAwaitingCollection(customer.id).catch(() => []);
 
+    // BACK FROM THE LAST STEP OF PLACING AN ORDER: that order's confirmation.
+    // Found among THIS customer's own pickups, so a number typed into the
+    // address bar can only ever show them something of theirs. A number that
+    // matches nothing (collected already, cancelled, somebody else's) falls
+    // through to the page below rather than an error.
+    const placed = String(req.query.order || '').replace(/\D/g, '');
+    const order = placed ? waiting.find((o) => String(o.order_number) === placed) : null;
+
+    if (order) {
+      const free = await promotions
+        .claimedFreeOrder(order.id)
+        .catch(() => ({ freeOrder: false, freeUpToLb: null }));
+
+      return accountPage(res, {
+        title: 'Thank you for your order',
+        body: orderConfirmedPage({
+          customer,
+          order,
+          others: waiting.filter((o) => o.id !== order.id),
+          free,
+        }),
+      });
+    }
+
     return accountPage(res, {
       title: 'Pickup confirmed',
       body: confirmedPage({ customer, orders: waiting }),
@@ -1175,6 +1200,126 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
     return next(err);
   }
 });
+
+// ---------------------------------------------------------------------------
+// THANK YOU FOR YOUR ORDER. Neil, 11 September: after the card, the customer
+// should land on "a confirmation page that says thank you for your order,
+// please check your texts from our text number, here is your order number, we
+// will pick it up on... and it should lay out the order details."
+//
+// EVERY DETAIL IS READ FROM WHERE THE TEXT READS IT. The card from
+// describeCard(), the wash from wash.describeSaved(), the bag spot from the
+// same spotOf() the step before used, and whether it is free from
+// claimedFreeOrder() - the exact lookup the confirmation text makes - so the
+// page and the text can never describe two different orders.
+//
+// "Check your texts" is true by the time this renders: the route above sends
+// the confirmation through cardSaved.cardWasSaved() before it gets here, or the
+// webhook already had.
+// ---------------------------------------------------------------------------
+function orderConfirmedPage({ customer, order, others, free }) {
+  const card = billing.describeCard(customer);
+  const prefs = customer.preferences || {};
+  const spot = setup.spotOf(customer);
+  const access = setup.accessNotesOf(customer);
+  const washed = booking.hasPreferences(customer) ? wash.describeSaved(prefs) : '';
+  const where = [
+    customer.address_line1,
+    customer.address_line2,
+    [customer.city, [customer.state, customer.postal_code].filter(Boolean).join(' ')]
+      .filter(Boolean)
+      .join(', '),
+  ]
+    .filter(Boolean)
+    .map((line) => escapeHtml(line))
+    .join('<br>');
+
+  const row = (label, value, last = false) => `
+    <div style="display:flex;justify-content:space-between;gap:18px;${last ? '' : 'padding-bottom:14px;'}">
+      <span style="font-size:16px;color:var(--ink-700);">${label}</span>
+      <span style="font-size:16px;font-weight:700;color:var(--ink-900);text-align:right;">${value}</span>
+    </div>`;
+
+  const detail = (label, value) => `
+    <div style="border-top:1px solid var(--ink-100);margin-top:16px;padding-top:14px;">
+      <p class="eyebrow" style="margin:0 0 6px;">${label}</p>
+      <p style="font-size:16px;line-height:1.5;color:var(--ink-800);margin:0;">${value}</p>
+    </div>`;
+
+  // THE PRICE, SAID THE WAY THE TEXT SAYS IT. A free order with a ceiling names
+  // the ceiling, because nobody has seen the laundry yet.
+  const price = free.freeOrder
+    ? free.freeUpToLb
+      ? `Free up to ${free.freeUpToLb} lb, then ${site.pricePerLb} a pound`
+      : 'Free, nothing to pay'
+    : `${site.pricePerLb} a pound, ${billing.money(config.pricing.minimumCents)} minimum`;
+
+  const textUs = site.hasPublicPhone
+    ? ` from <a href="sms:${escapeHtml(site.publicPhoneLink)}" style="white-space:nowrap;"><strong>${escapeHtml(
+        site.publicPhoneDisplay
+      )}</strong></a>`
+    : '';
+
+  return `
+<section class="hero" style="border-bottom:3px solid var(--ink-900);">
+  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
+    <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
+    <h1 class="display-2" style="margin-bottom:10px;">Thank you for your order.</h1>
+    <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
+      Please check your texts${textUs}. Your confirmation is there.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+
+  <div class="card card-xl" style="padding:26px 30px;">
+    <p class="eyebrow" style="margin:0 0 4px;">Order number</p>
+    <p class="display-4" style="margin:0;font-variant-numeric:tabular-nums;">#${escapeHtml(String(order.order_number))}</p>
+
+    <div style="border-top:1px solid var(--ink-100);margin-top:18px;padding-top:16px;">
+      <p class="eyebrow" style="margin:0 0 6px;">We will pick it up</p>
+      <p style="font-size:18px;line-height:1.45;font-weight:600;color:var(--ink-900);margin:0;">
+        ${escapeHtml(whenLineMdy(order))}
+      </p>
+    </div>
+
+    ${detail(
+      'Pickup address',
+      `${customer.name ? `<strong>${escapeHtml(customer.name)}</strong><br>` : ''}${where}`
+    )}
+    ${detail('Where to leave the bag', escapeHtml(spot ? 'At the ' + midSentence(spot) : 'Outside your door'))}
+    ${access ? detail('Getting to it', escapeHtml(access)) : ''}
+    ${washed ? detail('How we wash it', escapeHtml(washed)) : ''}
+  </div>
+
+  <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
+    ${row('Charged today', '$0.00')}
+    ${row('Card on file', escapeHtml(card || 'saved'))}
+    ${row('Price', escapeHtml(price), free.freeOrder && !free.freeUpToLb)}
+    ${free.freeOrder && !free.freeUpToLb ? '' : row('You are charged', 'after we weigh it', true)}
+  </div>
+
+  ${
+    others.length
+      ? `<div class="card card-xl" style="padding:22px 30px;margin-top:18px;">
+           <p class="eyebrow" style="margin-bottom:6px;">Also booked</p>
+           ${others
+             .map(
+               (o) => `
+           <div style="display:flex;justify-content:space-between;gap:18px;padding:12px 0;border-bottom:1px solid var(--ink-100);">
+             <span style="font-size:16px;font-weight:600;color:var(--ink-900);">#${escapeHtml(String(o.order_number))}</span>
+             <span style="font-size:16px;color:var(--ink-700);text-align:right;">${escapeHtml(whenLineMdy(o))}</span>
+           </div>`
+             )
+             .join('')}
+         </div>`
+      : ''
+  }
+
+  <p style="margin:26px 0 0;"><a href="/account">Back to your account</a></p>
+</section>`;
+}
 // STRAIGHT TO STRIPE, NOTHING OF OURS IN BETWEEN. This is what the Update
 // button on the payment card posts to: it mints the session and redirects, so
 // the next thing the customer sees is the card page itself.
@@ -1194,8 +1339,14 @@ router.post('/account/card', auth.requireCustomer, async (req, res) => {
     // cannot apply. The row is still written, so the webhook still resolves.
     // Back into their account afterwards rather than onto the standalone page
     // a texted link lands on. See createSetupLink() for how the token gets in.
+    //
+    // ?order= IS ONLY SET FROM THE LAST STEP OF PLACING AN ORDER, and it is
+    // what turns the page they come back to into that order's confirmation.
+    // Digits only, because it rides in a URL we hand to Stripe; the page it
+    // reaches only ever looks it up among this customer's own pickups.
+    const placed = String((req.body || {}).order || '').replace(/\D/g, '').slice(0, 9);
     const { providerUrl } = await billing.createSetupLink(req.customer, {
-      returnTo: "/account/card/done/{token}",
+      returnTo: `/account/card/done/{token}${placed ? `?order=${placed}` : ''}`,
     });
     return res.redirect(303, providerUrl);
   } catch (err) {
@@ -1797,6 +1948,9 @@ function cardStep({ customer, order }) {
     </p>
 
     <form method="post" action="/account/card" style="margin:0;">
+      <!-- WHICH ORDER THIS CARD IS FOR, carried to Stripe and back so the page
+           they return to can say "thank you for your order" about this one. -->
+      <input type="hidden" name="order" value="${escapeHtml(String(order.order_number))}">
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         Add payment method {{ICON_ARROW}}
       </button>

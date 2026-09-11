@@ -3064,6 +3064,28 @@ they would drift, and the database would end up in a state neither expects.
 **Customer sessions are signed with a key derived from `ADMIN_API_KEY`**, not
 the key itself, so a customer cookie can never be replayed as a staff one.
 
+**THE CUSTOMER COOKIE IS `SameSite=Lax`, NOT STRICT, BECAUSE OF STRIPE.** Neil,
+11 September: a customer placed an order, saved a card on Stripe's page, and
+landed on the sign-in page. A Strict cookie is withheld on any arrival from
+another site, and Stripe sending the browser back to `/account/card/done/<token>`
+is exactly that, so the page saw nobody signed in. Reproduced in a real browser
+with the old cookie, and fixed with the new one. Lax still withholds it from
+another site's forms and frames, and every `/account` route that changes
+anything is a POST. **`requireCustomer()` re-issues the cookie with the expiry
+it already had**, so sessions signed in under Strict become Lax on their next
+request (POST `/account/card` is one, right before Stripe) without any session
+lasting longer than fourteen days from sign-in. The staff cookie stays Strict.
+
+**AFTER THE CARD, THE ORDER'S OWN CONFIRMATION.** Neil's words: thank you for
+your order, check your texts from our number, the order number, when we pick it
+up, and the details. The card step's button carries `order=<number>` to POST
+`/account/card`, which puts it on the return URL, and `/account/card/done/<token>`
+renders `orderConfirmedPage()` for that order, looked up only among the signed-in
+customer's own pickups. Every detail comes from where the confirmation text gets
+it (`describeCard`, `wash.describeSaved`, `spotOf`, `claimedFreeOrder`). Adding a
+card from account settings carries no order and gets the old "You're booked"
+page, unchanged.
+
 **A customer's sign-in code is never written to the log**, unlike a staff one.
 Staff can read the server log as a way back in; a customer cannot, so it would
 be a live credential sitting in a log for nobody's benefit.

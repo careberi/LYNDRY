@@ -88,16 +88,32 @@ function readCookie(req, name) {
   return null;
 }
 
-function setSessionCookie(res, customerId) {
-  const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+// SAMESITE=LAX, NOT STRICT, AND THE DIFFERENCE IS THE TRIP TO STRIPE.
+//
+// Neil, 11 September: somebody placed an order, typed their card into Stripe's
+// page, and was sent back to the sign-in page instead of a confirmation. The
+// cookie was Strict, and a Strict cookie is withheld on ANY arrival from
+// another site - including Stripe sending the browser back to
+// /account/card/done/<token>. So the page saw nobody signed in, at the one
+// moment the customer had just proved who they were.
+//
+// Lax still withholds the cookie from another site's forms, images and frames,
+// and every /account route that changes anything is a POST, so nothing another
+// site can do moves an order or a card. What it adds is being signed in when a
+// plain link or redirect brings you back to one of our pages. The staff cookie
+// stays Strict: nothing ever sends a member of staff to /ops from another site.
+//
+// `expiresAt` is passed when re-issuing an existing session, so upgrading the
+// attribute never extends how long a session lasts. See requireCustomer().
+function setSessionCookie(res, customerId, expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000) {
   const value = `${customerId}.${expiresAt}.${hmac(`cust.${customerId}.${expiresAt}`)}`;
 
   res.cookie(COOKIE_NAME, value, {
     httpOnly: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
     secure: config.env === 'production',
     path: '/account',
-    maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
+    maxAge: Math.max(0, expiresAt - Date.now()),
   });
 }
 
@@ -394,7 +410,8 @@ async function requireCustomer(req, res, next) {
     return res.status(503).type('text/plain').send('The server is not configured for sign-in.');
   }
 
-  const customerId = readSession(readCookie(req, COOKIE_NAME));
+  const raw = readCookie(req, COOKIE_NAME);
+  const customerId = readSession(raw);
 
   if (!customerId) {
     const wanted = encodeURIComponent(req.originalUrl);
@@ -414,6 +431,14 @@ async function requireCustomer(req, res, next) {
       clearSessionCookie(res);
       return res.redirect(302, '/account/login');
     }
+
+    // RE-ISSUED AS LAX, WITH THE EXPIRY IT ALREADY HAD. A browser never tells
+    // us a cookie's attributes, so a session signed in while the cookie was
+    // Strict would stay Strict for up to fourteen days and keep bouncing that
+    // customer to sign-in on the way back from Stripe. POST /account/card comes
+    // through here right before the redirect to Stripe, so the cookie is Lax by
+    // the time it matters. Same expiry, so this never lengthens a session.
+    setSessionCookie(res, customer.id, Number(String(raw).split('.')[1]));
 
     req.customer = customer;
     return next();
