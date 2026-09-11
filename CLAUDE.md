@@ -2421,11 +2421,14 @@ arriving or not at all, so the rest of the window only helps somebody who
 picked the phone up. Two different lifetimes on two sign-ins would be a thing
 somebody has to go and look up, so they moved together.
 
-**A CUSTOMER'S CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER.** Neil's ask,
-and it makes the page faster rather than slower: the send used to be awaited
-inside the request, so the sign-in form sat waiting on the carrier before the
-code page could render at all. `LOGIN_CODE_DELAY_MS`, 10 seconds, and zero
-sends immediately.
+**A SIGN-IN CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER, ON BOTH
+SIGN-INS.** Neil's rule: you enter your number, and ten seconds later the code
+is sent. It makes the page faster rather than slower, because the send used to
+be awaited inside the request. `config.signIn.codeDelayMs`
+(`LOGIN_CODE_DELAY_MS`, 10 seconds; zero sends immediately). One implementation,
+`src/core/code-sender.js`, used by `admin-auth.js` and `customer-auth.js`. It was
+customers only until 11 September, and Neil reported the staff sign-in, the one
+he uses every day, texting at once.
 
 **ONE PENDING SEND PER NUMBER, AND A SECOND REQUEST REPLACES THE FIRST.** This
 is what makes the delay safe rather than a new bug. `verifyCode()` accepts the
@@ -2446,9 +2449,26 @@ the first few seconds the page is up and the message is not, and "we texted you
 a code" is a sentence the phone contradicts - which reads as broken and starts
 somebody tapping.
 
-**The delay is the customer sign-in only.** The staff one still sends inside the
-request, because it writes the code to the server log when texting fails and
-that log is the way back into a dashboard nobody else can reach.
+**The staff sign-in still writes the code to the server log when texting
+fails**, which is the way back into a dashboard nobody else can reach. The wait
+does not change that: the delayed send's failure is what writes the line. It was
+once the reason the staff sign-in did not wait at all; it never needed to be.
+
+**NOBODY IS SIGNED IN UNTIL THEY TAP "SIGN IN". A REQUIREMENT, NEIL'S WORD.** He
+entered a texted code and the page went on and signed him in without a tap.
+Nothing of ours submitted the form; the code box is `autocomplete="one-time-code"`,
+which lets a phone offer the code, and the browser or the phone sent the form on
+once it was in. `src/web/sign-in-tap.js`, on both code pages:
+
+- **On the page**, a click on the button (a tap or mouse, `detail > 0`, or Enter
+  or Space while the button has focus) sets a hidden `tapped=yes`. Enter in the
+  code box and a form sent on by the browser are neither; the submit is stopped
+  and "Tap Sign in to finish" appears.
+- **On the server**, a code without `tapped=yes` is not checked at all, uses up
+  no attempt, and the page comes back with the code still in the box.
+- The box keeps `one-time-code`: filling the code in is useful, sending it is not.
+- **Signing in now needs JavaScript**, because nothing else can tell a tap from a
+  browser submitting on its own. The page says so in a `<noscript>`.
 
 **The sign-in pages are `no-store`, and that is not housekeeping.** A cached
 sign-in form is served to somebody whose session is in fact still alive; the

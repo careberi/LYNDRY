@@ -24,6 +24,7 @@ const recurring = require('../core/recurring');
 const onboarding = require('../core/onboarding');
 const throttle = require('../core/throttle');
 const setup = require('../web/account-setup');
+const signInTap = require('../web/sign-in-tap');
 
 const router = express.Router();
 
@@ -185,7 +186,7 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
 </section>`;
 }
 
-function codeStep({ error = '', next = '/account', phone = '' } = {}) {
+function codeStep({ error = '', next = '/account', phone = '', code = '' } = {}) {
   return `
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:560px;padding-top:80px;padding-bottom:72px;">
@@ -212,12 +213,13 @@ function codeStep({ error = '', next = '/account', phone = '' } = {}) {
       <label class="field-label" for="code">Six-digit code</label>
       <input class="input input-lg" type="text" id="code" name="code" required
              inputmode="numeric" pattern="[0-9]*" maxlength="6"
-             autocomplete="one-time-code" autofocus
+             autocomplete="one-time-code" autofocus value="${escapeHtml(code)}"
              style="letter-spacing:0.4em;font-size:24px;text-align:center;">
     </div>
-    <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
+    <button type="submit" data-sign-in class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
       Sign in {{ICON_ARROW}}
     </button>
+    ${signInTap.tapGate()}
   </form>
 
   <form method="post" action="/account/login" style="margin-top:18px;">
@@ -379,6 +381,21 @@ router.post('/account/login/code', async (req, res, next) => {
 
   try {
     if (!phone) return res.redirect(303, '/account/login');
+
+    // NOT SIGNED IN WITHOUT A TAP ON "SIGN IN". Neil's requirement, the same on
+    // both sign-ins. No attempt is used up; the code stays in the box. See
+    // src/web/sign-in-tap.js.
+    if (!signInTap.wasTapped(req.body)) {
+      return accountPage(res, {
+        title: 'Enter your code',
+        body: codeStep({
+          error: 'Tap Sign in to finish.',
+          next: wanted,
+          phone,
+          code: String((req.body || {}).code || '').replace(/\D/g, '').slice(0, 6),
+        }),
+      });
+    }
 
     const result = await auth.verifyCode(phone, (req.body || {}).code, req);
 

@@ -95,6 +95,15 @@ const config = Object.freeze({
     burstMaxSeconds: Number(process.env.SMS_REPLY_MAX_SECONDS || 90),
   }),
 
+  // HOW LONG A SIGN-IN CODE WAITS BEFORE IT IS TEXTED, on BOTH sign-ins - staff
+  // at /ops/login and customers at /account/login. Neil's rule: you enter your
+  // number, and ten seconds later the code is sent. Zero sends at once, which is
+  // what the tests use. It used to be read inside customer-auth.js alone, and
+  // the staff sign-in did not wait at all. See src/core/code-sender.js.
+  signIn: Object.freeze({
+    codeDelayMs: Number(process.env.LOGIN_CODE_DELAY_MS ?? 10_000),
+  }),
+
   // Where handoff_to_human reaches Neil. His personal number, never published.
   supportPhone: process.env.SUPPORT_PHONE || '',
 

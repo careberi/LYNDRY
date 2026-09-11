@@ -27,6 +27,7 @@ const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 const burst = require('./core/burst');
 const customerAuth = require('./core/customer-auth');
+const adminAuth = require('./core/admin-auth');
 const scheduler = require('./core/scheduler');
 const issues = require('./core/issues');
 
@@ -417,6 +418,11 @@ function shutdown(signal) {
     customerAuth
       .flushPendingCodes()
       .catch((err) => console.error(`Could not flush pending sign-in codes: ${err.message}`)),
+    // The staff sign-in waits ten seconds too now, so it has codes in flight
+    // for exactly the same reason.
+    adminAuth
+      .flushPendingCodes()
+      .catch((err) => console.error(`Could not flush pending staff sign-in codes: ${err.message}`)),
   ]).finally(() => server.close(() => process.exit(0)));
   // If something hangs, don't wait forever. Raised from ten seconds when the
   // flush above was added: answering a held message means a call to the AI and

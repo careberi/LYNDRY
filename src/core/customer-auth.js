@@ -204,75 +204,37 @@ function clearBucket(key) {
 // --- Sending a code ---------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// THE CODE IS WRITTEN NOW AND TEXTED IN A MOMENT. Neil's call.
-//
-// It used to be sent inside the request, which meant the sign-in form sat there
-// waiting on the carrier before the page could even render. Handing the text to
-// a timer answers the visitor immediately and lets the code follow.
-//
-// ONE PENDING SEND PER NUMBER, AND A SECOND REQUEST REPLACES THE FIRST. This is
-// the part that makes the delay safe rather than a new bug. verifyCode() takes
-// the NEWEST unconsumed code, so somebody tapping the button twice inside the
-// window would otherwise be sent two texts of which only the second works - and
-// the first one to arrive is the one they would try. Cancelling the pending
-// send means exactly one text goes out per burst of taps, and it carries the
-// code that will actually be accepted. Same shape as src/core/burst.js.
+// THE CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER. Neil's rule, and the
+// staff sign-in follows it too - both use src/core/code-sender.js, which holds
+// the timer, the one-pending-send-per-number rule and the flush on shutdown.
 // ---------------------------------------------------------------------------
 
-const SEND_DELAY_MS = Number(process.env.LOGIN_CODE_DELAY_MS ?? 10_000);
+const SEND_DELAY_MS = config.signIn.codeDelayMs;
 
-const pendingCodes = new Map();
-
-async function deliver(phone, text) {
-  pendingCodes.delete(phone);
-
-  try {
-    await sms.sendMessage({
+const codeSender = require('./code-sender').createCodeSender({
+  delayMs: SEND_DELAY_MS,
+  send: (phone, text) =>
+    sms.sendMessage({
       to: phone,
       text,
       // Blank unless a short code or second number is configured.
       from: config.telnyx.codeNumber || undefined,
-    });
-  } catch (err) {
+    }),
+});
+
+function scheduleCode(phone, text) {
+  return codeSender.schedule(phone, text, (err) => {
     // Unlike the staff sign-in, a customer's code is NOT written to the log as
     // a fallback. Staff can read the server log; a customer cannot, so it would
     // be a credential sitting in a log for no one's benefit.
     console.error(`Could not text a customer sign-in code to ${phone}: ${err.message}`);
-  }
+  });
 }
 
-function scheduleCode(phone, text) {
-  const waiting = pendingCodes.get(phone);
-  if (waiting) clearTimeout(waiting.timer);
-
-  // Zero sends immediately, which is what the tests want and what to set if the
-  // delay ever needs taking out in a hurry.
-  if (SEND_DELAY_MS <= 0) return deliver(phone, text);
-
-  const timer = setTimeout(() => {
-    deliver(phone, text).catch(() => {});
-  }, SEND_DELAY_MS);
-
-  // Never hold the process open for a sign-in code. flushPendingCodes() below
-  // is what makes a deploy inside the window safe; an un-unref'd timer would
-  // only delay every shutdown by ten seconds.
-  if (typeof timer.unref === 'function') timer.unref();
-
-  pendingCodes.set(phone, { timer, text });
-  return Promise.resolve();
-}
-
-// A DEPLOY INSIDE THE WINDOW MUST NOT SWALLOW A CODE. The row is already in the
-// database, so without this somebody would wait for a text that was never sent
-// and have to ask for another. Called from shutdown() in src/index.js, next to
-// the burst flush and for the same reason.
-async function flushPendingCodes() {
-  const waiting = [...pendingCodes.entries()];
-  pendingCodes.clear();
-
-  for (const [, entry] of waiting) clearTimeout(entry.timer);
-
-  await Promise.all(waiting.map(([phone, entry]) => deliver(phone, entry.text)));
+// A DEPLOY INSIDE THE WINDOW MUST NOT SWALLOW A CODE. Called from shutdown() in
+// src/index.js, next to the burst flush and for the same reason.
+function flushPendingCodes() {
+  return codeSender.flush();
 }
 
 // Resolves the same whether or not that number belongs to a customer. THE

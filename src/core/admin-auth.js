@@ -151,6 +151,17 @@ function clearSessionCookie(res) {
 
 const { hit, clearBucket } = require('./throttle');
 
+const codeSender = require('./code-sender').createCodeSender({
+  delayMs: config.signIn.codeDelayMs,
+  send: (phone, text) =>
+    sms.sendMessage({
+      to: phone,
+      text,
+      // Blank unless a short code or second number is configured.
+      from: config.telnyx.codeNumber || undefined,
+    }),
+});
+
 // --- Sending a code ---------------------------------------------------------
 
 // Always resolves to the same shape whether or not the number belongs to
@@ -195,24 +206,26 @@ async function requestCode(rawPhone, req) {
 
   const text = `${code} is your LYNDRY sign-in code. It expires in ${CODE_TTL_MINUTES} minutes.`;
 
-  try {
-    await sms.sendMessage({
-      to: phone,
-      text,
-      // Blank unless a short code or second number is configured.
-      from: config.telnyx.codeNumber || undefined,
-    });
-  } catch (err) {
-    // Texting is not working yet — carrier registration is still pending — so
+  // TEXTED TEN SECONDS FROM NOW, NOT INSIDE THIS REQUEST. Neil's rule for both
+  // sign-ins, and this one used to send at once. See src/core/code-sender.js.
+  codeSender.schedule(phone, text, (err) => {
+    // Texting may not be working - carrier registration has been pending - and
     // without this the dashboard would be unreachable. The code goes to the
     // server log ONLY when the send failed, so it can be read from the hosting
-    // dashboard as a way back in. Nothing is written to the messages table:
-    // a live credential does not belong in a database row.
+    // dashboard as a way back in. The wait does not change that: the log line
+    // is written when the delayed send fails. Nothing is written to the messages
+    // table: a live credential does not belong in a database row.
     console.error(`Could not text an ops sign-in code to ${phone}: ${err.message}`);
     console.error(`  Sign-in code for ${user.name}: ${code}  (valid ${CODE_TTL_MINUTES} minutes)`);
-  }
+  });
 
   return { ok: true, phone };
+}
+
+// The waiting sends, for shutdown() in src/index.js. A deploy inside the ten
+// seconds must still send the code the database already holds.
+function flushPendingCodes() {
+  return codeSender.flush();
 }
 
 // --- Checking a code --------------------------------------------------------
@@ -390,6 +403,7 @@ module.exports = {
   requireAdminApi,
   requireAdminPage,
   requestCode,
+  flushPendingCodes,
   verifyCode,
   setSessionCookie,
   clearSessionCookie,

@@ -40,6 +40,7 @@ const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
 const runCore = require('../core/run');
 const { routingBoardBody } = require('../web/routing-board');
+const signInTap = require('../web/sign-in-tap');
 const { runBody, returnBagBody, doorBagBody, pickupBagBody } = require('../web/run-page');
 const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
@@ -1665,12 +1666,15 @@ function phoneStep({ error = '', next = '/ops', phone = '' } = {}) {
   });
 }
 
-function codeStep({ error = '', next = '/ops', phone = '' } = {}) {
+function codeStep({ error = '', next = '/ops', phone = '', code = '' } = {}) {
   return loginShell({
     heading: 'Check your phone.',
-    intro: `We texted a six-digit code to <strong>${escapeHtml(
+    // ON ITS WAY, NOT ALREADY SENT. The text goes ten seconds after the number
+    // was entered (src/core/code-sender.js), so "we texted you a code" would be
+    // a sentence the phone contradicts for the first few seconds.
+    intro: `A six-digit code is on its way to <strong>${escapeHtml(
       formatPhone(phone)
-    )}</strong>. It expires in ${auth.CODE_TTL_MINUTES} minutes.`,
+    )}</strong>. Give it a few seconds. It expires ${auth.CODE_TTL_MINUTES} minutes after it lands.`,
     error,
     form: `
       <form method="post" action="/ops/login/code" class="card card-xl" style="padding:28px;">
@@ -1679,12 +1683,13 @@ function codeStep({ error = '', next = '/ops', phone = '' } = {}) {
           <label class="field-label" for="code">Six-digit code</label>
           <input class="input input-lg" type="text" id="code" name="code" required
                  inputmode="numeric" pattern="[0-9]*" maxlength="6"
-                 autocomplete="one-time-code" autofocus
+                 autocomplete="one-time-code" autofocus value="${escapeHtml(code)}"
                  style="letter-spacing:0.4em;font-size:24px;text-align:center;">
         </div>
-        <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
+        <button type="submit" data-sign-in class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
           Sign in ${icon('arrow-right', '22')}
         </button>
+        ${signInTap.tapGate()}
       </form>
 
       <form method="post" action="/ops/login" style="margin-top:18px;">
@@ -1834,6 +1839,21 @@ router.post('/ops/login/code', async (req, res, next) => {
 
   try {
     if (!phone) return res.redirect(303, '/ops/login');
+
+    // NOT SIGNED IN WITHOUT A TAP ON "SIGN IN". Neil's requirement. A code that
+    // arrives any other way - the phone sending the form on after filling it in
+    // - is not checked and uses up no attempt; the page comes back with the code
+    // still in the box. See src/web/sign-in-tap.js.
+    if (!signInTap.wasTapped(req.body)) {
+      return res.type('html').send(
+        codeStep({
+          error: 'Tap Sign in to finish.',
+          next: wanted,
+          phone,
+          code: String((req.body || {}).code || '').replace(/\D/g, '').slice(0, 6),
+        })
+      );
+    }
 
     const result = await auth.verifyCode(phone, (req.body || {}).code, req);
 
