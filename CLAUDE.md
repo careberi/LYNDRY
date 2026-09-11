@@ -273,36 +273,64 @@ unlike the favicons, because iOS paints a transparent home-screen icon black.
 
 ### The Google Ads tag
 
+Account 719-154-3966, tag `AW-18438272002`, lead conversion
+`AW-18438272002/n0sjCK-C1_McEILohthE` ("Submit lead form", $1, counted once).
+The values live in `config.googleAds`; the tag is `googleTag()` in
+`layout.js`; the click id and the one-shot lead marker are
+`src/core/ad-attribution.js`. On in production only.
+
 **Off unless a page asks for it, and that default must never flip.** Google's
 tag reports the full address of the page it runs on, query string and all.
-`renderPage` is also used for `/pay/<token>`, `/account/booked/<token>`,
-`/account/card/done/<token>` and some ops screens, so a tag on by default hands
-tokens to an advertising account. `googleTag()` in `layout.js` holds the whole
-reasoning; `config.googleAds` holds the id and the conversion label, and it is
-on in production only.
+`renderPage` also renders `/pay/<token>`, `/account/booked/<token>`,
+`/account/card/done/<token>`, and the order wizard at `/account/book`, whose
+URL carries a customer's name and street address. A tag on by default hands
+those to an advertising account. Never on an ops screen.
 
 **Which pages:** everything in `PAGES` in `web.js` (being in that list is the
-opt-in), the town pages and `/locations`, and `/account/login`. Not `/bergen`,
-which is Facebook traffic, and never an ops page.
+opt-in), the town pages and `/locations`, `/bergen` and `/bergen/sent`, and
+`/account/login`. On `/account` only on the one landing that follows a new
+order. Never on `/account/book`.
 
-**Two leaks were found by loading real pages, not by reading code**, and the
-tag's own script now closes both: `next` is removed from the reported address
-(a signed-out customer opening a booking link lands on
-`/account/login?next=/account/booked/<token>`), and the referrer is cut to its
-origin (Referrer-Policy sends the full address on a same-site click). **Only
-`next` comes out**, never the whole query string - `gclid` rides there, and
-without it no conversion can be credited to an ad.
+**Two leaks were closed inside the tag, found by loading real pages:** `next`
+is removed from the reported address (a signed-out customer opening a booking
+link lands on `/account/login?next=/account/booked/<token>`), and the referrer
+is cut to its origin (Referrer-Policy sends the full address on a same-site
+click). **Only `next` comes out on the marketing pages**, never the whole
+query string: `gclid` rides there, and Google's `_gcl_aw` cookie was checked
+in a real browser to still pick it up. Pages rendered after a save use
+`stripQuery` and report no query string at all.
 
-**`/account/book` reads the order wizard's answers out of its URL** - name,
-street, zip. It is untagged on every render except one, and that one strips the
-whole query string.
+**A lead counts once, on a real save, with a real id as `transaction_id`:**
 
-**The "Submit lead form" conversion fires in two places**, which Neil chose:
-`/start/sent` for the home page form, and the first `/account/book` after a
-new number on `/account/login`, marked by the one-shot `ly_lead` cookie. **Not
-`/account/login/code`**: only an existing customer is ever sent a code, so that
-page is a returning customer signing in. Never use enhanced conversions - they
-would send a hashed phone number.
+| Where | Counted on | transaction_id |
+|---|---|---|
+| Home page form | `/start/sent` | customer id |
+| `/bergen` form | `/bergen/sent` | customer id |
+| Online order, card needed | the card step, in the POST response | order id |
+| Online order, no card needed | `/account` after `?booked=1` | order id |
+| A tap on any `sms:` or `tel:` link | the page it was on | none, plus `sms_click` / `call_click` |
+
+**Why a marker cookie and not the form's success handler.** The home page form
+is a plain POST with no script, and it answers every outcome with the same
+redirect; `/bergen/join` answers every outcome with `{ok: true}`. Both exist so
+nobody can find out who is a customer or tell a bot it was caught. So the POST,
+which alone knows a customer was really created, sets an httpOnly `ly_conv`
+marker only then, and the next page takes it and deletes it. A bot, a refused
+number and an existing customer get the identical response and no marker. **The
+Meta pixel on `/bergen` was left exactly as it was**, and still fires `Lead` on
+every `{ok: true}`, bots included.
+
+**Not `/account/login` itself, and not `/account/login/code`.** A new number
+there is a guest cookie and nothing saved, so it is not a lead until the order
+is placed; and only an existing customer is ever sent a code. Both were briefly
+conversion pages and both were wrong.
+
+**Google's click id is stored on the customer**, in `gclid`, `gbraid` or
+`wbraid` (migration 0085): kept in a 90-day first-party cookie set server-side
+by any GET that lands with one, and written first-touch when a website form
+creates the customer. It exists so booked first pickups can be uploaded back to
+Google later. **Never use enhanced conversions** - they send a hashed phone
+number.
 
 ### Motion
 

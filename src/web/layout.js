@@ -344,8 +344,9 @@ function renderPage({
   // THE GOOGLE ADS TAG, OPT-IN. See googleTag() at the foot of this file for
   // why it is off unless a page asks for it.
   tracking = false,
-  // 'lead' on the two pages somebody reaches after giving us their number.
-  conversion = null,
+  // The customer or order id of a real save, on the page that save leads to.
+  // Becomes Google's transaction_id. See src/core/ad-attribution.js.
+  conversionId = null,
   // Report no query string at all. For a page whose URL carries answers.
   stripQuery = false,
 }) {
@@ -361,7 +362,7 @@ function renderPage({
   const html = `<!doctype html>
 <html lang="en">
 <head>
-  ${tracking ? googleTag({ conversion, stripQuery }) : ''}
+  ${tracking ? googleTag({ conversionId, stripQuery }) : ''}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${fullTitle}</title>
@@ -619,7 +620,7 @@ const ICON_LINKS = [
 // /account/login/code carries only ?next=/account. Enhanced conversions, which
 // would send a hashed phone or email, are deliberately not used.
 // ---------------------------------------------------------------------------
-function googleTag({ conversion = null, stripQuery = false, ads = config.googleAds } = {}) {
+function googleTag({ conversionId = null, stripQuery = false, ads = config.googleAds } = {}) {
   // `ads` defaults to config and is a parameter only so the tests can exercise
   // the on, off and malformed cases without restarting the process.
   if (!ads || !ads.enabled || !ads.id) return '';
@@ -629,11 +630,47 @@ function googleTag({ conversion = null, stripQuery = false, ads = config.googleA
   if (!/^AW-\d+$/.test(ads.id)) return '';
 
   const label = /^[A-Za-z0-9_-]+$/.test(ads.leadLabel || '') ? ads.leadLabel : '';
+  const sendTo = label ? `${ads.id}/${label}` : '';
+  const value = Number.isFinite(Number(ads.leadValue)) ? Number(ads.leadValue) : 1;
+  const currency = /^[A-Z]{3}$/.test(ads.currency || '') ? ads.currency : 'USD';
+
+  // A LEAD, FIRED ONCE, WITH ITS OWN ID AS THE TRANSACTION. Only on the page a
+  // real save leads to - see src/core/ad-attribution.js for how that page is
+  // told. The id is a customer or order UUID; anything else is dropped rather
+  // than written into a script.
+  const txn = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(conversionId || '')
+  )
+    ? conversionId
+    : '';
 
   const fire =
-    conversion === 'lead' && label
-      ? `\n  gtag('event', 'conversion', {'send_to': '${ads.id}/${label}'});`
+    txn && sendTo
+      ? `\n  gtag('event', 'conversion', {send_to: '${sendTo}', value: ${value}, currency: '${currency}', transaction_id: '${txn}'});`
       : '';
+
+  // A TAP ON A TEXT OR CALL LINK COUNTS AS A LEAD TOO, Neil's brief. Somebody
+  // who taps "text us" off an advert has done the same thing as filling in a
+  // form, just faster. It sends the same conversion, with no transaction id -
+  // there is no record yet to name - plus sms_click or call_click, so the two
+  // can be told apart in reports from each other and from the forms.
+  //
+  // DELEGATED, so it catches every link however it was built: the footer, the
+  // town pages, /bergen, anything added later. NEVER preventDefault - the link
+  // does exactly what it did before, and this only watches it go. sms: and tel:
+  // open another app rather than leaving the page, so the request completes.
+  //
+  // Google counts a tap as one conversion per ad click (the conversion is set
+  // to count once), so a nervous double tap is not two leads.
+  const taps = sendTo
+    ? `
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href^="sms:"], a[href^="tel:"]') : null;
+    if (!a) return;
+    gtag('event', a.getAttribute('href').indexOf('sms:') === 0 ? 'sms_click' : 'call_click');
+    gtag('event', 'conversion', {send_to: '${sendTo}', value: ${value}, currency: '${currency}'});
+  });`
+    : '';
 
   // WHAT THE TAG IS ALLOWED TO REPORT ABOUT WHERE THE VISITOR IS AND WAS.
   //
@@ -678,7 +715,7 @@ function googleTag({ conversion = null, stripQuery = false, ads = config.googleA
     lyPage.page_location = lyHere.toString();
     lyPage.page_referrer = document.referrer ? new URL(document.referrer).origin + '/' : '';
   } catch (e) {}
-  gtag('config', '${ads.id}', lyPage);${fire}
+  gtag('config', '${ads.id}', lyPage);${fire}${taps}
   </script>`;
 }
 

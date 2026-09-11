@@ -159,12 +159,19 @@ const config = Object.freeze({
   // same trap the nightly pass and the lead sweep are guarded against.
   //
   // leadLabel is the half after the slash in Google Ads' "event snippet" for
-  // the Submit lead form conversion. Blank means the tag loads and measures
-  // visits but reports no conversions, which is the safe way to be missing it.
+  // the Submit lead form conversion (account 719-154-3966, value $1, counted
+  // once). Blank would mean the tag loads and reports no conversions, which is
+  // the safe way to be missing it.
+  //
+  // leadValue is what each lead is worth to Google's bidding - a nominal $1,
+  // Neil's setting in the conversion action. It is not revenue and nothing here
+  // treats it as such.
   // ---------------------------------------------------------------------------
   googleAds: Object.freeze({
     id: process.env.GOOGLE_ADS_ID || 'AW-18438272002',
-    leadLabel: process.env.GOOGLE_ADS_LEAD_LABEL || '',
+    leadLabel: process.env.GOOGLE_ADS_LEAD_LABEL || 'n0sjCK-C1_McEILohthE',
+    leadValue: 1,
+    currency: 'USD',
     enabled:
       process.env.GOOGLE_ADS_ENABLED === 'true' ||
       (process.env.NODE_ENV === 'production' && process.env.GOOGLE_ADS_ENABLED !== 'false'),

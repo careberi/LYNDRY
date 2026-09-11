@@ -7,6 +7,7 @@ const express = require('express');
 const db = require('../db');
 const notify = require('../core/notify');
 const onboarding = require('../core/onboarding');
+const adAttribution = require('../core/ad-attribution');
 const wash = require('../core/wash');
 
 const throttle = require('../core/throttle');
@@ -111,10 +112,11 @@ const PAGES = [
   {
     path: '/start/sent',
     noindex: true,
-    // A LEAD. Only reached by submitting the home page number form - and every
-    // outcome of that form lands here identically, which is why this counts
-    // submissions rather than confirmed new numbers. See googleTag().
-    conversion: 'lead',
+    // A LEAD PAGE. The home page form's POST marks a real new customer, and
+    // this page counts it once. Every outcome of that form still lands here
+    // identically; only a real save carries the marker. See
+    // src/core/ad-attribution.js.
+    leadPage: true,
     file: 'start-sent.html',
     title: 'Check your phone',
     description: 'We have texted you. Reply with your name and address and you are set up.',
@@ -266,7 +268,7 @@ function partnerTokens(form = {}, errorMessage = '') {
   };
 }
 
-function render(res, page, extra = {}, status = 200) {
+function render(res, page, extra = {}, status = 200, conversionId = null) {
   res.status(status).type('html').send(
     renderPage({
       title: page.title,
@@ -291,7 +293,7 @@ function render(res, page, extra = {}, status = 200) {
       // to stay out says `tracking: false`. See googleTag() in layout.js for
       // why the layout's own default is off.
       tracking: page.tracking !== false,
-      conversion: page.conversion || null,
+      conversionId,
     })
   );
 }
@@ -342,7 +344,9 @@ async function extraTokensFor(page, req) {
 for (const page of PAGES) {
   router.get(page.path, async (req, res, next) => {
     try {
-      render(res, page, await extraTokensFor(page, req));
+      // A lead page counts a lead only if the form that led here saved one.
+      const conversionId = page.leadPage ? adAttribution.takeLead(req, res, page.path) : null;
+      render(res, page, await extraTokensFor(page, req), 200, conversionId);
     } catch (err) {
       next(err);
     }
@@ -460,6 +464,10 @@ router.get('/bergen/sent', (req, res) => {
       body: readPageBody('bergen-sent.html'),
       bare: true,
       noindex: true,
+      // Google Ads, Neil's brief: every public page. The lead counts here, once,
+      // if /bergen/join just created a customer.
+      tracking: true,
+      conversionId: adAttribution.takeLead(req, res, '/bergen/sent'),
     })
   );
 });
@@ -473,6 +481,7 @@ router.get('/bergen', (req, res) => {
       body: readPageBody('bergen.html'),
       bare: true,
       noindex: true,
+      tracking: true,
       ogImage: '/og/bergen.png',
       head: bergen.pixel(),
       extra: { BERGEN_SCRIPT: bergen.script },
@@ -550,6 +559,11 @@ router.post('/bergen/join', async (req, res) => {
     // click always took the credit, including from campaigns that were only
     // ever shown to people we already had.
     if (started.created) {
+      // The Google Ads lead and the click that found them. {ok: true} still goes
+      // back for every outcome, so the page learns nothing it did not already.
+      adAttribution.markLead(res, started.customer.id, '/bergen/sent');
+      await adAttribution.recordAdClick(req, started.customer.id);
+
       const clean = (v) => {
         const s = String(v == null ? '' : v).trim().slice(0, 120);
         return s || null;
@@ -791,6 +805,15 @@ router.post('/start', async (req, res, next) => {
     });
 
     if (!result.ok) console.log(`/start refused ${phone}: ${result.reason}`);
+
+    // A REAL NEW CUSTOMER, AND ONLY THAT, IS A LEAD FOR GOOGLE ADS. The
+    // redirect below is identical whatever happened; the marker is not, and it
+    // is httpOnly, so the page cannot read which it was. See
+    // src/core/ad-attribution.js.
+    if (result.ok && result.created) {
+      adAttribution.markLead(res, result.customer.id, '/start/sent');
+      await adAttribution.recordAdClick(req, result.customer.id);
+    }
 
     return done();
   } catch (err) {

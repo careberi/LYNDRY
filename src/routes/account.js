@@ -12,6 +12,7 @@ const settings = require('../core/settings');
 const billing = require('../core/billing');
 const cardSaved = require('../core/card-saved');
 const auth = require('../core/customer-auth');
+const adAttribution = require('../core/ad-attribution');
 const payments = require('../providers/payments');
 const { sendAndLog } = require('../core/notify');
 const { site } = require('../web/site');
@@ -44,7 +45,7 @@ const router = express.Router();
 // reports the browser's REAL address rather than the `path` below - so turning
 // it on here for everyone would hand those tokens to Google. See googleTag() in
 // src/web/layout.js.
-function accountPage(res, { title, body, status = 200, tracking = false, conversion = null, stripQuery = false }) {
+function accountPage(res, { title, body, status = 200, tracking = false, conversionId = null, stripQuery = false }) {
   res
     .status(status)
     .type('html')
@@ -56,7 +57,7 @@ function accountPage(res, { title, body, status = 200, tracking = false, convers
         body,
         noindex: true,
         tracking,
-        conversion,
+        conversionId,
         stripQuery,
       })
     );
@@ -103,51 +104,7 @@ function readPending(req) {
   return '';
 }
 
-// ---------------------------------------------------------------------------
-// A NEW LEAD, COUNTED EXACTLY ONCE, for Google Ads.
-//
-// Neil asked for "Submit lead form" to count both number forms. On this one, a
-// new number goes straight from POST /account/login into /account/book - no
-// code, no confirmation page - so there is no page that only a new lead ever
-// sees. /account/book is also every later step of the order wizard and the
-// page an existing customer books from.
-//
-// So the POST, which is the only place that knows this was a new number, drops
-// a marker that the NEXT /account/book takes and deletes. One submission, one
-// conversion: a refresh, the Back button, and every later step find no marker.
-//
-// WHY A COOKIE AND NOT ?lead=1. /account/book reads the wizard's answers out of
-// its query string, so its URL is already the one thing on this page that must
-// not reach Google - see stripQuery in src/web/layout.js. Adding to it is the
-// wrong direction.
-//
-// It carries no information. "1", scoped to the one path that reads it, gone in
-// two minutes whether or not anybody arrives - the redirect is immediate, so a
-// marker still around after that is a stale one and must not fire later.
-// ---------------------------------------------------------------------------
-const LEAD_COOKIE = 'ly_lead';
 
-function markLead(res) {
-  res.cookie(LEAD_COOKIE, '1', {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/account/book',
-    maxAge: 2 * 60 * 1000,
-  });
-}
-
-// Did they arrive straight from giving us a new number? Deletes the marker as it
-// reads it, so asking twice about the same arrival cannot say yes twice.
-function takeLead(req, res) {
-  const header = req.headers.cookie || '';
-  const present = header
-    .split(';')
-    .some((part) => part.trim() === `${LEAD_COOKIE}=1`);
-
-  if (present) res.clearCookie(LEAD_COOKIE, { path: '/account/book' });
-  return present;
-}
 
 // The create-an-account page, redisplayed with an error and whatever they
 // typed. The happy path is rendered by web.js from public/pages/signup.html;
@@ -389,8 +346,6 @@ router.post('/account/login', async (req, res, next) => {
     }
 
     auth.setGuestCookie(res, number);
-    // A new number: the lead Google Ads counts. See LEAD_COOKIE above.
-    markLead(res);
     return res.redirect(303, '/account/book');
   } catch (err) {
     return next(err);
@@ -411,8 +366,8 @@ router.get('/account/login/code', (req, res) => {
     // somebody already on the books and sends a new number straight into the
     // order instead. So this page is a returning customer signing in, which is
     // the one thing a lead is not. Found by submitting a new number for real and
-    // watching it land on /account/book. The lead is counted there - see
-    // LEAD_COOKIE below.
+    // watching it land on /account/book. An online lead is now counted when the
+    // order is created - see POST /account/book.
   });
 });
 
@@ -857,7 +812,18 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
   </div>
 </section>`;
 
-    accountPage(res, { title: 'Your account', body });
+    // THE GOOGLE ADS TAG ONLY ON THE LANDING THAT FOLLOWS A NEW ONLINE ORDER,
+    // marked by POST /account/book and taken here exactly once. Every other
+    // view of the account page - which is most of them - carries no tag.
+    const orderLead = adAttribution.takeLead(req, res, '/account');
+
+    accountPage(res, {
+      title: 'Your account',
+      body,
+      tracking: Boolean(orderLead),
+      conversionId: orderLead,
+      stripQuery: true,
+    });
   } catch (err) {
     next(err);
   }
@@ -2137,18 +2103,15 @@ router.get('/account/book', async (req, res, next) => {
     // back; send them to the first thing that is actually still open.
     const shown = step === 'book' ? 'when' : step;
 
-    // THE GOOGLE ADS TAG ONLY ON THE ARRIVAL THAT IS A NEW LEAD, and never
-    // otherwise. This page's query string carries the wizard's answers - name,
-    // street address, zip - so every other render of it stays untagged, and
-    // the one tagged render reports no query string at all (stripQuery).
-    const lead = takeLead(req, res);
-
+    // NO GOOGLE ADS TAG ON ANY RENDER OF THIS PAGE. Its query string carries the
+    // order wizard's answers - name, street address, zip - so the tag's full
+    // address report would send a customer's home address to Google. It
+    // briefly fired a conversion here on a new number's first arrival; nothing
+    // is saved at that point, so it came out. An online lead is counted when
+    // the order is created - see POST /account/book.
     return accountPage(res, {
       title: 'Place an order',
       body: stepPage({ customer, step: shown, given, opensOn, guest: who.guest }),
-      tracking: lead,
-      conversion: lead ? 'lead' : null,
-      stripQuery: true,
     });
   } catch (err) {
     return next(err);
@@ -2259,6 +2222,11 @@ router.post('/account/book', async (req, res, next) => {
       auth.setSessionCookie(res, started.customer.id);
       auth.clearGuestCookie(res);
       guest = false;
+
+      // WHICH GOOGLE AD FOUND THEM, if one did. Only on a customer this request
+      // actually created - somebody already on the books keeps the click that
+      // brought them in the first time. See src/core/ad-attribution.js.
+      if (started.created) await adAttribution.recordAdClick(req, started.customer.id);
 
       const washed = await saveWash(started.customer, form);
       if (!washed.ok) return reshow('wash', washed.error);
@@ -2424,6 +2392,20 @@ router.post('/account/book', async (req, res, next) => {
       return accountPage(res, {
         title: 'Payment method',
         body: cardStep({ customer, order: result.order }),
+        // AN ONLINE ORDER IS A LEAD, COUNTED HERE, Neil's brief. The order row
+        // exists already - it is written before the card is asked for - so this
+        // is the moment it was placed. Counted now rather than after the card,
+        // on purpose: somebody who got as far as a day, an address and a wash
+        // and then stalled at the card is exactly the lead the ads should learn
+        // from. Whether they became a paying customer is the separate question
+        // the stored click id answers later.
+        //
+        // In this response, not via a marker: there is no redirect, the card
+        // panel is rendered straight back. The URL is the POST's - no query
+        // string - and stripQuery makes sure of it.
+        tracking: true,
+        conversionId: result.order.id,
+        stripQuery: true,
       });
     }
 
@@ -2444,6 +2426,10 @@ router.post('/account/book', async (req, res, next) => {
       customer.id
     );
 
+    // The other way an online order ends: no card was needed, so it redirects.
+    // The account page it lands on counts the lead, told by a one-shot marker
+    // carrying the order id. See src/core/ad-attribution.js.
+    adAttribution.markLead(res, result.order.id, '/account');
     return back(res, '?booked=1');
   } catch (err) {
     return next(err);

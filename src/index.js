@@ -84,6 +84,13 @@ app.use((req, res, next) => {
 // because we record the customer's IP as legal proof of SMS consent.
 app.set('trust proxy', 1);
 
+// THE GOOGLE AD CLICK, remembered for 90 days from whichever page an ad lands
+// on. Before every route so no landing page can be missed, and harmless to the
+// payment webhook beneath it: it only ever acts on a GET that carries gclid,
+// gbraid or wbraid in its URL, and never reads or touches a body. See
+// src/core/ad-attribution.js.
+app.use(require('./core/ad-attribution').captureAdClick);
+
 // Payment routes go on FIRST, before any body parser.
 //
 // The payment provider's webhook signature covers the exact bytes it sent, and
@@ -230,14 +237,14 @@ app.use('/', account.router);
 app.use('/', bag);
 
 // The public website and the signup form.
-app.use('/', web.router);
-
-// LAST, AND IT HAS TO BE. The town pages sit at the root - /tenafly, not
-// /locations/tenafly - so this router ends in a catch-all on /:slug. It calls
-// next() for anything that is not one of the 70 towns, but mounting it ahead
-// of a real route would still be asking for trouble the day somebody adds a
-// page whose path happens to be a town name. Everything above gets first
-// refusal, and the 404 handler below still gets the last word.
+app.use('/', web.router);
+
+// LAST, AND IT HAS TO BE. The town pages sit at the root - /tenafly, not
+// /locations/tenafly - so this router ends in a catch-all on /:slug. It calls
+// next() for anything that is not one of the 70 towns, but mounting it ahead
+// of a real route would still be asking for trouble the day somebody adds a
+// page whose path happens to be a town name. Everything above gets first
+// refusal, and the 404 handler below still gets the last word.
 app.use('/', locations.router);
 
 // Anything that matched nothing above.
