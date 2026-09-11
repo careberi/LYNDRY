@@ -355,6 +355,70 @@ async function transition(order, to) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// BRINGING A CANCELLED PICKUP BACK.
+//
+// CANCELED is terminal in ALLOWED_NEXT, on purpose, and this does not change
+// that: canTransition() still says no, so nothing that goes through
+// transition() - the AI's tools, the ops buttons, the website - can un-cancel
+// an order by accident. This is a separate, deliberate door beside it.
+//
+// Neil's case, 11 September: a customer's order had been cancelled, she then
+// wanted the pickup after all, and Neil asked for that same order to be brought
+// back rather than a new one booked beside it. A fresh booking would have
+// worked, but it leaves a cancelled order and a live one for the same laundry,
+// and the order number she already has stops meaning anything.
+//
+// WHAT MAY BE REINSTATED: only an order that never reached us. The state
+// machine only lets an order be cancelled before collection, so a cancelled
+// order should never carry a collection, a weight or a delivery - but "should
+// never" is exactly the thing to check rather than assume, because bringing
+// back an order that held laundry would put a finished job back on the board.
+//
+// It only moves the status and records who did it and why. It does NOT
+// reschedule, touch promotions or text anybody: the caller decides each of
+// those, the same division transition() keeps.
+// ---------------------------------------------------------------------------
+function reinstatable(order) {
+  if (!order) return 'There is no such order.';
+  if (order.status !== 'CANCELED') return `Order #${order.order_number} is ${order.status}, not cancelled.`;
+  if (order.collected_at || order.weight_lb || order.at_partner_at || order.delivered_at) {
+    return `Order #${order.order_number} held laundry at some point, so it cannot be brought back.`;
+  }
+  return null;
+}
+
+async function reinstate(order, { by = null, reason = null } = {}) {
+  const problem = reinstatable(order);
+  if (problem) throw new Error(problem);
+
+  const { data, error } = await db
+    .from('orders')
+    .update({ status: 'REQUESTED' })
+    // Only if it is still cancelled - two people reinstating at once cannot both
+    // succeed, the same guard transition() uses.
+    .eq('id', order.id)
+    .eq('status', 'CANCELED')
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('That order changed while we were updating it. Try again.');
+
+  // On the record, with a name and a reason. A cancellation that quietly undid
+  // itself would be the one change log entry nobody could explain later.
+  await require('./order-events').record(order.id, {
+    kind: 'STATUS',
+    summary: 'Reinstated after being cancelled',
+    was: 'CANCELED',
+    became: 'REQUESTED',
+    by: by || { actor: 'staff' },
+    reason,
+  });
+
+  return data;
+}
+
 async function reschedule(order, newDate, newTime, window, by = null) {
   if (!isCancellable(order.status)) {
     throw new Error('That order has already been collected, so it cannot be rescheduled.');
@@ -458,6 +522,8 @@ module.exports = {
   IN_FLIGHT,
   IN_OUR_HANDS,
   canTransition,
+  reinstatable,
+  reinstate,
   isCancellable,
   findAwaitingCollection,
   findAllAwaitingCollection,

@@ -653,6 +653,25 @@ the cancel button" is a worse question than a sentence answering it. **If the
 text fails the cancel still stands** and the screen says so — an admin who
 thinks the customer was told and was not is the worst of both.
 
+**A CANCELLED ORDER CAN BE BROUGHT BACK, BUT NOT THROUGH THE STATE MACHINE.**
+Neil's case, 11 September: order #1975 had been cancelled, the customer wanted
+the pickup after all, and he asked for that order back rather than a new one
+beside it. `orders.reinstate()` moves `CANCELED` to `REQUESTED` and writes a
+`STATUS` event with a name and a reason. **`ALLOWED_NEXT.CANCELED` is still
+empty**, so nothing that goes through `transition()` can un-cancel by accident,
+and a test pins that. `reinstatable()` refuses anything that ever held laundry
+(a collection, a weight, a laundromat, a delivery). It moves the status and
+nothing else: no reschedule, no promotion, no text. There is no button for it
+yet; it was run once, by hand.
+
+**THAT SAME ORDER IS WAIVED, AND THAT IS THE GUARANTEE, NOT THE PROMOTION.**
+Neil: under no circumstance is her card charged for #1975. It carries a
+one-order 100% promotion (`max_orders` 1, claimed by #1975, no blurb) so the
+price works out to nothing, and `payment_status` is `WAIVED`, which every charge
+path refuses on its own: `chargeOrder()`, the weigh-in, the delivery backstop
+and the declined-card retry. Either would do; both are there because he said
+"under no circumstance".
+
 **SOMEBODY CAN BE MARKED OPTED OUT BY HAND, AND IT IS ONE WAY.** Neil's ask: a
 customer who asks to come off the list on the phone or at a door left no trace,
 and kept getting reminders. `POST /ops/customers/:id/opt-out`, behind
