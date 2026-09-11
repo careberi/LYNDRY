@@ -93,15 +93,28 @@ async function step(order, to, buildMessage, by = {}) {
 // The moment the laundry becomes our responsibility, and the moment the
 // customer loses the ability to cancel. Both follow from this one call.
 
+// A WAIVED ORDER IS NEVER TOLD ABOUT A TOTAL. Neil, 11 September, on order
+// #1975, which is free and can never be charged: the pickup text promised "the
+// weight and the total", and there is no total to send. It promises the weight
+// alone, and waivedWeighInText() below is the text that keeps that promise.
+function collectedMessage(order) {
+  return order && order.payment_status === 'WAIVED'
+    ? `We've got your laundry! We'll text you the weight once it's on the scale.`
+    : `We've got your laundry! We'll text you the weight and the total once it's on the scale.`;
+}
+
+// What the laundromat's weigh-in texts on a waived order: the weight, and
+// nothing about money. The priced version would say "the total is $59.60" for a
+// demo order nobody will ever charge, or name a promotion and a $0.00 total -
+// neither of which the pickup text said was coming.
+function waivedWeighInText(pounds) {
+  return `Your laundry weighed ${pounds} lb.`;
+}
+
 async function collect(order, { bagCount, by = {} } = {}) {
   // The one new fact: we have the bag. The turnaround was promised in the
   // confirmation; repeating it in every text is what Neil flagged.
-  const result = await step(
-    order,
-    'IN_PROCESS',
-    () => `We've got your laundry! We'll text you the weight and the total once it's on the scale.`,
-    by
-  );
+  const result = await step(order, 'IN_PROCESS', (updated) => collectedMessage(updated), by);
 
   if (!result.ok) return result;
 
@@ -1221,7 +1234,11 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
         : ` We'll settle up with you.`;
     }
 
-    await sendAndLog(customer.phone, `${howPriced}${money_}`, customer.id);
+    // WAIVED: the weight and nothing else, the one thing the pickup text said
+    // was coming. See collectedMessage().
+    const text = settled.payment_status === 'WAIVED' ? waivedWeighInText(billable) : `${howPriced}${money_}`;
+
+    await sendAndLog(customer.phone, text, customer.id);
   }
 
   return {
@@ -1314,6 +1331,8 @@ async function reconcileReturn(order, returned, { by = {} } = {}) {
 }
 
 module.exports = {
+  collectedMessage,
+  waivedWeighInText,
   settleWeight,
   reconcileReturn,
   updateWeightEstimate,

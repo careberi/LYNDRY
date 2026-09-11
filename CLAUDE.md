@@ -673,6 +673,14 @@ path refuses on its own: `chargeOrder()`, the weigh-in, the delivery backstop
 and the declined-card retry. Either would do; both are there because he said
 "under no circumstance".
 
+**A WAIVED ORDER IS NEVER TOLD ABOUT A TOTAL.** Neil, the same evening: #1975's
+pickup text still said "We'll text you the weight and the total". On a waived
+order `collectedMessage()` promises the weight alone, and the laundromat
+weigh-in keeps that promise with `waivedWeighInText()` - "Your laundry weighed
+14.68 lb." - rather than a price, a promotion name or a $0.00 total. Out for
+delivery and delivered already say nothing about money on a waived order. A
+test pins both halves.
+
 **SOMEBODY CAN BE MARKED OPTED OUT BY HAND, AND IT IS ONE WAY.** Neil's ask: a
 customer who asks to come off the list on the phone or at a door left no trace,
 and kept getting reminders. `POST /ops/customers/:id/opt-out`, behind
