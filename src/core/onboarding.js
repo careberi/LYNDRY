@@ -64,6 +64,60 @@ const CONSENT_SOURCES = [
   'PHONE_CALL',
 ];
 
+// ---------------------------------------------------------------------------
+// CAN A CLAIMED CODE ACTUALLY COME OFF SOMETHING FOR THIS PERSON.
+//
+// Only a first-order offer has a question to answer here, and the question is
+// the same one discountFor() asks at pricing: have they had a delivered order?
+// Asking it the same way is the point - a code granted here that pricing later
+// refuses is a promise on their account that nothing will ever keep.
+//
+// Everything that is not first-order is always eligible. NEXT_ORDERS and
+// EVERY_ORDER apply whatever somebody's history.
+// ---------------------------------------------------------------------------
+async function firstOrderStillAhead(customerId, promo) {
+  if (!promo || promo.applies_to !== 'FIRST_ORDER') return true;
+
+  const { count, error } = await db
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .eq('status', 'DELIVERED');
+
+  // FAILS TOWARDS GRANTING. The worse mistake is telling somebody who has
+  // never ordered that a code they were sent does not apply to them; granting
+  // it to somebody who has ordered costs nothing, because discountFor() still
+  // refuses it at pricing.
+  if (error) {
+    console.error(`Could not check order history for ${customerId}: ${error.message}`);
+    return true;
+  }
+
+  return !count;
+}
+
+// THE EXPIRY, AS A DAY SOMEBODY CAN PUT IN A DIARY - or nothing, when the grant
+// has none. Read off the GRANT and never the promotion's rule: see the note
+// where this is called. Same "Friday 18 Sep" shape every other text uses, on
+// New Jersey's clock, because a date worked out in UTC is a day early for
+// anybody reading it after 8pm.
+function expiryNote(grant) {
+  if (!grant || !grant.expires_at) return '';
+
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+    })
+      .formatToParts(new Date(grant.expires_at))
+      .map((p) => [p.type, p.value])
+  );
+
+  return ` It is good until ${parts.weekday} ${parts.day} ${parts.month}.`;
+}
+
 // What we say to somebody we have never spoken to.
 //
 // It offers the thing rather than demanding details for it. Asking a stranger
@@ -263,20 +317,61 @@ async function startConversation({
   }
 
   if (existing) {
-    // ALREADY A CUSTOMER, SCANNING A DOOR HANGER. Neil's call: the $10 is a
-    // new-customer offer, so they do not get it. Said in a way that does not
-    // read as a refusal - they went out and scanned a card, and "no" is a poor
-    // thank you for that. Nothing is granted and nothing is written; the reply
-    // is the whole of it.
+    // SOMEBODY ALREADY ON THE BOOKS TEXTED A CODE.
+    //
+    // THIS USED TO REFUSE EVERY TIME, and it was unreachable anyway. Neil's
+    // original call for the door hanger was that the $10 was for new customers
+    // only, so this sent "that one is for people who have not used us yet" and
+    // granted nothing - but src/routes/sms.js only ever scanned a NEW number
+    // for a code, so an existing customer's code went straight to the AI, which
+    // had never been told a code existed and replied "I don't have any promo
+    // codes running on my end". Which was false.
+    //
+    // NEIL REVERSED IT ON 10 SEPTEMBER: "by text, fixed for existing contacts".
+    // Most of the people who will text CLEAN50 are the forty-odd already in the
+    // thread, and a promo code that tells them it does not exist is worse than
+    // no promo code.
+    //
+    // THE OLD SENTENCE WAS POINTING AT THE HONEST RULE. A first-order offer
+    // genuinely cannot help somebody who has already had their first order -
+    // discountFor() refuses it the moment a DELIVERED order exists - so
+    // granting it would put a promise on their account that pricing will never
+    // keep. "Have they used us yet" is now the literal gate rather than a
+    // stand-in for "are they new", and almost everybody in the book has not.
     if (claimed) {
-      await sendAndLog(
-        phone,
-        `Hey, good to hear from you again. That one is for people who have not ` +
-          `used us yet, so I cannot put it on your account - but you are already ` +
-          `set up with us. Want us to grab your laundry this week?`,
-        existing.id
-      );
-      return { ok: true, customer: existing, created: false, claimed: null };
+      const eligible = await firstOrderStillAhead(existing.id, claimed);
+
+      // grant() is idempotent: it hands back the grant somebody already holds
+      // rather than writing a second, so texting the code twice is harmless.
+      //
+      // AND THAT IS WHY THE EXPIRY IS READ OFF WHAT IT RETURNS rather than the
+      // promotion's rule. Somebody who claimed it three weeks ago and texts the
+      // code again holds the grant from three weeks ago, with three weeks
+      // already gone. Telling them "good for the next 30 days" would be a
+      // promise the pricing code never agreed to - CLAUDE.md is explicit that a
+      // grant's expiry is stamped once and never recomputed.
+      const held = eligible ? await promotions.grant(existing.id, claimed.id) : null;
+
+      // ONLY ANSWERED WHEN THE CODE IS ALL THEY SENT. sendWelcome carries the
+      // same decision it does for a new number: a message with a real question
+      // in it goes to the AI, which answers the question and can see the grant
+      // now sitting on their account. Two replies to one message - a canned
+      // "it's on your account" and then the AI - is the robot behaviour this
+      // exists to avoid.
+      if (sendWelcome) {
+        await sendAndLog(
+          phone,
+          eligible
+            ? `Got it! ${promotions.offerLine(claimed)}${expiryNote(held)} ` +
+                `Want us to grab your laundry this week?`
+            : `Hey, good to hear from you again. That one is for a first order, ` +
+                `and you have already had yours with us - so it would not come off ` +
+                `anything. Want us to grab your laundry this week?`,
+          existing.id
+        );
+      }
+
+      return { ok: true, customer: existing, created: false, claimed: eligible ? claimed : null };
     }
 
     // Their consent record is NOT overwritten. The first time they agreed is
@@ -382,4 +477,6 @@ module.exports = {
   welcomeBackMessage,
   introduction,
   CONSENT_SOURCES,
+  expiryNote,
+  firstOrderStillAhead,
 };

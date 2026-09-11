@@ -292,6 +292,46 @@ async function handleInbound(inbound) {
   // Claude reads the message and picks ONE action. Our code then carries it
   // out and writes the reply, so the price and the dates in a confirmation are
   // always real values from the database rather than something a model wrote.
+  // --- DID THEY TEXT A PROMO CODE? -----------------------------------------
+  //
+  // THIS WAS ONLY EVER ASKED OF A BRAND NEW NUMBER, and that was a bug with a
+  // real cost. The scan lived inside the "not a customer yet" branch above, so
+  // somebody already in the thread who texted a code went straight to the AI -
+  // which had never been told codes exist and answered "I don't have any promo
+  // codes running on my end". A real one was running. Neil texted the door
+  // hanger code from his own number on 8 September and got exactly that.
+  //
+  // FIXED ON 10 SEPTEMBER, when CLEAN50 made it matter: most of the people who
+  // will text it are the forty-odd already here. Whether they get it is decided
+  // in onboarding.startConversation(), which is where the new-number version of
+  // the same decision already lives - so the two cannot drift.
+  const scanned = await promocodes.findIn(text).catch((err) => {
+    console.error(`Could not check ${from} for a promo code: ${err.message}`);
+    return null;
+  });
+
+  if (scanned) {
+    // The code and nothing else gets a canned reply; a code alongside a real
+    // question is granted quietly and then goes to the AI, which answers the
+    // question and can see the grant now on their account. Same line the new
+    // number path draws, for the same reason.
+    const canned = promocodes.isJustTheCode(text, scanned.code);
+
+    console.log(`CODE    ${from} (existing) texted "${scanned.promo.name}"`);
+
+    await onboarding.startConversation({
+      phone: from,
+      // Required by the function and never written for somebody who already
+      // exists - their first consent record is the one that stands. INBOUND_TEXT
+      // because that is true: they texted us.
+      consentSource: 'INBOUND_TEXT',
+      sendWelcome: canned,
+      claimed: scanned.promo,
+    });
+
+    if (canned) return;
+  }
+
   // NOT ANSWERED YET - held for a few seconds in case they are still typing.
   // See src/core/burst.js. Everything downstream of this is unchanged; the AI
   // is simply handed what they said as one message instead of three.

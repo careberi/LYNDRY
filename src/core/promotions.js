@@ -77,6 +77,33 @@ function live(promo, now = new Date()) {
   return true;
 }
 
+// IS A GRANT SOMEBODY ALREADY HOLDS STILL HONOURED.
+//
+// NOT THE SAME QUESTION AS live(), and treating them as one was a real bug that
+// had simply never fired. live() asks "can this promotion be handed to anybody
+// NEW", and ENDED is exactly its answer no. This asks "does a promise already
+// made to one person still stand", and ENDED does not touch that.
+//
+// The End button has always said "Anyone already holding it keeps it", and so
+// does CLAUDE.md, and customer_promotions is a separate table precisely so that
+// it can be true. But heldBy() filtered on live(), which rejects anything not
+// ACTIVE - so pressing End silently took the promotion off every holder while
+// the screen told the person pressing it the opposite. Nobody noticed because
+// no promotion had ever been ended. On 10 September Neil asked to end the free
+// first order with the words "the people who have it have it", which would
+// have stripped fifteen people of an offer they had been texted about.
+//
+// WHAT STILL WITHDRAWS A GRANT: the holder's own expiry (see expired() below),
+// and a promotion that has not started yet. ends_at is left behaving as it
+// always has - nothing sets it today, and whether a scheduled end should also
+// withdraw from holders is a separate decision from pressing End.
+function honoured(promo, now = new Date()) {
+  if (!promo) return false;
+  if (promo.starts_at && new Date(promo.starts_at) > now) return false;
+  if (promo.ends_at && new Date(promo.ends_at) < now) return false;
+  return promo.status === 'ACTIVE' || promo.status === 'ENDED';
+}
+
 // HAS THIS PERSON'S GRANT RUN OUT. Separate from live(), which is about the
 // promotion: a promotion can be perfectly alive while one holder's seven days
 // are up.
@@ -111,12 +138,21 @@ async function find(id) {
 //
 // Live means live: ended, not yet started, or switched off and it is not here,
 // so a hanger from an old run stops granting the moment the promotion does.
+//
+// ANY PROMOTION WITH A CODE, not only audience CODE. It used to filter on the
+// audience, which made "given to every new number automatically" and "anybody
+// can text for it" mutually exclusive - two rows for one offer, each with its
+// own percentage and expiry to keep in step. CLEAN50 is both: new numbers get
+// it without asking, and anyone else can text the word. The audience says who
+// it is handed to unprompted; the code is a separate, additional way in.
+//
+// Nothing in the schema ever tied the two together - promotions_code_unique
+// constrains the code alone - so this was only ever this one filter.
 // ---------------------------------------------------------------------------
 async function claimableByCode() {
   const { data, error } = await db
     .from('promotions')
     .select(FIELDS)
-    .eq('audience', 'CODE')
     .eq('status', 'ACTIVE')
     .not('code', 'is', null);
 
@@ -457,7 +493,9 @@ async function heldBy(customerId) {
   if (error) throw error;
 
   return (data || [])
-    .filter((row) => live(row.promotions) && !expired(row))
+    // honoured(), NOT live(). A promotion that has been ended still belongs to
+    // the people already holding it - see the note on honoured() above.
+    .filter((row) => honoured(row.promotions) && !expired(row))
     .map((row) => ({
       grantId: row.id,
       grantedAt: row.granted_at,
@@ -742,6 +780,7 @@ module.exports = {
   redeem,
   describe,
   live,
+  honoured,
   expired,
   limitOf,
   AUDIENCES,
