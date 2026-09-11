@@ -111,6 +111,10 @@ const PAGES = [
   {
     path: '/start/sent',
     noindex: true,
+    // A LEAD. Only reached by submitting the home page number form - and every
+    // outcome of that form lands here identically, which is why this counts
+    // submissions rather than confirmed new numbers. See googleTag().
+    conversion: 'lead',
     file: 'start-sent.html',
     title: 'Check your phone',
     description: 'We have texted you. Reply with your name and address and you are set up.',
@@ -281,6 +285,13 @@ function render(res, page, extra = {}, status = 200) {
       // appended, which is what the search-facing pages need: sixty
       // characters does not stretch to saying LYNDRY twice.
       fullTitle: page.fullTitle || null,
+      // THE GOOGLE ADS TAG. On for everything in PAGES, because being in PAGES
+      // is itself the opt-in: every entry is a public page whose address holds
+      // no token, and an ad click lands on one of them. A page that ever needs
+      // to stay out says `tracking: false`. See googleTag() in layout.js for
+      // why the layout's own default is off.
+      tracking: page.tracking !== false,
+      conversion: page.conversion || null,
     })
   );
 }

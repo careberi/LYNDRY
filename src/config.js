@@ -146,6 +146,30 @@ const config = Object.freeze({
   //
   // Without it there is no card field on our own page, only the hosted one we
   // send people away to.
+  // ---------------------------------------------------------------------------
+  // GOOGLE ADS. The tag that tells Google which ad clicks became leads.
+  //
+  // NOT SECRETS. Both values sit in the page source of every page that carries
+  // the tag, which is how Google's tag works; neither can read or change
+  // anything in the Ads account. So they have sensible defaults here, and the
+  // environment variables exist only to override them.
+  //
+  // PRODUCTION ONLY. The dev server shares the production database and a
+  // laptop full of test page loads would otherwise count as ad traffic, the
+  // same trap the nightly pass and the lead sweep are guarded against.
+  //
+  // leadLabel is the half after the slash in Google Ads' "event snippet" for
+  // the Submit lead form conversion. Blank means the tag loads and measures
+  // visits but reports no conversions, which is the safe way to be missing it.
+  // ---------------------------------------------------------------------------
+  googleAds: Object.freeze({
+    id: process.env.GOOGLE_ADS_ID || 'AW-18438272002',
+    leadLabel: process.env.GOOGLE_ADS_LEAD_LABEL || '',
+    enabled:
+      process.env.GOOGLE_ADS_ENABLED === 'true' ||
+      (process.env.NODE_ENV === 'production' && process.env.GOOGLE_ADS_ENABLED !== 'false'),
+  }),
+
   stripe: Object.freeze({
     secretKey: process.env.STRIPE_SECRET_KEY || '',
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',

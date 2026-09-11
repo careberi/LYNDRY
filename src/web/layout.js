@@ -341,6 +341,13 @@ function renderPage({
   // pinning those to a pattern is how a 60-character budget gets spent on the
   // brand name twice.
   fullTitle: ownTitle = null,
+  // THE GOOGLE ADS TAG, OPT-IN. See googleTag() at the foot of this file for
+  // why it is off unless a page asks for it.
+  tracking = false,
+  // 'lead' on the two pages somebody reaches after giving us their number.
+  conversion = null,
+  // Report no query string at all. For a page whose URL carries answers.
+  stripQuery = false,
 }) {
   const fullTitle =
     ownTitle || (path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`);
@@ -354,6 +361,7 @@ function renderPage({
   const html = `<!doctype html>
 <html lang="en">
 <head>
+  ${tracking ? googleTag({ conversion, stripQuery }) : ''}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${fullTitle}</title>
@@ -563,5 +571,116 @@ const ICON_LINKS = [
   '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">',
 ].join('\n  ');
 
+// ---------------------------------------------------------------------------
+// THE GOOGLE ADS TAG.
+//
+// Neil's ask, 10 September, pasting Google's own snippet: measure which ad
+// clicks become leads. The markup below is that snippet, with the id read from
+// config rather than typed twice.
+//
+// OPT-IN PER PAGE, AND THAT IS THE WHOLE DESIGN. Google's tag reports the full
+// address of every page it runs on, query string and all, to Google. This
+// layout is also used by pages whose address IS the secret - /pay/<token>,
+// /account/booked/<token>, /account/card/done/<token> - and by some of the ops
+// screens. A tag on by default would hand those tokens to an advertising
+// platform the first time somebody opened a payment link. Off unless a page
+// says otherwise means a page added next year cannot leak by accident; the
+// cost is naming the pages that want it, which is a short list.
+//
+// WHICH PAGES: the public marketing pages and town pages, because an ad click
+// lands on one of those and the tag has to be there to catch it - a click that
+// lands on an untagged page is a lead Google can never attribute to the ad.
+// And the two number forms Neil chose to count, plus the pages after them.
+//
+// WHERE THE CONVERSION FIRES, and what that honestly measures. The two forms
+// are different and so are their answers:
+//
+//   the home page form   /start/sent. Shown IDENTICALLY whatever was submitted -
+//                        a bad number, a throttled one, an existing customer -
+//                        because telling them apart would let anybody find out
+//                        who uses us. So this counts SUBMISSIONS, not confirmed
+//                        new leads, and cannot be made conditional without
+//                        reopening that hole in the page source.
+//
+//   /account/login       the first arrival at /account/book after a NEW number.
+//                        It is NOT /account/login/code, which it briefly was:
+//                        only an existing customer is ever sent a code, so that
+//                        page counted returning customers and missed every new
+//                        lead. Found by submitting a new number for real. This
+//                        form already sends new and existing numbers to
+//                        different pages, so counting only new ones reveals
+//                        nothing it does not already. See LEAD_COOKIE in
+//                        src/routes/account.js.
+//
+// Set the conversion to count once per click in Google Ads, so a refresh on
+// /start/sent does not count twice.
+//
+// NO PHONE NUMBER IS SENT. The addresses these pages carry are checked:
+// /account/login/code carries only ?next=/account. Enhanced conversions, which
+// would send a hashed phone or email, are deliberately not used.
+// ---------------------------------------------------------------------------
+function googleTag({ conversion = null, stripQuery = false, ads = config.googleAds } = {}) {
+  // `ads` defaults to config and is a parameter only so the tests can exercise
+  // the on, off and malformed cases without restarting the process.
+  if (!ads || !ads.enabled || !ads.id) return '';
+
+  // An id reaches the page source verbatim, so refuse anything that is not
+  // shaped like one rather than trusting an environment variable into a script.
+  if (!/^AW-\d+$/.test(ads.id)) return '';
+
+  const label = /^[A-Za-z0-9_-]+$/.test(ads.leadLabel || '') ? ads.leadLabel : '';
+
+  const fire =
+    conversion === 'lead' && label
+      ? `\n  gtag('event', 'conversion', {'send_to': '${ads.id}/${label}'});`
+      : '';
+
+  // WHAT THE TAG IS ALLOWED TO REPORT ABOUT WHERE THE VISITOR IS AND WAS.
+  //
+  // Google's snippet reports the page's full address and the previous page's
+  // full address. Keeping the tag off token pages was not enough, and both
+  // leaks were found by loading real pages rather than by reading the code:
+  //
+  //   1. A signed-out customer opening /account/booked/<token> is redirected to
+  //      /account/login?next=/account/booked/<token> - a TAGGED page with the
+  //      token in its query string. So `next` is removed before reporting.
+  //
+  //   2. Referrer-Policy is strict-origin-when-cross-origin, which sends the
+  //      FULL address on a same-site click. A signed-in customer on a token page
+  //      who clicks Pricing in the nav arrives with the token in
+  //      document.referrer. So the previous page is reported as its origin only.
+  //
+  // ONLY `next` COMES OUT OF THE ADDRESS, NOT THE WHOLE QUERY STRING. Google's
+  // ad-click id (gclid) and the utm tags ride in the query string of the page
+  // an ad lands on, and they are what lets a conversion be credited to the ad
+  // at all. Stripping everything would make every lead unattributable, which is
+  // a failure nobody would see: the tag would load and report nothing useful.
+  //
+  // Wrapped so a malformed address can never stop the tag loading.
+  return `<!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=${ads.id}"></script>
+  <script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  var lyPage = {};
+  try {
+    var lyHere = new URL(location.href);
+    ${
+      // THE WHOLE QUERY STRING, on a page whose query string carries answers.
+      // /account/book reads the order wizard's answers out of its URL - name,
+      // street address, zip - so anything short of dropping all of it would
+      // report a customer's home address to Google. No ad-click id is lost:
+      // ads land on marketing pages, where gclid is stored before anybody
+      // reaches the wizard.
+      stripQuery ? "lyHere.search = '';" : "lyHere.searchParams.delete('next');"
+    }
+    lyPage.page_location = lyHere.toString();
+    lyPage.page_referrer = document.referrer ? new URL(document.referrer).origin + '/' : '';
+  } catch (e) {}
+  gtag('config', '${ads.id}', lyPage);${fire}
+  </script>`;
+}
+
 module.exports = {
-  ICON_LINKS, renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE };
+  ICON_LINKS, renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE, googleTag };

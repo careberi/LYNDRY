@@ -271,6 +271,39 @@ and the ops screens put in their `<head>`.
 The ops home-screen icons (`app-icon-*.png`) have a solid cream background,
 unlike the favicons, because iOS paints a transparent home-screen icon black.
 
+### The Google Ads tag
+
+**Off unless a page asks for it, and that default must never flip.** Google's
+tag reports the full address of the page it runs on, query string and all.
+`renderPage` is also used for `/pay/<token>`, `/account/booked/<token>`,
+`/account/card/done/<token>` and some ops screens, so a tag on by default hands
+tokens to an advertising account. `googleTag()` in `layout.js` holds the whole
+reasoning; `config.googleAds` holds the id and the conversion label, and it is
+on in production only.
+
+**Which pages:** everything in `PAGES` in `web.js` (being in that list is the
+opt-in), the town pages and `/locations`, and `/account/login`. Not `/bergen`,
+which is Facebook traffic, and never an ops page.
+
+**Two leaks were found by loading real pages, not by reading code**, and the
+tag's own script now closes both: `next` is removed from the reported address
+(a signed-out customer opening a booking link lands on
+`/account/login?next=/account/booked/<token>`), and the referrer is cut to its
+origin (Referrer-Policy sends the full address on a same-site click). **Only
+`next` comes out**, never the whole query string - `gclid` rides there, and
+without it no conversion can be credited to an ad.
+
+**`/account/book` reads the order wizard's answers out of its URL** - name,
+street, zip. It is untagged on every render except one, and that one strips the
+whole query string.
+
+**The "Submit lead form" conversion fires in two places**, which Neil chose:
+`/start/sent` for the home page form, and the first `/account/book` after a
+new number on `/account/login`, marked by the one-shot `ly_lead` cookie. **Not
+`/account/login/code`**: only an existing customer is ever sent a code, so that
+page is a returning customer signing in. Never use enhanced conversions - they
+would send a hashed phone number.
+
 ### Motion
 
 Three things, all defined in `layout.js` and `lyndry.css`:

@@ -219,6 +219,9 @@ ${cta(null)}`;
         path: HUB_PATH,
         body,
         head: jsonLd(schema({ path: HUB_PATH, areaServed: null })),
+        // The Google Ads tag. These pages exist to be found in search, so they
+        // are where an ad click is most likely to land. See googleTag().
+        tracking: true,
       })
     );
 });
@@ -335,6 +338,7 @@ ${cta(town)}
         path,
         body,
         head: jsonLd([...schema({ path, areaServed: town.name }), faqSchema]),
+        tracking: true,
       })
     );
 });

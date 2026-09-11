@@ -38,7 +38,13 @@ const router = express.Router();
 
 // These pages use the ordinary site chrome, because to a customer this is just
 // another part of lyndry.com. They are noindex all the same.
-function accountPage(res, { title, body, status = 200 }) {
+// THE GOOGLE ADS TAG IS OFF HERE UNLESS A ROUTE ASKS FOR IT, and only the two
+// sign-in pages do. Every account page comes through this one helper, including
+// /account/booked/<token> and /account/card/done/<token>, and Google's tag
+// reports the browser's REAL address rather than the `path` below - so turning
+// it on here for everyone would hand those tokens to Google. See googleTag() in
+// src/web/layout.js.
+function accountPage(res, { title, body, status = 200, tracking = false, conversion = null, stripQuery = false }) {
   res
     .status(status)
     .type('html')
@@ -49,6 +55,9 @@ function accountPage(res, { title, body, status = 200 }) {
         path: '/account',
         body,
         noindex: true,
+        tracking,
+        conversion,
+        stripQuery,
       })
     );
 }
@@ -92,6 +101,52 @@ function readPending(req) {
     }
   }
   return '';
+}
+
+// ---------------------------------------------------------------------------
+// A NEW LEAD, COUNTED EXACTLY ONCE, for Google Ads.
+//
+// Neil asked for "Submit lead form" to count both number forms. On this one, a
+// new number goes straight from POST /account/login into /account/book - no
+// code, no confirmation page - so there is no page that only a new lead ever
+// sees. /account/book is also every later step of the order wizard and the
+// page an existing customer books from.
+//
+// So the POST, which is the only place that knows this was a new number, drops
+// a marker that the NEXT /account/book takes and deletes. One submission, one
+// conversion: a refresh, the Back button, and every later step find no marker.
+//
+// WHY A COOKIE AND NOT ?lead=1. /account/book reads the wizard's answers out of
+// its query string, so its URL is already the one thing on this page that must
+// not reach Google - see stripQuery in src/web/layout.js. Adding to it is the
+// wrong direction.
+//
+// It carries no information. "1", scoped to the one path that reads it, gone in
+// two minutes whether or not anybody arrives - the redirect is immediate, so a
+// marker still around after that is a stale one and must not fire later.
+// ---------------------------------------------------------------------------
+const LEAD_COOKIE = 'ly_lead';
+
+function markLead(res) {
+  res.cookie(LEAD_COOKIE, '1', {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/account/book',
+    maxAge: 2 * 60 * 1000,
+  });
+}
+
+// Did they arrive straight from giving us a new number? Deletes the marker as it
+// reads it, so asking twice about the same arrival cannot say yes twice.
+function takeLead(req, res) {
+  const header = req.headers.cookie || '';
+  const present = header
+    .split(';')
+    .some((part) => part.trim() === `${LEAD_COOKIE}=1`);
+
+  if (present) res.clearCookie(LEAD_COOKIE, { path: '/account/book' });
+  return present;
 }
 
 // The create-an-account page, redisplayed with an error and whatever they
@@ -257,6 +312,10 @@ router.get('/account/login', (req, res) => {
   accountPage(res, {
     title: 'Sign in',
     body: phoneStep({ next: safeNext(req.query.next), phone }),
+    // The number form Google Ads measures. The tag reads the address and the
+    // title, never the form: the number pre-filled from the cookie above is in
+    // the page, and it is not in anything the tag sends.
+    tracking: true,
   });
 });
 
@@ -330,6 +389,8 @@ router.post('/account/login', async (req, res, next) => {
     }
 
     auth.setGuestCookie(res, number);
+    // A new number: the lead Google Ads counts. See LEAD_COOKIE above.
+    markLead(res);
     return res.redirect(303, '/account/book');
   } catch (err) {
     return next(err);
@@ -345,6 +406,13 @@ router.get('/account/login/code', (req, res) => {
   accountPage(res, {
     title: 'Enter your code',
     body: codeStep({ next: safeNext(req.query.next), phone }),
+    // NO TAG HERE, and it was briefly the conversion page, wrongly. Only an
+    // EXISTING customer is ever sent a code: POST /account/login texts a code to
+    // somebody already on the books and sends a new number straight into the
+    // order instead. So this page is a returning customer signing in, which is
+    // the one thing a lead is not. Found by submitting a new number for real and
+    // watching it land on /account/book. The lead is counted there - see
+    // LEAD_COOKIE below.
   });
 });
 
@@ -2069,9 +2137,18 @@ router.get('/account/book', async (req, res, next) => {
     // back; send them to the first thing that is actually still open.
     const shown = step === 'book' ? 'when' : step;
 
+    // THE GOOGLE ADS TAG ONLY ON THE ARRIVAL THAT IS A NEW LEAD, and never
+    // otherwise. This page's query string carries the wizard's answers - name,
+    // street address, zip - so every other render of it stays untagged, and
+    // the one tagged render reports no query string at all (stripQuery).
+    const lead = takeLead(req, res);
+
     return accountPage(res, {
       title: 'Place an order',
       body: stepPage({ customer, step: shown, given, opensOn, guest: who.guest }),
+      tracking: lead,
+      conversion: lead ? 'lead' : null,
+      stripQuery: true,
     });
   } catch (err) {
     return next(err);
