@@ -197,6 +197,9 @@ const BOARD_FIELDS =
   // choice wins when it has one; this is what stops a stop being drawn as "a
   // laundromat" with no address when it does not.
   'intended_partner_id, ' +
+  // Whether that laundromat was CHOSEN BY A PERSON, in which case the route
+  // follows it even when another is cheaper. See dropoffGroups().
+  'partner_pinned_at, ' +
   // WHERE THE CUSTOMER SAID TO LEAVE THE BAGS. Both copies: the order's own
   // snapshot of what it was booked with, and the customer's current answer as
   // the fallback - the same pair, in the same order of precedence, that
@@ -639,6 +642,60 @@ async function planPartnerFor(order, customer) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// WHICH LAUNDROMAT EACH BAG GOES TO TODAY, grouped into one stop per laundromat.
+//
+// Neil, 11 September: pin order #1975 to Fancy K, and route everything else to
+// the laundromat that is best for it. Until then the whole day's dirty laundry
+// went to ONE laundromat, the live cheapest - so a pinned order had nowhere to
+// go but the same counter as everybody else.
+//
+// In order of precedence, per order:
+//
+//   PINNED    a person chose it (partner_pinned_at), and it goes there even
+//             when another laundromat is cheaper. That is what a pin is for.
+//   CHOSEN    everything else goes to the live choice: cheapest all in, open,
+//             with room. Unpinned orders still travel together - splitting them
+//             across laundromats would add a stop for every order that did.
+//   PLANNED   no live choice at all (nothing open, nothing in range): fall back
+//             to the laundromat planned at booking, and say it is only a plan.
+//
+// A pin to a laundromat that is no longer an active one is ignored rather than
+// obeyed - the route cannot send a van to a partner that has been switched off
+// - and the order is routed like any other.
+//
+// Pure: it groups what it is given and decides nothing else, so it is tested
+// without a database.
+// ---------------------------------------------------------------------------
+function dropoffGroups(orders, partnerRows, liveChoice) {
+  const byId = new Map((partnerRows || []).map((p) => [p.id, p]));
+  const groups = new Map();
+
+  const add = (partner, order, how) => {
+    const key = partner ? partner.id : 'nowhere';
+    if (!groups.has(key)) groups.set(key, { partner: partner || null, orders: [], hows: [] });
+    groups.get(key).orders.push(order);
+    groups.get(key).hows.push(how);
+  };
+
+  for (const order of orders || []) {
+    const pinned = order.partner_pinned_at ? byId.get(order.intended_partner_id) : null;
+    if (pinned) add(pinned, order, 'pinned');
+    else if (liveChoice) add(liveChoice, order, 'chosen');
+    else add(byId.get(order.intended_partner_id) || null, order, 'plan');
+  }
+
+  return [...groups.values()].map(({ partner, orders: list, hows }) => ({
+    partner,
+    orders: list,
+    // Any pinned order makes it a stop a person decided on.
+    pinned: hows.includes('pinned'),
+    // Only a plan when nothing about the stop was decided today, and there
+    // was a laundromat to plan for.
+    fromPlan: Boolean(partner) && hows.every((h) => h === 'plan'),
+  }));
+}
+
 // Writes the plan onto the order. Separate from choosing it so a caller can
 // re-plan without writing, and so a failed write cannot lose a booking.
 async function savePlannedPartner(order, customer) {
@@ -951,9 +1008,17 @@ async function board(dateIso, fromTime, driverId = null) {
   // which made the wholesale rate irrelevant and handed the decision back to
   // distance alone. That is exactly the bug: a 30c partner and a $1.10 partner
   // look identical if you assume there is no laundry.
-  const dropWeight =
-    needsWash.reduce((t, o) => t + Number(o.weight_lb || 0), 0) +
-    (pickups || []).reduce((t, o) => t + assumedPounds(o.customers), 0);
+  const poundsOf = (o) =>
+    o.status === 'IN_PROCESS' ? Number(o.weight_lb || 0) : assumedPounds(o.customers);
+
+  const dropWeight = [...needsWash, ...(pickups || [])].reduce((t, o) => t + poundsOf(o), 0);
+
+  // WHAT THE LIVE CHOICE IS CHOOSING FOR. A pinned order is going where a
+  // person said, so its pounds must not fill up the laundromat everybody else
+  // is being matched against - or a pin could push the rest somewhere dearer.
+  const unpinnedWeight = [...needsWash, ...(pickups || [])]
+    .filter((o) => !o.partner_pinned_at)
+    .reduce((t, o) => t + poundsOf(o), 0);
 
   // TWO PASSES, AND THE REASON IS A CHICKEN AND EGG.
   //
@@ -987,58 +1052,51 @@ async function board(dateIso, fromTime, driverId = null) {
   const choice = chooseLaundromat(fromPoint, partnerRows, {
     weekday,
     time: start,
-    poundsToAdd: dropWeight,
+    poundsToAdd: unpinnedWeight,
     onward,
     promiseMinutes,
   });
 
-  // THE PASS THAT COUNTS. Now the laundromat is known, the pickup route is
-  // solved as what it actually is: base to that laundromat, calling at these
-  // doors on the way.
-  const orderedCollect = sequenceLeg(
-    collectStops,
-    base,
-    choice.chosen && choice.chosen.at ? choice.chosen.at : null
+  // ONE DROP-OFF STOP PER LAUNDROMAT THE BAGS ARE GOING TO. Usually one; more
+  // when a person has pinned an order somewhere else. See dropoffGroups().
+  //
+  // Everything being handed over: what is already in the van unwashed AND what
+  // leg 1 is about to collect. It once listed only the former, so a stop
+  // dropping three bags picked up this morning showed a bag count and no order
+  // numbers at all.
+  //
+  // THE PLAN IS THE FALLBACK, AND IT SAYS SO. The live choice is the better
+  // answer when it has one: it knows what is open right now, what is already on
+  // each partner's floor, and where the van actually is. When it comes back
+  // empty - nothing open, nobody in range - an order still carries the
+  // laundromat it was planned for at booking, and the stop is marked fromPlan
+  // so the driver knows to ring ahead rather than trust a week-old decision.
+  const dropStops = dropoffGroups([...needsWash, ...(pickups || [])], partnerRows, choice.chosen).map(
+    (group) => ({
+      kind: 'dropoff',
+      at: group.partner ? group.partner.at : null,
+      partner: group.partner,
+      pinned: group.pinned,
+      fromPlan: group.fromPlan,
+      choice,
+      bags: group.orders.length,
+      pounds: group.orders.reduce((t, o) => t + poundsOf(o), 0),
+      orders: group.orders,
+    })
   );
 
-  const partnerStops = [];
+  // THE PASS THAT COUNTS. Now the laundromats are known, the pickup route is
+  // solved as what it actually is: base to the first laundromat, calling at
+  // these doors on the way. The live choice when there is one, because that is
+  // where most bags go; otherwise whichever laundromat a stop is going to.
+  const firstDrop = choice.chosen && choice.chosen.at ? choice.chosen : dropStops.find((s) => s.at);
+  const orderedCollect = sequenceLeg(collectStops, base, firstDrop ? firstDrop.at : null);
 
-  if (needsWash.length || (pickups || []).length) {
-    // FALL BACK TO THE PLAN MADE AT BOOKING.
-    //
-    // The live choice above is the better answer when it has one: it knows
-    // what is open right now, what is already on each partner's floor, and
-    // where the van actually is. But it can come back empty - nothing open at
-    // this hour, nobody within range - and an empty answer used to draw a stop
-    // called "a laundromat" with no address and an "I'm here" button for a
-    // place the screen could not name.
-    //
-    // An order booked since 0048 carries the laundromat it was planned for, so
-    // there is something to show. It is marked as a plan rather than a live
-    // choice, because the driver deserves to know the difference between "this
-    // is where you are going" and "this is where we meant to send you, ring
-    // ahead".
-    const planned =
-      !choice.chosen &&
-      partnerRows.find((p) =>
-        [...needsWash, ...(pickups || [])].some((o) => o.intended_partner_id === p.id)
-      );
-
-    partnerStops.push({
-      kind: 'dropoff',
-      at: choice.chosen ? choice.chosen.at : planned ? planned.at : null,
-      partner: choice.chosen || planned || null,
-      fromPlan: Boolean(!choice.chosen && planned),
-      choice,
-      bags: needsWash.length + (pickups || []).length,
-      pounds: dropWeight,
-      // Everything being handed over: what is already in the van unwashed AND
-      // what leg 1 is about to collect. It listed only the former, so a stop
-      // dropping three bags picked up this morning showed a bag count and no
-      // order numbers at all.
-      orders: [...needsWash, ...(pickups || [])],
-    });
-  }
+  // SEVERAL LAUNDROMATS ARE DRIVEN IN THE SHORTEST ORDER from the last door,
+  // finishing towards wherever the van goes next. One is just one.
+  const lastDoor = [...orderedCollect].reverse().find((s) => s.at);
+  const partnerStops =
+    dropStops.length > 1 ? sequenceLeg(dropStops, lastDoor ? lastDoor.at : base, onward) : dropStops;
 
   // Collecting finished bags happens at whichever laundromat actually has them,
   // which is recorded on the order and is not a choice to make.
@@ -1197,9 +1255,28 @@ async function board(dateIso, fromTime, driverId = null) {
     weighed.reduce((t, o) => t + Number(o.weight_lb), 0) +
     expected.reduce((t, lb) => t + lb, 0);
 
+  // EACH ORDER AT ITS OWN LAUNDROMAT'S RATE. A pinned order washed at Fancy K
+  // costs Fancy K's rate, not the rate of wherever everything else is going.
+  // Anything not on a drop-off stop today - already washed, or out for
+  // delivery - is still priced at the live choice, as it always was.
+  const washedAt = new Map();
+  for (const stop of partnerStops.filter((s) => s.kind === 'dropoff')) {
+    for (const o of stop.orders) washedAt.set(o.id, stop.partner);
+  }
+  const rateFor = (o) => {
+    const partner = washedAt.get(o.id) || choice.chosen;
+    return partner && partner.wholesale_per_lb_cents != null ? Number(partner.wholesale_per_lb_cents) : null;
+  };
+  const washLines = [
+    ...weighed.map((o) => ({ lb: Number(o.weight_lb), rate: rateFor(o) })),
+    ...(pickups || []).map((o) => ({ lb: assumedPounds(o.customers), rate: rateFor(o) })),
+  ];
+
+  // Null when any of it cannot be priced, exactly as before: a partial wash
+  // figure presented as a whole one is the thing the page refuses to do.
   const wholesaleCents =
-    choice.chosen && choice.chosen.wholesale_per_lb_cents != null
-      ? Math.round(poundsWashed * choice.chosen.wholesale_per_lb_cents)
+    choice.chosen && washLines.every((l) => l.rate != null)
+      ? Math.round(washLines.reduce((t, l) => t + l.lb * l.rate, 0))
       : null;
 
   // Fuel and wear only - the wage comes out separately below, so that a minute
@@ -1465,6 +1542,7 @@ module.exports = {
   LEGS,
   board,
   chooseLaundromat,
+  dropoffGroups,
   planPartnerFor,
   savePlannedPartner,
   perMile,

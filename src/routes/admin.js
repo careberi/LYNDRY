@@ -5527,6 +5527,24 @@ router.post('/ops/run/clips-back', guard, may('orders.drive'), async (req, res, 
     const ids = droppedOrderIds(req);
     if (!ids.length) return res.redirect(303, '/ops/run');
 
+    // THE LAUNDROMAT THE RUN SENT HIM TO, when the screen said which. Checked
+    // against the real list of active laundromats, because a form field is not
+    // proof of anything. Falls back to each order's plan only when the stop
+    // named none, which is what this did for every order until 11 September -
+    // and it recorded Fancy K for bags the route had sent to Best Wash.
+    const postedPartner = UUID.test(String((req.body || {}).partner_id || ''))
+      ? String(req.body.partner_id)
+      : null;
+    const { data: sentTo } = postedPartner
+      ? await db
+          .from('partners')
+          .select('id')
+          .eq('id', postedPartner)
+          .eq('type', 'LAUNDROMAT')
+          .eq('status', 'ACTIVE')
+          .maybeSingle()
+      : { data: null };
+
     const returned = await bags.returnClips(ids);
 
     const failures = [];
@@ -5543,7 +5561,7 @@ router.post('/ops/run/clips-back', guard, may('orders.drive'), async (req, res, 
       });
 
       const result = await fulfilment.dropAtPartner(order, {
-        partnerId: order.intended_partner_id || null,
+        partnerId: (sentTo && sentTo.id) || order.intended_partner_id || null,
         by: { opsUser: req.opsUser },
       });
 

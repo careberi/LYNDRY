@@ -1492,6 +1492,27 @@ a $1.00/lb laundromat three miles further loses to a $1.25/lb one down the road.
 Distance alone only decides it when a partner has no agreed rate, and a partner
 with no rate is sorted last rather than treated as free.
 
+**A PERSON CAN PIN AN ORDER TO A LAUNDROMAT, AND THE ROUTE FOLLOWS IT.** Neil,
+11 September: order #1975 to Fancy K, though Best Wash was cheaper. The
+laundromat still lives in `orders.intended_partner_id`; `partner_pinned_at` and
+`partner_pinned_by` (migration 0087) say a person decided it rather than the
+booking-time plan. `dispatch.dropoffGroups()` sends each order to its pin, else
+to the live choice, else to its plan, and the route gets **one drop-off stop
+per laundromat**, driven in the shortest order from the last door and finishing
+towards wherever the van goes next. Unpinned orders still travel together.
+Pinned pounds are left out of the live choice's capacity, the wash is priced at
+each order's own laundromat, and the run and routing screens say "chosen by
+hand". A pin to a laundromat that is no longer active is ignored. There is no
+button for it yet; #1975 was pinned by hand.
+
+**THE PLAN MADE AT BOOKING GOES STALE, AND IT USED TO BE WHAT GOT RECORDED.**
+#1975 was planned on 5 Sep, before Best Wash existed, and moving the order
+never re-planned it. The route navigated to Best Wash while the run's
+drop-off step wrote each order's plan into `partner_id`, so it would have
+recorded Fancy K for bags handed over at Best Wash, and sent the driver to the
+wrong laundromat to collect them. The drop-off form now carries the stop's own
+laundromat, checked against the active list, and the plan is only the fallback.
+
 **Which laundromat a bag goes to is nearest-first, skipping anyone shut or
 full.** Neil's call: a partner at capacity is routed around rather than blocked
 at, because a driver holding a bag at a loading dock needs somewhere to put it,

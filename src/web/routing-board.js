@@ -297,7 +297,16 @@ function routingBoardBody({
       .map((s) => ({ n: s.position, lat: s.at.lat, lng: s.at.lng, kind: s.kind })),
     partners: board.partners
       .filter((p) => p.at)
-      .map((p) => ({ lat: p.at.lat, lng: p.at.lng, name: p.name, used: p.id === (board.choice.chosen || {}).id })),
+      // USED MEANS A STOP IS GOING THERE, which is not only the cheapest: an
+      // order pinned somewhere else puts a second laundromat on the route.
+      .map((p) => ({
+        lat: p.at.lat,
+        lng: p.at.lng,
+        name: p.name,
+        used:
+          p.id === (board.choice.chosen || {}).id ||
+          board.stops.some((s) => s.kind === 'dropoff' && s.partner && s.partner.id === p.id),
+      })),
   };
 
   const legGroups = [
@@ -589,7 +598,27 @@ function routingBoardBody({
         </h2>
 
         ${
-          board.choice.chosen
+          // MORE THAN ONE LAUNDROMAT WHEN AN ORDER IS PINNED. Each drop-off stop
+          // says where it goes and which orders, and a pinned one says a person
+          // chose it - otherwise the list below, which ranks on cost, reads as
+          // though the route ignored its own answer.
+          board.stops.filter((s) => s.kind === 'dropoff' && s.partner).length > 1 ||
+          board.stops.some((s) => s.kind === 'dropoff' && s.pinned)
+            ? `<div style="margin:0 0 16px;">
+                 ${board.stops
+                   .filter((s) => s.kind === 'dropoff')
+                   .map(
+                     (s) => `
+                 <p style="font-size:15px;line-height:1.55;margin:0 0 6px;">
+                   ${escapeHtml(s.orders.map((o) => `#${o.order_number}`).join(', '))} ${s.orders.length === 1 ? 'goes' : 'go'} to
+                   <strong>${escapeHtml(s.partner ? s.partner.name : 'nowhere yet')}</strong>${
+                     s.pinned ? ' <span class="badge" style="background:var(--lilac-300);">Chosen by hand</span>' : ''
+                   }
+                 </p>`
+                   )
+                   .join('')}
+               </div>`
+            : board.choice.chosen
             ? `<p style="font-size:15px;line-height:1.55;margin:0 0 16px;">
                  Today's dirty bags go to <strong>${escapeHtml(board.choice.chosen.name)}</strong>.
                </p>`

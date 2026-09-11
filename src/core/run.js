@@ -719,18 +719,28 @@ async function forDriver(driverId, roundStart = null) {
 
   // Several finished bags handed to one laundromat was one visit, not four, so
   // they collapse into a single done stop the way the live board groups them.
+  //
+  // ONE DONE STOP PER LAUNDROMAT, not one for the whole day. They all collapsed
+  // into a single stop named after the first laundromat, which was harmless
+  // while every bag went to the same counter and wrong the day an order was
+  // pinned somewhere else: two visits would have read as one, at the wrong
+  // address. In the order they happened.
   const finished = await doneToday(driverId, now.date);
-  const drops = finished.filter((s) => s.kind === 'dropoff');
-  const collapsedDrops = drops.length
-    ? [
-        {
-          kind: 'dropoff',
-          bags: drops.length,
-          orders: drops.map((s) => s.order),
-          partner: (board.partners || []).find((p) => p.id === drops[0].partnerId) || null,
-        },
-      ]
-    : [];
+  const dropsByPartner = new Map();
+  for (const s of finished.filter((x) => x.kind === 'dropoff')) {
+    const key = s.partnerId || 'unknown';
+    if (!dropsByPartner.has(key)) dropsByPartner.set(key, []);
+    dropsByPartner.get(key).push(s);
+  }
+  const collapsedDrops = [...dropsByPartner.entries()]
+    .map(([partnerId, list]) => ({
+      kind: 'dropoff',
+      bags: list.length,
+      orders: list.map((s) => s.order),
+      partner: (board.partners || []).find((p) => p.id === partnerId) || null,
+      firstAt: list.map((s) => s.order.at_partner_at).sort()[0],
+    }))
+    .sort((a, b) => String(a.firstAt).localeCompare(String(b.firstAt)));
 
   const behind = [
     ...finished.filter((s) => s.kind === 'collect'),

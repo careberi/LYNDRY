@@ -208,6 +208,24 @@ function travelCard(run, user = null) {
     }
 
     ${
+      // A PIN SAYS SO, because it is the one laundromat stop that is not the
+      // cheapest on purpose, and a driver who knows the area will otherwise
+      // wonder why he is driving past one.
+      stop.kind === 'dropoff' && stop.pinned
+        ? `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
+                     background:var(--lilac-300);font-size:15px;line-height:1.5;">
+             The office chose this laundromat for
+             ${escapeHtml(
+               (stop.orders || [])
+                 .filter((o) => o.partner_pinned_at)
+                 .map((o) => `#${o.order_number}`)
+                 .join(', ') || 'these bags'
+             )}.
+           </p>`
+        : ''
+    }
+
+    ${
       // NO DESTINATION, NO ARRIVAL. Offering "I'm here" for a stop the screen
       // cannot name asks the driver to confirm he has reached somewhere nobody
       // has decided on, and marks the order arrived at a place that does not
@@ -366,9 +384,17 @@ function dropTask(task, detail) {
 
 function dropCards(stop) {
   const where = stop.name || 'the laundromat';
-  const orderInputs = (stop.orders || [])
-    .map((o) => `<input type="hidden" name="order_id" value="${escapeHtml(o.id)}">`)
-    .join('');
+  // WHICH LAUNDROMAT THIS STOP IS, carried with the orders so the drop-off is
+  // recorded where the driver was actually sent. It used to record each order's
+  // booking-time plan, which could name a different laundromat from the one
+  // this screen had just navigated him to.
+  const orderInputs =
+    (stop.orders || [])
+      .map((o) => `<input type="hidden" name="order_id" value="${escapeHtml(o.id)}">`)
+      .join('') +
+    (stop.partner && stop.partner.id
+      ? `<input type="hidden" name="partner_id" value="${escapeHtml(stop.partner.id)}">`
+      : '');
 
   // --- CARD 1: out of the van ----------------------------------------------
   if (stop.dropStage === 'unload') {
