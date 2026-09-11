@@ -265,13 +265,37 @@ async function handleInbound(inbound) {
 
     const started = await onboarding.startConversation({
       phone: from,
-      consentSource: scanned ? 'DOOR_HANGER' : 'INBOUND_TEXT',
+      // A CODE IS NOT ALWAYS A DOOR HANGER, and it was assumed to be. While
+      // D00R10 was the only code that was true; the day CLEAN50 went live every
+      // stranger who texted it off a flyer or a post would have been recorded
+      // as "Scanned a door hanger" - on the profile's "How they found us" line,
+      // and in the consent record an audit reads.
+      //
+      // DOOR_HANGER only for a claim-only promotion (audience CODE), which is
+      // what the door hanger is. A code on a promotion that is also handed out
+      // automatically, like CLEAN50, says nothing about a front door, so the
+      // honest source is what actually happened: they texted us first.
+      //
+      // Worth knowing it is a proxy. A future claim-only code printed on a
+      // flyer would also read DOOR_HANGER here, and the fix then is a source
+      // per campaign rather than a longer list of exceptions.
+      consentSource:
+        scanned && scanned.promo.audience === 'CODE' ? 'DOOR_HANGER' : 'INBOUND_TEXT',
       // No IP to record — this did not come through a browser. The evidence is
       // their own inbound message, not a form submission.
       consentIp: null,
       sendWelcome: canned,
       claimed: scanned ? scanned.promo : null,
-      opening: canned ? `Hey, thanks for scanning.` : null,
+      // "Thanks for scanning" is the door hanger's sentence, and only true of it:
+      // the QR types the message for them. Somebody who typed CLEAN50 off a
+      // flyer did not scan anything, so they are thanked for the code instead.
+      // Same test as the consent source just above, so the two cannot disagree
+      // about whether this person was standing at a front door.
+      opening: canned
+        ? scanned.promo.audience === 'CODE'
+          ? `Hey, thanks for scanning.`
+          : `Hey, thanks for texting in.`
+        : null,
     });
 
     if (!started.ok) {
