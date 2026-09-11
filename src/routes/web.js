@@ -12,7 +12,7 @@ const wash = require('../core/wash');
 const throttle = require('../core/throttle');
 const { config } = require('../config');
 const { site, textUsQrSvg } = require('../web/site');
-const { renderPage, FAVICON_SVG } = require('../web/layout');
+const { renderPage } = require('../web/layout');
 const towns = require('../web/towns');
 const structured = require('../web/schema');
 
@@ -613,14 +613,50 @@ router.get('/.well-known/apple-developer-merchantid-domain-association', (req, r
   });
 });
 
-router.get('/favicon.ico', (req, res) => {
-  res
-    .type('image/svg+xml')
-    // A year, because this drawing has not changed since the site launched and
-    // will not change without the file it lives in changing too.
-    .set('Cache-Control', 'public, max-age=31536000, immutable')
-    .send(FAVICON_SVG);
+// ---------------------------------------------------------------------------
+// THE ICONS, cut from Neil's logo. See ICON_LINKS in src/web/layout.js for why
+// they replaced the hand-drawn one.
+//
+// AN ALLOWLIST, NOT A FOLDER. Only public/css is served statically, and that
+// stays true: these are six named files, and anything else asked for under
+// these names is a 404 rather than a directory somebody can walk.
+//
+// STABLE URLS, AND THAT IS WHY THEY ARE NOT FINGERPRINTED like the stylesheets.
+// Google asks for a favicon URL that does not change, and /css/<hash>/ changes
+// on every stylesheet edit - so an icon there would be a new URL to Google on
+// every deploy.
+//
+// A DAY, AND REVALIDATED. /favicon.ico used to be sent for a year with
+// `immutable`, on the grounds that the drawing would never change. It did
+// change, and immutable meant no browser that had seen it would ever ask for
+// the new one. A day costs almost nothing for six small files and means the
+// next change reaches people by tomorrow rather than next September.
+// ---------------------------------------------------------------------------
+const ICON_FILES = Object.freeze({
+  '/favicon.ico': 'image/x-icon',
+  '/favicon-48.png': 'image/png',
+  '/favicon-96.png': 'image/png',
+  '/favicon-192.png': 'image/png',
+  '/favicon-512.png': 'image/png',
+  '/apple-touch-icon.png': 'image/png',
+  // The installed ops app. Solid backgrounds, unlike the favicons above.
+  '/app-icon-192.png': 'image/png',
+  '/app-icon-512.png': 'image/png',
 });
+
+for (const [route, type] of Object.entries(ICON_FILES)) {
+  router.get(route, (req, res) => {
+    res.sendFile(
+      path.join(__dirname, '..', '..', 'public', 'icons', path.basename(route)),
+      { headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400, must-revalidate' } },
+      (err) => {
+        if (!err) return;
+        console.error(`Icon ${route} could not be served: ${err.message}`);
+        if (!res.headersSent) res.status(404).end();
+      }
+    );
+  });
+}
 
 router.get('/robots.txt', (req, res) => {
   // /ops is the internal tool. It is behind a sign-in anyway, but there is no

@@ -244,10 +244,32 @@ is a link, `role="img"` on the mark itself when it is not.
 **Variants set only `--ly-h`.** The width comes from `aspect-ratio`, so a
 variant can never squash the mark.
 
-**The favicon is the silhouette, not the logo.** The wordmark is about a fifth
-of the mark's height, so at 32px it is an illegible smear and at 16px a grey
-band. The favicon is the bag-and-bubble shape with no type in it, drawn inline
-in `layout.js` as it always was.
+**The favicon is the full logo, cut from the artwork, not drawn.** It used to
+be a hand-drawn SVG silhouette in `layout.js`, and it came out green, as a
+rounded rectangle with a dome on top - nothing like the cream bag with a tied
+bow. Neil saw it in a Google result: "That is not my logo." It was the exact
+mistake the rule above warns against, a hand copy of a file we already had,
+and there were three copies of it (the favicon, `/favicon.ico`, and the ops
+home-screen icon).
+
+The icons in `public/icons/` are all cut from `public/css/logo.png`. **Neil
+chose the version with the wordmark**, having been shown the word painted out
+beside it: LYNDRY is a smear in a 16px browser tab, but Google shows the icon
+in a circle fetched at 48px or more, where it reads. If the logo changes,
+regenerate these from it; never redraw one.
+
+**They are served from fixed routes, not the fingerprinted `/css/<hash>/`
+path**, because Google wants a favicon URL that does not change and the hash
+changes on every stylesheet edit. `ICON_FILES` in `src/routes/web.js` is an
+allowlist of named files, not a static folder. **The cache is a day with
+revalidation, never `immutable`**: `/favicon.ico` was once sent for a year
+with `immutable`, which meant no browser that saw the green icon would ever
+have asked for the new one. The page's icon links point at new URLs for the
+same reason. `ICON_LINKS` in `layout.js` is the one list both the public site
+and the ops screens put in their `<head>`.
+
+The ops home-screen icons (`app-icon-*.png`) have a solid cream background,
+unlike the favicons, because iOS paints a transparent home-screen icon black.
 
 ### Motion
 

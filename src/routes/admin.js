@@ -7,7 +7,7 @@ const orders = require('../core/orders');
 const auth = require('../core/admin-auth');
 const { config } = require('../config');
 const { site } = require('../web/site');
-const { escapeHtml, logo, icon, CSS_BASE } = require('../web/layout');
+const { escapeHtml, logo, icon, CSS_BASE, ICON_LINKS } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const notify = require('../core/notify');
 const throttle = require('../core/throttle');
@@ -482,6 +482,10 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0, head
   <meta name="apple-mobile-web-app-title" content="${escapeHtml(site.name)}">
   <meta name="theme-color" content="#101210">
   <link rel="manifest" href="/ops/app.webmanifest">
+  <!-- The same icons as the public site, from the same list. The ops screens
+       had no icon link at all and fell back to /favicon.ico, which was the
+       hand-drawn green shape on a one-year immutable cache. -->
+  ${ICON_LINKS}
   <meta name="theme-color" content="#101210">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1603,6 +1607,9 @@ function loginShell({ heading, intro, error = '', form }) {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in — ${site.name} ops</title>
   <meta name="robots" content="noindex, nofollow">
+  <!-- Its own shell, so it needs the icons named separately. Without them this
+       page fell back to /favicon.ico like everything else did. -->
+  ${ICON_LINKS}
   <meta name="theme-color" content="#0EA47A">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -5835,28 +5842,15 @@ const reportForm = (req) => ({
 //
 // start_url is /ops/run rather than /ops, because the person who installs this
 // on a home screen is a driver and the route is what they open it for.
-// THE HOME SCREEN ICON. The same bag-and-bubble silhouette the favicon uses,
-// as a standalone SVG because a manifest cannot point at a data: URI.
+// THE HOME SCREEN ICON is the logo artwork, not a drawing of it. It used to be
+// a hand-drawn SVG here - the third copy of the same green shape that the
+// favicon was, and Neil's "That is not my logo" applied to all three. The
+// files are cut from public/css/logo.png and served by src/routes/web.js.
 //
-// Padded to 20% on every side: iOS masks a home-screen icon into a rounded
-// square and a mark drawn to the edges loses its corners. The background is
-// paper rather than transparent, because a transparent icon on iOS renders
-// black and the mark is ink.
-const APP_ICON =
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
-  `<rect width="64" height="64" rx="14" fill="#FFF8EC"/>` +
-  `<g transform="translate(12.8 12.8) scale(1.2)">` +
-  `<path d="M9 22 L9.6 30.6 L16 24" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="route"/>` +
-  `<rect x="2.3" y="10" width="27.4" height="16" rx="7" fill="#0EA47A" stroke="#101210" stroke-width="2.3"/>` +
-  `<path d="M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z" fill="#0EA47A" stroke="#101210" stroke-width="2.3" stroke-linejoin="route"/>` +
-  `<path d="M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6" fill="none" stroke="#101210" stroke-width="2.1" stroke-linecap="route"/>` +
-  `</g></svg>`;
-
-router.get('/ops/app-icon.svg', (req, res) => {
-  res.type('image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  return res.send(APP_ICON);
-});
+// Solid cream paper behind the mark, not transparent: iOS paints a transparent
+// home-screen icon black, and the mark is ink. The mark sits inside the middle
+// 80% so a launcher that masks icons into a circle does not crop the bow or
+// the tail.
 
 router.get('/ops/app.webmanifest', (req, res) => {
   res.type('application/manifest+json');
@@ -5872,16 +5866,9 @@ router.get('/ops/app.webmanifest', (req, res) => {
       background_color: '#FFF8EC',
       theme_color: '#101210',
       icons: [
-        {
-          // The favicon silhouette, as SVG so one file covers every size. The
-          // wordmark is a fifth of the mark's height and an illegible smear on
-          // a home screen, which is why the icon is the bag-and-bubble shape
-          // with no type in it - the same decision the browser tab favicon made.
-          src: '/ops/app-icon.svg',
-          sizes: 'any',
-          type: 'image/svg+xml',
-          purpose: 'any',
-        },
+        // Cut from the logo artwork. See the note above the manifest route.
+        { src: '/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/app-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
       ],
     })
   );

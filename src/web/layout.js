@@ -377,15 +377,7 @@ function renderPage({
        behind a sign-in, but there is no reason for a crawler to try. -->
   ${noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
 
-  <!-- Favicon: the bag-and-bubble silhouette, drawn inline so there is no
-       image file to manage.
-       IT IS NOT THE FULL LOGO, and that is deliberate. The wordmark inside the
-       bag is about a fifth of the mark's height, so at 32px it renders as an
-       illegible smear and at 16px as a grey band. What survives at that size
-       is the SHAPE, so the favicon is the shape with no type in it.
-       The tail is drawn first and the body painted over it, so the body's
-       outline closes across the top of the tail rather than showing through. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 22 L9.6 30.6 L16 24' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Crect x='2.3' y='10' width='27.4' height='16' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.3'/%3E%3Cpath d='M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Cpath d='M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6' fill='none' stroke='%23101210' stroke-width='2.1' stroke-linecap='route'/%3E%3C/svg%3E">
+  ${ICON_LINKS}
   <meta name="theme-color" content="#101210">
 
   <!-- The design system's font file @imports Google Fonts, and an @import
@@ -533,12 +525,43 @@ ${bare ? '' : footer()}
   return fillTokens(html, { ...ICON_TOKENS, ...extra });
 }
 
-// The favicon shape, as the markup rather than as a data: URL, so the <head>
-// above and the /favicon.ico route in src/routes/web.js serve one drawing.
-// Browsers still ask for /favicon.ico whatever the head says, and that had
-// been a 404 on every page load since launch.
-const FAVICON_SVG = decodeURIComponent(
-  "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 22 L9.6 30.6 L16 24' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Crect x='2.3' y='10' width='27.4' height='16' rx='7' fill='%230EA47A' stroke='%23101210' stroke-width='2.3'/%3E%3Cpath d='M9.6 10.6 C10.4 5.6 12 3 16 2.2 C20 3 21.6 5.6 22.4 10.6 Z' fill='%230EA47A' stroke='%23101210' stroke-width='2.3' stroke-linejoin='route'/%3E%3Cpath d='M12.4 6.6 C14.2 8.6 17.8 8.6 19.6 6.6' fill='none' stroke='%23101210' stroke-width='2.1' stroke-linecap='route'/%3E%3C/svg%3E"
-);
+// ---------------------------------------------------------------------------
+// THE ICONS: Neil's logo, not a drawing of it.
+//
+// The favicon used to be a hand-drawn SVG, inline in this file, meant to be the
+// bag-and-bubble silhouette without the wordmark. It came out green, as a plain
+// rounded rectangle with a dome on top - nothing like the cream bag with a tied
+// bow that the artwork is. Neil saw it beside the site in a Google result on 10
+// September: "That is not my logo."
+//
+// THE LESSON IS THE SAME ONE THE LOGO ITSELF ALREADY TAUGHT. CLAUDE.md says do
+// not re-derive the mark in CSS, because a hand copy is only ever a worse
+// version of a file we already have. The favicon was exactly that hand copy,
+// and it drifted. These files are cut from public/css/logo.png, so they cannot.
+//
+// THE FULL LOGO, WORDMARK INCLUDED, and that reverses an earlier call on
+// purpose. The old reasoning was that LYNDRY smears at 16px, which is true in a
+// browser tab. It is not true where the icon actually matters: Google shows it
+// in a circle, fetched at 48px or more, and at that size the word reads. Neil
+// was shown both versions side by side and chose this one.
+//
+// REAL URLS, NOT A data: URL. Google cannot crawl a data: URL, so it fell back
+// to /favicon.ico. And these are NEW paths on purpose: /favicon.ico was served
+// with a one-year immutable cache, which tells a browser never to ask again,
+// so anybody who had visited would have kept the green one for up to a year.
+// A browser follows the href in these tags, and none of them has ever cached
+// these URLs. See src/routes/web.js for how they are served.
+//
+// sizes="any" on the .ico is the pattern that stops browsers preferring a
+// small bitmap from inside it over the PNGs listed above it.
+// ---------------------------------------------------------------------------
+const ICON_LINKS = [
+  '<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png">',
+  '<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png">',
+  '<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">',
+  '<link rel="icon" href="/favicon.ico" sizes="any">',
+  '<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">',
+].join('\n  ');
+
 module.exports = {
-  FAVICON_SVG, renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE };
+  ICON_LINKS, renderPage, fillTokens, icon, logo, avatar, escapeHtml, CSS_BASE };
