@@ -40,8 +40,9 @@ const router = express.Router();
 
 // These pages use the ordinary site chrome, because to a customer this is just
 // another part of lyndry.com. They are noindex all the same.
-// THE GOOGLE ADS TAG IS OFF HERE UNLESS A ROUTE ASKS FOR IT, and only the two
-// sign-in pages do. Every account page comes through this one helper, including
+// THE GOOGLE ADS TAG IS OFF HERE UNLESS A ROUTE ASKS FOR IT: the sign-in page,
+// the card step, and /account/thanks when it follows a card-on-file order. Every
+// account page comes through this one helper, including
 // /account/booked/<token> and /account/card/done/<token>, and Google's tag
 // reports the browser's REAL address rather than the `path` below - so turning
 // it on here for everyone would hand those tokens to Google. See googleTag() in
@@ -813,18 +814,10 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
   </div>
 </section>`;
 
-    // THE GOOGLE ADS TAG ONLY ON THE LANDING THAT FOLLOWS A NEW ONLINE ORDER,
-    // marked by POST /account/book and taken here exactly once. Every other
-    // view of the account page - which is most of them - carries no tag.
-    const orderLead = adAttribution.takeLead(req, res, '/account');
-
-    accountPage(res, {
-      title: 'Your account',
-      body,
-      tracking: Boolean(orderLead),
-      conversionId: orderLead,
-      stripQuery: true,
-    });
+    // NO GOOGLE ADS TAG HERE ANY MORE. It used to fire on the one landing that
+    // followed a new online order; every order now ends on /account/thanks, and
+    // that page counts it instead.
+    accountPage(res, { title: 'Your account', body });
   } catch (err) {
     next(err);
   }
@@ -1168,33 +1161,70 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
 
     const waiting = await orders.findAllAwaitingCollection(customer.id).catch(() => []);
 
-    // BACK FROM THE LAST STEP OF PLACING AN ORDER: that order's confirmation.
-    // Found among THIS customer's own pickups, so a number typed into the
-    // address bar can only ever show them something of theirs. A number that
-    // matches nothing (collected already, cancelled, somebody else's) falls
-    // through to the page below rather than an error.
+    // BACK FROM THE LAST STEP OF PLACING AN ORDER: on to the thank-you page,
+    // the one every online order ends on. A redirect rather than rendering it
+    // here, so the address bar stops carrying the payment token and a refresh
+    // is harmless. A number that matches none of their pickups falls through
+    // to the page below rather than an error.
     const placed = String(req.query.order || '').replace(/\D/g, '');
     const order = placed ? waiting.find((o) => String(o.order_number) === placed) : null;
 
-    if (order) {
-      const free = await promotions
-        .claimedFreeOrder(order.id)
-        .catch(() => ({ freeOrder: false, freeUpToLb: null }));
-
-      return accountPage(res, {
-        title: 'Thank you for your order',
-        body: orderConfirmedPage({
-          customer,
-          order,
-          others: waiting.filter((o) => o.id !== order.id),
-          free,
-        }),
-      });
-    }
+    if (order) return res.redirect(303, `/account/thanks?order=${order.order_number}`);
 
     return accountPage(res, {
       title: 'Pickup confirmed',
       body: confirmedPage({ customer, orders: waiting }),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /account/thanks?order=<number> - where every online order ends.
+//
+// Neil: "always give the thank you page for ordering." Two ways reach it: back
+// from Stripe once the card is saved, and straight from POST /account/book when
+// a card was already on file. Both have sent the confirmation text before they
+// redirect here, which is what lets the page say "check your texts".
+//
+// ONLY A BOOKED ORDER GETS THANKED. The order is looked up among THIS
+// customer's pickups still waiting for us, so a number typed into the address
+// bar can only show them their own. And an order still waiting on a card is not
+// booked and has had no confirmation text, so it goes to the account page,
+// which says "Awaiting card" in as many words.
+//
+// THE GOOGLE ADS TAG IS ON ONLY WHEN POST /account/book LEFT A MARKER, which is
+// the card-on-file order arriving for the first time. The card path was already
+// counted at the card step, and a refresh finds the marker gone. The order
+// number rides in the query string, and stripQuery keeps it out of Google.
+// ---------------------------------------------------------------------------
+router.get('/account/thanks', auth.requireCustomer, async (req, res, next) => {
+  try {
+    const customer = req.customer;
+    const placed = String(req.query.order || '').replace(/\D/g, '');
+    const waiting = placed ? await orders.findAllAwaitingCollection(customer.id) : [];
+    const order = waiting.find((o) => String(o.order_number) === placed);
+
+    if (!order || billing.needsCardOnFile(customer)) return back(res, '');
+
+    const free = await promotions
+      .claimedFreeOrder(order.id)
+      .catch(() => ({ freeOrder: false, freeUpToLb: null }));
+
+    const lead = adAttribution.takeLead(req, res, '/account/thanks');
+
+    return accountPage(res, {
+      title: 'Thank you for your order',
+      body: orderConfirmedPage({
+        customer,
+        order,
+        others: waiting.filter((o) => o.id !== order.id),
+        free,
+      }),
+      tracking: Boolean(lead),
+      conversionId: lead,
+      stripQuery: true,
     });
   } catch (err) {
     return next(err);
@@ -1213,9 +1243,10 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
 // claimedFreeOrder() - the exact lookup the confirmation text makes - so the
 // page and the text can never describe two different orders.
 //
-// "Check your texts" is true by the time this renders: the route above sends
-// the confirmation through cardSaved.cardWasSaved() before it gets here, or the
-// webhook already had.
+// "Check your texts" is true by the time this renders, whichever way they came:
+// POST /account/book texts the confirmation before redirecting, and the card
+// path's return page sends it through cardSaved.cardWasSaved() (or the webhook
+// already had). Rendered only by GET /account/thanks.
 // ---------------------------------------------------------------------------
 function orderConfirmedPage({ customer, order, others, free }) {
   const card = billing.describeCard(customer);
@@ -1295,7 +1326,7 @@ function orderConfirmedPage({ customer, order, others, free }) {
 
   <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
     ${row('Charged today', '$0.00')}
-    ${row('Card on file', escapeHtml(card || 'saved'))}
+    ${card ? row('Card on file', escapeHtml(card)) : ''}
     ${row('Price', escapeHtml(price), free.freeOrder && !free.freeUpToLb)}
     ${free.freeOrder && !free.freeUpToLb ? '' : row('You are charged', 'after we weigh it', true)}
   </div>
@@ -2580,11 +2611,13 @@ router.post('/account/book', async (req, res, next) => {
       customer.id
     );
 
-    // The other way an online order ends: no card was needed, so it redirects.
-    // The account page it lands on counts the lead, told by a one-shot marker
-    // carrying the order id. See src/core/ad-attribution.js.
-    adAttribution.markLead(res, result.order.id, '/account');
-    return back(res, '?booked=1');
+    // The other way an online order ends: no card was needed, so it redirects -
+    // to the same thank-you page the card path reaches. Neil: "always give the
+    // thank you page for ordering." That page counts the lead, told by a
+    // one-shot marker carrying the order id, scoped to its own path so no other
+    // account page can take it. See src/core/ad-attribution.js.
+    adAttribution.markLead(res, result.order.id, '/account/thanks');
+    return res.redirect(303, `/account/thanks?order=${result.order.order_number}`);
   } catch (err) {
     return next(err);
   }

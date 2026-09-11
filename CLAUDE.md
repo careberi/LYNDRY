@@ -288,8 +288,9 @@ those to an advertising account. Never on an ops screen.
 
 **Which pages:** everything in `PAGES` in `web.js` (being in that list is the
 opt-in), the town pages and `/locations`, `/bergen` and `/bergen/sent`, and
-`/account/login`. On `/account` only on the one landing that follows a new
-order. Never on `/account/book`.
+`/account/login`. On `/account/thanks` only on the first load after a
+card-on-file order, and on the card step. Never on `/account/book`, and no
+longer on `/account` itself.
 
 **Two leaks were closed inside the tag, found by loading real pages:** `next`
 is removed from the reported address (a signed-out customer opening a booking
@@ -307,7 +308,7 @@ in a real browser to still pick it up. Pages rendered after a save use
 | Home page form | `/start/sent` | customer id |
 | `/bergen` form | `/bergen/sent` | customer id |
 | Online order, card needed | the card step, in the POST response | order id |
-| Online order, no card needed | `/account` after `?booked=1` | order id |
+| Online order, no card needed | `/account/thanks`, the first load after the order | order id |
 | A tap on any `sms:` or `tel:` link | the page it was on | none, plus `sms_click` / `call_click` |
 
 **Why a marker cookie and not the form's success handler.** The home page form
@@ -3076,15 +3077,24 @@ it already had**, so sessions signed in under Strict become Lax on their next
 request (POST `/account/card` is one, right before Stripe) without any session
 lasting longer than fourteen days from sign-in. The staff cookie stays Strict.
 
-**AFTER THE CARD, THE ORDER'S OWN CONFIRMATION.** Neil's words: thank you for
-your order, check your texts from our number, the order number, when we pick it
-up, and the details. The card step's button carries `order=<number>` to POST
-`/account/card`, which puts it on the return URL, and `/account/card/done/<token>`
-renders `orderConfirmedPage()` for that order, looked up only among the signed-in
-customer's own pickups. Every detail comes from where the confirmation text gets
-it (`describeCard`, `wash.describeSaved`, `spotOf`, `claimedFreeOrder`). Adding a
-card from account settings carries no order and gets the old "You're booked"
-page, unchanged.
+**EVERY ONLINE ORDER ENDS ON `/account/thanks?order=<number>`.** Neil's words:
+thank you for your order, check your texts from our number, the order number,
+when we pick it up, and the details; and "always give the thank you page for
+ordering". Two ways in, and both have already sent the confirmation text:
+
+- **Card already on file:** POST `/account/book` texts the confirmation and
+  redirects there, leaving the one-shot Google Ads marker scoped to that path.
+- **Card needed:** the card step's button carries `order=<number>` to POST
+  `/account/card`, which puts it on Stripe's return URL; `/account/card/done/<token>`
+  saves the card, sends the text, and redirects there.
+
+The page only thanks a booked order: it is looked up among the signed-in
+customer's own pickups still waiting for us, and an order still waiting on a
+card goes to the account page instead, which says "Awaiting card". Every detail
+comes from where the confirmation text gets it (`describeCard`,
+`wash.describeSaved`, `spotOf`, `claimedFreeOrder`). Leaving Stripe without
+saving a card is not an order and is not thanked. Adding a card from account
+settings carries no order and gets the old "You're booked" page, unchanged.
 
 **A customer's sign-in code is never written to the log**, unlike a staff one.
 Staff can read the server log as a way back in; a customer cannot, so it would
