@@ -409,6 +409,7 @@ async function chargeOrder(order, customer) {
         stripe_payment_intent_id: result.paymentIntentId,
         paid_at: new Date().toISOString(),
         payment_failure_reason: null,
+        payment_decline_code: null,
         payment_attempts: (order.payment_attempts || 0) + 1,
       })
       .eq('id', order.id);
@@ -430,7 +431,7 @@ async function chargeOrder(order, customer) {
   // revenue. That was a deliberate business decision, not an oversight.
 
   const card = describeCard(customer);
-  await markFailed(order, result.reason, result.paymentIntentId);
+  await markFailed(order, result.reason, result.paymentIntentId, result.declineCode);
 
   const { url } = await createSetupLink(customer);
 
@@ -445,12 +446,25 @@ async function chargeOrder(order, customer) {
   };
 }
 
-async function markFailed(order, reason, paymentIntentId) {
+// WRITE DOWN WHY, NOT JUST THAT.
+//
+// `reason` is Stripe's sentence for cardholders - safe to show a customer and
+// often useless to us: order #2060's card was refused and the sentence stored
+// was "The payment failed.", which is exactly what the issuer said and exactly
+// nothing. `declineCode` is the machine answer behind it, which the provider
+// has always read off the error and this has always discarded.
+//
+// It is evidence and a hint, never a rule. Nothing branches on it - an issuer's
+// code is not a thing to build behaviour on - but it is the difference between
+// a person knowing to tell somebody "there is no money in the account today"
+// and knowing to tell them "this one cannot be charged unless you are there".
+async function markFailed(order, reason, paymentIntentId, declineCode = null) {
   const { error } = await db
     .from('orders')
     .update({
       payment_status: 'FAILED',
       payment_failure_reason: reason ? String(reason).slice(0, 500) : null,
+      payment_decline_code: declineCode ? String(declineCode).slice(0, 100) : null,
       stripe_payment_intent_id: paymentIntentId || order.stripe_payment_intent_id || null,
       payment_attempts: (order.payment_attempts || 0) + 1,
     })

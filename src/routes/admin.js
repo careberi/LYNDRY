@@ -1165,6 +1165,91 @@ function returnCheckCard(order, mayRelease) {
   </section>`;
 }
 
+// A DECLINED CARD, AND THE ONE BUTTON THAT CAN DO ANYTHING ABOUT IT.
+//
+// Neil, 12 September, on order #2060: a customer's bank refused $84.00 at the
+// weigh-in. The customer was texted a link straight away, which is the path
+// that usually settles it - saving a card runs billing.retryOutstanding() and
+// the money follows on its own. What there was no answer to at all is the
+// other case: they ring up and say "try it now".
+//
+// SO THIS IS A RETRY AND NOTHING ELSE. It cannot change a price, cannot waive
+// anything, and cannot charge an amount the weigh-in would not have charged -
+// it calls the same billing.chargeOrder().
+//
+// WHAT THE ISSUER SAID IS ON THE CARD, because the first question anybody asks
+// is why. Both halves: the sentence Stripe writes for cardholders, and the
+// code behind it (migration 0091), which is usually the more useful of the two.
+//
+// AND WHETHER WHAT THEY SAVED IS ACTUALLY A CARD. #2060's customer had saved
+// Link rather than a card, which is why we hold no brand and no last four for
+// them - and a wallet whose funding source refuses an off-session charge will
+// go on refusing it however many times this button is pressed. Saying so here
+// is the difference between a person retrying six times and a person ringing
+// the customer.
+function declinedCard(order, mayCharge) {
+  if (order.payment_status !== 'FAILED') return '';
+  if (!order.price_cents) return '';
+
+  const customer = order.customers || {};
+  const hasMethod = Boolean(customer.stripe_customer_id && customer.default_payment_method_id);
+  // A saved method with no brand and no last four is not a card: Stripe returns
+  // those off the card object, and a wallet has none.
+  const notACard = hasMethod && !customer.card_brand && !customer.card_last4;
+
+  const line = (label, value) => `
+    <p style="margin:0 0 6px;font-size:15px;line-height:1.6;">
+      <span class="eyebrow" style="margin:0 8px 0 0;">${escapeHtml(label)}</span>${value}
+    </p>`;
+
+  return `
+  <section class="card" style="background:var(--sunbeam-500);margin-bottom:20px;">
+    <p class="eyebrow" style="margin:0 0 8px;">Nothing has been taken</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 12px;">
+      ${escapeHtml(money(order.price_cents))} was refused
+    </h2>
+
+    <p style="font-size:15px;line-height:1.6;margin:0 0 16px;max-width:62ch;">
+      They were texted the weight, the total and a link to sort it out, and the
+      delivery goes ahead either way. If they save a card on that link the money
+      settles itself.
+    </p>
+
+    ${order.payment_failure_reason ? line('What the bank said', escapeHtml(order.payment_failure_reason)) : ''}
+    ${order.payment_decline_code ? line('Their code', `<code>${escapeHtml(order.payment_decline_code)}</code>`) : ''}
+    ${line('Attempts', String(order.payment_attempts || 0))}
+
+    ${
+      !hasMethod
+        ? `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;max-width:62ch;font-weight:700;">
+             There is nothing on file to charge. They have to add a payment
+             method before this can go anywhere.
+           </p>`
+        : notACard
+          ? `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;max-width:62ch;font-weight:700;">
+               What they saved is a wallet rather than a card, so we hold no
+               brand and no last four for them. If the account behind it is
+               refusing the charge, pressing this again will not change that:
+               ring them and ask them to put a card on instead.
+             </p>`
+          : ''
+    }
+
+    ${
+      mayCharge
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.order_number)}/charge"
+                 style="margin:18px 0 0;">
+             <button class="btn btn-primary btn-lg btn-full" type="submit">
+               Try the card again
+             </button>
+           </form>`
+        : `<p style="font-size:15px;line-height:1.6;margin:18px 0 0;font-weight:700;">
+             An admin has to try this one again.
+           </p>`
+    }
+  </section>`;
+}
+
 function heldWeightCard(order, maySettle) {
   if (order.weight_settled_at) return '';
 
@@ -3101,6 +3186,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
            right now, so it sits above the money and above the progress card. -->
       ${returnCheckCard(order, roles.can(req.opsUser, 'orders.override'))}
       ${roles.can(req.opsUser, 'money.view') ? heldWeightCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
+      ${roles.can(req.opsUser, 'money.view') ? declinedCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
       ${cancelCard(order, roles.can(req.opsUser, 'orders.override'))}
@@ -4594,6 +4680,83 @@ router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (re
 // unprompted, it goes out because of something WE did, and the words should be
 // ones a person has read - the same rule as the nudges.
 // ---------------------------------------------------------------------------
+
+// POST /ops/orders/:id/charge - try a declined card again
+//
+// Neil, 12 September, on order #2060: the laundromat weighed it, the card was
+// refused, the customer was told, and there was no way to take the money from
+// any screen. The lever existed only as POST /ops/charge in the JSON API,
+// which needs the machine key and a terminal - so in practice a declined order
+// could only be settled by the customer saving a new card, and never by
+// somebody ringing up to say "try it now".
+//
+// IT IS THE SAME FUNCTION THE WEIGH-IN CALLS. billing.chargeOrder() decides
+// everything - whether there is a card, what is owed, what the customer is
+// told - so this button cannot charge an amount the automatic path would not
+// have, and a second implementation cannot drift from the first.
+//
+// ADMIN ONLY, through orders.override. Taking money off somebody is a decision
+// about the customer rather than a step in the round, the same line cancelling
+// a pickup and reassigning a driver already draw.
+router.post('/ops/orders/:id/charge', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const said = (kind, message) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(message)}`);
+
+    // Refused here as well as hidden on the page, because a card that is not on
+    // the screen and a route that still fires is not a guard.
+    if (order.payment_status === 'PAID') return said('done', 'That one is already paid.');
+    if (order.payment_status === 'WAIVED') {
+      return said('problem', 'This order is waived. Nothing may be charged for it.');
+    }
+    if (!order.price_cents) {
+      return said('problem', 'It has no price yet. Weigh it first and it charges itself.');
+    }
+
+    const customer = order.customers;
+    const charge = await billing.chargeOrder(order, customer).catch((err) => {
+      console.error(`Could not retry the card on ${order.id}: ${err.message}`);
+      return { ok: false, reason: err.message };
+    });
+
+    // ONE MESSAGE, AND ONLY WHEN THERE IS NEWS. chargeOrder() writes the
+    // sentence; a retry that succeeds is worth telling somebody about, and so
+    // is one that fails again, because it carries a fresh link.
+    if (charge.message && customer) {
+      await notify
+        .sendAndLog(customer.phone, charge.message, customer.id)
+        .catch((err) => console.error(`Could not text the charge result: ${err.message}`));
+    }
+
+    await orderEvents.record(order.id, {
+      kind: 'PAYMENT',
+      summary: charge.ok
+        ? `Charged ${billing.money(order.price_cents)} by hand`
+        : charge.needsCard
+          ? `Tried again by hand: no card on file`
+          : `Tried again by hand: ${charge.declined ? 'declined' : charge.reason || 'it did not go through'}`,
+      became: charge.ok ? 'PAID' : 'unpaid',
+      by: { opsUser: req.opsUser },
+      reason: charge.ok ? null : 'They were texted a link to sort it out',
+    });
+
+    return charge.ok
+      ? said('done', `Charged ${billing.money(order.price_cents)}. They have been told.`)
+      : said(
+          'problem',
+          charge.needsCard
+            ? 'No card on file. They have been texted a link to add one.'
+            : `Refused again${
+                order.payment_decline_code ? ` (${order.payment_decline_code})` : ''
+              }. They have been texted a link to sort it out.`
+        );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.post('/ops/orders/:id/cancel', guard, may('orders.override'), async (req, res, next) => {
   try {

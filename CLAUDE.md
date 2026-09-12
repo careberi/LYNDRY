@@ -998,6 +998,7 @@ GET  /ops/customers/:id      profile, preferences, consent record, history
 POST /ops/customers/:id/ask  text them for one thing we still need
 POST /ops/customers/:id/opt-out  they asked not to be texted (one way)
 POST /ops/orders/:id/cancel  call a pickup off, and tell them
+POST /ops/orders/:id/charge  try a refused card again (Admin only)
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
@@ -2794,6 +2795,76 @@ asks for a weight and a reason.
 **A decline is told to the customer immediately**, in the same text as the
 price, with a link to update the card. It does not hold up the delivery: the
 clothes still go back and we chase by text.
+
+**A DECLINE IS NOT THE END OF IT ANY MORE, AND UNTIL 12 SEPTEMBER IT WAS.**
+Order #2060: the laundromat weighed it, the bank refused $84.00, the customer
+was texted the total and a link, and then nothing in the system ever asked
+about that order again. No screen offered to try the card, and no sweep noticed.
+If the customer did not act on that one message the money was simply gone,
+unless somebody happened to remember.
+
+Three things close that, and the first one already existed: **saving a card
+settles everything outstanding by itself.** `card-saved.js` calls
+`billing.retryOutstanding()`, so the link in the decline text is the path that
+usually works and needs nobody here to do anything.
+
+**A button, for the case where they ring up.** `POST /ops/orders/:id/charge`,
+behind `orders.override` - Admin only, the line cancelling a pickup already
+draws, because taking money off somebody is a decision about the customer
+rather than a step in the round. It calls the same `billing.chargeOrder()` the
+weigh-in calls, so it cannot charge an amount the automatic path would not
+have. The lever existed before only as `POST /ops/charge` in the JSON API,
+which needs the machine key and a terminal: in practice, unreachable.
+
+**The card on the order page says what the issuer said**, because the first
+question anybody asks is why. `orders.payment_decline_code` (migration 0091) is
+the machine answer behind `payment_failure_reason`, which is Stripe's sentence
+for cardholders and is often useless on its own - #2060's stored reason is "The
+payment failed.", which is exactly what the bank said and exactly nothing. It
+is **evidence and a hint, never a rule**: nothing branches on an issuer's code.
+
+**AND THE CARD PAGE ACCEPTS THINGS THAT ARE NOT CARDS.** #2060's customer had
+saved **Link**, not a card, which is why we hold no brand and no last four for
+them and why their weigh-in text said "your card" rather than "your Visa ending
+4242". `createSetupLink()` deliberately does not pass `payment_method_types`,
+and the comment saying that means "cards, plus Apple Pay or Google Pay" was
+written before the Stripe account had Klarna, Link, Affirm, Cash App Pay and
+Amazon Pay switched on. A wallet whose funding source refuses an off-session
+charge will go on refusing it, so the order page says so when there is a saved
+method with no brand and no last four: **ring them, do not press the button
+again.** Whether to restrict that list is Neil's call and has not been taken.
+
+**THE CHASE IS A MESSAGE, AND IT COMES AFTER THE DELIVERY.**
+`src/core/payment-chase.js`, on the same ten-minute tick as everything else.
+One text, a day after the laundry went back, to anybody whose order is
+`DELIVERED`, `FAILED` and still owed for.
+
+**After delivery, never before, and that is the rule worth defending.** A
+declined card never holds up a delivery - that is deliberate - and a payment
+chase landing while somebody is still waiting for their laundry reads as
+exactly the opposite: pay up and then you get your clothes. So it waits for
+`DELIVERED` and then waits `PAYMENT_CHASE_HOURS` (24) on top.
+
+**One chase, ever, per order.** `orders.payment_chase_sent_at` is what makes a
+second one impossible rather than discouraged, the same shape as
+`card_link_sent_at` and `reminder_sent_at`, and stamped **after** the send.
+Past one text it is a phone call from a person, not another message from a
+machine.
+
+**It does not retry the card.** Charging a refused method again on a timer is
+dunning, and dunning is something to decide to build, not something that should
+appear as a side effect of a reminder. **It mints a fresh link every time**,
+because a Stripe session expires in a day and a day is exactly how long this
+has been waiting - reusing the one from the weigh-in would send somebody to a
+dead page. The words are written in code, like the nudges and the lead message,
+and `kind = 'SYSTEM'` so a payment reminder is never mistaken for a question
+the customer failed to answer.
+
+**It is NOT the card chase in `card-chase.js`, and the two must not be merged.**
+That one is for a booking with no card on it at all, before the pickup. This is
+for a card that said no, after the delivery. Different moment, different
+message, different column.
+
 
 **`/ops/delivered` is still a charge point and must stay one.** It is the
 backstop for orders that never reach a laundromat — anything we wash ourselves

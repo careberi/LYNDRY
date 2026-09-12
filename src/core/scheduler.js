@@ -5,19 +5,25 @@ const booking = require('./booking');
 const nightly = require('./nightly');
 const followups = require('./followups');
 const cardChase = require('./card-chase');
+const paymentChase = require('./payment-chase');
 const leads = require('./leads');
 const issues = require('./issues');
 
 // ---------------------------------------------------------------------------
 // THE ONE CLOCK. Everything that happens without somebody pressing a button.
 //
-// Three jobs on two timers:
+// Two timers, and this is everything on them. The count used to be written
+// down as a number here and the number went stale, so it is a list now:
 //
 //   the nightly pass   once an evening: book tomorrow's standing orders, then
 //                      remind everybody whose pickup is tomorrow.
 //   follow-ups         all day: chase anybody the AI asked a question and
 //                      never got an answer - once a couple of hours into a
 //                      stalled setup, and once a day later.
+//   the card link      all day: a booking half an hour old that still has no
+//                      card on it at all. See card-chase.js.
+//   the payment chase  all day: an order whose card was REFUSED, a day after
+//                      the laundry went back. See payment-chase.js.
 //   the re-page        all day: an open issue a quarter of an hour old that no
 //                      person has written to the customer about gets every
 //                      admin texted once more. See issues.repageStale().
@@ -120,6 +126,15 @@ async function tick({ now = null } = {}) {
     // it can watch the clock for free, and quiet hours are the right floor on
     // a message nobody just asked for.
     done.cardChase = await cardChase
+      .sendDue()
+      .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
+
+    // An order whose card was refused, a day after the laundry went back. It
+    // is the other half of the card link above: that one is for a booking with
+    // no card at all, this one is for a card that said no. Both ride this tick
+    // and both stop at 9pm, because neither is answering anything the customer
+    // just said.
+    done.paymentChase = await paymentChase
       .sendDue()
       .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
 
