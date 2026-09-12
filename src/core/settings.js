@@ -360,10 +360,48 @@ async function setLeadAutoText(on, opsUserId) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// DOES THE WEBSITE SHOW THE OFFER POPUP.
+//
+// Neil's ask, 12 September. One switch, and deliberately NOT "which promotion
+// does it advertise": see migration 0089. The popup says whatever the
+// automatic promotion says, so the website cannot get out of step with what a
+// new number is actually given.
+//
+// Off by default and off when the read fails, which is the direction
+// leadAutoText() takes and for the same reason: putting an offer in front of a
+// stranger is an act that needs a decision behind it, and a database having a
+// bad minute is not one.
+// ---------------------------------------------------------------------------
+async function websitePopup() {
+  const s = await read();
+  return s.website_popup === true;
+}
+
+async function setWebsitePopup(on, opsUserId) {
+  const { data, error } = await db
+    .from('app_settings')
+    .update({
+      website_popup: Boolean(on),
+      updated_at: new Date().toISOString(),
+      updated_by: opsUserId || null,
+    })
+    .eq('id', true)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+
+  cached = data;
+  cachedAt = Date.now();
+  return data;
+}
+
 module.exports = {
   serviceBase,
   setServiceBase,
   weightLimits,
   setWeightLimits, read, takingOrders, pausedReason, setTakingOrders,
   opensOn, setOpensOn, markNightlyRan, followUpsOn, setFollowUps,
-  leadAutoText, setLeadAutoText, CACHE_MS };
+  leadAutoText, setLeadAutoText,
+  websitePopup, setWebsitePopup, CACHE_MS };

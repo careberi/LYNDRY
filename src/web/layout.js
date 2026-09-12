@@ -349,6 +349,12 @@ function renderPage({
   conversionId = null,
   // Report no query string at all. For a page whose URL carries answers.
   stripQuery = false,
+  // THE OFFER POPUP, ALREADY DRAWN. A string, never a decision: whether a
+  // visitor gets one is src/core/site-popup.js's business and reading it
+  // needs the database, which this function has never touched. Empty for
+  // every page that does not ask, which is every page by default - the same
+  // shape as `tracking` and for the same reason. See src/web/popup.js.
+  popupHtml = '',
 }) {
   const fullTitle =
     ownTitle || (path === '/' ? `${site.name} — ${site.tagline}` : `${title} — ${site.name}`);
@@ -418,6 +424,7 @@ ${bare ? bareHeader() : navBar(path)}
 ${body}
 </main>
 ${bare ? '' : footer()}
+${popupHtml}
 
 <script>
   // ---------------------------------------------------------------------

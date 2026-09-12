@@ -1570,3 +1570,126 @@ button {
   .repeat-group .repeat-cadence { display: none; }
   .repeat-group:has(input[name="regular"][value="yes"]:checked) .repeat-cadence { display: flex; }
 }
+
+/* ---------------------------------------------------------------------------
+   The offer popup
+   ---------------------------------------------------------------------------
+   Neil's ask, 12 September. One dialog, over the whole page, carrying the
+   first-order offer and the same phone box the hero has.
+
+   IT IS display:none UNTIL A SCRIPT OPENS IT, and there is no CSS-only way in.
+   That is the opposite of the .js-anim rule above and deliberately so: a reveal
+   that fails safe means showing the content, and a popup that fails safe means
+   never appearing. A browser with scripting off gets the page it came for, and
+   the hero form is the same form.
+
+   The HTML `hidden` attribute is not used for this. A class that sets `display`
+   beats it, which is the bug already recorded for .btn - so the open state is a
+   class and there is nothing for an attribute to lose to.
+
+   The card sits on an ink scrim, so its shadow is the coloured offset rather
+   than an ink one: an ink shadow on ink is invisible. Same reasoning as
+   .card-on-ink. */
+.ly-pop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  padding: 20px;
+  overflow-y: auto;
+  background: rgba(16, 18, 16, 0.55);
+  align-items: center;
+  justify-content: center;
+}
+
+.ly-pop.is-open { display: flex; }
+
+/* Nothing behind the dialog scrolls while it is open. Removed on close, so a
+   visitor who dismisses it never inherits a page that will not move. */
+body.ly-pop-locked { overflow: hidden; }
+
+.ly-pop-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  margin: auto;
+  padding: 30px 28px 26px;
+  background: var(--paper-050);
+  border: var(--border-w-2) solid var(--ink-900);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop-brand);
+}
+
+.ly-pop-sheet:focus { outline: none; }
+.ly-pop-sheet:focus-visible { box-shadow: var(--focus-ring); }
+
+/* 44px, the floor for anything a thumb has to hit, and in the corner nobody
+   has to hunt for. The glyph is type rather than an icon: the icon set has no
+   close mark, and adding one to icons.css for a single multiplication sign is
+   a worse trade than setting the character. */
+.ly-pop-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink-700);
+  background: none;
+  border: none;
+  border-radius: var(--radius-circle);
+  cursor: pointer;
+}
+
+.ly-pop-close:hover { color: var(--ink-900); background: var(--paper-200); }
+
+.ly-pop-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 30px;
+  line-height: 1.08;
+  text-wrap: balance;
+  margin: 0 0 10px;
+}
+
+.ly-pop-lede {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-700);
+  margin: 0 0 20px;
+}
+
+.ly-pop-terms {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.ly-pop-terms li + li { margin-top: 3px; }
+
+/* The number and the button stack on a narrow screen rather than squeezing a
+   ten-digit field down beside a button. */
+.ly-pop-row { display: flex; flex-direction: column; gap: 10px; }
+
+@media (min-width: 420px) {
+  .ly-pop-row { flex-direction: row; }
+  .ly-pop-row .ly-pop-field { flex: 1; min-width: 0; }
+}
+
+/* Anyone whose device asks for less motion gets none, the same as every other
+   animation on this site. */
+@media (prefers-reduced-motion: no-preference) {
+  .ly-pop.is-open .ly-pop-sheet { animation: ly-pop-in 220ms ease-out both; }
+}
+
+@keyframes ly-pop-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}

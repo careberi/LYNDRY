@@ -178,6 +178,61 @@ function offerLine(promo) {
   return `${promo.blurb} is on your account, ready to use.`;
 }
 
+// WHAT THE WEBSITE POPUP SAYS, or null if there is nothing it may say.
+//
+// Neil's ask, 12 September: a popup on lyndry.com offering the first-order
+// discount. The words come from the promotion and never from the popup, which
+// is the rule the AI has always followed - a promise with a number in it must
+// not have two copies of the number.
+//
+// TWO THINGS MAKE IT REFUSE, and both are existing rules rather than new ones:
+//
+//   live()        the promotion has to be one we could hand to somebody NEW.
+//                 honoured() is the wrong question here: that is about a
+//                 promise already made to a person, and an ENDED promotion has
+//                 to come off the website the moment it ends.
+//
+//   a blurb       "A PROMOTION WITH NO BLURB IS SILENT" - the AI is told
+//                 nothing about it and says nothing. A popup is the same voice
+//                 talking to the same customer, so a silent promotion cannot be
+//                 advertised either. Neil's own case for a blurb-less promotion
+//                 was an offer he had already texted somebody about by hand;
+//                 putting it on the front page would be exactly the second
+//                 announcement he was avoiding.
+//
+// The small print is assembled from the columns that are actually set, so the
+// popup can never name a ceiling the pricing code is not enforcing, and never
+// invent one it is. The weight wording is only used where it means anything:
+// pounds are derived from the money cap by dividing by the price per pound,
+// which is only the same thing as the allowance when the offer covers the whole
+// cost. On a half-price offer the cap is money and is said as money.
+function popupOffer(promo, now = new Date()) {
+  if (!live(promo, now)) return null;
+
+  const headline = String(promo.blurb || '').trim();
+  if (!headline) return null;
+
+  const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+  const terms = [];
+
+  if (promo.min_order_cents) terms.push(`On orders over ${money(promo.min_order_cents)}.`);
+
+  if (promo.max_discount_cents) {
+    const lb = takesEverythingOff(promo) ? freeAllowanceLb(promo) : null;
+    terms.push(lb ? `Covers the first ${lb} lb.` : `Up to ${money(promo.max_discount_cents)} off.`);
+  }
+
+  if (promo.expires_days) {
+    const d = promo.expires_days;
+    terms.push(`Good for ${d} day${d === 1 ? '' : 's'} from the day you get it.`);
+  }
+
+  // max_orders is NOT small print, it is a question about whether there is
+  // anything left to offer at all. Answering it means counting claims, which is
+  // a query, so it is left to the caller - see src/core/site-popup.js.
+  return { id: promo.id, headline, terms, maxOrders: promo.max_orders || null };
+}
+
 async function autoGrant() {
   const { data, error } = await db
     .from('promotions')
@@ -771,6 +826,7 @@ module.exports = {
   freeAllowanceLb,
   freeOfferLine,
   offerLine,
+  popupOffer,
   claimableByCode,
   full,
   issueToAudience,

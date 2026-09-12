@@ -97,12 +97,37 @@ const PUBLIC_PHONE_DISPLAY = PUBLIC_PHONE_LINK ? displayPhone(PUBLIC_PHONE_LINK)
 const CALL_PHONE_LINK = '+12017712933';
 const CALL_PHONE_DISPLAY = CALL_PHONE_LINK ? displayPhone(CALL_PHONE_LINK) : '';
 
+// THE CONSENT SENTENCE, AND THERE IS ONLY ONE OF IT.
+//
+// It sits under every box on this site that takes a phone number, and a carrier
+// comparing two of those boxes expects to read the same sentence twice. They
+// drifted apart once already: /sms-terms quoted wording no form had ever shown.
+//
+// WRITTEN HERE AND ONLY HERE FROM NOW ON. Four copies of it already exist in
+// markup - the home page hero, the /bergen advert page, the blockquote on
+// /sms-terms and consentTick() in src/routes/account.js - and test/consent.test.js
+// holds all of them against this one, so a change to any of them fails the
+// suite rather than reaching a carrier. Anything new that asks for a number
+// renders this instead of typing a fifth copy.
+//
+// Plain text, no markup. The two links that follow it on a form are part of the
+// form's own markup, because the blockquote on /sms-terms deliberately does not
+// carry them: it is already on the page they point at.
+const SMS_CONSENT =
+  'By checking this box you agree to receive text messages from lyndry at the ' +
+  'number provided, including messages sent by autodialer. Consent is not a ' +
+  'condition of purchase. Message and data rates may apply. Message frequency ' +
+  'varies. Reply HELP for help, STOP to cancel.';
+
 const site = Object.freeze({
   name: 'LYNDRY',
   legalName: LEGAL_NAME,
   businessAddress: BUSINESS_ADDRESS,
 
   tagline: 'Laundry, handled.',
+
+  // See SMS_CONSENT above. One sentence, held to by a test.
+  smsConsent: SMS_CONSENT,
 
   // THE PICTURE THAT SHOWS WHEN A LINK IS PASTED ANYWHERE - iMessage, Slack,
   // Facebook. Without one a shared link is a line of grey text, which is what

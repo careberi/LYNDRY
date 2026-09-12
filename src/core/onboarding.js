@@ -54,6 +54,10 @@ const CONSENT_SOURCES = [
   'WEB_ORDER',
   'WEB_HERO',
   'WEB_BERGEN',
+  // The offer popup on the marketing pages. Its own value rather than
+  // WEB_HERO's, for the reason DOOR_HANGER has its own: what this records is
+  // WHICH box somebody typed into. Migration 0090.
+  'WEB_POPUP',
   'INBOUND_TEXT',
   'FACEBOOK_FORM',
   'DOOR_HANGER',

@@ -16,6 +16,8 @@ const { site, textUsQrSvg } = require('../web/site');
 const { renderPage } = require('../web/layout');
 const towns = require('../web/towns');
 const structured = require('../web/schema');
+const sitePopup = require('../core/site-popup');
+const popup = require('../web/popup');
 
 // The hub path only, so the sitemap and the router cannot disagree about where
 // it lives. Requiring the router itself would be circular; this will not.
@@ -112,6 +114,10 @@ const PAGES = [
   {
     path: '/start/sent',
     noindex: true,
+    // NO POPUP. They have just given us a number, which is the only thing it
+    // was going to ask for. The cookie set in POST /start already covers this;
+    // saying so here covers the visitor whose browser refused the cookie.
+    popup: false,
     // A LEAD PAGE. The home page form's POST marks a real new customer, and
     // this page counts it once. Every outcome of that form still lands here
     // identically; only a real save carries the marker. See
@@ -136,6 +142,10 @@ const PAGES = [
   {
     path: '/sms-terms',
     file: 'sms-terms.html',
+    // NO POPUP. This is the page a carrier reviewer opens to read the consent
+    // wording, and a discount box over it is the worst possible first
+    // impression at the worst possible moment.
+    popup: false,
     title: 'Messaging terms',
     description: 'Terms for the LYNDRY text messaging program, including how to opt out.',
   },
@@ -152,6 +162,11 @@ const PAGES = [
     // commercial terms either - see the note at the top of the file.
     path: '/for-laundromats',
     file: 'for-laundromats.html',
+    // NO POPUP. A laundromat owner reading our pitch is not somebody to offer
+    // a consumer discount to, and a popup over a sales page is noise on top of
+    // the argument it is making.
+    popup: false,
+
     title: 'For laundromats',
     fullTitle: 'Laundromat Partners, Wash and Fold Work from LYNDRY',
     description:
@@ -161,6 +176,11 @@ const PAGES = [
   {
     path: '/partners',
     file: 'partners.html',
+    // NO POPUP. A laundromat owner reading our pitch is not somebody to offer
+    // a consumer discount to, and a popup over a sales page is noise on top of
+    // the argument it is making.
+    popup: false,
+
     title: 'Partners',
     fullTitle: 'Partner with LYNDRY, Laundromats & Buildings in Bergen County',
     description:
@@ -169,6 +189,11 @@ const PAGES = [
   {
     path: '/partners/thanks',
     noindex: true,
+    // NO POPUP. A laundromat owner reading our pitch is not somebody to offer
+    // a consumer discount to, and a popup over a sales page is noise on top of
+    // the argument it is making.
+    popup: false,
+
     file: 'partners-thanks.html',
     title: 'Thanks',
     description: 'We have your details and will come back to you.',
@@ -268,7 +293,17 @@ function partnerTokens(form = {}, errorMessage = '') {
   };
 }
 
-function render(res, page, extra = {}, status = 200, conversionId = null) {
+// ASYNC SINCE THE POPUP, and it takes the request as well as the response.
+// Whether somebody gets the offer popup depends on a cookie they are carrying
+// and on a promotion in the database, so this can no longer answer from the
+// page definition alone.
+async function render(req, res, page, extra = {}, status = 200, conversionId = null) {
+  // VARY ON THE COOKIE, because the page is no longer the same for everybody.
+  // Nothing caches these responses today; the day something does, a visitor who
+  // dismissed the popup must not have their copy of the page handed to the next
+  // person who arrives.
+  res.set('Vary', 'Cookie');
+
   res.status(status).type('html').send(
     renderPage({
       title: page.title,
@@ -294,6 +329,12 @@ function render(res, page, extra = {}, status = 200, conversionId = null) {
       // why the layout's own default is off.
       tracking: page.tracking !== false,
       conversionId,
+      // THE OFFER POPUP, ON THE MARKETING PAGES AND NOWHERE ELSE. Being in
+      // PAGES is the opt-in, exactly as it is for the Google tag: every entry
+      // is a public page a stranger can land on. It is deliberately not on
+      // /bergen, which is itself a page with one phone box on it, and it can
+      // never reach /account, /pay or /ops, none of which render through here.
+      popupHtml: page.popup === false ? '' : await popup.htmlFor(req),
     })
   );
 }
@@ -346,7 +387,7 @@ for (const page of PAGES) {
     try {
       // A lead page counts a lead only if the form that led here saved one.
       const conversionId = page.leadPage ? adAttribution.takeLead(req, res, page.path) : null;
-      render(res, page, await extraTokensFor(page, req), 200, conversionId);
+      await render(req, res, page, await extraTokensFor(page, req), 200, conversionId);
     } catch (err) {
       next(err);
     }
@@ -538,6 +579,12 @@ router.post('/bergen/join', async (req, res) => {
     if (body.sms_consent !== 'yes') {
       return res.status(400).json({ ok: false, error: 'Please tick the box so we are allowed to text you.' });
     }
+
+    // Somebody who signed up off the advert page is not shown the offer popup
+    // when they come back to lyndry.com. Same cookie, same reasoning as
+    // POST /start: they have given us a number, so there is nothing left to ask
+    // them for. See src/core/site-popup.js.
+    sitePopup.markSeen(res);
 
     const started = await onboarding.startConversation({
       phone,
@@ -741,6 +788,12 @@ const START_PER_PHONE = 3;
 const START_PER_IP = 10;
 const START_WINDOW_MS = 60 * 60 * 1000;
 
+// THE BOXES THAT POST HERE, and what each one is called in the consent record.
+// A hidden field in a form is the visitor's to edit, so it chooses between
+// doors we already know about; an unrecognised value is the hero, which is
+// where the field did not exist at all.
+const START_DOORS = Object.freeze({ popup: 'WEB_POPUP' });
+
 router.post('/start', async (req, res, next) => {
   const form = req.body || {};
 
@@ -751,6 +804,14 @@ router.post('/start', async (req, res, next) => {
   // whether a given person is a LYNDRY customer, and "already registered" is
   // the same leak in a friendlier voice.
   const done = () => res.redirect(303, '/start/sent');
+
+  // WHICH BOX THIS CAME FROM, and only from a list. The popup posts here with
+  // from=popup so its customers are recorded as WEB_POPUP rather than sharing
+  // the hero's source - what this column answers is HOW consent was obtained,
+  // and "a popup over the page" is a different answer from "the form in the
+  // middle of it". Anything else falls back to the hero, so a hand-edited field
+  // can never invent a consent source.
+  const source = START_DOORS[String(form.from || '').trim().toLowerCase()] || 'WEB_HERO';
 
   try {
     // The honeypot, same as the partners form. Anything that fills a field a
@@ -787,6 +848,14 @@ router.post('/start', async (req, res, next) => {
       return res.redirect(303, '/?problem=phone#start');
     }
 
+    // THEY HAVE HAD THEIR TURN AT THE POPUP. Set here rather than on a real
+    // save, and set for every outcome from this point on - an opted-out number,
+    // a throttle, somebody already on the books - because a cookie that
+    // appeared only for a genuine new customer would be a way to find out which
+    // of those happened. The page can read it, so it says nothing the browser
+    // did not already know: somebody typed a number into this form.
+    sitePopup.markSeen(res);
+
     if (
       throttle.hit(`start:phone:${phone}`, START_PER_PHONE, START_WINDOW_MS) ||
       throttle.hit(`start:ip:${req.ip}`, START_PER_IP, START_WINDOW_MS)
@@ -800,7 +869,7 @@ router.post('/start', async (req, res, next) => {
     // the load balancer's.
     const result = await onboarding.startConversation({
       phone,
-      consentSource: 'WEB_HERO',
+      consentSource: source,
       consentIp: req.ip,
     });
 
@@ -864,7 +933,7 @@ const PARTNER_TYPES = { LAUNDROMAT: 'a laundromat', PROPERTY: 'a property manage
 router.post('/partners', async (req, res, next) => {
   const form = req.body || {};
 
-  const fail = (message) => render(res, PARTNERS_PAGE, partnerTokens(form, message), 400);
+  const fail = (message) => render(req, res, PARTNERS_PAGE, partnerTokens(form, message), 400);
 
   try {
     // The honeypot. A person never sees this field; something filling every

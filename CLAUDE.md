@@ -333,6 +333,89 @@ creates the customer. It exists so booked first pickups can be uploaded back to
 Google later. **Never use enhanced conversions** - they send a hashed phone
 number.
 
+### The offer popup
+
+**A box over lyndry.com carrying the first-order offer, with the home page's
+phone field in it.** Neil's ask, 12 September. `src/core/site-popup.js` decides
+whether a visitor gets one, `src/web/popup.js` draws it, `/ops/promotions/:id`
+switches it on and off.
+
+**IT ADVERTISES THE PROMOTION EVERY NEW NUMBER IS ALREADY GIVEN, AND NOTHING
+ELSE.** That is the whole design. The switch in `app_settings.website_popup`
+(migration 0089) is a boolean with **no promotion id beside it**, because
+storing which offer to advertise would be a second copy of a fact the database
+already holds: `promotions.autoGrant()` is what actually lands on somebody's
+account a second after they submit the form. CLAUDE.md already records that
+creating a second automatic promotion stands the first down - so a stored id
+would have left the front page advertising an offer nobody was being given, to
+strangers, before they had typed anything.
+
+**Nothing here grants anything.** The promotion attaches in
+`onboarding.startConversation()` exactly as it does for the hero form. Delete
+this feature tomorrow and every number typed into it still gets the same offer.
+
+**The words are the promotion's `blurb`, and the small print is read off its
+columns.** `promotions.popupOffer()` refuses two ways, and both are existing
+rules rather than new ones: `live()` rather than `honoured()`, so an **ENDED**
+promotion comes off the website the moment it ends; and **no blurb means
+silent** - the AI is told nothing about a blurb-less promotion and says nothing,
+and a popup is the same voice talking to the same customer. A capped promotion
+that has run out is refused in `site-popup.js`, because counting claims is a
+query. **A money cap is said in money** - `freeAllowanceLb()` turns a cap into
+pounds by dividing by the price per pound, which only means anything when the
+offer covers the whole cost, so on a half-price offer it would promise nearly
+twice what the code allows.
+
+**The form is the home page's form.** It posts to `POST /start` with the same
+honeypot, the same throttles and the same consent box, and lands on the same
+`/start/sent`. There is no second path into `customers` and no second consent
+record. The one field the hero does not have is `from=popup`, checked against
+`START_DOORS` - a hidden field is the visitor's to edit, so it picks from a list
+and can never name a consent source of its own.
+
+**It is a plain form behind a script.** A script opens the dialog and nothing
+after that needs scripting. **A browser with scripting off never sees it at
+all**, which is the opposite of the `data-reveal` rule and deliberate: a reveal
+fails safe by showing content, a popup fails safe by never appearing.
+
+**Which pages:** everything in `PAGES` that does not say `popup: false`, plus
+the town pages and `/locations`. Off on `/for-laundromats`, `/partners` and
+`/partners/thanks` (a laundromat owner reading our pitch is not somebody to
+offer a consumer discount to), on `/sms-terms` (the page a carrier reviewer
+opens to read the consent wording), and on `/start/sent` (they have just given
+us the number). Never on `/bergen`, which is itself a page with one phone box on
+it, and it cannot reach `/account`, `/pay` or `/ops`, none of which render
+through `render()`.
+
+**One cookie, `ly_popup`, 30 days, and it is not httpOnly.** Set by the close
+button from the page, and by the server on any `/start` or `/bergen/join`
+submission carrying a readable number. **Set for every outcome from that point
+on** - an opted-out number, a throttle, somebody already on the books - because
+a cookie that appeared only for a real new customer would be a way of finding
+out which of those happened. That is the difference from `ly_conv`, which is
+httpOnly for exactly that reason. When it is present the dialog is **not in the
+markup at all**, the same doctrine as leaving prices out of a driver's page
+rather than hiding them with CSS.
+
+**`render()` sets `Vary: Cookie`.** The page is no longer the same for
+everybody. Nothing caches these responses today; the day something does, one
+visitor's dismissed popup must not be served to the next person who arrives.
+
+**Its own consent source, `WEB_POPUP`** (migration 0090), for the reason
+`DOOR_HANGER` has one: what that column answers is HOW consent was obtained, and
+"a box over the page" is a different answer from "the form in the middle of it".
+It also happens to answer whether the popup is worth having, which is a side
+effect and not the justification.
+
+**The switch lives on the promotion's own page**, behind `service.manage` like
+everything else pre-launch, and shows **the exact sentence a visitor will read**
+above the button - same rule as the nudge panel, a button that publishes words
+nobody has read is not one anybody should press. On any promotion that is not
+the automatic one it explains why it cannot go on the website instead of
+offering a button that would be refused. `sitePopup.forget()` clears the
+ten-second cache on the way out, so somebody who has just pressed it does not
+have to wait.
+
 ### Motion
 
 Three things, all defined in `layout.js` and `lyndry.css`:
@@ -941,6 +1024,7 @@ POST /ops/settings/open      start again
 GET  /ops/promotions         what we are giving away
 POST /ops/promotions         create one
 POST /ops/promotions/:id/end stop new grants; holders keep it
+POST /ops/promotions/:id/popup  show this offer on lyndry.com, or stop
 GET  /ops/broadcast          send one text to everybody
 POST /ops/broadcast          actually send it
 GET  /ops/partners           the businesses we work with, added by hand
@@ -2873,6 +2957,7 @@ their defaults and are changed by texting.
 | `WEB_SIGNUP` | The full signup form. Same box, same evidence |
 | `INBOUND_TEXT` | They texted first. Their own message in the `messages` table |
 | `DOOR_HANGER` | They scanned a card on their front door. Their own message again - what this records is WHICH door, the same reason `WEB_BERGEN` is not folded into `WEB_HERO` |
+| `WEB_POPUP` | The offer box over the marketing pages. Same ticked box and same evidence as the hero form; its own value because what this column answers is WHICH box they typed into |
 
 **THERE ARE THREE DOORS ONTO THE SAME INTRODUCTION, AND ALL THREE HAVE TO KNOW.**
 Somebody hears from us first in one of three ways. Each passes its own opening
@@ -2958,10 +3043,19 @@ offer sentence only** — it used to carry the invitation too, which is why it
 took a `from` argument, and the ask is now its own paragraph in
 `introduction()`.
 
-**The consent checkbox wording appears in three places and must stay identical
-in all of them** — the home page hero, `/signup`, and the blockquote on
-`/sms-terms`. A carrier comparing them expects one sentence. They drifted once
-already and the terms page quoted wording no form had ever shown.
+**THE CONSENT SENTENCE IS WRITTEN ONCE, IN `site.smsConsent`, AND A TEST HOLDS
+EVERY COPY TO IT.** A carrier comparing two of our forms expects to read the
+same sentence twice. It drifted once already and the terms page quoted wording
+no form had ever shown, and nothing caught it.
+
+Five copies of it live in markup, because each sits inside different
+surrounding HTML: the home page hero, the `/bergen` advert form, the blockquote
+on `/sms-terms`, `consentTick()` in `src/routes/account.js`, and the offer
+popup. `test/consent.test.js` flattens the whitespace and holds all of them
+against `site.smsConsent`, and checks that none of the boxes ships pre-ticked.
+**Anything new that asks for a phone number renders `site.smsConsent` rather
+than typing a sixth copy.** If that test fails, the fix is to correct the copy
+that moved, never to loosen the comparison.
 
 **`POST /start` sends a text to a number a stranger typed.** That cannot be
 designed away, only contained: the box must be ticked, the number must parse,

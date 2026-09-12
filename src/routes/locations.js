@@ -37,6 +37,7 @@ const express = require('express');
 const { config } = require('../config');
 const { site } = require('../web/site');
 const { renderPage, escapeHtml, icon } = require('../web/layout');
+const popup = require('../web/popup');
 const towns = require('../web/towns');
 const structured = require('../web/schema');
 
@@ -159,7 +160,7 @@ function cta(town) {
 // ---------------------------------------------------------------------------
 // GET /locations — the hub.
 // ---------------------------------------------------------------------------
-router.get(HUB_PATH, (req, res) => {
+router.get(HUB_PATH, async (req, res) => {
   const index = towns
     .byLetter()
     .map(
@@ -209,6 +210,9 @@ ${priceBlock()}
 
 ${cta(null)}`;
 
+  // The page differs by cookie now that it can carry the offer popup.
+  res.set('Vary', 'Cookie');
+
   return res
     .type('html')
     .send(
@@ -219,6 +223,9 @@ ${cta(null)}`;
         path: HUB_PATH,
         body,
         head: jsonLd(schema({ path: HUB_PATH, areaServed: null })),
+        // The offer popup. These pages are where an ad click lands, so they
+        // are exactly where a stranger meets the offer for the first time.
+        popupHtml: await popup.htmlFor(req),
         // The Google Ads tag. These pages exist to be found in search, so they
         // are where an ad click is most likely to land. See googleTag().
         tracking: true,
@@ -233,7 +240,7 @@ ${cta(null)}`;
 // straight back with next(). A catch-all at the root that answered for every
 // path would swallow the 404 page and every route added after it.
 // ---------------------------------------------------------------------------
-router.get('/:slug', (req, res, next) => {
+router.get('/:slug', async (req, res, next) => {
   const town = towns.bySlug(req.params.slug);
   if (!town) return next();
 
@@ -328,6 +335,8 @@ ${cta(town)}
   </p>
 </section>`;
 
+  res.set('Vary', 'Cookie');
+
   return res
     .type('html')
     .send(
@@ -338,6 +347,7 @@ ${cta(town)}
         path,
         body,
         head: jsonLd([...schema({ path, areaServed: town.name }), faqSchema]),
+        popupHtml: await popup.htmlFor(req),
         tracking: true,
       })
     );

@@ -569,7 +569,7 @@ ${
 // answering two of them.
 
 // One promotion as a campaign card rather than a row.
-function promotionCard(p, counts) {
+function promotionCard(p, counts, popupOn = false) {
   const held = counts[p.id] || { granted: 0, claimed: 0, redeemed: 0 };
   const aud = promotionsCore.audienceOf(p.audience);
   const ended = p.status === 'ENDED';
@@ -608,6 +608,13 @@ function promotionCard(p, counts) {
               : '<span class="badge" style="background:var(--suds-300);">Live</span>'
           }
           ${aud.automatic ? '<span class="badge" style="background:var(--sunbeam-500);">Automatic</span>' : ''}
+          ${
+            // The popup shows the automatic promotion and only that one, so this
+            // badge can never sit on two cards at once. See migration 0089.
+            popupOn && aud.automatic && !ended
+              ? '<span class="badge" style="background:var(--lilac-300);">On the website</span>'
+              : ''
+          }
         </div>
 
         <p style="font-size:17px;font-weight:700;margin:0 0 4px;">
@@ -682,7 +689,92 @@ function promotionCard(p, counts) {
 // One promotion, and every person holding it. The number on the card is a
 // count; this is the list behind it, which is what Neil asked for: not "82
 // issued" but which 82.
-function promotionDetailBody({ promo, holders, notice, problem }) {
+// THE OFFER ON THE WEBSITE.
+//
+// Neil's ask, 12 September: a popup on lyndry.com carrying the first-order
+// offer, switched from in here. The switch is site-wide and holds no promotion
+// id (migration 0089), so this card is the same switch seen from whichever
+// promotion is currently the automatic one.
+//
+// IT ONLY APPEARS ON THE AUTOMATIC PROMOTION, and on any other it explains why
+// rather than offering a button that would be refused. The popup advertises
+// what promotions.autoGrant() hands out and can advertise nothing else: the
+// alternative is a front page promising an offer nobody is being given.
+//
+// The exact sentence a visitor will read is shown above the button, because a
+// button that publishes words nobody has read is not one anybody should press.
+// Same rule as the nudge panel.
+function websiteCard({ promo, popupOn, popupOffer, isAutomatic }) {
+  const heading = '<p class="eyebrow" style="margin:0 0 12px;">On the website</p>';
+
+  if (!isAutomatic) {
+    return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
+    ${heading}
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+      The popup on lyndry.com always shows the automatic promotion, because that
+      is the one a brand new number is actually given. This one is not it, so it
+      cannot go on the website without somebody being promised an offer they
+      would not get.
+    </p>
+  </div>`;
+  }
+
+  if (!popupOffer) {
+    return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
+    ${heading}
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+      This one is silent: there is no sentence for a customer to read, so there
+      is nothing to put in a popup. Give it wording and it can go on the site.
+    </p>
+  </div>`;
+  }
+
+  const terms = (popupOffer.terms || []).map((t) => `<li>${escapeHtml(t)}</li>`).join('');
+
+  return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <p class="eyebrow" style="margin:0;">On the website</p>
+      ${
+        popupOn
+          ? '<span class="badge" style="background:var(--suds-300);">Showing now</span>'
+          : '<span class="badge">Off</span>'
+      }
+    </div>
+
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+      A box over lyndry.com offering this to anybody who has not given us a
+      number yet. It asks for a mobile number with the same consent tick as the
+      home page, and the offer goes on by itself once they are set up. Somebody
+      who closes it, or gives us a number, does not see it again for a month.
+    </p>
+
+    <div style="border:2px solid var(--ink-900);border-radius:12px;background:var(--paper-000);
+                padding:16px 18px;max-width:60ch;">
+      <p class="eyebrow" style="margin:0 0 8px;">What they read</p>
+      <p style="margin:0;font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.15;">
+        ${escapeHtml(popupOffer.headline)}
+      </p>
+      ${
+        terms
+          ? `<ul style="margin:10px 0 0;padding:0;list-style:none;font-size:13px;
+                        line-height:1.5;color:var(--ink-500);">${terms}</ul>`
+          : ''
+      }
+    </div>
+
+    <form method="post" action="/ops/promotions/${promo.id}/popup" style="margin:18px 0 0;">
+      <input type="hidden" name="on" value="${popupOn ? 'no' : 'yes'}">
+      <button class="btn ${popupOn ? 'btn-outline' : 'btn-primary'}" type="submit">
+        ${popupOn ? 'Take it off the website' : 'Show it on the website'}
+      </button>
+    </form>
+  </div>`;
+}
+
+function promotionDetailBody({ promo, holders, notice, problem, popupOn = false, popupOffer = null, isAutomatic = false }) {
   const aud = promotionsCore.audienceOf(promo.audience);
   const tone = { HOLDING: 'var(--suds-300)', USED: 'var(--paper-200)', EXPIRED: 'var(--sunbeam-500)' };
   const words = { HOLDING: 'Holding it', USED: 'Used it', EXPIRED: 'Ran out' };
@@ -756,6 +848,7 @@ function promotionDetailBody({ promo, holders, notice, problem }) {
       : '<span class="badge" style="background:var(--suds-300);">Live</span>'
   }
   ${aud.automatic ? '<span class="badge" style="background:var(--sunbeam-500);">Automatic</span>' : ''}
+  ${popupOn && isAutomatic ? '<span class="badge" style="background:var(--lilac-300);">On the website</span>' : ''}
 </div>
 
 <p style="font-size:18px;font-weight:700;margin:0 0 4px;">${escapeHtml(promotionsCore.describe(promo))}</p>
@@ -763,6 +856,7 @@ function promotionDetailBody({ promo, holders, notice, problem }) {
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
+${websiteCard({ promo, popupOn, popupOffer, isAutomatic })}
 
 <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
   <div style="display:flex;flex-wrap:wrap;gap:40px;">
@@ -797,7 +891,7 @@ ${
 }`;
 }
 
-function promotionsBody({ list, counts, notice, problem }) {
+function promotionsBody({ list, counts, notice, problem, popupOn = false }) {
   const live = list.filter((p) => p.status !== 'ENDED');
   const ended = list.filter((p) => p.status === 'ENDED');
 
@@ -832,7 +926,7 @@ ${banner(problem, 'bad')}
 
 ${
   live.length
-    ? live.map((p) => promotionCard(p, counts)).join('')
+    ? live.map((p) => promotionCard(p, counts, popupOn)).join('')
     : `<div class="card" style="padding:20px 24px;margin-bottom:16px;">
          <p style="margin:0;font-size:16px;">Nothing running. The form below starts one.</p>
        </div>`
@@ -841,7 +935,7 @@ ${
 ${
   ended.length
     ? `<p class="eyebrow" style="margin:30px 0 12px;">Finished</p>
-       ${ended.map((p) => promotionCard(p, counts)).join('')}`
+       ${ended.map((p) => promotionCard(p, counts, popupOn)).join('')}`
     : ''
 }
 

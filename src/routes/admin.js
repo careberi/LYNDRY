@@ -67,6 +67,7 @@ const onboarding = require('../core/onboarding');
 const leads = require('../core/leads');
 const leadOutreach = require('../core/lead-outreach');
 const settings = require('../core/settings');
+const sitePopup = require('../core/site-popup');
 const promotions = require('../core/promotions');
 const promocodes = require('../core/promocodes');
 const fulfilment = require('../core/fulfilment');
@@ -9194,6 +9195,8 @@ router.get('/ops/promotions', guard, withIssues, may('service.manage'), async (r
         active: '/ops/promotions',
         body: promotionsBody({
           list: await promotions.list({ includeEnded: true }),
+          // Which offer, if any, a visitor to lyndry.com is being shown.
+          popupOn: await settings.websitePopup(),
           counts: await promoCounts(),
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
@@ -9226,6 +9229,9 @@ router.get('/ops/promotions/:id', guard, withIssues, may('service.manage'), asyn
         active: '/ops/promotions',
         body: promotionDetailBody({
           promo,
+          popupOn: await settings.websitePopup(),
+          popupOffer: promotions.popupOffer(promo),
+          isAutomatic: Boolean((await promotions.autoGrant() || {}).id === promo.id),
           holders: await promotions.holders(promo.id),
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
@@ -9422,6 +9428,61 @@ router.post('/ops/promotions/:id/issue', guard, may('service.manage'), async (re
           `${result.short ? `, ${result.short} missed out - it has run out` : ''}. ` +
           'Nobody has been texted - the AI mentions it when they next get in touch.'
       )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /ops/promotions/:id/popup - put this offer on the website, or take it off
+//
+// Neil's ask, 12 September. The switch is one boolean in app_settings and the
+// promotion id is NOT stored beside it: the popup always advertises whatever
+// promotions.autoGrant() hands out, so the website cannot get out of step with
+// what a new number is actually given. See migration 0089.
+//
+// THE BUTTON LIVES ON THE PROMOTION ALL THE SAME, because that is the screen
+// somebody is looking at when they decide, and it is the only screen that can
+// show the sentence that will appear. What the route checks is that the
+// promotion being pressed is still the automatic one - a page left open since
+// this morning must not be able to switch on a popup for an offer that was
+// stood down since.
+router.post('/ops/promotions/:id/popup', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = (kind, message) =>
+      res.redirect(303, `/ops/promotions/${req.params.id}?${kind}=${encodeURIComponent(message)}`);
+
+    const on = String((req.body || {}).on || '') === 'yes';
+
+    if (on) {
+      const auto = await promotions.autoGrant();
+
+      if (!auto || auto.id !== req.params.id) {
+        return back(
+          'problem',
+          'Only the automatic promotion can go on the website, because that is the one a new number is actually given.'
+        );
+      }
+
+      // A promotion with no blurb is silent - the AI is told nothing about it
+      // and says nothing. A popup is the same voice, so it has nothing to say
+      // either, and switching it on would put an empty box in front of people.
+      if (!promotions.popupOffer(auto)) {
+        return back('problem', 'This one has no sentence for a customer to read, so there is nothing to show.');
+      }
+    }
+
+    await settings.setWebsitePopup(on, req.opsUser && req.opsUser.id);
+
+    // The offer is cached for a few seconds so every page view is not a query.
+    // Somebody who has just pressed this button must not have to wait for that.
+    sitePopup.forget();
+
+    return back(
+      'note',
+      on ? 'It is on the website now.' : 'Taken off the website. Nothing else about the promotion changed.'
     );
   } catch (err) {
     return next(err);
