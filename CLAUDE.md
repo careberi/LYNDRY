@@ -3472,11 +3472,21 @@ rule is only about text messages.
 - **Price:** $2.00 per pound, weighed after pickup. The one source of
   truth is `pricing.perPoundCents` in `src/config.js`; this line is a
   description of it and drifted from it once already
-- **Turnaround:** next day, and the clock means it. A bag is due back by the
-  end of the day after collection — the end of the last pickup window, derived
-  from `PICKUP_WINDOWS` so changing the windows moves the promise. It used to
-  be a flat 24 hours from collection, which gave two customers on the same
-  round deadlines eight hours apart and matched nothing either was told
+- **Turnaround:** next day, and the clock means it. A bag is due back **by the
+  end of the day after collection** - the whole of day two, to 23:59.
+  `booking.endOfPromiseDay()`, read by both `fulfilment.dueAt()` and the
+  routing board's `promiseMinutes`, so the badge on an order and the laundromat
+  chosen for it cannot disagree about when it is late.
+
+  **Two wrong versions have shipped and neither may come back.** A flat 24 hours
+  from collection gave two customers on one round deadlines eight hours apart
+  and matched nothing either was told. Then it became the end of the last
+  **pickup** window, which let the hours we offer to COLLECT in decide when a
+  DELIVERY was late - Neil, 13 September, reading "9h 51m left" on #2060: *"we
+  have the whole day 2 to drop it off... not until we are closed. we have until
+  day 2 is over."* A customer handed their laundry back at seven in the evening
+  on day two got exactly what they were promised, and the old figure called it
+  overdue an hour earlier. `test/turnaround.test.js` pins both
 - **Scheduling:** pickup whenever the customer needs — no fixed route days
 - **Model:** door-to-door pickup, for **houses and apartments alike**. An
   apartment customer puts their unit on `address_line2` and the driver comes to

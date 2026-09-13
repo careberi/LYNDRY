@@ -909,11 +909,14 @@ function nextSteps(order) {
 // finished. Two customers on the same route had deadlines eight hours apart
 // and neither matched what they were told.
 //
-// Now both are due by the end of the day after we collected - the end of the
-// last window the van runs, which is where `endOfDeliveryDay()` comes from
-// rather than being written down again here. So the time a bag has is exactly
-// "the rest of today, plus tomorrow up to the last delivery", and a late
+// Now both are due by the END OF THE DAY after we collected. So the time a bag
+// has is exactly "the rest of today, plus the whole of tomorrow", and a late
 // pickup honestly has less of it.
+//
+// IT WAS THE END OF THE LAST PICKUP WINDOW UNTIL 13 SEPTEMBER, which let the
+// hours we offer to COLLECT in decide when a DELIVERY was late. Neil, reading
+// "9h 51m left" on #2060: "we have the whole day 2 to drop it off... not until
+// we are closed. we have until day 2 is over." See booking.endOfPromiseDay().
 //
 // Returns null for anything not yet collected or already delivered, because a
 // countdown only means something while we are holding somebody's clothes.
@@ -926,7 +929,7 @@ function dueAt(order) {
   // pickup's deadline forward a whole day.
   const collectedOn = booking.serviceDateOf(order.collected_at);
 
-  return booking.instantAt(booking.addDays(collectedOn, 1), booking.endOfDeliveryDay());
+  return booking.instantAt(booking.addDays(collectedOn, 1), booking.endOfPromiseDay());
 }
 
 function turnaround(order) {

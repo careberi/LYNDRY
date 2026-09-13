@@ -133,11 +133,29 @@ function instantAt(iso, hhmm) {
   return naive - offsetAt(first);
 }
 
-// The hour by which a bag has to be back: the end of the last window the van
-// runs. Derived rather than written down again, so changing the windows moves
-// the promise with them.
-function endOfDeliveryDay() {
-  return PICKUP_WINDOWS[PICKUP_WINDOWS.length - 1].end;
+// THE MOMENT THE NEXT-DAY PROMISE RUNS OUT: the end of the day, not the end of
+// the round.
+//
+// Neil, 13 September, reading "9h 51m left" on order #2060: "if we have picked
+// up the order on day 1, we have the whole day 2 to drop it off, not 24hrs
+// after we picked it up, not until we are closed. we have until day 2 is over."
+//
+// IT USED TO BE THE LAST PICKUP WINDOW, AND THAT WAS AN ASSUMPTION NOBODY MADE
+// ON PURPOSE. It read PICKUP_WINDOWS and took the end of the last one - so the
+// hours we offer to COLLECT in were quietly deciding when a DELIVERY was late.
+// Those are different questions: a customer who gets their laundry back at
+// seven in the evening on day two has been given exactly what they were
+// promised, and the old figure called it overdue an hour earlier.
+//
+// The comment here used to say deriving it from the windows meant changing them
+// moved the promise, which was true and was the problem. A promise made to a
+// customer should not move because the van started finishing earlier.
+//
+// 23:59 rather than 24:00 because the day is named by its own date; a minute is
+// not worth the confusion of a deadline stamped on the day after the one it
+// belongs to.
+function endOfPromiseDay() {
+  return '23:59';
 }
 
 // 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones naive versions
@@ -1312,7 +1330,7 @@ module.exports = {
   SERVICE_TZ,
   addDays,
   instantAt,
-  endOfDeliveryDay,
+  endOfPromiseDay,
   PICKUP_WINDOWS,
   windowFor,
   cannotDoThatTime,

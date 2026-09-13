@@ -635,7 +635,7 @@ async function planPartnerFor(order, customer) {
       // charge implies - the same estimate the routing board uses.
       poundsToAdd: assumedPounds(customer),
       onward: null,
-      promiseMinutes: 24 * 60 + toMinutesOfDay(booking.endOfDeliveryDay()),
+      promiseMinutes: 24 * 60 + toMinutesOfDay(booking.endOfPromiseDay()),
     });
 
     return choice.chosen || null;
@@ -1079,11 +1079,16 @@ async function board(dateIso, fromTime, driverId = null) {
   const firstDelivery = deliverStops.find((s) => s.at);
   const onward = firstDelivery ? firstDelivery.at : base;
 
-  // WHEN A BAG DROPPED NOW HAS TO BE BACK ON THE VAN. The promise is the end of
-  // tomorrow's last window, so a laundromat has until then to finish - anything
+  // WHEN A BAG DROPPED NOW HAS TO BE BACK ON THE VAN. The promise runs to the
+  // end of tomorrow, so a laundromat has until then to finish and anything
   // slower breaks it. Expressed in minutes from the start of today so it can be
   // compared against a turnaround.
-  const promiseMinutes = 24 * 60 + toMinutesOfDay(booking.endOfDeliveryDay());
+  //
+  // THE SAME FIGURE THE COUNTDOWN USES, deliberately. If the badge on an order
+  // and the laundromat we choose for it disagreed about when it is late, one of
+  // them would be picking a partner that cannot keep a promise the other is
+  // still counting down.
+  const promiseMinutes = 24 * 60 + toMinutesOfDay(booking.endOfPromiseDay());
 
   const choice = chooseLaundromat(fromPoint, partnerRows, {
     weekday,
