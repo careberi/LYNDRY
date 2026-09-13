@@ -2824,9 +2824,9 @@ customer ended up with a Link payment method carrying no card at all. No
 argument to the session removes it - only switching Link off for the account
 does.
 
-So the live account now has **Cards and Apple Pay enabled and nothing else**.
-Amazon Pay, Cash App Pay, Klarna, Affirm, BLIK, EPS and Link were all switched
-off. Six of those seven changed nothing on our pages, because the code already
+So the live account now has **Cards, Apple Pay and Google Pay enabled and
+nothing else**. Amazon Pay, Cash App Pay, Klarna, Affirm, BLIK, EPS and Link
+were all switched off. Six of those seven changed nothing on our pages, because the code already
 refused them; they are off as a safety net, so the day somebody adds a payment
 surface and forgets to name the type, the account cannot volunteer Klarna.
 
@@ -2834,10 +2834,17 @@ surface and forgets to name the type, the account cannot volunteer Klarna.
 is offered. The account decides what exists, and it is the only thing that can
 reach the Link enrolment box.
 
-**Google Pay is NOT enabled on the account**, which is worth knowing before
-anybody repeats the claim in the paragraph above: the code permits it, the
-account has it switched off, so it cannot appear. Enabling it is a dashboard
-decision nobody has taken.
+**All three that remain are cards**, which is the whole rule in one line: Apple
+Pay and Google Pay are a card with a token in front of it, they charge
+off-session like any other card, and they report a brand and a last four so a
+decline text can say "your Visa ending 4242" rather than "your card". That
+sentence is what gets somebody to act, and losing it is what made #2060 so hard
+to sort out.
+
+**The last four on a wallet is the DEVICE's, not the one printed on the card.**
+Worth knowing before somebody reports it as a bug: a customer looking at their
+Visa may see different digits from the ones we texted them. Still far better
+than naming nothing.
 
 **Wallets on our OWN page may need the domain registered.** Apple Pay and Google
 Pay appear on Stripe's hosted page automatically; inside `/account` the card
