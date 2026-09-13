@@ -19,7 +19,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { updateCardText } = require('../src/core/billing');
+const { updateCardText, holdingItBack } = require('../src/core/billing');
 const { site } = require('../src/web/site');
 
 const PAY_URL = 'https://lyndry.com/pay/zZyU4MzZN10UJccgk-iKYldS';
@@ -59,14 +59,36 @@ test('IT CARRIES BOTH ROUTES: the link to tap and the address to type', () => {
 test('it says why while the laundry is still ours', () => {
   // Neil's rule: "we just need the payment method updated before we make
   // delivery." Saying so is the difference between a request and a mystery.
-  assert.match(held(), /before your laundry can go back out/i);
+  assert.match(held(), /before your laundry can go out for delivery/i);
 });
 
 test('and does NOT once the laundry is back with them', () => {
   // By then it would be a threat about nothing.
   const delivered = held({ holding: false });
-  assert.ok(!/go back out/i.test(delivered), delivered);
+  assert.ok(!/go out for delivery/i.test(delivered), delivered);
   assert.ok(delivered.includes(PAY_URL), delivered);
+});
+
+test('IT ASKS FOR A PAYMENT METHOD, NOT A CARD', () => {
+  // Shamar never saved a card - he saved a Link wallet, which is why we hold
+  // no brand and no last four for him. "Your card" names something he does
+  // not have, and the same is true of anybody paying by wallet.
+  for (const text of [held(), held({ priceCents: null })]) {
+    assert.ok(!/card/i.test(text), `still says card: ${text}`);
+  }
+});
+
+test('THE REASON IS ONLY CLAIMED WHILE IT IS TRUE, AND OUT_FOR_DELIVERY IS NOT', () => {
+  // The van is on its way back with it. Saying "before your laundry can go out
+  // for delivery" there promises to withhold something already gone, and
+  // contradicts the standing rule that a declined card never holds up a
+  // delivery. IN_OUR_HANDS counts it; this sentence must not.
+  assert.ok(holdingItBack('IN_PROCESS'));
+  assert.ok(holdingItBack('AT_PARTNER'));
+  assert.ok(holdingItBack('READY'));
+  assert.ok(!holdingItBack('OUT_FOR_DELIVERY'), 'the van has already left');
+  assert.ok(!holdingItBack('DELIVERED'));
+  assert.ok(!holdingItBack('REQUESTED'));
 });
 
 test('it is asked for, never threatened', () => {

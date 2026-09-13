@@ -3177,12 +3177,25 @@ reader still has the safe route.
 
 **It says why while the laundry is still ours, and not once it is back.** Neil's
 rule, same day: *"we just need the payment method updated before we make
-delivery."* `orders.IN_OUR_HANDS` decides, so the sentence is in a text about a
-bag on a laundromat floor and out of one about a bag already on a doorstep,
-where it would be a threat about nothing. **It is asked for, never threatened** -
-nothing in it says we are keeping anybody's clothes, and a test refuses the
-words that would. Two segments with the link in it, and `test/update-card-text.test.js`
-holds it to that ceiling.
+delivery."* So the sentence is in a text about a bag on a laundromat floor and
+out of one about a bag already on a doorstep, where it would be a threat about
+nothing.
+
+**`billing.holdingItBack()` decides, and it is NOT `orders.IN_OUR_HANDS`** -
+that list counts `OUT_FOR_DELIVERY`, and on that one "before your laundry can go
+out for delivery" promises to withhold laundry already in the van on its way
+back. Both a contradiction and against the standing rule that a declined card
+never holds up a delivery. It is derived from `IN_OUR_HANDS` minus that one
+status rather than typed out, so a status added there is still considered here.
+
+**IT ASKS FOR A PAYMENT METHOD, NOT A CARD.** Neil's wording, and it is more
+than tidier: Shamar never saved a card, he saved a Link wallet, so "your card"
+names something he does not have. True of anybody paying by wallet, which is
+why a test refuses the word outright.
+
+**It is asked for, never threatened** - nothing in it says we are keeping
+anybody's clothes, and a test refuses the words that would. Two segments with
+the link in it, and `test/update-card-text.test.js` holds it to that ceiling.
 
 **The screen says the words afterwards, not "sent".** Same rule as the nudge
 panel: a button that texts a customer something nobody has read is not one

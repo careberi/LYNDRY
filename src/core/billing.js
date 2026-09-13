@@ -342,17 +342,34 @@ function updateCardText({ orderNumber, priceCents, url, holding = false }) {
 
   const opening = owed
     ? `Order #${orderNumber} came to ${money(priceCents)} and the payment didn't go through, so nothing has been taken.`
-    : `We need a new card for order #${orderNumber}. Nothing has been taken.`;
+    : `We need a new payment method for order #${orderNumber}. Nothing has been taken.`;
 
-  // Asked for, never threatened. "We need a card before it can go back out" is
-  // a thing they can act on; "we are keeping your laundry" is a standoff.
-  const why = holding ? ` We need a working card before your laundry can go back out.` : '';
+  // Asked for, never threatened. "We need a payment method before it can go
+  // out" is a thing they can act on; "we are keeping your laundry" is a
+  // standoff.
+  //
+  // IT SAYS PAYMENT METHOD, NOT CARD, and that is not only tidier wording.
+  // Shamar never saved a card - he saved a Link wallet, which is why we hold no
+  // brand and no last four for him - so "your card" names something he does not
+  // have. The same is true of anybody paying by wallet.
+  const why = holding
+    ? ` We need a working payment method before your laundry can go out for delivery.`
+    : '';
 
   const where = url
     ? ` Update it here: ${url} or at ${site.domain}/account.`
     : ` Update it at ${site.domain}/account - sign in with this number.`;
 
   return `${opening}${why}${where}`;
+}
+
+// The statuses where "before your laundry can go out for delivery" is a true
+// sentence: we have it, and it has not set off back yet. Derived from
+// IN_OUR_HANDS so a status added there is still considered here, and required
+// lazily for the same reason the caller below did.
+function holdingItBack(status) {
+  const { IN_OUR_HANDS } = require('./orders');
+  return IN_OUR_HANDS.includes(status) && status !== 'OUT_FOR_DELIVERY';
 }
 
 // The whole message, with a link minted only for the people who are being sent
@@ -366,8 +383,13 @@ async function updateCardMessage(order, customer) {
     orderNumber: order.order_number,
     priceCents: order.price_cents,
     url,
-    // Only while the bags are actually with us.
-    holding: require('./orders').IN_OUR_HANDS.includes(order.status),
+    // ONLY WHILE IT CAN STILL BE TRUE, WHICH IS NOT EVERY STATUS WE HOLD IT IN.
+    // IN_OUR_HANDS counts OUT_FOR_DELIVERY, and on that one the sentence would
+    // promise to withhold laundry that is already in the van on its way back -
+    // both a contradiction and against the standing rule that a declined card
+    // never holds up a delivery. Derived from IN_OUR_HANDS rather than typed
+    // out, so a status added there is still considered here.
+    holding: holdingItBack(order.status),
   });
 }
 
@@ -685,6 +707,7 @@ module.exports = {
   createInlineCardSetup,
   setupLinkMessage,
   updateCardText,
+  holdingItBack,
   updateCardMessage,
   recordSavedCard,
   chargeOrder,
