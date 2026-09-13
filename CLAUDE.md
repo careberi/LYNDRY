@@ -1705,6 +1705,52 @@ door. At the door the scan is a confirmation, not a search, and a multi-bag
 order will not complete until every bag has been scanned. Stop numbers are
 cleared on delivery: they describe one afternoon, not the order.
 
+**THE PHONE'S OWN CAMERA IS A SCANNER, AND IT IS THE ONE THAT ALWAYS WORKS.**
+Neil, 12 September: the in-page scanner "doesn't read the code", and his fix is
+the one the laundromat has always used - point the real camera at the QR, let it
+open the URL, and take the code out of that.
+
+Three moves:
+
+1. Any ops screen with a scan box drops a crumb, `ly_scan`, holding the path the
+   driver is standing on.
+2. He scans with the camera app, which opens `https://lyndry.com/o/<code>` - the
+   laundromat's page, and for everybody else it still is.
+3. Seeing the crumb, that page sends him **back to the screen he came from** with
+   `?code=<code>` on the end, and the box is filled when he lands.
+
+**It fills the box; it does not press the button.** Neil's words were "determine
+what code should be entered into the entry box", and stopping there is right:
+the tap he still makes is the driver saying this is the bag in his hand, which
+is the whole reason the step exists.
+
+**It never acts on a GET.** Nothing is bound, ticked or written. A scan that
+acted would act again on a refresh or a back button, which is exactly what
+`?done=` and `?problem=` exist to prevent everywhere else in ops.
+
+**The crumb is not a credential.** It holds a path and nothing else; it only ever
+sends somebody to a page that asks them to sign in on its own; and
+`scanner.scanReturn()` refuses anything that is not under `/ops`, anything with
+a scheme, a protocol-relative `//`, or a backslash. Without that check a page
+with **no login at all** becomes an open redirector on lyndry.com, which is a
+ready-made phishing link - so the refusals are what `test/scan-return.test.js`
+mostly pins.
+
+**It deliberately does not depend on the ops session cookie.** That one is
+`SameSite=Strict`, and whether a browser hands a Strict cookie to a link opened
+from the camera app is not something to bet a driver's afternoon on. If his
+session has lapsed he lands on the sign-in page, which is honest.
+
+**The in-page scanner stays**, and so does jsQR. It is one tap when it works.
+What could not be established is why it does not: the vendored decoder is served
+correctly, the URL regex is right, the video carries `playsinline`, and jsQR was
+tested directly against a rendered tag at every size down to a fifth of the
+frame - it reads them all. Whatever is wrong is in the lens rather than the code,
+and reproducing it needs the driver's own phone. **That is the argument for this
+change rather than against it**: the camera app has autofocus, exposure, a torch
+and years of tuning that a canvas and 250 KB of JavaScript will never match.
+
+
 **The camera is an accelerator, never the mechanism.** Every scan field is a
 plain text box in a plain form. `BarcodeDetector` fills it where it exists, and
 the button is hidden where it does not — which includes every iPhone. Never use

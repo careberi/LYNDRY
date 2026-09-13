@@ -3,6 +3,13 @@
 const bags = require('../core/bags');
 const { CSS_BASE } = require('./assets');
 
+// The crumb a driver's scan screen leaves so a code scanned with the phone's
+// own camera knows where to come back to. Fifteen minutes: long enough for a
+// driver to find the tag on a bag, short enough that it is not still lying
+// around next time he opens a sticker on a different job.
+const CRUMB = 'ly_scan';
+const CRUMB_MINUTES = 15;
+
 // ---------------------------------------------------------------------------
 // Scanning a bag label with the phone's camera.
 //
@@ -34,6 +41,78 @@ const { CSS_BASE } = require('./assets');
 // about a megabyte on every page load, and wrong about 250 KB, cached for a
 // year, on the one tap that needs it.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// SCANNING WITH THE PHONE'S OWN CAMERA, WHICH IS THE ONE THAT ALWAYS WORKS.
+//
+// Neil, 12 September: the in-page scanner "doesn't read the code", and his fix
+// is the one the laundromat has always used - point the phone's real camera at
+// the QR, let it open the URL, and take the code out of that.
+//
+// It is the right answer whatever is wrong with the in-page decoder, and that
+// is the point of it. The camera app is the best QR reader on any phone: it has
+// the autofocus, the exposure, the torch and years of tuning that a canvas and
+// 250 KB of JavaScript cannot match. Our decoder stays as the one-tap path when
+// it works; this is the one that cannot not work.
+//
+// HOW IT HANGS TOGETHER, IN THREE MOVES:
+//
+//   1. Any driver screen with a scan box on it drops a crumb - ly_scan, the
+//      path he is standing on.
+//   2. He scans with the camera app, which opens https://lyndry.com/o/<code>.
+//      That page is the laundromat's, and for anybody else it still is.
+//   3. Seeing the crumb, it sends him straight back to the screen he came from
+//      with ?code=<code> on the end, and the box is filled in when he lands.
+//
+// IT FILLS THE BOX; IT DOES NOT PRESS THE BUTTON. Neil's words were "determine
+// what code should be entered into the entry box", and he is right to stop
+// there: the tap he still makes is the driver saying this is the bag in his
+// hand, which is the whole reason the step exists.
+//
+// AND IT NEVER ACTS ON A GET. A scan that bound a tag by being opened would
+// bind it again on a refresh or a back button, which is exactly what ?done= and
+// ?problem= exist to prevent everywhere else in ops.
+//
+// THE CRUMB IS NOT A CREDENTIAL AND IS NOT TREATED AS ONE. It holds a path and
+// nothing else, it only ever sends somebody to a page that will ask them to
+// sign in on its own, and it is refused unless it starts with /ops/ - without
+// that check this route would be an open redirector on our own domain, which is
+// a ready-made phishing link. It deliberately does NOT depend on the ops
+// session cookie being sent: that one is SameSite=Strict, and whether a browser
+// hands a Strict cookie to a link opened from the camera app is not something
+// to bet a driver's afternoon on.
+// ---------------------------------------------------------------------------
+
+// Where a scanned code should be handed back to, or null if nowhere safe.
+function scanReturn(crumb, code) {
+  const path = String(crumb || '').trim();
+  const clean = String(code || '').trim();
+
+  if (!path || !clean) return null;
+
+  // A path on this site, under /ops, and nothing clever. No scheme, no host, no
+  // protocol-relative "//evil.example" - each of which would turn this into a
+  // redirect somebody could aim anywhere.
+  if (!path.startsWith('/ops/')) return null;
+  if (path.startsWith('//')) return null;
+  if (path.includes('://')) return null;
+  if (path.includes('\\')) return null;
+
+  // The code is ours to trust only as far as its shape: it came out of a URL
+  // somebody pointed a camera at.
+  if (!/^[0-9A-Za-z-]{1,16}$/.test(clean)) return null;
+
+  const [bare, query = ''] = path.split('?');
+
+  // Any code already on the crumb is last scan's, so it goes rather than
+  // stacking up.
+  const kept = query
+    .split('&')
+    .filter((pair) => pair && !pair.startsWith('code='))
+    .join('&');
+
+  return `${bare}?${kept ? `${kept}&` : ''}code=${encodeURIComponent(clean)}`;
+}
 
 // A scan field: the input, the camera button, and the viewfinder.
 //
@@ -89,6 +168,14 @@ function scanField({
     <button type="button" class="btn btn-outline btn-lg btn-full scan-open"
             style="margin-top:${cameraOnly ? '0' : '12'}px;display:none;">Scan with the camera</button>
 
+    <!-- ALWAYS OFFERED, and not hidden behind anything. The camera app on the
+         driver's phone is a better QR reader than ours will ever be, and it is
+         the path that works when ours does not. Scanning there opens
+         /o/<code>, which sends him back here with the code in the box. -->
+    <p class="field-hint" style="margin-top:8px;">
+      Or point your phone's camera at the QR and open the link.
+    </p>
+
     <div class="scan-stage" style="margin-top:12px;display:none;">
       <video class="scan-video" playsinline muted
              style="width:100%;border:2px solid var(--ink-900);border-radius:12px;background:var(--ink-900);"></video>
@@ -111,7 +198,55 @@ function scannerScript() {
 (function () {
   'use strict';
 
-  // No camera at all means no camera button. Everything still works by hand.
+  // --- THE PHONE'S OWN CAMERA, WHICH IS THE ONE THAT ALWAYS WORKS ---------
+  //
+  // This runs before the early return below on purpose. A phone with no
+  // getUserMedia at all still wants this path, and it is the path that does not
+  // depend on us decoding anything.
+  var forms = document.querySelectorAll('.scan-form');
+
+  if (forms.length) {
+    // Leave a crumb so a code scanned in the camera app knows where to come
+    // back to. A path and nothing else; /o/<code> refuses anything not under
+    // /ops, and the page it lands on asks for a sign-in on its own.
+    try {
+      document.cookie =
+        'ly_scan=' + encodeURIComponent(location.pathname + location.search) +
+        '; Max-Age=900; Path=/; SameSite=Lax' +
+        (location.protocol === 'https:' ? '; Secure' : '');
+    } catch (e) {
+      // A browser refusing cookies costs the shortcut and nothing else.
+    }
+
+    // And if we have just come back from one, put it in the box. FILLED, NOT
+    // SENT: the tap that follows is the driver saying this is the bag in his
+    // hand, which is the whole reason the step exists.
+    var came = null;
+    try {
+      came = new URLSearchParams(location.search).get('code');
+    } catch (e) {
+      came = null;
+    }
+
+    if (came) {
+      forms.forEach(function (form) {
+        var box = form.querySelector('.scan-input');
+        if (!box || box.value) return;
+        box.value = came.toUpperCase();
+
+        // A camera-only form hides its box so a code cannot be typed INSTEAD of
+        // scanned. This code came off a real scan, so the box is shown: he is
+        // confirming a bag, not typing his way past the rule.
+        var typed = form.querySelector('.scan-typed');
+        var label = form.querySelector('label.eyebrow');
+        if (typed) typed.style.display = 'flex';
+        if (label) label.style.display = '';
+      });
+    }
+  }
+
+  // No camera API means no in-page camera button. Everything above still works,
+  // and so does typing.
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
 
   var native = null;
@@ -299,4 +434,4 @@ function describeCodeFormat() {
   return `${bags.CODE_LENGTH} characters. O reads as zero and I or L as one, so a misread still finds the right bag.`;
 }
 
-module.exports = { scanField, scannerScript, describeCodeFormat };
+module.exports = { scanField, scannerScript, describeCodeFormat, scanReturn, CRUMB };

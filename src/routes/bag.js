@@ -13,6 +13,27 @@ const orderEvents = require('../core/order-events');
 const partnersCore = require('../core/partners');
 const { config } = require('../config');
 const { sendAndLog } = require('../core/notify');
+const scanner = require('../web/scanner');
+
+// The crumb a driver's scan screen leaves behind. A third copy of this reader
+// in the codebase and deliberately not a shared one: it is a header split on
+// semicolons, and three unrelated features depending on one helper is the
+// worse trade.
+function readCookie(req, name) {
+  const header = (req && req.headers && req.headers.cookie) || '';
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i !== -1 && part.slice(0, i).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(i + 1).trim());
+      } catch (e) {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 const { site } = require('../web/site');
 const { escapeHtml, CSS_BASE, logo } = require('../web/layout');
 
@@ -1031,6 +1052,36 @@ router.get('/o/:code', async (req, res, next) => {
     if (!code || !bags.verifyCode(code, req.query.t)) {
       await bags.recordScan({ code: raw, outcome: 'BAD_TOKEN', ip, userAgent });
       return res.status(404).type('html').send(nothingHere(req));
+    }
+
+    // ---------------------------------------------------------------------
+    // A DRIVER SCANNED THIS WITH HIS OWN CAMERA. SEND HIM BACK.
+    //
+    // Neil, 12 September: the in-page scanner "doesn't read the code", and the
+    // way through is the one the laundromat has always used - point the phone's
+    // real camera at the QR, which opens this page, and take the code out of
+    // the URL. The camera app has the autofocus, the exposure and the torch
+    // that a canvas and 250 KB of JavaScript never will.
+    //
+    // The crumb is dropped by any ops screen with a scan box on it. It holds a
+    // path and nothing else, scanner.scanReturn() refuses anything that is not
+    // under /ops, and the page it lands on asks for a sign-in on its own - so
+    // this is not a credential and is not an open redirector.
+    //
+    // IT HANDS THE CODE BACK AND DOES NOTHING ELSE. No tag is bound, no bag is
+    // ticked, nothing is written. A GET that acted would act again on a refresh
+    // or a back button, which is the whole reason every other ops action
+    // answers with ?done= on a redirect.
+    //
+    // Checked AFTER the signature above, so a guessed code cannot bounce
+    // somebody into ops, and BEFORE the scan is recorded, because a driver
+    // passing through is not a laundromat reading a bag's instructions.
+    const back = scanner.scanReturn(readCookie(req, scanner.CRUMB), code);
+    if (back) {
+      // Spent. The screen he lands on drops a fresh one, so the next bag works
+      // the same way and a stale path cannot send him somewhere he has left.
+      res.clearCookie(scanner.CRUMB, { path: '/' });
+      return res.redirect(303, back);
     }
 
     // AN ORDER TAG FIRST, A BAG STICKER SECOND.
