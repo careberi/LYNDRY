@@ -69,9 +69,31 @@ async function createSetupLink({ stripeCustomerId, lyndryCustomerId, returnUrl, 
     customer: stripeCustomerId,
     currency: 'usd',
 
-    // Deliberately not listing payment_method_types: left off, Stripe offers
-    // whatever suits the customer's device — cards always, plus Apple Pay or
-    // Google Pay where they are set up.
+    // CARDS, AND ONLY CARDS. Named explicitly, which is the opposite of what
+    // this did for months.
+    //
+    // It used to leave the list off, with a comment saying that meant "cards
+    // always, plus Apple Pay or Google Pay". That was true when it was written
+    // and stopped being true the moment more payment methods were switched on
+    // in the Stripe account: on 12 September this page was really offering
+    // card, Klarna, Link, Cash App Pay and Amazon Pay.
+    //
+    // WHY IT MATTERS HERE AND NOT ON AN ORDINARY CHECKOUT: nothing is charged
+    // on this page. We are storing something to charge days later with nobody
+    // at a keyboard, and several of those methods cannot be charged that way at
+    // all. Order #2060's customer saved Link, was charged $84.00 off-session at
+    // the laundromat, and was refused - and because a wallet carries no card
+    // object, we could not even tell them which card had failed. Their text
+    // said "your card" rather than "your Visa ending 4242".
+    //
+    // Apple Pay and Google Pay are unaffected: they are cards, and they ride on
+    // this type. What goes is everything that is not one.
+    //
+    // This ALSO removes Link, which is its own payment method type rather than
+    // part of 'card' - checked against Stripe rather than assumed. Putting Link
+    // back is adding 'link' to this array, and it is a decision about
+    // conversion against being able to name somebody's card back to them.
+    payment_method_types: ['card'],
 
     setup_intent_data: {
       metadata: { lyndry_customer_id: lyndryCustomerId },
@@ -120,9 +142,16 @@ async function createSetupIntent({ stripeCustomerId, lyndryCustomerId }) {
     // decides which cards Stripe will accept here at all.
     usage: 'off_session',
 
-    // Same as the hosted page: not listing types leaves Stripe to offer
-    // whatever suits the device, cards always plus Apple or Google Pay.
-    automatic_payment_methods: { enabled: true },
+    // CARDS, AND ONLY CARDS - see the same change on the hosted page above,
+    // which this has to match: they are two doors onto one act and a customer
+    // must not be offered something on one that the other refuses.
+    //
+    // automatic_payment_methods was worse here than on the hosted page. Asked
+    // on 12 September, this intent offered card, Bancontact, Klarna, Link, Cash
+    // App Pay, Amazon Pay, Kakao Pay and Naver Pay - Belgian and Korean
+    // methods, to a laundry round in Bergen County, every one of them saved
+    // against a charge we make days later while the customer is asleep.
+    payment_method_types: ['card'],
 
     metadata: { lyndry_customer_id: lyndryCustomerId },
   });

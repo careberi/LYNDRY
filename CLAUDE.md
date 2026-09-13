@@ -2728,6 +2728,41 @@ runs on two.
 
 ## Payments
 
+**THE CARD PAGE SAVES CARDS, AND ONLY CARDS.** Both surfaces name
+`payment_method_types: ['card']` - the hosted page in `createSetupLink()` and
+the field on our own page in `createSetupIntent()`. They have to match: two
+doors onto one act, and a customer must not be offered on one what the other
+refuses.
+
+**Neither listed its types until 12 September**, and the comment saying that
+meant "cards always, plus Apple Pay or Google Pay" was true when it was written
+and false by the time it mattered. Asked directly that day, the hosted page was
+offering **card, Klarna, Link, Cash App Pay and Amazon Pay**, and our own page
+was additionally offering **Bancontact, Kakao Pay and Naver Pay** - Belgian and
+Korean methods, to a laundry round in Bergen County.
+
+**Why it matters here and not on an ordinary checkout: nothing is charged on
+this page.** We are storing something to charge days later with nobody at a
+keyboard, and several of those cannot be charged that way at all. Order #2060's
+customer saved Link, was charged $84.00 off-session at the laundromat, and was
+refused - and because a wallet carries no card object we could not name the card
+back to them. Their text read "your card" rather than "your Visa ending 4242",
+which is the sentence that actually gets somebody to act.
+
+**Apple Pay and Google Pay are unaffected.** They are cards and they ride on
+this type.
+
+**This also removes Link, which is a payment method type of its own rather than
+part of `card`** - checked against Stripe rather than assumed. Putting it back
+is adding `'link'` to both arrays, and it is a real trade: Link saves a card in
+one tap and costs us the ability to say whose card failed. Neil's call, taken as
+part of restricting to cards on 12 September.
+
+**`test/payment-methods.test.js` reads the source**, which nothing else in
+`test/` does. What is worth protecting is one argument on two calls, and the
+failure it prevents is somebody deleting it in a tidy-up with nothing going
+wrong until a charge is refused days later on an unrelated order.
+
 **No card number is ever stored, logged or received by this system.** Stripe
 holds them. What we keep is Stripe's *reference* to a saved card (`pm_...`),
 plus the brand and last four digits for display. Accepting a real card number
@@ -2832,7 +2867,7 @@ written before the Stripe account had Klarna, Link, Affirm, Cash App Pay and
 Amazon Pay switched on. A wallet whose funding source refuses an off-session
 charge will go on refusing it, so the order page says so when there is a saved
 method with no brand and no last four: **ring them, do not press the button
-again.** Whether to restrict that list is Neil's call and has not been taken.
+again.** That list is now restricted to cards - see "THE CARD PAGE SAVES CARDS" above.
 
 **THE CHASE IS A MESSAGE, AND IT COMES AFTER THE DELIVERY.**
 `src/core/payment-chase.js`, on the same ten-minute tick as everything else.
