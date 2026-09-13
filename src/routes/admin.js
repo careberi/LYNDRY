@@ -4722,9 +4722,13 @@ router.post('/ops/orders/:id/charge', guard, may('orders.override'), async (req,
       return { ok: false, reason: err.message };
     });
 
-    // ONE MESSAGE, AND ONLY WHEN THERE IS NEWS. chargeOrder() writes the
-    // sentence; a retry that succeeds is worth telling somebody about, and so
-    // is one that fails again, because it carries a fresh link.
+    // ONLY WHEN IT WORKED. chargeOrder() returns a sentence for a charge that
+    // went through and null for one that did not, so this goes quiet on a
+    // failure without having to know why - Neil's call, 12 September: a retry
+    // that fails is a phone call from him tomorrow, not a text tonight.
+    //
+    // The screen still says what happened, below. It is the customer who hears
+    // nothing, not the person who pressed the button.
     if (charge.message && customer) {
       await notify
         .sendAndLog(customer.phone, charge.message, customer.id)

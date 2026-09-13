@@ -211,6 +211,10 @@ router.post('/ops/charge', async (req, res, next) => {
     const customer = order.customers;
     const charge = await billing.chargeOrder(order, customer);
 
+    // Only ever set when the charge worked - see billing.chargeOrder(). A
+    // retry that fails tells the caller and says nothing to the customer,
+    // which is the same rule the button on the order page follows, because it
+    // is the same act through a second door.
     if (charge.message) await sendAndLog(customer.phone, charge.message, customer.id);
 
     res.json({

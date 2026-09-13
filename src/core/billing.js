@@ -62,6 +62,32 @@ function consentText() {
   );
 }
 
+// WHAT A RETRY SAYS WHEN IT WORKS, and it is the only thing chargeOrder() ever
+// texts anybody now.
+//
+// Neil's words, 12 September, on order #2060.
+//
+// IT DOES NOT RESTATE THE WEIGHT, and that is the whole point of rewriting it.
+// The sentence here used to open "Your laundry weighed X lb, that's $Y at $2.00
+// a pound" - written when the card was charged on the doorstep and this was the
+// first the customer heard of either number. The charge moved to the laundromat
+// weigh-in, which writes its own message, so this stopped being reached by
+// anything except a manual retry and quietly went stale.
+//
+// On #2060 it would have gone out reading "Your laundry weighed 81.38 lb,
+// that's $84.00 at $2.00 a pound": the wrong weight, because the customer was
+// billed on the laundromat's 84 lb, and arithmetic that does not work, because
+// 81.38 lb at $2.00 is $162.76 and the only thing making it $84.00 is a 50%
+// promotion this sentence never mentioned.
+//
+// A retry is not a second announcement of the price. They were told the weight
+// and the total at the weigh-in. The one new fact is that the money has moved.
+// So this says that and nothing else, and having no figures in it besides the
+// amount charged means it cannot contradict what they were already told.
+function settledMessage(order, owedCents) {
+  return `Good news, the ${money(owedCents)} for order #${order.order_number} has gone through. Thanks!`;
+}
+
 // --- Does this customer have a usable card? --------------------------------
 
 function hasPaymentMethod(customer) {
@@ -380,9 +406,10 @@ async function chargeOrder(order, customer) {
       ok: false,
       needsCard: true,
       setupUrl: url,
-      message:
-        `Your laundry weighed ${order.weight_lb} lb, so that's ${money(order.price_cents)}. ` +
-        `We don't have a card on file. Add one here and we'll settle it: ${url}`,
+      // NOTHING IS SAID. See the declined branch below: a retry that does not
+      // work is Neil's to handle, not the system's. `setupUrl` is still
+      // returned because fulfilment.deliver() builds its own sentence from it.
+      message: null,
     };
   }
 
@@ -417,10 +444,7 @@ async function chargeOrder(order, customer) {
     return {
       ok: true,
       chargedCents: owed,
-      message:
-        `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)} at ` +
-        `${site.pricePerLb} a pound, charged to your ${describeCard(customer)}. ` +
-        `Back with you the ${site.turnaround}.`,
+      message: settledMessage(order, owed),
     };
   }
 
@@ -430,7 +454,6 @@ async function chargeOrder(order, customer) {
   // declined card is a bad look and legally murky; the exposure is one order's
   // revenue. That was a deliberate business decision, not an oversight.
 
-  const card = describeCard(customer);
   await markFailed(order, result.reason, result.paymentIntentId, result.declineCode);
 
   const { url } = await createSetupLink(customer);
@@ -439,10 +462,27 @@ async function chargeOrder(order, customer) {
     ok: false,
     declined: true,
     setupUrl: url,
-    message:
-      `Your laundry weighed ${order.weight_lb} lb, that's ${money(order.price_cents)}. ` +
-      `Your ${card} was declined, so nothing has been taken. ` +
-      `We'll still deliver today. Update your card here and we'll settle it: ${url}`,
+    // A RETRY THAT FAILS SAYS NOTHING TO THE CUSTOMER. Neil, 12 September:
+    // "dont mention anything if it fails. If it fails, ill give him a call
+    // tomorrow."
+    //
+    // He is right, and the reason is who is standing there. Every other charge
+    // in this system happens with nobody watching - at the weigh-in, at the
+    // door - so a decline has to reach the customer somehow or nobody finds
+    // out. A retry is a person pressing a button because they already know
+    // about the problem, usually with the customer on the phone. A text saying
+    // "it failed again" arrives into a conversation that is already happening.
+    //
+    // The sentence that used to be here was worse than redundant: written for
+    // the doorstep-charge era, it promised "We'll still deliver today" on a
+    // retry that might be run two days after the delivery.
+    //
+    // THE AUTOMATIC PATHS ARE UNTOUCHED and still tell the customer everything.
+    // fulfilment.settleWeight() and fulfilment.deliver() each write their own
+    // wording from the `declined` and `setupUrl` flags rather than from this
+    // message, which is exactly why this can go quiet without a decline ever
+    // going unmentioned.
+    message: null,
   };
 }
 
@@ -501,6 +541,7 @@ module.exports = {
   hasPaymentMethod,
   needsCardOnFile,
   describeCard,
+  settledMessage,
   consentText,
   createSetupLink,
   createInlineCardSetup,

@@ -2831,6 +2831,55 @@ asks for a weight and a reason.
 price, with a link to update the card. It does not hold up the delivery: the
 clothes still go back and we chase by text.
 
+**A MANUAL RETRY SAYS ONE THING WHEN IT WORKS AND NOTHING WHEN IT DOES NOT.**
+Neil, 12 September, about to press the button on #2060: *"dont mention anything
+if it fails. If it fails, ill give him a call tomorrow."*
+
+`billing.settledMessage()` is his sentence and the only thing `chargeOrder()`
+ever texts anybody now: **"Good news, the $84.00 for order #2060 has gone
+through. Thanks!"** Both failing branches return `message: null`, so both retry
+doors go quiet without either having to know why.
+
+**The reason is who is standing there.** Every other charge happens with nobody
+watching, at the weigh-in or at a door, so a decline has to reach the customer
+or nobody finds out. A retry is a person pressing a button because they already
+know about the problem, usually with the customer on the phone, and a text
+saying "it failed again" lands in the middle of a conversation that is already
+happening.
+
+**THE AUTOMATIC PATHS ARE UNTOUCHED.** `settleWeight()` and `deliver()` each
+write their own wording from the `declined`, `needsCard` and `setupUrl` flags
+rather than from `chargeOrder()`'s message, which is exactly why it can go quiet
+without a decline ever going unmentioned. Both failing branches still mint
+`setupUrl`, because `deliver()` builds its sentence out of it.
+
+**WHAT THE OLD SENTENCE GOT WRONG IS WORTH KEEPING, because it is the shape of
+mistake that reads fine in a diff and is obvious on a phone.** It opened *"Your
+laundry weighed X lb, that's $Y at $2.00 a pound"*, written when the card was
+charged at the doorstep and that was the first the customer heard of either
+figure. When the charge moved to the laundromat weigh-in - which writes its own
+message - this stopped being reached by anything except a manual retry, and the
+manual retry was API-only and effectively unreachable, so it went stale unseen.
+
+On #2060 it would have gone out as *"Your laundry weighed 81.38 lb, that's
+$84.00 at $2.00 a pound"*: **the wrong weight**, because the customer was billed
+on the laundromat's 84 lb, and **arithmetic that does not work**, because 81.38
+lb at $2.00 is $162.76 and the only thing making it $84.00 was a 50% promotion
+the sentence never mentioned. The failure branch was worse still - it promised
+*"We'll still deliver today"* on a retry that might run two days after the
+delivery.
+
+**So the rule: a retry does not restate the price.** The customer was told the
+weight and the total at the weigh-in; the one new fact is that the money moved.
+Having no figures in it besides the amount charged is what makes it impossible
+for it to contradict what they were already told, and `test/retry-message.test.js`
+pins that by refusing any mention of a weight or a rate.
+
+**This is the fourth and fifth sentence found saying the wrong thing after the
+charge point moved.** The other three are recorded above. If it ever moves
+again, grep for "a pound" as well as for "deliver".
+
+
 **A DECLINE IS NOT THE END OF IT ANY MORE, AND UNTIL 12 SEPTEMBER IT WAS.**
 Order #2060: the laundromat weighed it, the bank refused $84.00, the customer
 was texted the total and a link, and then nothing in the system ever asked
