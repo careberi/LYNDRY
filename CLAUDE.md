@@ -3629,8 +3629,27 @@ customer's own pickups still waiting for us, and an order still waiting on a
 card goes to the account page instead, which says "Awaiting card". Every detail
 comes from where the confirmation text gets it (`describeCard`,
 `wash.describeSaved`, `spotOf`, `claimedFreeOrder`). Leaving Stripe without
-saving a card is not an order and is not thanked. Adding a card from account
-settings carries no order and gets the old "You're booked" page, unchanged.
+saving a card is not an order and is not thanked.
+
+**ADDING A CARD FROM THE PORTAL GOES BACK TO THE PORTAL.** Neil, 13 September,
+after replacing his own card: the page that used to render here said *"You're
+booked."* and *"We have texted your confirmation"*, with **"Nothing booked yet"**
+directly underneath. Three sentences, two of them false and one contradicting
+the headline, on a screen somebody reaches by doing nothing more than updating a
+card.
+
+The route's own comment already said where they belong - "somebody who pressed a
+button inside their account belongs back in it" - and a fall-through was quietly
+defeating it whenever there was no order to thank. It redirects to `/account`
+now and the standalone page is deleted, because their account already lists the
+pickups, names the card and says what happens next.
+
+**The flash carries the one thing that page was right about**: "Card saved: Visa
+ending 8663. Nothing has been charged." Nothing taken is the first question
+anybody has after handing over a card, and the account page does not answer it on
+its own. The card is **named only when there is a name** - `describeCard()`
+answers the bare word "card" for a wallet with no brand and no last four, which
+reads fine in "charged to your card" and reads as a fault in "Card saved: card."
 
 **A customer's sign-in code is never written to the log**, unlike a staff one.
 Staff can read the server log as a way back in; a customer cannot, so it would

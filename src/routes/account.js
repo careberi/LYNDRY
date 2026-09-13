@@ -1054,74 +1054,6 @@ router.post('/account/repeat/stop', auth.requireCustomer, async (req, res, next)
 });
 
 // ---------------------------------------------------------------------------
-// The screen after the card is saved.
-//
-// Neil: "after the payment details are entered it should take you to a screen
-// that says a confirmation was sent to you via text."
-//
-// IT ONLY SAYS THAT BECAUSE IT IS NOW TRUE. The route above sends the text
-// through the one shared path before rendering this - it did not, until today:
-// the return page saved the card and sent nothing, the webhook saw the card
-// already saved and also sent nothing, and whichever arrived first decided
-// whether the customer heard anything. A screen promising a text that never
-// left would be the worst version of that bug rather than a fix for it.
-// ---------------------------------------------------------------------------
-function confirmedPage({ customer, orders: waiting }) {
-  const card = billing.describeCard(customer);
-
-  const rows = (waiting || [])
-    .map(
-      (o) => `
-      <div style="display:flex;justify-content:space-between;gap:18px;padding:16px 0;border-bottom:1px solid var(--ink-100);">
-        <span style="font-size:16px;font-weight:600;color:var(--ink-900);">#${o.order_number}</span>
-        <span style="font-size:16px;color:var(--ink-700);text-align:right;">${escapeHtml(whenLineMdy(o))}</span>
-      </div>`
-    )
-    .join('');
-
-  return `
-<section class="hero" style="border-bottom:3px solid var(--ink-900);">
-  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
-    <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
-    <h1 class="display-2" style="margin-bottom:10px;">You're booked.</h1>
-    <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
-      We have texted your confirmation to
-      <strong>${escapeHtml(formatPhone(customer.phone))}</strong>.
-    </p>
-  </div>
-</section>
-
-<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
-
-  <div class="card card-xl" style="padding:26px 30px;">
-    <p class="eyebrow" style="margin-bottom:6px;">${
-      (waiting || []).length === 1 ? 'Your pickup' : 'Your pickups'
-    }</p>
-    ${rows || '<p style="font-size:16px;color:var(--ink-700);margin:12px 0 0;">Nothing booked yet.</p>'}
-  </div>
-
-  <!-- THE THREE THINGS SOMEBODY WANTS TO KNOW after handing over a card, and
-       the first one is the point: nothing has been taken. -->
-  <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
-    <div style="display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;">
-      <span style="font-size:16px;color:var(--ink-700);">Charged today</span>
-      <span style="font-size:16px;font-weight:700;color:var(--ink-900);">$0.00</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;gap:18px;padding-bottom:14px;">
-      <span style="font-size:16px;color:var(--ink-700);">Card on file</span>
-      <span style="font-size:16px;font-weight:700;color:var(--ink-900);">${escapeHtml(card || 'saved')}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;gap:18px;">
-      <span style="font-size:16px;color:var(--ink-700);">You are charged</span>
-      <span style="font-size:16px;font-weight:700;color:var(--ink-900);text-align:right;">after we weigh it</span>
-    </div>
-  </div>
-
-  <p style="margin:26px 0 0;"><a href="/account">Back to your account</a></p>
-</section>`;
-}
-
-// ---------------------------------------------------------------------------
 // GET /account/card/done/:token - back from Stripe, into their own account.
 //
 // Neil: "after you enter your information, it takes you back to your account
@@ -1188,10 +1120,35 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
 
     if (order) return res.redirect(303, `/account/thanks?order=${order.order_number}`);
 
-    return accountPage(res, {
-      title: 'Pickup confirmed',
-      body: confirmedPage({ customer, orders: waiting }),
-    });
+    // NO ORDER TO THANK, SO BACK INTO THEIR ACCOUNT. Neil, 13 September, after
+    // replacing his own card from the portal: the page that used to render here
+    // said "You're booked." and "We have texted your confirmation", with
+    // "Nothing booked yet" directly underneath it. Three sentences, two of them
+    // false and one contradicting the headline, on a screen somebody reaches by
+    // doing nothing more than updating a card.
+    //
+    // The comment at the top of this route already said where they belong -
+    // "somebody who pressed a button inside their account belongs back in it" -
+    // and this fall-through was quietly defeating it. Their account page
+    // already lists the pickups, names the card and says what happens next, so
+    // there was never a second page worth rendering.
+    //
+    // The flash carries the one thing that page was right about: nothing has
+    // been taken. That is the first question anybody has after handing over a
+    // card, and the account page does not answer it on its own.
+    // NAMED ONLY IF THERE IS A NAME. describeCard() answers the bare word
+    // "card" for a saved method carrying no brand and no last four, which is
+    // right in a sentence like "charged to your card" and reads as a fault in
+    // this one: "Card saved: card."
+    const named =
+      customer.card_brand || customer.card_last4 ? billing.describeCard(customer) : null;
+
+    return back(
+      res,
+      `?saved=${encodeURIComponent(
+        `Card saved${named ? `: ${named}` : ''}. Nothing has been charged.`
+      )}`
+    );
   } catch (err) {
     return next(err);
   }
