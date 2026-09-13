@@ -4744,7 +4744,12 @@ router.post('/ops/orders/:id/charge', guard, may('orders.override'), async (req,
           : `Tried again by hand: ${charge.declined ? 'declined' : charge.reason || 'it did not go through'}`,
       became: charge.ok ? 'PAID' : 'unpaid',
       by: { opsUser: req.opsUser },
-      reason: charge.ok ? null : 'They were texted a link to sort it out',
+      // NOT "they were texted a link", which is what this said for a few
+      // hours and was false the moment the retry went silent. A change log
+      // that records a message nobody sent is worse than one that records
+      // nothing: somebody reads it tomorrow and thinks the customer has been
+      // asked.
+      reason: charge.ok ? null : 'Nothing said to the customer - a failed retry is handled by a person',
     });
 
     return charge.ok
