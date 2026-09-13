@@ -2815,6 +2815,37 @@ which is the sentence that actually gets somebody to act.
 **Apple Pay and Google Pay are unaffected.** They are cards and they ride on
 this type.
 
+**AND THE STRIPE ACCOUNT WAS NARROWED TO MATCH, 12 September.** Naming the type
+in code is what stops those methods being OFFERED, and it is not the whole
+story: Stripe Checkout still showed a pre-ticked **"Save my information for
+faster checkout... everywhere Link is accepted"** box, which is Link enrolment
+rather than a way to pay, and is the most likely route by which order #2060's
+customer ended up with a Link payment method carrying no card at all. No
+argument to the session removes it - only switching Link off for the account
+does.
+
+So the live account now has **Cards and Apple Pay enabled and nothing else**.
+Amazon Pay, Cash App Pay, Klarna, Affirm, BLIK, EPS and Link were all switched
+off. Six of those seven changed nothing on our pages, because the code already
+refused them; they are off as a safety net, so the day somebody adds a payment
+surface and forgets to name the type, the account cannot volunteer Klarna.
+
+**The two layers do different jobs and both are needed.** The code decides what
+is offered. The account decides what exists, and it is the only thing that can
+reach the Link enrolment box.
+
+**Google Pay is NOT enabled on the account**, which is worth knowing before
+anybody repeats the claim in the paragraph above: the code permits it, the
+account has it switched off, so it cannot appear. Enabling it is a dashboard
+decision nobody has taken.
+
+**Wallets on our OWN page may need the domain registered.** Apple Pay and Google
+Pay appear on Stripe's hosted page automatically; inside `/account` the card
+field is a Payment Element, and those only render when `lyndry.com` is listed
+under **Payment method domains**. Unchecked as of 12 September - if the in-page
+form ever shows no wallet while the hosted link does, that is the first place to
+look.
+
 **This also removes Link, which is a payment method type of its own rather than
 part of `card`** - checked against Stripe rather than assumed. Putting it back
 is adding `'link'` to both arrays, and it is a real trade: Link saves a card in
