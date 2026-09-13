@@ -296,6 +296,52 @@ async function setupLinkMessage(customer) {
 }
 
 // ---------------------------------------------------------------------------
+// ASKING SOMEBODY TO REPLACE A CARD THAT DOES NOT WORK.
+//
+// Neil, 13 September: "I should have a button in the order page - to send a
+// text message link to update their payment method. or a text message link
+// with instructions on how to update their payment method online."
+//
+// NOT setupLinkMessage(), WHICH IS A DIFFERENT CONVERSATION. That one opens
+// "Before your first pickup we need a card on file" and goes to somebody who
+// has never given us one. Sending it to a customer whose card was refused
+// reads as though we have lost track of them, and it is the last thing to say
+// to somebody already annoyed that a payment failed.
+//
+// IT NAMES THE ORDER AND THE AMOUNT, because the one question it has to answer
+// before anything else is "what is this about". A text asking for card details
+// that does not say what it is for is indistinguishable from a phishing message,
+// which is the whole reason cardDestination() exists.
+//
+// AND IT SAYS NOTHING HAS BEEN TAKEN. That is the second question, and leaving
+// it out turns a request into an accusation.
+//
+// The two sentences come apart because the destination depends on the door -
+// a web customer is sent to their own account rather than handed a token to
+// tap. See cardDestination().
+function updateCardText({ orderNumber, priceCents, destination }) {
+  const owed = Number(priceCents) > 0;
+
+  const opening = owed
+    ? `Order #${orderNumber} came to ${money(priceCents)} and your card would not go through, so nothing has been taken.`
+    : `We need a new card for order #${orderNumber}. Nothing has been taken.`;
+
+  return `${opening} Update it ${destination}`;
+}
+
+// The whole message, with a link minted only for the people who are being sent
+// one. Async because that mint is a call to the payment provider.
+async function updateCardMessage(order, customer) {
+  const url = wantsPaymentLink(order) ? (await createSetupLink(customer)).url : null;
+
+  return updateCardText({
+    orderNumber: order.order_number,
+    priceCents: order.price_cents,
+    destination: cardDestination(order, url),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Recording that a card was saved
 // ---------------------------------------------------------------------------
 
@@ -608,6 +654,8 @@ module.exports = {
   createSetupLink,
   createInlineCardSetup,
   setupLinkMessage,
+  updateCardText,
+  updateCardMessage,
   recordSavedCard,
   chargeOrder,
   retryOutstanding,

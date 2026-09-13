@@ -1187,7 +1187,7 @@ function returnCheckCard(order, mayRelease) {
 // go on refusing it however many times this button is pressed. Saying so here
 // is the difference between a person retrying six times and a person ringing
 // the customer.
-function declinedCard(order, mayCharge) {
+function declinedCard(order, mayCharge, mayText) {
   if (order.payment_status !== 'FAILED') return '';
   if (!order.price_cents) return '';
 
@@ -1246,6 +1246,22 @@ function declinedCard(order, mayCharge) {
         : `<p style="font-size:15px;line-height:1.6;margin:18px 0 0;font-weight:700;">
              An admin has to try this one again.
            </p>`
+    }
+
+    <!-- ASK THEM TO FIX IT THEMSELVES, which is the one that usually works.
+         Saving a card runs billing.retryOutstanding(), so the money follows
+         without anybody here pressing anything else. Whether they get a link
+         or are sent to their own account is decided by the door the order came
+         through - see billing.cardDestination(). -->
+    ${
+      mayText
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.order_number)}/card-link"
+                 style="margin:10px 0 0;">
+             <button class="btn btn-outline btn-lg btn-full" type="submit">
+               Text them a way to update it
+             </button>
+           </form>`
+        : ''
     }
   </section>`;
 }
@@ -3186,7 +3202,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
            right now, so it sits above the money and above the progress card. -->
       ${returnCheckCard(order, roles.can(req.opsUser, 'orders.override'))}
       ${roles.can(req.opsUser, 'money.view') ? heldWeightCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
-      ${roles.can(req.opsUser, 'money.view') ? declinedCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
+      ${roles.can(req.opsUser, 'money.view') ? declinedCard(order, roles.can(req.opsUser, 'orders.override'), roles.can(req.opsUser, 'messages.send')) : ''}
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
       ${cancelCard(order, roles.can(req.opsUser, 'orders.override'))}
@@ -4698,6 +4714,78 @@ router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (re
 // ADMIN ONLY, through orders.override. Taking money off somebody is a decision
 // about the customer rather than a step in the round, the same line cancelling
 // a pickup and reassigning a driver already draw.
+// POST /ops/orders/:id/card-link - text them a way to replace the card
+//
+// Neil, 13 September: "I should have a button in the order page - to send a
+// text message link to update their payment method. or a text message link
+// with instructions on how to update their payment method online."
+//
+// It is the gap left after order #2060. The only button that mints a card link
+// is the nudge, and that one only appears for somebody with NO payment method
+// at all - so a customer whose saved card is refused, which is the one case
+// where you actually want to ask, was the one case with no way to ask. The
+// answer was to paste a URL out of the database into the conversation screen.
+//
+// WHICH OF THE TWO IT SENDS IS NOT A CHOICE HERE. Neil named both a link and
+// instructions, and billing.cardDestination() already decides between them off
+// the door the order came through: a web customer is pointed at their own
+// account, everybody else gets a link. One button, one rule, and it cannot
+// disagree with the decline text the weigh-in already sent.
+//
+// BEHIND messages.send, NOT orders.override. Pressing it texts a customer, and
+// the people who may cause a text are the people who may stop one - the same
+// line the nudge buttons and the opt-out draw. Charging the card is the Admin
+// decision beside it; asking somebody to fix their own card is not.
+router.post('/ops/orders/:id/card-link', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const said = (kind, message) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(message)}`);
+
+    const customer = order.customers;
+    if (!customer) return said('problem', 'There is nobody on this order to text.');
+    if (customer.status === 'UNSUBSCRIBED') {
+      return said('problem', 'They have opted out of texts, so this has to be a phone call.');
+    }
+
+    // Nothing to fix. Refused here as well as hidden on the page, because a
+    // control that is not on the screen and a route that still fires is not a
+    // guard.
+    if (order.payment_status === 'PAID') return said('problem', 'That one is already paid.');
+    if (order.payment_status === 'WAIVED') {
+      return said('problem', 'This order is waived, so there is nothing to collect.');
+    }
+
+    const text = await billing.updateCardMessage(order, customer);
+
+    const sent = await notify
+      .sendAndLog(customer.phone, text, customer.id)
+      .catch((err) => {
+        console.error(`Could not text a card link for ${order.id}: ${err.message}`);
+        return { sent: false, refused: err.message };
+      });
+
+    if (sent && sent.refused) {
+      return said('problem', 'That did not send. Nothing has gone to them.');
+    }
+
+    await orderEvents.record(order.id, {
+      kind: 'PAYMENT',
+      summary: 'Texted them a way to update the card',
+      by: { opsUser: req.opsUser },
+    });
+
+    // THE WORDS, NOT "SENT". A button that texts a customer something nobody
+    // has read is not one anybody should press, and the same goes for one that
+    // will not say afterwards what it said. Same rule as the nudge panel.
+    return said('done', `Sent: ${text}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/orders/:id/charge', guard, may('orders.override'), async (req, res, next) => {
   try {
     const order = await loadOrderForAction(req.params.id);

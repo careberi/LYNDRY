@@ -3130,6 +3130,35 @@ weigh-in calls, so it cannot charge an amount the automatic path would not
 have. The lever existed before only as `POST /ops/charge` in the JSON API,
 which needs the machine key and a terminal: in practice, unreachable.
 
+**A BUTTON TO ASK THEM TO FIX IT THEMSELVES**, beside the retry.
+`POST /ops/orders/:id/card-link`, behind `messages.send` rather than
+`orders.override`: pressing it texts a customer, and the people who may cause
+a text are the people who may stop one. Charging the card is the Admin decision
+next to it; asking somebody to fix their own card is not.
+
+**It is the gap #2060 left.** The only button that minted a card link was the
+nudge, and that one only appears for somebody with **no** payment method at all
+- so a customer whose saved card is refused, which is the one case where you
+actually want to ask, was the one case with no way to ask. The answer was
+pasting a URL out of the database into the conversation screen.
+
+**It is NOT `setupLinkMessage()`**, which opens "Before your first pickup we
+need a card on file" and goes to somebody who has never given us one. Sent to a
+customer whose card was just refused that reads as though we have lost track of
+them. `billing.updateCardText()` names the order and the amount, because a text
+asking for card details that does not say what it is about is indistinguishable
+from a phishing message, and says nothing has been taken, because leaving that
+out turns a request into an accusation.
+
+**Neil asked for "a link, or instructions to do it online" and the code does not
+choose between them** - `cardDestination()` already decides off the door the
+order came through, so this button cannot disagree with the decline text the
+weigh-in already sent. One segment either way.
+
+**The screen says the words afterwards, not "sent".** Same rule as the nudge
+panel: a button that texts a customer something nobody has read is not one
+anybody should press, and neither is one that will not say what it said.
+
 **The card on the order page says what the issuer said**, because the first
 question anybody asks is why. `orders.payment_decline_code` (migration 0091) is
 the machine answer behind `payment_failure_reason`, which is Stripe's sentence
