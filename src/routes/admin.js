@@ -3047,6 +3047,14 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // query fail rather than just returning null.
       .select(
         `${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at, ` +
+          // THE OTHER TWO HALVES OF WHY A CARD SAID NO. Both were missing, and
+          // both failed silently in the worst way: an unselected column reads
+          // as undefined, so the decline code line was omitted altogether and
+          // "Attempts" printed 0 through `|| 0`. Order #2060 had been refused
+          // TWICE and carried generic_decline, and the page said neither -
+          // which is the exact question anybody opens this card to answer, and
+          // the whole reason migration 0091 stored the code at all.
+          'payment_decline_code, payment_attempts, ' +
           'weight_photo_path, partner_weight_lb, partner_weight_at, driver_id, ' +
           // A held weight is money that is deliberately stuck. Without these
           // two the page cannot tell a settled order from one waiting on a
