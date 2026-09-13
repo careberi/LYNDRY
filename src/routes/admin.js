@@ -5899,53 +5899,15 @@ orderAction('collected', (order, req) =>
 //
 // It refuses until every bag is tagged and weighed. The screen does not offer
 // it before then either, but a form that is not rendered is not a guard.
-orderAction('in-van', async (order, req) => {
-  const labels = await bags.forOrder(order.id, 'PICKUP');
-  const expected = Number(order.bag_count || 0);
-
-  const weighed = labels.filter((l) => l.weight_lb != null).length;
-
-  if (!expected || weighed < expected) {
-    return {
-      ok: false,
-      detail: `${weighed} of ${expected || '?'} bags are weighed. Finish those before loading.`,
-    };
-  }
-
-  // AND ACTUALLY IN THE VAN. This is the step that says the load is complete
-  // and clears the arrival, so it cannot be reached over a bag still on a
-  // porch. The button on the list is disabled until they are all aboard; a
-  // disabled button whose route still fires is not a guard.
-  const aboard = labels.filter((l) => l.loaded_at).length;
-
-  if (aboard < expected) {
-    return {
-      ok: false,
-      detail: `${expected - aboard} bag${expected - aboard === 1 ? ' is' : 's are'} not in the van yet.`,
-    };
-  }
-
-  if (order.van_confirmed_at) return { ok: true };
-
-  const { error } = await db
-    .from('orders')
-    // THIS is the moment he leaves the door - the last bag is aboard - so the
-    // arrival flags go here rather than at the scale. Left set, the run would
-    // think he had already arrived at the laundromat he has not driven to yet.
-    .update({ van_confirmed_at: new Date().toISOString(), arrived_at: null, navigating_at: null })
-    .eq('id', order.id);
-
-  if (error) throw error;
-
-  await orderEvents.record(order.id, {
-    kind: 'STATUS',
-    summary: `${expected} bag${expected === 1 ? '' : 's'} loaded into the van` +
-      (bags.clipsFor(labels).length ? ` on clip${bags.clipsFor(labels).length === 1 ? '' : 's'} ${bags.clipsFor(labels).join(', ')}` : ''),
-    by: { opsUser: req.opsUser },
-  });
-
-  return { ok: true };
-});
+// THE LAST STEP OF THE PICKUP, AND THE ONE THAT TAKES THE MONEY.
+//
+// It moved into fulfilment.js when it became a charge point, which is the rule
+// the rest of the steps already follow: the work lives there and both front
+// doors - this page and the driver's run - call it, so the two cannot drift.
+// What it does before stamping anything is price the order off our own scale
+// and put it on the card, and if that is refused the bags do not move. See
+// fulfilment.loadVan().
+orderAction('in-van', (order, req) => fulfilment.loadVan(order, { by: { opsUser: req.opsUser } }));
 
 // AT THE DOOR, STEP ONE: the bags are out of the van and the clips are off.
 //

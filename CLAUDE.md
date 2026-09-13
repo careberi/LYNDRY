@@ -2778,6 +2778,79 @@ Code works out whether they have a card, whether to send a link, and when to
 charge. This is the same rule as `open_locker()` taking no arguments — no
 amount of clever texting should move a charge.
 
+**THE CARD IS CHARGED AT THE DOOR, BEFORE THE BAGS GO IN THE VAN.** Neil, 12
+September, after order #2060 was refused $84.00 while three bags were already on
+a laundromat floor: *"the card should be charged after I or the driver enters
+the weight... if the card is declined... we left it where we found it... we can
+pick up same time tomorrow."*
+
+`fulfilment.loadVan()` is the charge point now, and it is **the fourth place it
+has been**: our own scale, then the doorstep at delivery, then the laundromat's
+weigh-in, now here. What moved it is the one thing the other three could not do.
+This is the last moment at which saying no costs us nothing. Past this line we
+are holding somebody's laundry, and every option after that is bad: hand it back
+from a laundromat, wash it for free, or keep it and argue.
+
+**WHAT IT COST, AND NEIL AGREED TO IT: the customer is billed on OUR scale.**
+The laundromat has not seen the bags yet, so "the higher of the two scales"
+cannot be asked at a doorstep, and the rule that their figure is half of what
+bills is **retired**. Their weight still decides what we PAY them and still
+raises an issue when the two disagree; it no longer moves the customer's price.
+On #2060 that is $162.76 against $168.00, in the customer's favour, and it is
+the scale they watched the driver use.
+
+**CHARGED FIRST, WRITTEN SECOND**, and that ordering is the whole design. The
+price is worked out in memory and the card is tried before a single figure is
+saved, so a refusal leaves no settled price, no spent promotion and nothing to
+undo but the physical pickup. Settling first and rolling back would mean
+un-redeeming a promotion, which is the one operation here with no honest
+reverse.
+
+**IF IT IS REFUSED, THE BAGS STAY AND THE PICKUP GOES BACK TO TOMORROW.** The
+tags come off, the clips return to the pool, and `orders.uncollect()` puts the
+order back to awaiting collection. The customer is texted the weight, the total,
+that nothing was taken, that the bags are where they left them, and that we can
+come back the same time tomorrow. An issue is raised and the office is paged.
+The driver's screen turns red and names the clips to take off.
+
+**This is NOT the delivery rule and must not be confused with it.** At delivery
+a declined card never holds anything up, because we are already holding their
+clothes and keeping them over a card is a bad look and legally murky. At a
+doorstep we have not taken the laundry yet, so declining to take it is not
+holding anybody's property. The difference is custody, not policy.
+
+**`orders.uncollect()` does not go through the state machine.** `IN_PROCESS ->
+REQUESTED` is not in `ALLOWED_NEXT` and is not being added, so nothing that
+calls `transition()` can un-collect by accident - the same shape as
+`reinstate()`. It refuses the moment the laundry is genuinely ours: in the van,
+at a laundromat, or delivered. It clears what the doorstep wrote and nothing
+else; the **payment record stays**, because an order on tomorrow's board reading
+FAILED is the most useful thing that board can say about it.
+
+**`settleWeight()` no longer charges, and it does not simply return either.**
+Every order reaching a laundromat is already priced and paid, so the guard at
+the top now calls `recordPartnerScale()` before returning: what we owe them off
+their own weight, and whether the two scales agree. Returning flat would have
+silently dropped both. **Nothing in there moves money** - an order billed
+$162.76 at a doorstep stays billed $162.76 however the laundromat reads it,
+because the customer was told a total while the driver stood in front of them
+and a figure that changes afterwards is not a price. Past the tolerance it
+raises an issue; the old `weight_held_at` hold is meaningless now, because there
+is no pending charge to hold.
+
+**The pickup text stopped saying "We've got your laundry".** It is sent when the
+driver taps Collected, a minute before the card is tried, and "We've got your
+laundry!" followed by "we've left the bags where we found them" is the system
+contradicting itself inside two minutes, on the one occasion the customer is
+already annoyed. It says "We're here for your laundry" now. The rule underneath
+is unchanged: a waived order is promised the weight and never a total.
+
+**The step moved into `fulfilment.js`**, which is the rule the rest of them
+follow - the work lives there and both front doors, the order page and the
+driver's run, call it. It was in `admin.js` while it was only a flag; the moment
+it took money it belonged with the other steps.
+
+
 **The price is provisional at `/ops/weight` and the card is charged when the
 laundromat weighs it.** Two authorisations are on record by then: the consent
 given on the Stripe page, and the booking confirmation naming the card. There is
@@ -2810,7 +2883,7 @@ reads `freeOrder` and `freeUpToLb` off the same `bookPickup()` result the
 confirmation text reads, so the ceiling it names is the one the pricing code
 enforces.
 
-**The customer is billed on the HIGHER of the two scales.** Inside the tolerance
+**The customer WAS billed on the HIGHER of the two scales, and is not any more** - see "THE CARD IS CHARGED AT THE DOOR" above, 12 September. The paragraph below describes how it worked until then, and the tolerance still decides what we pay a laundromat and when an issue is raised. Inside the tolerance
 the two numbers are describing the same laundry and the gap is smaller than the
 amount either scale could be out by, so the higher one is taken and the card is
 charged there and then. Outside it, nothing is charged and nothing is said —

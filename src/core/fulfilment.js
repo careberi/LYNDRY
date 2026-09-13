@@ -12,6 +12,7 @@ const partners = require('./partners');
 const promotions = require('./promotions');
 const settings = require('./settings');
 const tags = require('./tags');
+const issues = require('./issues');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -97,10 +98,20 @@ async function step(order, to, buildMessage, by = {}) {
 // #1975, which is free and can never be charged: the pickup text promised "the
 // weight and the total", and there is no total to send. It promises the weight
 // alone, and waivedWeighInText() below is the text that keeps that promise.
+// WHY IT NO LONGER SAYS "WE'VE GOT YOUR LAUNDRY".
+//
+// It is sent when the driver taps Collected, which is now a minute BEFORE the
+// card is charged - and if that is refused the bags stay on the step. "We've
+// got your laundry!" followed by "we've left the bags where we found them" is
+// the system contradicting itself inside two minutes, on the one occasion the
+// customer is already annoyed. See fulfilment.loadVan().
+//
+// The rest of it is unchanged, including the rule underneath: a waived order is
+// promised the weight and never a total.
 function collectedMessage(order) {
   return order && order.payment_status === 'WAIVED'
-    ? `We've got your laundry! We'll text you the weight once it's on the scale.`
-    : `We've got your laundry! We'll text you the weight and the total once it's on the scale.`;
+    ? `We're here for your laundry. We'll text you the weight once it's on the scale.`
+    : `We're here for your laundry. We'll text you the weight and the total once it's on the scale.`;
 }
 
 // What the laundromat's weigh-in texts on a waived order: the weight, and
@@ -972,9 +983,92 @@ function turnaround(order) {
 // page, from delivery and from Neil settling a hold by hand, and it charges a
 // card. An order that is already settled returns and does nothing, so a
 // double-tap, a retry or two doors racing cannot charge twice.
+// ---------------------------------------------------------------------------
+// THE LAUNDROMAT'S SCALE, ON AN ORDER THAT IS ALREADY PAID FOR.
+//
+// Since the charge moved to the doorstep (see loadVan), every order that
+// reaches a laundromat has already been priced and charged on our scale. Their
+// figure therefore no longer decides what the CUSTOMER pays - but it still
+// decides two things, and both would have been silently lost if settleWeight()
+// simply returned early on an already-settled order:
+//
+//   what we pay them   partners.partnerBillFor(), off their own weight. It is
+//                      their invoice and it was never the customer's price.
+//   whether they agree  a gap past the tolerance is the whole reason their
+//                      weight is mandatory. It used to HOLD the charge; there
+//                      is no charge left to hold, so it raises an issue and a
+//                      person looks.
+//
+// NOTHING HERE MOVES MONEY. It cannot re-price, cannot charge, cannot refund.
+// An order that was billed $162.76 at a doorstep stays billed $162.76 even if
+// the laundromat reads it 3 lb heavier, because the customer was told a total
+// while the driver was standing in front of them and a figure that changes
+// afterwards is not a price.
+// ---------------------------------------------------------------------------
+async function recordPartnerScale(order, { by = {} } = {}) {
+  const ours = order.weight_lb == null ? null : Number(order.weight_lb);
+  const theirs = order.partner_weight_lb == null ? null : Number(order.partner_weight_lb);
+
+  // Nothing to compare. The laundromat leg is optional and plenty of orders
+  // never have one.
+  if (ours == null || theirs == null) return { ok: true, compared: false };
+
+  // Already done. This runs on every bag the laundromat weighs, so the last one
+  // must not redo what the one before it recorded.
+  if (order.partner_bill_settled_at) return { ok: true, already: true };
+
+  const limits = await settings.weightLimits();
+  const check = partners.compareWeights({ weight_lb: ours, partner_weight_lb: theirs }, limits);
+
+  const { error } = await db
+    .from('orders')
+    .update({
+      weight_band: check.band,
+      partner_bill_lb: partners.partnerBillFor(check),
+      partner_bill_settled_at: new Date().toISOString(),
+    })
+    .eq('id', order.id);
+
+  if (error) throw error;
+
+  await events.record(order.id, {
+    kind: 'PARTNER_WEIGHT',
+    summary:
+      `Laundromat read ${theirs} lb against our ${ours} lb` +
+      (check.overThreshold ? ` - ${check.absolute.toFixed(1)} lb apart, past the ${check.tolerance.toFixed(1)} we allow` : ' - within tolerance'),
+    was: `${ours} lb ours`,
+    became: `${theirs} lb theirs`,
+    by,
+    reason: check.overThreshold ? 'The customer was already charged on our scale; this is for a person to look at' : null,
+  });
+
+  if (check.overThreshold) {
+    await issues
+      .raise({
+        customer: order.customers || null,
+        order,
+        reason:
+          `Scales disagree on #${order.order_number}: we read ${ours} lb, the laundromat ${theirs} lb, ` +
+          `${check.absolute.toFixed(1)} lb apart. The customer was charged on ours at the door and nothing has changed for them.`,
+      })
+      .catch((err) => console.error(`Could not raise a scales issue for ${order.id}: ${err.message}`));
+  }
+
+  return { ok: true, compared: true, band: check.band, overThreshold: check.overThreshold };
+}
+
 async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null, note = null } = {}) {
   if (order.weight_settled_at) {
-    return { ok: true, already: true, priceCents: order.price_cents };
+    // ALREADY PRICED AND ALREADY PAID, because since loadVan() that happens at
+    // the customer's door. Their laundromat's figure still has two jobs though
+    // - what we owe them, and whether the two scales agree - and returning flat
+    // here would have quietly dropped both.
+    const partnerScale = await recordPartnerScale(order, { by }).catch((err) => {
+      console.error(`Could not record the laundromat scale on ${order.id}: ${err.message}`);
+      return null;
+    });
+
+    return { ok: true, already: true, priceCents: order.price_cents, partnerScale };
   }
 
   const ours = order.weight_lb == null ? null : Number(order.weight_lb);
@@ -1254,6 +1348,298 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   };
 }
 
+// ---------------------------------------------------------------------------
+// THE BAGS GO IN THE VAN, AND THE CARD IS CHARGED BEFORE THEY DO.
+//
+// Neil, 12 September, after order #2060 was refused $84.00 while three bags
+// were already on a laundromat floor: "the card should be charged after I or
+// the driver enters the weight... if the card is declined... we left it where
+// we found it... we can pick up same time tomorrow."
+//
+// THIS IS THE CHARGE POINT NOW, and it is the fourth place it has been. Our own
+// scale, then the doorstep at delivery, then the laundromat's weigh-in, now
+// here. What moved it is the one thing the other three could not do: this is
+// the last moment at which saying no costs us nothing. Past this line we are
+// holding somebody's laundry, and every option after that is bad - hand it back
+// from a laundromat, wash it for free, or keep it and argue.
+//
+// WHAT IT COSTS, SAID PLAINLY: the customer is billed on OUR scale. The
+// laundromat has not seen the bags yet, so "the higher of the two scales"
+// cannot be asked here, and Neil's rule that their figure is half of what bills
+// is retired with his agreement. Their weight still decides what we PAY them
+// and still raises an issue when the two disagree - it simply no longer moves
+// the customer's price. On #2060 that is $162.76 against $168.00, in the
+// customer's favour, and it is the scale they watched the driver use.
+//
+// CHARGED FIRST, WRITTEN SECOND. The price is worked out in memory and the card
+// is tried before a single figure is saved. That ordering is the whole reason
+// this is safe to unwind: a refusal leaves no settled price, no spent
+// promotion, and nothing to undo but the physical pickup. Settling first and
+// rolling back would mean un-redeeming a promotion, which is the one operation
+// here with no honest reverse.
+// ---------------------------------------------------------------------------
+async function loadVan(order, { by = {} } = {}) {
+  const labels = await bags.forOrder(order.id, 'PICKUP');
+  const expected = Number(order.bag_count || 0);
+
+  const weighed = labels.filter((l) => l.weight_lb != null).length;
+  if (!expected || weighed < expected) {
+    return {
+      ok: false,
+      detail: `${weighed} of ${expected || '?'} bags are weighed. Finish those before loading.`,
+    };
+  }
+
+  // AND ACTUALLY IN THE VAN. The button on the list is disabled until they are
+  // all aboard; a disabled button whose route still fires is not a guard.
+  const aboard = labels.filter((l) => l.loaded_at).length;
+  if (aboard < expected) {
+    return {
+      ok: false,
+      detail: `${expected - aboard} bag${expected - aboard === 1 ? ' is' : 's are'} not in the van yet.`,
+    };
+  }
+
+  // Already done. A double tap is not an error and must never charge twice.
+  if (order.van_confirmed_at) return { ok: true, already: true };
+
+  const customer = order.customers || null;
+  const weight = Number(order.weight_lb || 0);
+
+  // --- What it comes to, in memory ----------------------------------------
+  const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
+  const floor = order.minimum_cents != null ? order.minimum_cents : 0;
+  const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
+
+  const byWeight = Math.round(weight * rate);
+  // Paid wash options sit on top of the minimum, not inside it - the same order
+  // settleWeight() has always used, because the minimum is what a small load is
+  // worth and an extra we were asked for is separate work.
+  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
+  const minimumApplied = floor > byWeight;
+
+  const deal = customer
+    ? await promotions.discountFor(customer, order, beforeDiscount).catch((err) => {
+        console.error(`Could not work out a discount for ${order.id}: ${err.message}`);
+        return null;
+      })
+    : null;
+
+  const discountCents = deal ? deal.cents : 0;
+  const priceCents = Math.max(0, beforeDiscount - discountCents);
+
+  // --- The card, before anything is written --------------------------------
+  const charge =
+    order.payment_status === 'WAIVED'
+      ? { ok: true, waived: true }
+      : await billing.chargeOrder({ ...order, price_cents: priceCents }, customer).catch((err) => {
+          console.error(`Could not charge ${order.id} at the door: ${err.message}`);
+          return { ok: false, failed: true, reason: err.message };
+        });
+
+  if (!charge.ok) {
+    return declinedAtTheDoor(order, { by, customer, labels, weight, priceCents, charge });
+  }
+
+  // --- It cleared. Now it is real ------------------------------------------
+  const { error } = await db
+    .from('orders')
+    .update({
+      billable_weight_lb: weight,
+      price_cents: priceCents,
+      discount_cents: discountCents,
+      promotion_id: deal ? deal.promotion.id : null,
+      weight_settled_at: new Date().toISOString(),
+      weight_held_at: null,
+      van_confirmed_at: new Date().toISOString(),
+      // He is leaving the door, so the arrival flags go here. Left set, the run
+      // would think he had arrived at a laundromat he has not driven to yet.
+      arrived_at: null,
+      navigating_at: null,
+    })
+    .eq('id', order.id);
+
+  if (error) throw error;
+
+  if (deal) {
+    await promotions
+      .redeem(deal.grantId, order.id)
+      .catch((err) => console.error(`Could not redeem a promotion on ${order.id}: ${err.message}`));
+  }
+
+  const clips = bags.clipsFor(labels);
+
+  await events.record(order.id, {
+    kind: 'STATUS',
+    summary:
+      `${expected} bag${expected === 1 ? '' : 's'} loaded into the van` +
+      (clips.length ? ` on clip${clips.length === 1 ? '' : 's'} ${clips.join(', ')}` : ''),
+    by,
+  });
+
+  await events.record(order.id, {
+    kind: 'PRICE',
+    summary:
+      `Priced ${money(priceCents)} on ${weight} lb at the door` +
+      (deal ? `, less ${money(discountCents)} for ${deal.promotion.name}` : ''),
+    became: money(priceCents),
+    by,
+  });
+
+  await events.record(order.id, {
+    kind: 'PAYMENT',
+    summary: charge.waived
+      ? 'Waived, nothing charged'
+      : charge.alreadyPaid
+        ? 'Already paid'
+        : `Charged ${money(priceCents)} at the door`,
+    became: charge.waived ? 'WAIVED' : 'PAID',
+    by,
+  });
+
+  if (customer) {
+    // A WAIVED ORDER IS TOLD THE WEIGHT AND NOTHING ELSE, which is the promise
+    // the pickup text made it.
+    const text = charge.waived
+      ? waivedWeighInText(weight)
+      : doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer });
+
+    await sendAndLog(customer.phone, text, customer.id).catch((err) =>
+      console.error(`Could not text the door total for ${order.id}: ${err.message}`)
+    );
+  }
+
+  return { ok: true, priceCents, weight, charged: !charge.waived && !charge.alreadyPaid };
+}
+
+// WHAT THEY READ WHEN IT CLEARED AT THE DOOR. The weight, what it comes to, and
+// what came off. Written here rather than by the AI, like every message about
+// money.
+function doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer }) {
+  const card = billing.describeCard(customer) || 'card';
+  const opening = `Your laundry weighed ${weight} lb`;
+
+  const base = minimumApplied
+    ? `${opening}, which is under our ${money(beforeDiscount)} minimum, so that is ${money(beforeDiscount)}.`
+    : `${opening}, so that is ${money(beforeDiscount)} at ${site.pricePerLb} a pound.`;
+
+  // SAY WHAT CAME OFF. A total lower than the arithmetic somebody can do in
+  // their head reads as a mistake unless the reason is in the same message. The
+  // promotion's blurb, never its internal name.
+  const off = deal
+    ? ` ${deal.promotion.blurb || 'Your discount'} takes ${money(deal.cents)} off, so the total is ${money(priceCents)}.`
+    : '';
+
+  return `${base}${off} Charged to your ${card}. Back with you the ${site.turnaround}.`;
+}
+
+// ---------------------------------------------------------------------------
+// THE CARD WAS REFUSED AND THE BAGS STAY WHERE THEY ARE.
+//
+// Neil's rule, and it is the right one: we have not taken the laundry yet, so
+// declining to take it is not holding anybody's property. That is the whole
+// difference between this and a decline at delivery, where CLAUDE.md is
+// emphatic that the clothes go back and we chase by text - there we are already
+// holding them, and keeping somebody's clothes over a card is a bad look and
+// legally murky. Here there is nothing to hold.
+//
+// It undoes the pickup rather than leaving it half done. The tags come off, the
+// clips go back in the pool, and the order returns to awaiting collection so
+// tomorrow is an ordinary pickup rather than a repair job. What stays is the
+// payment record: an order on tomorrow's board reading FAILED is the most
+// useful thing that board can say about it.
+// ---------------------------------------------------------------------------
+// WHAT THEY READ WHEN THE BAGS ARE LEFT. Neil's own words, 12 September:
+// "we tried to pick up your laundry. It weighed this much. However, the card
+// was declined. We left it where we found it. Please update the payment method,
+// and we can pick up same time tomorrow."
+//
+// Every fact in it is one they can check on their own step: the weight the
+// driver just read out, the total that follows from it, and the bags still
+// sitting there. Nothing is asked of them that they cannot do from the message.
+function leftAtDoorText({ weight, priceCents, needsCard, destination }) {
+  const problem = needsCard
+    ? `We don't have a card on file, so we've left the bags where we found them. Add one ${destination}`
+    : `Your card was declined, so nothing has been taken and we've left the bags where we found them. Update it ${destination}`;
+
+  return (
+    `We came for your laundry and it weighed ${weight} lb, which comes to ${money(priceCents)}. ` +
+    `${problem} We can come back same time tomorrow.`
+  );
+}
+
+async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCents, charge }) {
+  const clips = bags.clipsFor(labels);
+
+  await events.record(order.id, {
+    kind: 'PAYMENT',
+    summary: charge.needsCard
+      ? `No card on file for ${money(priceCents)} at the door`
+      : `Card refused ${money(priceCents)} at the door`,
+    became: 'unpaid',
+    by,
+    reason: 'Bags left at the door and the pickup put back to tomorrow',
+  });
+
+  // The bags are staying, so nothing may still be attached to them. A clip left
+  // out of the pool is one the next driver cannot use, and a live sticker on a
+  // bag on a doorstep resolves to an order nobody is collecting.
+  await bags
+    .unclipOrder(order.id)
+    .catch((err) => console.error(`Could not return the clips on ${order.id}: ${err.message}`));
+  await bags
+    .releaseOrder(order.id)
+    .catch((err) => console.error(`Could not release the tags on ${order.id}: ${err.message}`));
+
+  await orders.uncollect(order, {
+    by,
+    reason: charge.needsCard ? 'No card on file' : 'Card was declined at the door',
+  });
+
+  // THEM FIRST. They are behind a door with their laundry still on the step,
+  // and they are the only person who can fix it.
+  if (customer) {
+    const text = leftAtDoorText({
+      weight,
+      priceCents,
+      needsCard: Boolean(charge.needsCard),
+      destination: billing.cardDestination(order, charge.setupUrl),
+    });
+
+    await sendAndLog(customer.phone, text, customer.id).catch((err) =>
+      console.error(`Could not text the doorstep decline for ${order.id}: ${err.message}`)
+    );
+  }
+
+  // AND A PERSON HAS TO KNOW. The driver is told by what comes back from here;
+  // this is what reaches the office, because a pickup that did not happen is
+  // somebody's morning tomorrow.
+  await issues
+    .raise({
+      customer,
+      order,
+      reason:
+        `Card refused ${money(priceCents)} at the door on #${order.order_number}. ` +
+        `${weight} lb left with the customer; pickup put back to tomorrow.`,
+    })
+    .catch((err) => console.error(`Could not raise an issue for ${order.id}: ${err.message}`));
+
+  return {
+    ok: false,
+    declined: true,
+    leftAtTheDoor: true,
+    priceCents,
+    weight,
+    clips,
+    detail:
+      `${money(priceCents)} was refused. Leave the bags where you found them` +
+      (clips.length
+        ? ` - take clip${clips.length === 1 ? '' : 's'} ${clips.join(', ')} off first.`
+        : '.') +
+      ` They have been texted and the office knows.`,
+  };
+}
+
 // --- Did it all come back? --------------------------------------------------
 
 // Compares what went out with what came back, under one order number.
@@ -1337,6 +1723,10 @@ module.exports = {
   collectedMessage,
   waivedWeighInText,
   settleWeight,
+  loadVan,
+  recordPartnerScale,
+  doorTotalText,
+  leftAtDoorText,
   reconcileReturn,
   updateWeightEstimate,
   collect,

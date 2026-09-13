@@ -419,6 +419,74 @@ async function reinstate(order, { by = null, reason = null } = {}) {
   return data;
 }
 
+// PUT A PICKUP BACK ON THE DOORSTEP, AND NOT THROUGH THE STATE MACHINE.
+//
+// Neil, 12 September: the card is charged when the driver has weighed the bags,
+// and if it is refused "we left it where we found it... we can pick up same
+// time tomorrow." So the bags do not go in the van, and the order has to stop
+// being collected.
+//
+// IN_PROCESS -> REQUESTED is not in ALLOWED_NEXT and is not being added.
+// Nothing that goes through transition() may un-collect an order by accident,
+// exactly as nothing may un-cancel one - this is the same shape as reinstate()
+// directly above, for the same reason.
+//
+// It refuses the moment the laundry is genuinely ours. A bag that has reached a
+// laundromat, been handed back, or gone out for delivery cannot be put back on
+// a doorstep: it is not there. The only case this serves is the one where the
+// driver is still standing at the door with the bags at his feet.
+//
+// It clears what the doorstep wrote and nothing else. The weight goes because
+// the bag rows that added up to it are being released; the pickup date, the
+// bag count the customer booked, and the payment record all stay. A FAILED
+// payment on an order waiting to be collected is not a mess to tidy - it is the
+// most useful thing the board can say about that order tomorrow morning.
+function uncollectable(order) {
+  if (!order) return 'No order.';
+  if (order.status !== 'IN_PROCESS') return 'That order is not out with a driver.';
+  if (order.van_confirmed_at) return 'Those bags are already in the van.';
+  if (order.at_partner_at) return 'That order has already been to a laundromat.';
+  if (order.delivered_at) return 'That order has already been delivered.';
+  return null;
+}
+
+async function uncollect(order, { by = null, reason = null } = {}) {
+  const problem = uncollectable(order);
+  if (problem) throw new Error(problem);
+
+  const { data, error } = await db
+    .from('orders')
+    .update({
+      status: 'REQUESTED',
+      collected_at: null,
+      arrived_at: null,
+      navigating_at: null,
+      // The sum of the bag weights, and those rows are being released. Leaving
+      // it would show a weight for laundry we do not have.
+      weight_lb: null,
+    })
+    .eq('id', order.id)
+    // Only if it is still collected, the same guard transition() uses: two
+    // people cannot both succeed at this.
+    .eq('status', 'IN_PROCESS')
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('That order changed while we were updating it. Try again.');
+
+  await require('./order-events').record(order.id, {
+    kind: 'STATUS',
+    summary: 'Left at the door, not collected',
+    was: 'IN_PROCESS',
+    became: 'REQUESTED',
+    by: by || { actor: 'staff' },
+    reason,
+  });
+
+  return data;
+}
+
 async function reschedule(order, newDate, newTime, window, by = null) {
   if (!isCancellable(order.status)) {
     throw new Error('That order has already been collected, so it cannot be rescheduled.');
@@ -524,6 +592,8 @@ module.exports = {
   canTransition,
   reinstatable,
   reinstate,
+  uncollectable,
+  uncollect,
   isCancellable,
   findAwaitingCollection,
   findAllAwaitingCollection,

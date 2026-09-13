@@ -18,7 +18,7 @@ const { collectedMessage, waivedWeighInText } = require('../src/core/fulfilment'
 test('a waived order is promised the weight, and not a total', () => {
   assert.equal(
     collectedMessage({ payment_status: 'WAIVED' }),
-    "We've got your laundry! We'll text you the weight once it's on the scale."
+    "We're here for your laundry. We'll text you the weight once it's on the scale."
   );
 });
 
@@ -26,7 +26,7 @@ test('every other order is still promised the weight and the total', () => {
   for (const status of ['UNPAID', 'PAID', 'FAILED', undefined]) {
     assert.equal(
       collectedMessage({ payment_status: status }),
-      "We've got your laundry! We'll text you the weight and the total once it's on the scale.",
+      "We're here for your laundry. We'll text you the weight and the total once it's on the scale.",
       `payment_status ${status}`
     );
   }
