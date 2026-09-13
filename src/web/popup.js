@@ -179,7 +179,12 @@ function markup(offer) {
       }
     });
 
-    window.setTimeout(show, ${sitePopup.SHOW_AFTER_MS});
+    // Straight away. This script sits at the foot of the body, so the page is
+    // already parsed and painted behind the dialog rather than the dialog
+    // arriving over a blank screen. A delay is only used if one is configured.
+    var wait = ${sitePopup.SHOW_AFTER_MS};
+    if (wait > 0) window.setTimeout(show, wait);
+    else show();
   })();
 </script>`;
 }

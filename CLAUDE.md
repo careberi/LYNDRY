@@ -373,6 +373,23 @@ record. The one field the hero does not have is `from=popup`, checked against
 `START_DOORS` - a hidden field is the visitor's to edit, so it picks from a list
 and can never name a consent source of its own.
 
+**IT APPEARS AS THE PAGE LOADS, WITH NO DELAY.** It waited eight seconds until
+12 September, on the reasoning that an offer over the top of the headline
+somebody came to read is rude. Neil: *"as soon as a new user who's never been to
+the site before appears, this thing should come up."*
+
+He is right, and the old reasoning was answering the wrong question. Eight
+seconds is longer than most visits, so somebody who bounced never saw the offer
+at all - the delay was not sparing them an interruption, it was hiding the offer
+from exactly the people it exists for. The ones who stayed were not spared
+either: they got it eight seconds in, having already started reading, which is
+the more interrupting of the two. `POPUP_DELAY_MS` is the knob if a pause is
+ever wanted again.
+
+**Nothing stops anybody seeing it twice except the cookie**, and that is
+unchanged: close it, or give us a number, and it is gone for a month - not
+hidden, absent from the markup.
+
 **It is a plain form behind a script.** A script opens the dialog and nothing
 after that needs scripting. **A browser with scripting off never sees it at
 all**, which is the opposite of the `data-reveal` rule and deliberate: a reveal

@@ -48,11 +48,30 @@ const promotions = require('./promotions');
 const COOKIE = 'ly_popup';
 const COOKIE_DAYS = 30;
 
-// How long after the page settles the popup appears. Long enough that it is not
-// arriving over the top of the headline somebody came to read, short enough
-// that it is still the same visit. There is no exit-intent version: that reads
-// the mouse leaving the top of the window, which no phone has.
-const SHOW_AFTER_MS = 8000;
+// HOW LONG AFTER THE PAGE LOADS THE POPUP APPEARS, AND IT IS NONE.
+//
+// It was eight seconds, on the reasoning that an offer arriving over the top of
+// the headline somebody came to read is rude. Neil, 12 September: "as soon as a
+// new user who's never been to the site before appears, this thing should come
+// up. The popup should appear with the website being loaded, not a delayed time
+// afterwards."
+//
+// He is right and the old reasoning was answering the wrong question. Eight
+// seconds is longer than most visits: somebody who bounces never sees the offer
+// at all, so the delay was not protecting them from an interruption, it was
+// hiding the offer from exactly the people it exists for. The ones who stay are
+// not saved from anything either - they get it eight seconds later, having
+// already started reading, which is the more interrupting of the two.
+//
+// NOTHING PROTECTS ANYBODY FROM SEEING IT TWICE EXCEPT THE COOKIE, and that is
+// unchanged: a visitor who closes it, or gives us a number, does not see it
+// again for a month, and the dialog is not even in the markup for them.
+//
+// Zero means shown as soon as the script runs, which is at the foot of the
+// body, so the page is parsed and on screen behind it. The knob survives for a
+// day when somebody wants a pause again; there is no exit-intent version, which
+// reads the mouse leaving the top of the window and no phone has one.
+const SHOW_AFTER_MS = Number(process.env.POPUP_DELAY_MS || 0);
 
 // Same reasoning and the same number as settings.js: every marketing page asks
 // this question, a cached answer costs a stale switch for a few seconds, and an
