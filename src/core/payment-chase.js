@@ -48,7 +48,7 @@ async function due({ now = new Date() } = {}) {
 
   const { data, error } = await db
     .from('orders')
-    .select('id, order_number, price_cents, payment_status, delivered_at, customers(*)')
+    .select('id, order_number, price_cents, payment_status, placed_via, delivered_at, customers(*)')
     .eq('payment_status', 'FAILED')
     .eq('status', 'DELIVERED')
     .is('payment_chase_sent_at', null)
@@ -93,7 +93,7 @@ function chaseMessage(order, url) {
   return (
     `Quick one about order #${order.order_number}: the ${billing.money(order.price_cents)} ` +
     `payment did not go through, so nothing has been taken yet. ` +
-    `You can settle it here: ${url}`
+    `Update your card ${billing.cardDestination(order, url)}`
   );
 }
 
@@ -119,11 +119,14 @@ async function sendDue({ now = new Date() } = {}) {
     const customer = order.customers;
 
     try {
-      // A FRESH LINK EVERY TIME. The one they were given at the weigh-in is a
-      // Stripe session and those expire after a day, which is exactly how long
-      // this sweep has been waiting - so reusing it would send somebody to a
-      // dead page.
-      const { url } = await billing.createSetupLink(customer);
+      // A FRESH LINK EVERY TIME, when a link is what they are getting. The one
+      // they were given at the weigh-in is a Stripe session and those expire
+      // after a day, which is exactly how long this sweep has been waiting, so
+      // reusing it would send somebody to a dead page. A web customer gets sent
+      // to their own account instead and needs no link at all.
+      const url = billing.wantsPaymentLink(order)
+        ? (await billing.createSetupLink(customer)).url
+        : null;
 
       const message = chaseMessage(order, url);
       // SYSTEM, because a person pressed no button and the AI wrote no word:

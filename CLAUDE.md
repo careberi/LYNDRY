@@ -2831,6 +2831,62 @@ asks for a weight and a reason.
 price, with a link to update the card. It does not hold up the delivery: the
 clothes still go back and we chase by text.
 
+**WHERE WE SEND SOMEBODY TO FIX A CARD DEPENDS ON WHICH DOOR THEY CAME IN.**
+Neil, 12 September, on order #2060: the customer placed the order on the
+website, saved a card on the website, and was then sent a text with a link
+asking him to update it. *"We're switching between two platforms... this can
+just come off as spam."*
+
+He is right, and it is worse than a feeling. An unsolicited text carrying a
+link that asks for card details is the exact shape of a phishing message. It
+teaches customers to tap payment links in texts, which is the habit we want
+them not to have; carriers score that pattern hard in 10DLC filtering; and a
+careful person ignores it, which may be what happened here.
+
+`billing.cardDestination(order, setupUrl)`:
+
+| Door | What they read |
+|---|---|
+| `WEB` | "at lyndry.com/account - sign in with this number." |
+| `THREAD`, `PHONE`, unknown | "here: lyndry.com/pay/<token>" |
+
+**The link stays for everyone else and that is not a hedge.** Somebody who
+books by texting has a thread with us and no account they have ever signed
+into; in that thread a link IS the natural continuation, and sending them off
+to sign in is friction against a trust problem they do not have. Somebody who
+ordered over the phone has used neither. **Unknown falls back to the link**,
+which is what every order did before this, so an order predating the column
+reads exactly as it always did.
+
+**It returns the TAIL of a sentence**, so the caller says what is wrong: "Your
+card was declined. Update it ..." and "We don't have a card on file. Add one
+..." are one destination reached from two problems.
+
+**No Stripe session is minted for somebody who will not be sent one.**
+`wantsPaymentLink()` is asked first, because a session and a `payment_links`
+row nobody will open is litter that expires in a day.
+
+**Used by all three doors that ask for a card after an order exists**:
+`settleWeight()`, `deliver()` and `payment-chase.js`. `card-chase.js` is
+deliberately untouched - that one asks for a first card before any pickup and
+has its own wording in `billing.setupLinkMessage()`.
+
+**THE DOOR WAS ALREADY ON THE ORDER AND WAS NULL FOR EXACTLY THIS CUSTOMER.**
+`orders.placed_via` has recorded `THREAD`/`WEB`/`PHONE` since migration 0083,
+but a pickup booked from a standing order passed none of them - so #2060, set
+up in the website wizard along with its own schedule, read null, which is
+indistinguishable from a thread booking.
+
+**So the schedule carries the door and its pickups inherit it**
+(`recurring_schedules.placed_via`, migration 0092). A standing order is an
+arrangement made at a particular door, and the pickups it books are that
+arrangement happening. `addSchedule()` only writes it when the caller says, so
+editing a schedule from somewhere else cannot quietly reassign where it was
+made. Existing rows were backfilled to `WEB`, which is a fact rather than a
+guess: `addSchedule()` has exactly one caller, the booking wizard - the AI has
+no tool that makes a schedule and there is no ops screen for one.
+
+
 **A MANUAL RETRY SAYS ONE THING WHEN IT WORKS AND NOTHING WHEN IT DOES NOT.**
 Neil, 12 September, about to press the button on #2060: *"dont mention anything
 if it fails. If it fails, ill give him a call tomorrow."*

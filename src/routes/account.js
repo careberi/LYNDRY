@@ -1515,7 +1515,17 @@ async function startSchedules(customer, { cadence, weekdays, timeOfDay }) {
   const made = [];
 
   for (const weekday of weekdays) {
-    made.push(await recurring.addSchedule(customer, { cadence, weekday, timeOfDay }));
+    // THE WIZARD IS THE WEB DOOR, and the schedule remembers it, so every
+    // pickup this arrangement books is known to be a web customer's. See
+    // recurring.addSchedule() and billing.cardDestination().
+    made.push(
+      await recurring.addSchedule(customer, {
+        cadence,
+        weekday,
+        timeOfDay,
+        placedVia: booking.DOORS.WEB,
+      })
+    );
   }
 
   const dates = made.map((s) => recurring.nextDate(s)).filter(Boolean).sort();

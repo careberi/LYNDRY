@@ -764,9 +764,9 @@ async function deliver(orderIn, file, { by = {} } = {}) {
     } else if (charge.ok) {
       price = ` ${money(order.price_cents)} charged to your ${billing.describeCard(order.customers) || 'card'}.`;
     } else if (charge.needsCard) {
-      price = ` We don't have a card on file. ${money(order.price_cents)} is outstanding. Add one here and we'll settle it: ${charge.setupUrl || ''}`;
+      price = ` We don't have a card on file. ${money(order.price_cents)} is outstanding. Add one ${billing.cardDestination(order, charge.setupUrl)}`;
     } else if (charge.declined) {
-      price = ` Your card was declined. ${money(order.price_cents)} is still outstanding. Update it here and we'll settle it: ${charge.setupUrl || ''}`;
+      price = ` Your card was declined. ${money(order.price_cents)} is still outstanding. Update it ${billing.cardDestination(order, charge.setupUrl)}`;
     }
 
     // The one moment worth asking about a standing order: they have just
@@ -1223,9 +1223,12 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
     } else if (charge.ok) {
       money_ = ` Charged to your ${card || 'card'}.`;
     } else if (charge.needsCard) {
-      money_ = ` We don't have a card on file. Add one here and we'll settle it: ${charge.setupUrl || ''}`;
+      // WHERE WE SEND THEM DEPENDS ON WHERE THEY CAME IN. A customer who did
+      // everything on the website is pointed back at it rather than handed a
+      // token to tap in a text. See billing.cardDestination().
+      money_ = ` We don't have a card on file. Add one ${billing.cardDestination(settled, charge.setupUrl)}`;
     } else if (charge.declined) {
-      money_ = ` Your card was declined. Please update your payment method here and we'll settle it: ${charge.setupUrl || ''}`;
+      money_ = ` Your card was declined. Update it ${billing.cardDestination(settled, charge.setupUrl)}`;
     } else {
       // Payments switched off, or the charge threw. Say what they were always
       // told rather than inventing a problem they cannot act on.

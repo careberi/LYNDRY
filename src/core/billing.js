@@ -88,6 +88,61 @@ function settledMessage(order, owedCents) {
   return `Good news, the ${money(owedCents)} for order #${order.order_number} has gone through. Thanks!`;
 }
 
+// HOW WE ASK SOMEBODY TO FIX A CARD, AND IT DEPENDS ON WHERE THEY CAME IN.
+//
+// Neil, 12 September, on order #2060: the customer placed the order on the
+// website, saved a card on the website, and was then sent a text with a link
+// asking him to update his card. His words: "we're switching between two
+// platforms... this can just come off as spam."
+//
+// He is right, and it is worse than a feeling. An unsolicited text carrying a
+// link that asks for card details is the exact shape of a phishing message. It
+// teaches customers to tap payment links in texts, which is the habit we want
+// them not to have; carriers score that pattern hard in 10DLC filtering; and a
+// careful person ignores it, which may be exactly what happened here.
+//
+// So somebody who did their business on the website is sent back to the
+// website. Not an opaque token they have to trust, but a page they have
+// already used, which they can reach by typing the address themselves, and
+// where signing in needs a code sent to their own phone - so intercepting the
+// text gets nobody anything.
+//
+// THE LINK STAYS FOR EVERYONE ELSE, and that is not a hedge. Somebody who
+// books by texting has a thread with us and no account they have ever signed
+// into; for them a link in that thread IS the natural continuation, and being
+// sent off to sign in somewhere is friction against a trust problem they do
+// not have. Somebody who ordered over the phone has used neither, and a link
+// is the shorter road.
+//
+// UNKNOWN FALLS BACK TO THE LINK, which is what every order did before this,
+// so an order from before the column reads exactly as it always did.
+//
+// Same rule booking.DOORS already sets - which door an order came through
+// decides how we talk about it - carried from the voice of a message to where
+// it sends somebody.
+// It returns the TAIL of a sentence rather than a whole one, so the caller can
+// say what is actually wrong. "Your card was declined. Update it at
+// lyndry.com/account" and "We don't have a card on file. Add one here: <link>"
+// are the same destination reached from two different problems, and a helper
+// that wrote the whole sentence would have to know which.
+function cardDestination(order, setupUrl) {
+  if (order && order.placed_via === 'WEB') {
+    // No scheme and no token. A phone will probably still turn this into a
+    // link, and that is fine: what matters is that it names a place they
+    // recognise and can check, rather than characters only we can read.
+    return `at ${site.domain}/account - sign in with this number.`;
+  }
+
+  return `here: ${setupUrl}`;
+}
+
+// Does this order's customer get a texted payment link at all. Asked before
+// minting one, because a Stripe session and a payment_links row for somebody
+// who is being pointed at their account is litter that expires in a day.
+function wantsPaymentLink(order) {
+  return !(order && order.placed_via === 'WEB');
+}
+
 // --- Does this customer have a usable card? --------------------------------
 
 function hasPaymentMethod(customer) {
@@ -399,7 +454,11 @@ async function chargeOrder(order, customer) {
   }
 
   if (!hasPaymentMethod(customer)) {
-    const { url } = await createSetupLink(customer);
+    // ONLY WHEN A LINK IS ACTUALLY GOING TO BE SENT. A web customer is pointed
+    // at their own account instead, so minting a session for them leaves a
+    // Stripe object and a payment_links row that nobody will ever open and
+    // that expires in a day. See cardDestination().
+    const url = wantsPaymentLink(order) ? (await createSetupLink(customer)).url : null;
     await markFailed(order, 'No card on file.');
 
     return {
@@ -456,7 +515,8 @@ async function chargeOrder(order, customer) {
 
   await markFailed(order, result.reason, result.paymentIntentId, result.declineCode);
 
-  const { url } = await createSetupLink(customer);
+  // Same rule as the no-card branch above.
+  const url = wantsPaymentLink(order) ? (await createSetupLink(customer)).url : null;
 
   return {
     ok: false,
@@ -541,6 +601,8 @@ module.exports = {
   hasPaymentMethod,
   needsCardOnFile,
   describeCard,
+  cardDestination,
+  wantsPaymentLink,
   settledMessage,
   consentText,
   createSetupLink,

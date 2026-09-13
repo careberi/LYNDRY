@@ -198,6 +198,9 @@ async function bookDue({ date } = {}) {
         pickupTime:
           schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
         fromSchedule: true,
+        // The door the arrangement was made at, carried onto the pickup. See
+        // addSchedule() above.
+        placedVia: schedule.placed_via || null,
       });
 
       if (!result.ok) {
@@ -246,7 +249,13 @@ async function bookDue({ date } = {}) {
 // Keyed on customer + weekday + cadence, so asking twice for "Tuesdays" edits
 // the Tuesday one rather than creating a second that would quietly never fire
 // - bookPickup refuses a second pickup on a day that already has one.
-async function addSchedule(customer, { cadence, weekday, timeOfDay = null }) {
+// `placedVia` is where the ARRANGEMENT was made, and every pickup it books
+// inherits it. Migration 0092, and the reason is order #2060: it was set up in
+// the website wizard, so the pickups it books are a web customer's pickups -
+// but bookPickup() was never told, and orders.placed_via read null. Null then
+// looks exactly like a thread booking, which is how a customer who had never
+// used the text thread came to be sent a payment link in one.
+async function addSchedule(customer, { cadence, weekday, timeOfDay = null, placedVia = null }) {
   if (!CADENCES[cadence]) throw new Error(`Unknown cadence: ${cadence}`);
 
   const day = Number(weekday);
@@ -262,6 +271,10 @@ async function addSchedule(customer, { cadence, weekday, timeOfDay = null }) {
     status: 'ACTIVE',
     updated_at: new Date().toISOString(),
   };
+
+  // Only written when the caller says. Editing a schedule from somewhere else
+  // must not quietly reassign where the arrangement was originally made.
+  if (booking.DOORS[placedVia]) patch.placed_via = booking.DOORS[placedVia];
 
   if (existing) {
     const { data, error } = await db
@@ -322,6 +335,7 @@ async function bookNext(customer, { after = null } = {}) {
       pickupTime:
         schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
       fromSchedule: true,
+      placedVia: schedule.placed_via || null,
     });
 
     if (result.ok) booked.push(result.order);

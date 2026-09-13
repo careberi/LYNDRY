@@ -126,6 +126,12 @@ const site = Object.freeze({
 
   tagline: 'Laundry, handled.',
 
+  // The bare domain, for the places a message names where to go rather than
+  // handing over a link: "lyndry.com/account" reads as somewhere you already
+  // know and can type yourself, which a token cannot. Derived from baseUrl so
+  // there is still one copy of where this site lives.
+  domain: String(config.baseUrl || '').split('//').pop().split('/')[0],
+
   // See SMS_CONSENT above. One sentence, held to by a test.
   smsConsent: SMS_CONSENT,
 
