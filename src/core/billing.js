@@ -316,28 +316,58 @@ async function setupLinkMessage(customer) {
 // AND IT SAYS NOTHING HAS BEEN TAKEN. That is the second question, and leaving
 // it out turns a request into an accusation.
 //
-// The two sentences come apart because the destination depends on the door -
-// a web customer is sent to their own account rather than handed a token to
-// tap. See cardDestination().
-function updateCardText({ orderNumber, priceCents, destination }) {
+// BOTH ROUTES, AND THIS ONE MESSAGE IS THE EXCEPTION TO THE DOOR RULE.
+//
+// cardDestination() sends a web customer to their own account rather than
+// handing them a link, because an unsolicited text carrying a payment link is
+// the shape of a phishing message. That still governs every message the system
+// sends ON ITS OWN - the weigh-in decline, the doorstep decline, the chase.
+//
+// This one is different in the way that matters: a person pressed a button,
+// usually with the customer on the phone or a voicemail already left. Neil, 13
+// September, after Shamar's phone went to voicemail: "give me the link to just
+// update it in the text as well." He is right. Signing in with a texted code is
+// real friction for somebody you are already chasing, and the message names the
+// order, the amount and the reason, which is what makes it checkable. So it
+// carries the tap-once link AND the address they can type themselves, and the
+// cautious reader still has the safe route.
+//
+// IT SAYS WHY IT MATTERS WHEN THE LAUNDRY IS STILL OURS. Neil's rule, same day:
+// "we just need the payment method updated before we make delivery." Saying so
+// is the difference between a request and a mystery - and it is left OUT once
+// the laundry is back with them, because by then it would be a threat about
+// nothing.
+function updateCardText({ orderNumber, priceCents, url, holding = false }) {
   const owed = Number(priceCents) > 0;
 
   const opening = owed
     ? `Order #${orderNumber} came to ${money(priceCents)} and your card would not go through, so nothing has been taken.`
     : `We need a new card for order #${orderNumber}. Nothing has been taken.`;
 
-  return `${opening} Update it ${destination}`;
+  // Asked for, never threatened. "We need a card before it can go back out" is
+  // a thing they can act on; "we are keeping your laundry" is a standoff.
+  const why = holding ? ` We need a working card before your laundry can go back out.` : '';
+
+  const where = url
+    ? ` Update it here: ${url} or at ${site.domain}/account.`
+    : ` Update it at ${site.domain}/account - sign in with this number.`;
+
+  return `${opening}${why}${where}`;
 }
 
 // The whole message, with a link minted only for the people who are being sent
 // one. Async because that mint is a call to the payment provider.
 async function updateCardMessage(order, customer) {
-  const url = wantsPaymentLink(order) ? (await createSetupLink(customer)).url : null;
+  // Always minted here, whichever door the order came through - see the note on
+  // updateCardText() for why this message is the one exception.
+  const { url } = await createSetupLink(customer);
 
   return updateCardText({
     orderNumber: order.order_number,
     priceCents: order.price_cents,
-    destination: cardDestination(order, url),
+    url,
+    // Only while the bags are actually with us.
+    holding: require('./orders').IN_OUR_HANDS.includes(order.status),
   });
 }
 

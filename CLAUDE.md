@@ -3045,6 +3045,14 @@ row nobody will open is litter that expires in a day.
 deliberately untouched - that one asks for a first card before any pickup and
 has its own wording in `billing.setupLinkMessage()`.
 
+**AND THERE IS EXACTLY ONE EXCEPTION, WHICH IS A BUTTON A PERSON PRESSES.**
+`billing.updateCardText()`, behind "Text them a way to update it" on the order
+page, sends the link **and** the account address to everybody. Every message
+here goes out on its own with nobody watching; that one is somebody chasing a
+customer they have already tried to ring. See "A BUTTON TO ASK THEM TO FIX IT
+THEMSELVES" below. Nothing else may make that exception without the same
+argument.
+
 **THE DOOR WAS ALREADY ON THE ORDER AND WAS NULL FOR EXACTLY THIS CUSTOMER.**
 `orders.placed_via` has recorded `THREAD`/`WEB`/`PHONE` since migration 0083,
 but a pickup booked from a standing order passed none of them - so #2060, set
@@ -3150,10 +3158,31 @@ asking for card details that does not say what it is about is indistinguishable
 from a phishing message, and says nothing has been taken, because leaving that
 out turns a request into an accusation.
 
-**Neil asked for "a link, or instructions to do it online" and the code does not
-choose between them** - `cardDestination()` already decides off the door the
-order came through, so this button cannot disagree with the decline text the
-weigh-in already sent. One segment either way.
+**NEIL ASKED FOR "A LINK, OR INSTRUCTIONS TO DO IT ONLINE" AND THIS ONE SENDS
+BOTH. IT IS THE ONLY MESSAGE THAT DOES.** Shamar's phone went to voicemail on 13
+September, and Neil: *"give me the link to just update it in the text as well.
+Tell him that the payment method is needed in order for the laundry to go out
+for delivery."*
+
+**That is a deliberate exception to `cardDestination()`, not a hole in it.** The
+door rule exists because an unsolicited text carrying a payment link is the
+shape of a phishing message, and it still governs every message the system
+sends **on its own** - the weigh-in decline, the doorstep decline, the chase.
+This one is pressed by a person who is already chasing somebody, usually with
+the customer on the phone or a voicemail already left. Signing in with a texted
+code is real friction at that moment, and the message names the order, the
+amount and the reason, which is what makes it checkable. So it carries the
+tap-once link **and** the address they can type themselves, and the cautious
+reader still has the safe route.
+
+**It says why while the laundry is still ours, and not once it is back.** Neil's
+rule, same day: *"we just need the payment method updated before we make
+delivery."* `orders.IN_OUR_HANDS` decides, so the sentence is in a text about a
+bag on a laundromat floor and out of one about a bag already on a doorstep,
+where it would be a threat about nothing. **It is asked for, never threatened** -
+nothing in it says we are keeping anybody's clothes, and a test refuses the
+words that would. Two segments with the link in it, and `test/update-card-text.test.js`
+holds it to that ceiling.
 
 **The screen says the words afterwards, not "sent".** Same rule as the nudge
 panel: a button that texts a customer something nobody has read is not one

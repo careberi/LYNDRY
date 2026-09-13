@@ -1250,9 +1250,10 @@ function declinedCard(order, mayCharge, mayText) {
 
     <!-- ASK THEM TO FIX IT THEMSELVES, which is the one that usually works.
          Saving a card runs billing.retryOutstanding(), so the money follows
-         without anybody here pressing anything else. Whether they get a link
-         or are sent to their own account is decided by the door the order came
-         through - see billing.cardDestination(). -->
+         without anybody here pressing anything else. This message carries the
+         link AND the account address, whichever door the order came through -
+         the one exception to billing.cardDestination(), and the reason is on
+         billing.updateCardText(). -->
     ${
       mayText
         ? `<form method="post" action="/ops/orders/${escapeHtml(order.order_number)}/card-link"
@@ -4726,11 +4727,15 @@ router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (re
 // where you actually want to ask, was the one case with no way to ask. The
 // answer was to paste a URL out of the database into the conversation screen.
 //
-// WHICH OF THE TWO IT SENDS IS NOT A CHOICE HERE. Neil named both a link and
-// instructions, and billing.cardDestination() already decides between them off
-// the door the order came through: a web customer is pointed at their own
-// account, everybody else gets a link. One button, one rule, and it cannot
-// disagree with the decline text the weigh-in already sent.
+// IT SENDS BOTH, AND IT IS THE ONE MESSAGE THAT DOES. Neil named both a link
+// and instructions, and every message the system sends on its own picks between
+// them off the door - billing.cardDestination(), because an unsolicited text
+// carrying a payment link is the shape of a phishing message. This one is
+// pressed by a person, usually with the customer on the phone or a voicemail
+// already left, so sending a web customer away to sign in is friction against
+// somebody who is already being chased. See billing.updateCardText() for the
+// whole argument; it also says why the laundry is being held, but only while
+// it actually is.
 //
 // BEHIND messages.send, NOT orders.override. Pressing it texts a customer, and
 // the people who may cause a text are the people who may stop one - the same
