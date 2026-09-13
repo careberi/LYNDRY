@@ -341,7 +341,7 @@ function updateCardText({ orderNumber, priceCents, url, holding = false }) {
   const owed = Number(priceCents) > 0;
 
   const opening = owed
-    ? `Order #${orderNumber} came to ${money(priceCents)} and your card would not go through, so nothing has been taken.`
+    ? `Order #${orderNumber} came to ${money(priceCents)} and the payment didn't go through, so nothing has been taken.`
     : `We need a new card for order #${orderNumber}. Nothing has been taken.`;
 
   // Asked for, never threatened. "We need a card before it can go back out" is
