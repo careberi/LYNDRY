@@ -1,85 +1,117 @@
 # HANDOFF
 
-Issue: Reminders must use `dispatch.collectable()`
+Issue: Payment Hold — laundry we hold with money outstanding never reaches the doorstep
 Owner of the keyboard: Neil
-Status: review
+Status: spec
 
 ## Goal
 
-`src/core/reminders.js` never looks at whether an order can actually be
-collected. It selects the order, the customer's name, phone, status and
-preferences, and nothing else. So a pickup with no card on file — which
-`dispatch.collectable()` already keeps off the driver's route — still gets the
-night-before "have the bag out" text, and still shows **PICKUP REMINDER
-SCHEDULED** in the thread. The reminder must ask the same question the route
-asks, by calling the same function, so the two cannot drift.
+`dispatch.collectable()` is already "one predicate, many doors", and it gates
+only the **pickup** door. Order #2060 is long past that door: collected, weighed,
+charged, declined, and sitting washed at Best Wash. Nothing looks at payment on
+the later legs, so it can still be drawn as a delivery stop.
 
-Order #2063 is the live example: badged AWAITING CARD, off the route since
-13 September, and still carrying a scheduled reminder on the customer page.
+Widen the same idea to the legs that matter, derive Payment Hold rather than
+storing it, block the customer's other pickups while it stands, and rewrite the
+deliver-and-chase rule this reverses.
+
+## What Payment Hold is
+
+```
+balance(order)     = price - card captured - cash recorded
+paymentHold(order) = IN_OUR_HANDS.includes(status) && balance > 0
+```
+
+Derived, never stored. No `payment_hold` column, no `PART_PAID` on the enum.
+Until the cash ledger exists there is no partial payment, so `balance > 0` is
+exactly `payment_status === 'FAILED'` — **but write it as balance from the
+start**, so the ledger drops in later without re-opening the rule.
+
+## What it gates — Neil's lock, 14 September
+
+Hold keeps the bag out of the customer's doorway, not off Best Wash's floor.
+
+| Leg | |
+|---|---|
+| **Pickup** | `collectable()` as today, **plus the sibling block** |
+| **Plant drop-off** | already blocked, and not by this work — `loadVan()` charges before it writes `van_confirmed_at`, and `board()` only promotes a stop to the drop-off leg once that stamp exists. New unpaid work cannot reach a laundromat by accident. **Do not add a clause for it** |
+| **Retrieval** | **allowed even on hold**, so a laundromat's shelf is not our warehouse |
+| **Delivery** | **refused while `paymentHold`** |
 
 ## Must happen
 
-- The reminder sweep skips an order `dispatch.collectable()` says no to.
-- The thread badge and the scheduled list skip it too. **Three functions in
-  `reminders.js` decide this, not one**, and all three need the gate:
-  - `sendDue()` — the nightly sweep, what actually texts
-  - `pendingFor(customerId)` — the "PICKUP REMINDER SCHEDULED" box in the thread
-  - `allPending()` — the list on `/ops/scheduled`
-- **The card fields have to be added to all three select lists.**
-  `collectable()` reads `order.payment_status` and the customer's
-  `stripe_customer_id` / `default_payment_method_id`. None of the three selects
-  carry them today, and an unselected column is undefined, which is
-  indistinguishable from an absent card — so without this the gate would skip
-  *every* reminder rather than the ones that deserve it. That trap has now bitten
-  five times in this codebase; see `BOARD_FIELDS`, `RUN_FIELDS`, the order page's
-  `payment_attempts`, and its `ready_at` / `delivered_at`.
-- One implementation. Call `dispatch.collectable()`; do not re-derive "has a
-  card" here.
-- A waived order is still reminded. `collectable()` already answers true for it.
-- The screen and the sweep must agree, which is the existing rule for this file:
-  both read the same rows and call the same function, so a badge can never
-  promise a text that will not be sent.
+- The four rows above, and nothing more. The gate is delivery-only plus the
+  sibling block.
+- **The sibling block is customer-level**, so `collectable(order)` cannot answer
+  it alone: a customer holding an in-hand order with a balance has their *other*
+  pickups blocked. #2061 parks until #2060's balance is $0. One `in` query per
+  board keyed by customer id — thirty orders must not mean thirty queries.
+- **Entering hold rings the office immediately.** No 24-hour clock. It raises an
+  issue and pages, the way a handoff does. This is an ops call, **not** a `tel:`
+  on the driver's page and **not** masked Telnyx voice — neither exists and
+  neither is in scope here.
+- **Paused, not cancelled.** Status, bags and history are untouched. Nothing
+  transitions.
+- **It stays visible.** A held order comes off the delivery leg and is named on
+  the screen, the way `uncollectable` is drawn in red on the routing board. A
+  stop that silently vanishes reads as the board losing an order.
+- **`DECISIONS.md` and `CLAUDE.md` both say the opposite today** and are rewritten
+  in this branch:
+  > A declined card never holds up a delivery. We deliver and chase by text.
+
+  Until that sentence changes the next reader ships the clothes and chases.
+- A `WAIVED` order stays routable everywhere. Nothing to charge is not cannot
+  charge.
 
 ## Must not happen
 
-- No second copy of the card rule.
-- Do not stamp `reminder_sent_at` on a skipped order. It has not been reminded,
-  and stamping it would mean nothing ever reminds them if a card arrives in time.
-- Do not change the reminder's wording, its timing, the evening-before rule, the
-  three-hour just-booked skip, or quiet hours.
-- Do not touch routing, payment, or `fulfilment.js`. The route gate already
-  exists and is not being re-opened.
-- Do not make the reminder a second gate on collection. It reads the rule; it
-  does not own it.
+- Do not store the flag. Do not add an enum value. Derive the word from the
+  number.
+- Do not gate the plant drop-off. `van_confirmed_at` already does it, and an
+  `IN_PROCESS` order that has not been charged is a **doorstep** stop with the
+  driver standing at it — gating it would take his current stop off his own
+  screen.
+- Do not gate retrieval. Neil's lock.
+- Do not build the cash ledger here if it would stall the gate.
+- Do not build the $80 authorization, capture, or overage. Still unlocked.
+- Do not rebuild `loadVan()`. The door decline path is correct and finished.
+- Do not waive #2060 to clear it. Cash handed over is not a waiver, and an
+  `order_events` row is a note, not a tender.
+- Do not cancel a held order.
 
 ## Edge cases
 
-- **A card added after the reminder evening but before the pickup.** They are
-  back on the route and correctly get no reminder, because the evening has
-  passed. That is the right outcome and not a gap to close — but it means the
-  first they hear is the driver arriving, so say whether that is acceptable.
-- **Standing orders already carry the stamp.** `recurring.bookDue()` sets
-  `reminder_sent_at` at the moment it books, so a non-collectable standing order
-  is already skipped by accident. The gate must not double-count that.
-- **Stripe switched off entirely** (`needsCardOnFile()` answers false): every
-  order is collectable and everybody is reminded. Correct — a sandbox with no key
-  must not silently empty the reminder pass, the same way it must not empty the
-  round.
-- **An order that becomes uncollectable after the reminder went.** The reminder
-  was true when sent. The morning route is the authority; nothing here should
-  chase it back.
-- `pendingFor()` returns the soonest pickup only. If that one is not collectable
-  it must not silently fall through to a later one and badge the wrong order.
+- **Retrieved bags wear clips, and the pool is finite.** A bag collected off a
+  laundromat gets a van clip and keeps it until it is handed back at the door.
+  Hold means that never happens, so #2060's three bags would hold three of the
+  50 in `config.routing.vanClips` indefinitely. Decide what "held" bags do:
+  unclip and store at base, or sit in the van wearing their numbers. This is the
+  one operational consequence the retrieval lock creates and nothing currently
+  answers it.
+- **`IN_PROCESS` + `UNPAID`, mid-doorstep.** Real, transient, and *not* Payment
+  Hold. Must stay on the driver's screen.
+- **A held order is still overdue.** #2060 was collected Saturday and was due back
+  end of Sunday. The turnaround badge keeps counting. Honest — do not suppress it.
+- **Stripe switched off** (`needsCardOnFile()` false): nothing is ever `FAILED`,
+  so nothing is ever held. Same fail-open the round already has.
+- **The sibling block reaches across orders**, so a customer with one bad order
+  loses service on every other. That is the lock; it should be obvious on the
+  screen why a pickup is parked, naming the order that caused it.
 
-## Files Claude touched
+## Files Claude expects to touch
 
-- `src/core/reminders.js` — requires `dispatch`, adds `collectable()` as a
-  one-line pass-through, adds `CARD_FIELDS` / `CUSTOMER_CARD_FIELDS` as one
-  shared string, widens all three selects and gates all three functions.
-- `test/reminder-collectable.test.js` — new, 12 tests.
+- `src/core/dispatch.js` — `balance()`, `paymentHold()`, the delivery-leg refusal,
+  the sibling look-up, and returning held orders the way `uncollectable` is.
+- `src/core/fulfilment.js` — the matching refusal on the delivery step, so a
+  screen that hides a stop is not the only guard.
+- `src/core/issues.js` — raise and page on entering hold.
+- `src/web/routing-board.js` — name what came off and why.
+- `DECISIONS.md`, `CLAUDE.md` — the deliver-and-chase reversal.
+- `test/` — a new file.
 - `HANDOFF.md`
 
-Nothing else. `dispatch.js` was read, not edited.
+Not on this branch: the cash ledger, the $80 auth, QR, the order console, any
+telephony.
 
 ## Grok review
 
@@ -87,38 +119,12 @@ Nothing else. `dispatch.js` was read, not edited.
 
 ## Neil
 
-Implemented on `fix/reminder-collectable`. `npm test`: 247 pass, 0 fail.
+Spec only. Nothing implemented — say go.
 
-Checked against live rows, read-only — `sendDue()` was deliberately not called
-because it texts real people:
+Two things true right now that this file does not fix:
 
-| Order | | After the change | Proves the change? |
-|---|---|---|---|
-| #2063 ashley | no card, off the route | no reminder, no badge | **No.** Her pickup is today, so the reminder evening (13 Sep) had already passed and `pendingFor()` would return null from the pre-existing date check with or without this branch |
-| #2062 Trisha | waived | still scheduled, goes tonight | Yes, in the useful direction: waived must keep its reminder |
-| #2061 Shamar | card on file | still scheduled | Yes, nothing collectable was lost |
-
-**No live row can currently distinguish the two behaviours.** That would need an
-order with no card AND a pickup at least two days out, and there is not one. The
-proof is the unit tests, which call `collectable()` with no dates involved and
-read the source to pin that all three queries carry the card fields.
-
-**Grok review: deferred by Neil on 14 Sep.**
-
-- Accepted on unit tests + the `pendingFor()` select fix.
-- Ashley thread is not proof (reminder evening already passed).
-- No live `sendDue()` against customers.
-
-One thing deliberately left alone, per the brief: a customer who adds a card
-after the reminder evening but before the pickup gets no reminder and is on the
-route. No new text for that in this branch.
-
-Branch state, so nothing is lost:
-
-- `feat/ops-order-console` — the warehouse-terminal order page, committed off
-  `main`, 255 tests passing, unreviewed and unpushed.
-- `docs/ai-workflow` — AGENTS.md, HANDOFF.md, and the CLAUDE.md correction about
-  the QR regex.
-- `fix/reminder-collectable` — this branch, cut from `docs/ai-workflow` because
-  HANDOFF.md only exists there. Merge the docs branch first or this one carries
-  it along.
+1. **Neither PR is merged.** `origin/main` is still `3f191b1`, so the reminder
+   gate is not live either. This branch is cut from `fix/reminder-collectable`
+   and carries both it and the docs.
+2. **#2060 can still be drawn as a delivery stop** until this ships. That is the
+   live hole, and the only thing stopping it today is somebody knowing not to.
