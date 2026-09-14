@@ -147,11 +147,11 @@ router.get('/pay/:token/done', async (req, res, next) => {
       //
       // They may have closed the page rather than finished, in which case there
       // is no card to read and this quietly does nothing.
-      const updated = await cardSaved.cardWasSaved(link).catch((err) => {
+      const done = await cardSaved.cardWasSaved(link).catch((err) => {
         console.error('Could not finish saving the card:', err.message);
-        return null;
+        return { customer: null, order: null };
       });
-      if (updated) customer = updated;
+      if (done.customer) customer = done.customer;
     }
 
     if (!billing.hasPaymentMethod(customer)) {

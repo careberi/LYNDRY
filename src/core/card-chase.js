@@ -28,6 +28,7 @@ const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
 const booking = require('./booking');
+const bookingIntents = require('./booking-intents');
 const { sendAndLog } = require('./notify');
 
 // Half an hour, and it is a FLOOR rather than a schedule. The tick is every ten
@@ -93,6 +94,57 @@ async function sendDue({ now = new Date() } = {}) {
   const skipped = [];
 
   const waiting = await due({ now });
+
+  // ---------------------------------------------------------------------
+  // AND THE CHECKOUTS NOBODY FINISHED.
+  //
+  // Neil's decision lock moved the thing that waits on a card. There used to be
+  // an order sitting in AWAITING_COLLECTION with no card on its customer, and
+  // that is what the query above finds. An online customer without a payment
+  // method no longer has one of those - they have a booking intent - so this
+  // sweep had to learn the second shape or it would have gone quiet for exactly
+  // the people it was written for.
+  //
+  // THE MESSAGE IS THE SAME ONE. billing.setupLinkMessage() asks somebody with
+  // no card on file to add one, which is true of both, and a second wording for
+  // the same request is how two doors drift apart.
+  // ---------------------------------------------------------------------
+  const unfinished = await bookingIntents
+    .dueForCardChase({ olderThanMinutes: WAIT_MINUTES })
+    .catch((err) => {
+      console.error(`Could not look for unfinished checkouts: ${err.message}`);
+      return [];
+    });
+
+  for (const intent of unfinished) {
+    const customer = intent.customers;
+    if (!customer) continue;
+
+    // A card arrived in the meantime, which is the outcome the wait exists for.
+    // The intent will have become an order on its own; nothing to say.
+    if (billing.hasPaymentMethod(customer)) continue;
+    if (customer.status === 'UNSUBSCRIBED') continue;
+
+    try {
+      const message = await billing.setupLinkMessage(customer);
+      const result = await sendAndLog(customer.phone, message, customer.id);
+
+      // A refusal answers; a send says nothing. See the note in the loop below.
+      if (result && result.sent === false) {
+        skipped.push({
+          intent: intent.id,
+          reason: `the send was refused (${result.refused || 'no reason given'})`,
+        });
+        continue;
+      }
+
+      await bookingIntents.stampCardLink(intent.id);
+      sent.push({ intent: intent.id, phone: customer.phone });
+    } catch (err) {
+      console.error(`Card chase for checkout ${intent.id} threw: ${err.message}`);
+      skipped.push({ intent: intent.id, reason: err.message });
+    }
+  }
 
   for (const order of waiting) {
     const customer = order.customers;
