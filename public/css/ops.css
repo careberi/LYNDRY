@@ -1,0 +1,173 @@
+/* ---------------------------------------------------------------------------
+   THE BACK OFFICE IS A WAREHOUSE TERMINAL.
+
+   Neil, 13 September: "one header, one exception line, then tables."
+
+   This is the ops visual language, and it is deliberately NOT the public
+   site's. The marketing pages are a line drawing on cream paper with hard
+   shadows and display type; that is right for somebody deciding whether to
+   hand over a card and wrong for somebody reading a 47-line change log at a
+   desk or a bag table on a doorstep. Ops gets hairlines, a gray header row,
+   tabular numbers, and colour only where it means something.
+
+   It sits AFTER lyndry.css in the head, so anything it names wins. The four-
+   menu nav (.ops-bar, .ops-menu) is untouched and stays as it is - this file
+   is everything under the nav. Fingerprinted under /css/<hash>/ like every
+   other file in this directory, so a change here reaches every phone on the
+   next deploy.
+   --------------------------------------------------------------------------- */
+
+.console {
+  --c-bg: #f3f4f6;
+  --c-ink: #111827;
+  --c-muted: #6b7280;
+  --c-line: #d1d5db;
+  --c-line-strong: #9ca3af;
+  --c-head: #e5e7eb;
+  --c-row: #ffffff;
+  --c-row-alt: #f9fafb;
+  --c-green: #166534;
+  --c-green-bg: #dcfce7;
+  --c-amber: #92400e;
+  --c-amber-bg: #fef3c7;
+  --c-red: #991b1b;
+  --c-red-bg: #fee2e2;
+  --c-link: #1d4ed8;
+  --c-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--c-ink);
+  /* NO GROUND OF ITS OWN. Neil, 13 September: "this background should match
+     the background surrounding it." Painting --c-bg here drew the console as a
+     gray box with a cream seam down both sides. It inherits the page instead;
+     when every ops screen is a console, the ground is set once in the chrome
+     and this still inherits. --c-bg stays a token for the day that happens. */
+  background: transparent;
+  padding: 8px 16px 40px;
+  max-width: 1280px;
+  font-variant-numeric: tabular-nums;
+}
+.console a { color: var(--c-link); text-decoration: none; }
+.console a:hover { text-decoration: underline; }
+.console .mono { font-family: var(--c-mono); font-size: 12px; }
+.console .muted { color: var(--c-muted); }
+
+/* --- identity row ---------------------------------------------------------- */
+.console .crumb { color: var(--c-muted); font-size: 12px; margin: 0 0 6px; }
+.console .title-row {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 6px;
+}
+.console h1 { font: 700 20px/1.2 inherit; letter-spacing: -0.02em; margin: 0; }
+.console .id { font-family: var(--c-mono); color: var(--c-muted); font-size: 13px; }
+.console .meta { color: var(--c-muted); margin: 0 0 10px; }
+.console .meta span { margin-right: 14px; white-space: nowrap; }
+.console .meta b { color: var(--c-ink); font-weight: 600; }
+
+/* --- chips: small, flat, and only the true ones ---------------------------- */
+.console .chip {
+  display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px;
+  border-radius: 3px; background: var(--c-head); color: #374151;
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+.console .chip.ok { background: var(--c-green-bg); color: var(--c-green); }
+.console .chip.warn { background: var(--c-amber-bg); color: var(--c-amber); }
+.console .chip.bad { background: var(--c-red-bg); color: var(--c-red); }
+
+/* --- toolbar: small buttons, real forms ------------------------------------
+   Every button is a <form method="post"> to a route that already exists. On a
+   phone they go full width, because a driver taps these with one hand at a
+   door and 44px is the floor for a touch target - the warehouse look does not
+   get to make the doorstep worse. */
+.console .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; align-items: flex-start; }
+.console .toolbar form { margin: 0; display: contents; }
+.console .cbtn {
+  background: #fff; border: 1px solid var(--c-line-strong); padding: 5px 10px;
+  border-radius: 3px; cursor: pointer; color: var(--c-ink); font: inherit;
+  min-height: 30px; text-decoration: none; display: inline-block;
+}
+.console .cbtn:hover { background: #f3f4f6; text-decoration: none; }
+.console .cbtn.primary { background: #111827; color: #fff; border-color: #111827; }
+.console .cbtn.primary:hover { background: #000; }
+.console .cbtn.danger { color: var(--c-red); border-color: #fca5a5; }
+.console .toolbar .field { display: inline-flex; gap: 6px; align-items: center; }
+.console .toolbar input, .console .toolbar select {
+  font: inherit; padding: 4px 6px; border: 1px solid var(--c-line-strong); border-radius: 3px;
+  min-height: 30px; background: #fff;
+}
+@media (max-width: 720px) {
+  .console .toolbar form { display: flex; width: 100%; }
+  .console .cbtn { min-height: 44px; flex: 1; text-align: center; }
+  .console .toolbar .field { width: 100%; }
+  .console .toolbar input, .console .toolbar select { min-height: 44px; flex: 1; }
+}
+
+/* --- the one exception strip ----------------------------------------------- */
+.console .strip {
+  border: 1px solid #f59e0b; background: var(--c-amber-bg); padding: 8px 10px; margin: 0 0 12px;
+}
+.console .strip.open { border-color: #ef4444; background: var(--c-red-bg); }
+.console .strip b { font-weight: 700; }
+.console .strip .row { margin-top: 4px; }
+.console .strip .bad { color: var(--c-red); font-weight: 600; }
+
+/* --- stage rail ------------------------------------------------------------- */
+.console .rail {
+  display: flex; background: #fff; border: 1px solid var(--c-line); margin: 0 0 4px; overflow-x: auto;
+}
+.console .rail .s { flex: 1; min-width: 110px; padding: 6px 10px; border-right: 1px solid var(--c-line); }
+.console .rail .s:last-child { border-right: 0; }
+.console .rail .s .n { font-weight: 700; font-size: 12px; }
+.console .rail .s .t { color: var(--c-muted); font-size: 11px; }
+.console .rail .s.on { background: var(--c-green-bg); }
+.console .rail .s.now { background: var(--c-amber-bg); }
+
+/* --- two columns, one below 960 ------------------------------------------- */
+.console .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 960px) { .console .layout { grid-template-columns: 1fr; } }
+.console .side { position: sticky; top: 8px; }
+@media (max-width: 960px) { .console .side { position: static; } }
+
+.console h2 {
+  font: 700 11px/1.3 inherit; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #4b5563; margin: 16px 0 6px;
+}
+.console h2:first-child { margin-top: 0; }
+
+/* --- tables ----------------------------------------------------------------- */
+.console table.data { width: 100%; border-collapse: collapse; background: var(--c-row); font-size: 13px; }
+.console table.data th {
+  text-align: left; font-size: 11px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #4b5563; background: var(--c-head); border: 1px solid var(--c-line); padding: 5px 8px; white-space: nowrap;
+}
+.console table.data td { border: 1px solid var(--c-line); padding: 5px 8px; vertical-align: top; background: var(--c-row); }
+.console table.data tbody tr:nth-child(even) td { background: var(--c-row-alt); }
+.console table.data td.num, .console table.data th.num { text-align: right; }
+.console table.data td.mono { font-family: var(--c-mono); font-size: 12px; }
+.console table.data tfoot td { font-weight: 700; background: var(--c-head); }
+.console table.data td.who { white-space: nowrap; color: var(--c-muted); }
+.console .tablewrap { overflow-x: auto; }
+
+/* --- key/value --------------------------------------------------------------- */
+.console table.kv { width: 100%; border-collapse: collapse; background: #fff; }
+.console table.kv th, .console table.kv td {
+  border: 1px solid var(--c-line); padding: 5px 8px; text-align: left; font-weight: 400; vertical-align: top;
+}
+.console table.kv th { width: 38%; background: var(--c-head); color: #4b5563; font-size: 12px; }
+
+/* --- log filters: links, not scripts --------------------------------------- */
+.console .filters { color: var(--c-muted); font-size: 12px; margin: -2px 0 6px; }
+.console .filters a, .console .filters span { margin-right: 12px; }
+.console .filters span.on { color: var(--c-ink); font-weight: 700; }
+
+/* --- thread ------------------------------------------------------------------ */
+.console .thread { background: #fff; border: 1px solid var(--c-line); }
+.console .thread .m { padding: 7px 8px; border-bottom: 1px solid var(--c-line); white-space: pre-wrap; word-break: break-word; }
+.console .thread .m:last-child { border-bottom: 0; }
+.console .thread .m.in { background: var(--c-row-alt); }
+.console .thread .when { color: var(--c-muted); font-size: 11px; margin-bottom: 2px; white-space: normal; }
+.console .hint { color: var(--c-muted); font-size: 12px; margin-top: 6px; }
+
+/* --- the page-level banners the route already passes ----------------------- */
+.console .flash { padding: 8px 10px; margin: 0 0 12px; border: 1px solid var(--c-line-strong); background: #fff; }
+.console .flash.problem { border-color: #ef4444; background: var(--c-red-bg); color: var(--c-red); }
+.console .flash.done { border-color: #16a34a; background: var(--c-green-bg); color: var(--c-green); }

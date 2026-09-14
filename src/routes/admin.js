@@ -23,6 +23,7 @@ const reminders = require('../core/reminders');
 const { nudgePanel } = require('../web/nudge-panel');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
+const { orderConsoleBody, orderConsoleHead } = require('../web/order-console');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const {
@@ -3105,6 +3106,23 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           // which is the exact question anybody opens this card to answer, and
           // the whole reason migration 0091 stored the code at all.
           'payment_decline_code, payment_attempts, ' +
+          // THE NAMES BEHIND TWO IDS. The console's exception strip and stage
+          // rail say "Fancy K 27.6 lb", not "partner 27.6 lb", and the Order
+          // key/value names the promotion that came off. Joined here rather
+          // than fetched again per page, the same way the board reads them.
+          // orders has TWO foreign keys to partners - partner_id (who had the
+          // bag) and intended_partner_id (who was planned) - so the embed has
+          // to name the relationship or PostgREST refuses it as ambiguous. The
+          // console wants the laundromat that actually held the laundry.
+          'promotion_id, discount_cents, partners!orders_partner_id_fkey(name), promotions(name, code), ' +
+          // ready_at and delivered_at. ORDER_FIELDS carries collected_at and
+          // at_partner_at and stops there; the board added these two, this
+          // page never had. Without delivered_at the console's stage rail read
+          // "Delivered -" on a delivered order and its thread window ran to
+          // infinity - every later order's texts on a closed ticket, which is
+          // the exact thing the spec forbids. Fourth time a select list has
+          // quietly decided what a page can know.
+          'ready_at, delivered_at, ' +
           'weight_photo_path, partner_weight_lb, partner_weight_at, driver_id, ' +
           // A held weight is money that is deliberately stuck. Without these
           // two the page cannot tell a settled order from one waiting on a
@@ -3154,12 +3172,18 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
     // The conversation around this order. There is no order id on a message,
     // so this is the customer's recent thread rather than a per-order log.
+    // FROM THE BOOKING ONWARD, NOT THE LAST TWELVE. The console shows the
+    // texts sent while THIS order was live - booking to delivery - and the
+    // customer's twelve most recent never reach back that far on anybody with
+    // a history (#1992's thread has 28). The window bounds it: a day for a
+    // closed order, and an open one is short by definition. sent_by rides along
+    // so a line a person typed can be told from one the system sent.
     const { data: messages } = await db
       .from('messages')
-      .select('direction, body, created_at')
+      .select('direction, body, created_at, sent_by')
       .eq('customer_id', c.id)
-      .order('created_at', { ascending: false })
-      .limit(12);
+      .gte('created_at', order.created_at)
+      .order('created_at', { ascending: true });
 
     const detail = (label, value) => `
       <div style="display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
@@ -3209,7 +3233,86 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       labels: doorScan.labels || [],
     };
 
-    const body = `
+    // THE WAREHOUSE TERMINAL. Neil, 13 September: "one header, one exception
+    // line, then tables." src/web/order-console.js renders it from exactly what
+    // this route already loaded; the permission answers are the same four calls
+    // they always were, passed through by name so a driver still sees the stop
+    // and not the customer. The old template below is kept as _legacyBody -
+    // parsed, unused - until the console has been driven for a few days; every
+    // card helper it calls is untouched, so going back is one rename.
+    // The same four permission calls the rest of this route makes; called here
+    // rather than read from seeCustomer/seeThread/seeAudit because those are
+    // declared further down and this block runs first.
+    const can = {
+      act: roles.can(req.opsUser, 'orders.act'),
+      override: roles.can(req.opsUser, 'orders.override'),
+      customers: roles.can(req.opsUser, 'customers.view'),
+      messages: roles.can(req.opsUser, 'messages.view'),
+      money: showMoney,
+      audit: roles.can(req.opsUser, 'orders.audit'),
+      text: canAskOnOrder,
+    };
+    const driverRow = team.find((d) => d.id === order.driver_id) || null;
+    const consoleOrder = {
+      ...order,
+      driverName: driverRow ? driverRow.name : order.driver_id && order.driver_id === req.opsUser.id ? req.opsUser.name : null,
+      partnerName: order.partners ? order.partners.name : null,
+      promotionName: order.promotions ? order.promotions.code || order.promotions.name : null,
+    };
+    const askedView = String(req.query.log || '').trim();
+    const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
+    const banner = req.query.problem
+      ? `<div class="flash problem">${escapeHtml(String(req.query.problem))}</div>`
+      : req.query.done
+        ? `<div class="flash done">${escapeHtml(String(req.query.done))}</div>`
+        : '';
+    // Everything with a form on it that the toolbar links to by anchor. These
+    // are the existing cards, unchanged, so every mutation posts exactly where
+    // it always did.
+    const sideExtras = [
+      order.weight_held_at && showMoney ? `<div id="settle">${heldWeightCard(order, can.override)}</div>` : '',
+      `<div id="release">${returnCheckCard(order, can.override)}</div>`,
+      showMoney && order.payment_status === 'FAILED' ? `<div id="declined">${declinedCard(order, can.override, roles.can(req.opsUser, 'messages.send'))}</div>` : '',
+      stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override)}</div>` : '',
+      orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
+      can.customers && stillRunning
+        ? `<h2>Driver</h2><div id="driver"><form method="post" action="/ops/orders/${order.order_number}/driver" style="margin:0;display:flex;gap:8px;flex-wrap:wrap;">
+             <select name="driver_id" style="font:inherit;padding:4px 6px;border:1px solid #9ca3af;border-radius:3px;min-height:30px;">
+               <option value=""${order.driver_id ? '' : ' selected'}>Nobody yet</option>
+               ${team.map((d) => `<option value="${escapeHtml(d.id)}"${d.id === order.driver_id ? ' selected' : ''}>${escapeHtml(d.name)}${d.base_city ? ` - ${escapeHtml(d.base_city)}` : ''}</option>`).join('')}
+             </select>
+             <button class="cbtn" type="submit">Move</button>
+           </form></div>`
+        : '',
+      // Only while the order is live. The gaps are facts about the PERSON -
+      // "nothing booked" is true of everybody whose last pickup ran - and on a
+      // finished order the only sentence worth sending is "make it regular".
+      can.customers && stillRunning && orderGaps.length
+        ? `<h2 id="send">Send</h2>${nudgePanel({ gaps: orderGaps, action: `/ops/customers/${c.id}/ask?order=${order.order_number}`, canSend: canAskOnOrder, heading: 'Still needed from them' })}`
+        : '',
+    ].join('');
+
+    const body = orderConsoleBody({
+      order: consoleOrder,
+      customer: c,
+      events: history,
+      labels,
+      messages: messages || [],
+      tasks: pickupTasks,
+      team,
+      laundromats,
+      limits: null,
+      can,
+      view,
+      banner,
+      money,
+      shortDate,
+      labelState,
+      sideExtras,
+    });
+
+    // eslint-disable-next-line no-unused-vars
+    const _legacyBody = `
       <a href="/ops" style="font-size:15px;font-weight:600;">&larr; All orders</a>
 
       <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin:18px 0 32px;">
@@ -3526,7 +3629,17 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       </div>`;
       })()}`;
 
-    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(
+      adminPage({
+        title: `#${order.order_number}`,
+        active: '/ops',
+        body,
+        head: orderConsoleHead(),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
   } catch (err) {
     next(err);
   }
