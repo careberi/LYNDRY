@@ -6405,6 +6405,8 @@ router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res
 
     return res.type('html').send(
       adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Weight and money report',
         active: '/ops/reports',
         body: reportsBody({ report, partners: partnerRows || [], form }),
@@ -8018,7 +8020,9 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     `;
 
     res.type('html').send(
-      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true, title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -9156,6 +9160,8 @@ router.get('/ops/checkouts', guard, withIssues, may('customers.view'), async (re
 
     return res.type('html').send(
       adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Unfinished checkouts',
         active: '/ops/checkouts',
         body: checkoutsBody({
@@ -9206,6 +9212,8 @@ router.get('/ops/scheduled', guard, withIssues, may('messages.view'), async (req
 
     return res.type('html').send(
       adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Customer follow-up',
         active: '/ops/scheduled',
         body: scheduledBody({
