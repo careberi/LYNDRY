@@ -4,6 +4,7 @@ const db = require('../db');
 const orders = require('./orders');
 const booking = require('./booking');
 const notify = require('./notify');
+const dispatch = require('./dispatch');
 
 // ---------------------------------------------------------------------------
 // "YOUR PICKUP IS TOMORROW - HAVE THE BAG OUT."
@@ -33,6 +34,66 @@ const notify = require('./notify');
 // carrying the SKIP line, sent as they are booked; recurring.bookDue() stamps
 // the same column, so they are simply not due one here.
 // ---------------------------------------------------------------------------
+
+// NO CARD MEANS NO REMINDER, BECAUSE NO CARD ALREADY MEANS NO PICKUP.
+//
+// Neil, 14 September: "reminders must use dispatch.collectable() so no-card
+// orders get no night-before text and do not show PICKUP REMINDER SCHEDULED."
+//
+// dispatch.collectable() took an unbillable order off the driver's route on 13
+// September. Nothing here read it, so the van was not coming and the customer
+// was still being told to put the bag out - which is worse than saying nothing,
+// because they act on it. Order #2063 was the live case: badged AWAITING CARD,
+// off the route, still carrying a scheduled reminder on its own page.
+//
+// IT CALLS THE ROUTE'S FUNCTION RATHER THAN ASKING THE SAME QUESTION AGAIN.
+// "Has this order got a card" is one rule with one owner, and a second copy
+// here would disagree with the round the first time either changed. A WAIVED
+// order is still reminded, because collectable() already answers true for it -
+// nothing to charge is not the same as cannot charge.
+//
+// THREE FUNCTIONS BELOW DECIDE THIS, NOT ONE, and all three are gated: the
+// sweep that sends, the badge in the thread, and the list on /ops/scheduled. A
+// badge promising a text that will not be sent is the failure this rule exists
+// to prevent, not a smaller version of it.
+function collectable(order) {
+  return dispatch.collectable(order);
+}
+
+// AND NO CARD WAS ONLY HALF OF IT. Grok's review, 14 September.
+//
+// There are two reasons the van is not coming, and this file knew one. A
+// customer with laundry of ours and an unpaid balance has their other pickups
+// parked by the sibling block, and nothing here knew it: #2061 is booked for 26
+// September behind #2060, so it comes off the round that morning and would have
+// been sent a text the evening before telling them to have the bag out. That is
+// the same failure this file was written to fix, one rule along, and worse than
+// the first because the customer has done nothing wrong.
+//
+// SO IT CALLS dispatch.routableCheck(), WHICH IS THE ROUTE'S OWN ANSWER TO
+// BOTH. Not a second card check and not an `&&` written out again here: "can
+// this pickup be driven" has one owner, and a copy in this file would disagree
+// with the round the first time either moved. It is async because the sibling
+// half is a query, and it takes the whole list so one query serves a pass.
+//
+// A WAIVED ORDER IS STILL REMINDED. Nothing to charge is not cannot charge, and
+// a waived order has no balance, so neither half of this touches it.
+const routableCheck = dispatch.routableCheck;
+
+// WHAT collectable() HAS TO BE HANDED, AND WHY IT IS A CONSTANT.
+//
+// It reads orders.payment_status and the customer's stripe_customer_id and
+// default_payment_method_id. An unselected column comes back undefined, which
+// is indistinguishable from an absent card - so a select that forgets these
+// does not fail loudly, it silently answers "no card" for EVERYBODY and
+// cancels every reminder in the system.
+//
+// That has now happened five times in this codebase (BOARD_FIELDS, RUN_FIELDS,
+// the order page's payment_attempts, and its ready_at / delivered_at), which is
+// why the fields are one string used by all three queries rather than typed out
+// three times. A test pins that each query carries them.
+const CARD_FIELDS = 'payment_status';
+const CUSTOMER_CARD_FIELDS = 'stripe_customer_id, default_payment_method_id';
 
 // A pickup booked in the last few hours does not need reminding that it is
 // tomorrow. They booked it this evening, the confirmation is the message above
@@ -109,13 +170,21 @@ async function sendDue({ date = null } = {}) {
     .select(
       'id, order_number, pickup_date, pickup_window_start, pickup_window_end, ' +
         'pickup_method, preferences, created_at, ' +
-        'customers(id, name, phone, status, preferences)'
+        `${CARD_FIELDS}, ` +
+        // customer_id is what the sibling half groups on. Unselected it is
+        // undefined, nobody is blocked, and this gate quietly does half its job.
+        'customer_id, ' +
+        `customers(id, name, phone, status, preferences, ${CUSTOMER_CARD_FIELDS})`
     )
     .eq('pickup_date', target)
     .in('status', orders.AWAITING_COLLECTION)
     .is('reminder_sent_at', null);
 
   if (error) throw error;
+
+  // ONE QUERY FOR THE WHOLE PASS, before the loop. Asking per order would be a
+  // round trip per reminder on a night with thirty of them.
+  const routable = await routableCheck(data || []);
 
   const sent = [];
   const skipped = [];
@@ -132,6 +201,16 @@ async function sendDue({ date = null } = {}) {
     // tomorrow morning and the column should keep meaning "we sent it".
     if (customer.status === 'UNSUBSCRIBED') {
       skipped.push({ order, reason: 'opted out' });
+      continue;
+    }
+
+    // Nothing can be billed for this one, or the customer is parked behind an
+    // unpaid order of their own, so the van is not coming either way. Telling
+    // them to put the bag out would be the system contradicting its own round.
+    // NOT STAMPED, for the same reason STOP is not: if a card arrives before
+    // the pass runs again the column must still mean "we sent it".
+    if (!routable(order)) {
+      skipped.push({ order, reason: collectable(order) ? 'payment hold' : 'no card on file' });
       continue;
     }
 
@@ -187,7 +266,13 @@ async function pendingFor(customerId) {
 
   const { data, error } = await db
     .from('orders')
-    .select('id, order_number, pickup_date, pickup_window_start, pickup_window_end, reminder_sent_at')
+    // The customer rides along ONLY so collectable() can be asked. This query
+    // wanted nothing off them before, which is exactly how the badge came to
+    // promise a text for an order that was off the route.
+    .select(
+      'id, order_number, pickup_date, pickup_window_start, pickup_window_end, reminder_sent_at, ' +
+        `${CARD_FIELDS}, customer_id, customers(${CUSTOMER_CARD_FIELDS})`
+    )
     .eq('customer_id', customerId)
     .in('status', orders.AWAITING_COLLECTION)
     .is('reminder_sent_at', null)
@@ -197,8 +282,14 @@ async function pendingFor(customerId) {
 
   if (error) throw error;
 
+  // THE SOONEST, AND ONLY THE SOONEST. If that one cannot be collected there is
+  // no reminder to promise - falling through to a later pickup would badge the
+  // wrong order, which is a quieter version of the bug being fixed.
   const order = (data || [])[0];
   if (!order) return null;
+
+  const routable = await routableCheck([order]);
+  if (!routable(order)) return null;
 
   // The evening before. A pickup TODAY has no reminder left to send - the
   // evening before it has already gone by.
@@ -220,7 +311,8 @@ async function allPending() {
     .from('orders')
     .select(
       'id, order_number, pickup_date, pickup_window_start, pickup_window_end, ' +
-        'customers (id, name, phone, status)'
+        `${CARD_FIELDS}, customer_id, ` +
+        `customers (id, name, phone, status, ${CUSTOMER_CARD_FIELDS})`
     )
     .in('status', orders.AWAITING_COLLECTION)
     .is('reminder_sent_at', null)
@@ -228,6 +320,8 @@ async function allPending() {
     .order('pickup_date', { ascending: true });
 
   if (error) throw error;
+
+  const routable = await routableCheck(data || []);
 
   return (data || [])
     .map((order) => ({
@@ -237,7 +331,17 @@ async function allPending() {
       goesOn: booking.addDays(order.pickup_date, -1),
       window: booking.arrivalWindow(order),
     }))
-    .filter((row) => row.phone && row.goesOn >= today);
+    .filter((row) => row.phone && row.goesOn >= today && routable(row.order));
 }
 
-module.exports = { sendDue, reminderMessage, pendingFor, allPending, JUST_BOOKED_HOURS };
+module.exports = {
+  sendDue,
+  reminderMessage,
+  pendingFor,
+  allPending,
+  collectable,
+  routableCheck,
+  CARD_FIELDS,
+  CUSTOMER_CARD_FIELDS,
+  JUST_BOOKED_HOURS,
+};

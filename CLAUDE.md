@@ -1759,13 +1759,23 @@ from the camera app is not something to bet a driver's afternoon on. If his
 session has lapsed he lands on the sign-in page, which is honest.
 
 **The in-page scanner stays**, and so does jsQR. It is one tap when it works.
-What could not be established is why it does not: the vendored decoder is served
-correctly, the URL regex is right, the video carries `playsinline`, and jsQR was
-tested directly against a rendered tag at every size down to a fifth of the
-frame - it reads them all. Whatever is wrong is in the lens rather than the code,
-and reproducing it needs the driver's own phone. **That is the argument for this
-change rather than against it**: the camera app has autofocus, exposure, a torch
-and years of tuning that a canvas and 250 KB of JavaScript will never match.
+
+**AND ONE REASON IT DOES NOT IS NOW KNOWN, AND THIS PARAGRAPH USED TO DENY IT.**
+It said "the URL regex is right". It is not. `codeFrom()` in `scanner.js` matches
+`/o/([0-9A-Za-z]+)`, with no hyphen in the class, so a scan of a return sticker
+`0H7Y2S-1` yields `0H7Y2S` - the parent tag. The form then posts the wrong bag
+and the driver confirms a bag he is not holding. Found 14 September by reading
+the source against a written spec that claimed it; the spec was right and this
+file was wrong. **Nothing else in the old sentence has been re-checked since**,
+so treat "the decoder is served correctly" and "playsinline is there" as
+unverified rather than as findings.
+
+The rest of the original note still stands and is the argument for the camera
+app rather than against it: jsQR was tested directly against a rendered tag at
+every size down to a fifth of the frame and read them all, so whatever else is
+wrong is in the lens rather than the decoder, and reproducing it needs the
+driver's own phone. The camera app has autofocus, exposure, a torch and years of
+tuning that a canvas and 250 KB of JavaScript will never match.
 
 
 **The camera is an accelerator, never the mechanism.** Every scan field is a
@@ -3307,9 +3317,55 @@ still written *before* the card is asked for — a customer sent away to pay
 before their booking exists comes back to nothing, which happened to a real one.
 Saving the card confirms it automatically from the webhook.
 
-**A declined card never holds up a delivery.** We deliver and chase by text.
-Holding someone's clothes over a decline is a bad look and legally murky; the
-exposure is one order.
+**A DECLINED CARD DOES HOLD UP A DELIVERY NOW, AND THAT REVERSES WHAT THIS FILE
+SAID UNTIL 14 SEPTEMBER.** It read: *"A declined card never holds up a delivery.
+We deliver and chase by text. Holding someone's clothes over a decline is a bad
+look and legally murky; the exposure is one order."*
+
+Neil's call, on order #2060 - collected, weighed, charged $84.00, refused, and
+sitting washed at a laundromat while nothing in the system would stop it being
+driven to his door. The old rule was written when the charge happened at
+delivery, so "deliver and chase" was the only option that did not strand
+somebody at a doorstep. **The charge moved to the door on 12 September**, which
+is what changed the argument: a customer whose card fails at the doorstep now
+keeps their bags and nothing has left the property. The only laundry that can
+reach this state is laundry we took in good faith and then could not bill for.
+
+`dispatch.paymentHold()` is the rule and it is **derived, never stored** - there
+is no `payment_hold` column and no `PART_PAID` status. `balance()` is what it
+reads, written as money rather than as `payment_status === 'FAILED'` so the cash
+ledger can make it partial later without this rule being re-opened.
+
+**HOLD KEEPS THE BAG OUT OF THE CUSTOMER'S DOORWAY, NOT OFF THE LAUNDROMAT'S
+FLOOR**, and that distinction is the whole of Neil's lock:
+
+| Leg | |
+|---|---|
+| Pickup | `collectable()` as before, **plus the sibling block** |
+| Plant drop-off | already impossible - `loadVan()` charges before it writes `van_confirmed_at`, and only a stamped order reaches that leg. Nothing was added |
+| **Retrieval** | **allowed while held.** Refusing would leave our bags on somebody else's shelf at their cost |
+| **Delivery** | **refused while held** |
+
+**THE SIBLING BLOCK IS CUSTOMER-LEVEL**, so `paymentHold(order)` cannot answer it -
+it only ever sees one row. A customer holding an unsettled order has their other
+pickups parked until it clears: #2061 waits on #2060. `heldCustomerIds()` is one
+query for the whole board rather than one per order, the same shape as
+`promotions.expectedForMany()`, and it **fails open** - a ledger lookup that is
+down must not quietly empty the round.
+
+**ENTERING HOLD RINGS THE OFFICE IMMEDIATELY.** No 24-hour clock.
+`billing.markFailed()` is the one line where an order becomes `FAILED`, so it is
+the only honest place to call "the moment it entered hold" - the hold itself is
+derived and has no moment of its own. It raises an issue and pages, and only
+while the laundry is ours, because a doorstep decline is not a hold.
+
+**It is paused, not cancelled**, and it is said out loud: the routing board draws
+a red card naming every held order, because a delivery that silently stops
+happening reads as the board losing one.
+
+**The payment chase below still waits for `DELIVERED`** and is therefore
+unreachable for a held order. That is correct rather than an oversight: a chase
+is for laundry already returned, and a held order has not been.
 
 **The idempotency key must include the attempt number.** Stripe caches the
 result of a key — including a decline — so a key of just order + amount would
