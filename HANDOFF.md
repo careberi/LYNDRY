@@ -2,7 +2,7 @@
 
 Issue: Reminders must use `dispatch.collectable()`
 Owner of the keyboard: Neil
-Status: spec
+Status: review
 
 ## Goal
 
@@ -71,16 +71,15 @@ Order #2063 is the live example: badged AWAITING CARD, off the route since
 - `pendingFor()` returns the soonest pickup only. If that one is not collectable
   it must not silently fall through to a later one and badge the wrong order.
 
-## Files Claude expects to touch
+## Files Claude touched
 
-- `src/core/reminders.js` — the three selects and the three gates.
-- `test/` — a new test file. Pin: no card means no reminder in all three
-  functions; waived still reminded; a card on file still reminded; the select
-  lists actually carry the fields, so the "undefined reads as no card" failure
-  cannot come back.
+- `src/core/reminders.js` — requires `dispatch`, adds `collectable()` as a
+  one-line pass-through, adds `CARD_FIELDS` / `CUSTOMER_CARD_FIELDS` as one
+  shared string, widens all three selects and gates all three functions.
+- `test/reminder-collectable.test.js` — new, 12 tests.
 - `HANDOFF.md`
 
-Nothing else. `dispatch.js` is read, not edited.
+Nothing else. `dispatch.js` was read, not edited.
 
 ## Grok review
 
@@ -88,7 +87,22 @@ Nothing else. `dispatch.js` is read, not edited.
 
 ## Neil
 
-Spec only. Nothing implemented yet — say go.
+Implemented on `fix/reminder-collectable`. `npm test`: 247 pass, 0 fail.
+
+Verified against live rows, read-only — `sendDue()` was deliberately not called
+because it texts real people:
+
+| Order | | Before | After |
+|---|---|---|---|
+| #2063 ashley | no card, off the route | reminder scheduled | **no reminder, no badge** |
+| #2062 Trisha | waived | reminder scheduled | reminder scheduled, goes tonight |
+| #2061 Shamar | card on file | reminder scheduled | reminder scheduled |
+
+Still to do before merge: paste the diff to Grok, then click it.
+
+One thing deliberately left alone, per the brief: a customer who adds a card
+after the reminder evening but before the pickup gets no reminder and is on the
+route. No new text for that in this branch.
 
 Branch state, so nothing is lost:
 
