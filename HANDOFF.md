@@ -1,6 +1,6 @@
 # HANDOFF
 
-Issue: Payment Hold, then Booking Intents. BOTH ON MAIN AND DEPLOYED.
+Issue: Payment Hold, Booking Intents, then the ops terminal skin. ALL ON MAIN.
 Owner of the keyboard: Neil
 Status: shipped 14 September. Nothing in flight.
 
@@ -233,54 +233,77 @@ retrieval stops     : [ pickup_partner ]
 
 ## Where this actually stands, 14 September
 
-BOTH ISSUES ARE ON MAIN AND LIVE. Neil handed over the merges and the database
-rather than running them himself.
+THREE PIECES OF WORK ARE ON MAIN AND DEPLOYED. Neil handed over the merges, the
+database and the deploys rather than running them himself.
 
 | | |
 |---|---|
-| Payment Hold | merged at `2ba8d20` |
-| Booking Intents | merged at `0816b47` |
-| A test fix on top | merged at `a3ca64f` |
+| Payment Hold | `2ba8d20` |
+| Booking Intents | `0816b47` |
 | Migration 0093 | APPLIED to project pauaemlehenfrnjvgzmc, checked against SUPABASE_URL rather than assumed |
+| The ops terminal skin | `1880751` |
 
-Merged locally with merge commits, not committed to main, because there is no
-GitHub CLI on that machine to open a pull request with.
+Merged locally with merge commits, never committed to main directly, because
+there is no GitHub CLI on that machine to open a pull request with.
 
-### The verification Neil asked for could not pass, and why
+### The ops skin, in one paragraph
 
-He asked to gate the Payment Hold merge on #2060 being held and #2061 being
-parked behind it. Neither is true any more, because he had #2060 marked paid by
-hand earlier the same day - so it owes nothing, is not held, and is a delivery
-stop again, and #2061 is back on the round for 26 September with its reminder
-due the 25th. That is a working gate reporting on settled orders.
+The back office is a warehouse terminal: a 40px dark bar, a grey ground, 13px
+system type, white tables with a grey header row and zebra rows, chips instead
+of badges, flat panels instead of cream cards. Every page under /ops wears it -
+37 routes carry a `terminal` flag on adminPage(), four are styled through their
+own shells, the rest are redirects or files. ONE stylesheet owns it,
+`public/css/ops.css`, linked in exactly two places and never in the public
+layout, because it names the body element.
 
-The live proof of the hold is the run recorded at `2f6c76d`, before the balance
-was cleared. What was re-checked before merging is that the gate evaluates
-correctly on the current rows and that the two wiring bugs stay fixed - the
-sibling query runs, and customer_id reaches the board.
+**Three deliberate exceptions**, each with a reason that will look like an
+inconsistency to whoever reads the CSS next:
 
-### What was found while shipping, that review had not
+- **Big targets survive on the route, its door, bag and pickup screens, and the
+  load-out**, behind a second `ops-touch` flag. CLAUDE.md sets 56px and a 44px
+  floor for anything tapped on a doorstep. It was every terminal page until the
+  desk screens arrived, which had made the text blast's Send it a 52px slab.
+- **The bar wears a text wordmark**, because the compact logo's documented floor
+  is 38px and the bar is 40px tall.
+- **Leaflet's map is excluded**, because it styles its own controls.
 
-- **The schedule undo was wrong twice.** Ending every schedule was the original
-  bug. Deleting by id, which replaced it, was ALSO wrong: `addSchedule()` reuses
-  an existing row for the same weekday and cadence, including an ended one, so
-  the id handed back can belong to a row that predates the booking. Booking
-  first and scheduling second removes the undo entirely.
-- **A test failed on main with bytes identical to the branch.** Git checks this
-  repo out with CRLF; the helper looked for a bare LF, found nothing, and handed
-  back the rest of the file - so a claim-lock test failed while pointing at
-  product code. It would have broken on any fresh clone.
-- **The claim lock is now tested against Postgres**, not read. A second claim on
-  a held checkout loses, a released one can be claimed again, a stale one is
-  taken over. The test row was deleted and the table is empty.
+### What the restyle turned up that was not styling
+
+- **A thread now shows what the customer saw.** issues.js and order-alerts.js
+  page the team with a null customer, and Neil's handset is both a team phone
+  and the DEMO CUSTOMER - so 29 internal pages sat interleaved with 31 real
+  messages on one thread. Folded behind a link, never deleted, and three things
+  the rule cannot reach are each pinned by a test.
+- **Phone numbers were compared as raw digits**, so a team number saved without
+  the country code was a different number.
+- **The thread query did not select `customer_id`**, which would have made every
+  outbound message look like an alert. Eighth occurrence of that trap.
+
+### The mistakes worth not repeating
+
+- **Three slices did less than I said they did.** Fifty ops headings are styled
+  inline, an inline style beats the sheet, and the heading rule did nothing on
+  most of the screens it was meant to convert. It survived three slices because
+  every check ran against markup I supplied, which carried no inline styles -
+  the test proved the rule, not the page it had to win against.
+- **Flags placed by searching forward landed on the wrong routes**, twice, and
+  missed the load-out entirely. Placing them by walking BACK from each flag to
+  its owning route is what found it.
+- **The schedule undo was wrong in two different ways**, the second being the
+  fix for the first.
 
 ### Still open
 
-- **Nobody has click-tested the new checkout.** Neil said go without it. The
-  first real online booking by somebody with no card on file is the test.
-- **Grok's finding 4 was never recorded anywhere** and is still not done.
-- **The order console** (`feat/ops-order-console`) is still local and unpushed,
-  under a standing instruction not to push it.
-- CLEAN50 has no ceiling. The van clips a held bag ties up are undecided.
+- **NOTHING HAS BEEN SEEN ON A REAL SIGNED-IN OPS PAGE.** Signing in would mint
+  a session token and sign Neil out on his phone, so every visual check ran
+  against real stylesheets with supplied markup. The first person to sign in is
+  the real test, and that gap is exactly what hid the heading bug.
+- **The new checkout has never been click-tested either.** The first online
+  booking by somebody with no card on file is the test.
+- Grok's finding 4 was never recorded anywhere and is still not done.
+- Two asks deliberately not built: the admin dashboard as an index table, which
+  would reverse a decision CLAUDE.md records in Neil's words, and a column on
+  the laundromat page showing whose bags are on their floor.
+- CLEAN50 still has no ceiling. The van clips a held bag ties up are undecided.
 
 Not started and not to be started: QR, cash, the $80 authorization.
