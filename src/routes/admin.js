@@ -507,6 +507,11 @@ function adminPage({
   serviceClosed = false,
   bare = false,
   terminal = false,
+  // A SCREEN USED AT A DOOR OR A COUNTER, not at a desk. It keeps 52px
+  // buttons and real input targets; a desk screen gets toolbar-sized ones.
+  // CLAUDE.md: nothing a driver taps goes below 44px. Set on the route, not
+  // guessed from the URL, so a page that moves keeps the right targets.
+  touch = false,
 }) {
   return `<!doctype html>
 <html lang="en">
@@ -563,7 +568,7 @@ function adminPage({
   <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 ${head}
 </head>
-<body${terminal ? ' class="ops-terminal"' : ''}>
+<body${terminal ? ` class="ops-terminal${touch ? ' ops-touch' : ''}"` : ''}>
   ${
     // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
     // should look like the bag tag page - the logo and nothing else.
@@ -5254,6 +5259,7 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
       adminPage({
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
         title: 'Your route',
         active: '/ops/run',
         // NO NAV ON THE ROUTE. One stop, one thing to do - see adminPage.
@@ -5410,8 +5416,10 @@ router.get('/ops/run/door/:id', guard, withIssues, may('orders.drive'), async (r
       adminPage({
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
         title: `${found.label.code}-${found.label.sticker_seq}`,
         active: '/ops/run',
         bare: true,
@@ -5589,8 +5597,10 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
       adminPage({
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
         title: `Bag #${position}`,
         active: '/ops/run',
         bare: true,
@@ -5619,6 +5629,7 @@ router.get('/ops/run/bag/:id', guard, withIssues, may('orders.drive'), async (re
       adminPage({
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
         title: `${found.label.code}-${found.label.sticker_seq}`,
         active: '/ops/run',
         bare: true,
@@ -6630,6 +6641,7 @@ async function renderLoadout(req, res, { built = false } = {}) {
     adminPage({
         // Live day: the terminal skin. See adminPage().
         terminal: true,
+        touch: true,
       title: 'Load the van',
       // Highlighted as the route, because that is what it is a step of. A nav
       // that lights up nothing while you are standing on a page reads as
@@ -9575,6 +9587,8 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Admin dashboard',
         active: '/ops/admin',
         body: adminDashboardBody({
@@ -9615,6 +9629,8 @@ router.get('/ops/weights', guard, withIssues, may('service.manage'), async (req,
   try {
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Weight thresholds',
         active: '/ops/weights',
         body: weightLimitsBody({
@@ -9667,6 +9683,8 @@ router.get('/ops/settings', guard, withIssues, may('service.manage'), async (req
   try {
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Are we taking orders?',
         active: '/ops/settings',
         body: settingsBody({
@@ -9806,6 +9824,8 @@ router.get('/ops/promotions', guard, withIssues, may('service.manage'), async (r
   try {
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Promotions',
         active: '/ops/promotions',
         body: promotionsBody({
@@ -9840,6 +9860,8 @@ router.get('/ops/promotions/:id', guard, withIssues, may('service.manage'), asyn
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: promo.name,
         active: '/ops/promotions',
         body: promotionDetailBody({
@@ -10166,6 +10188,8 @@ router.get('/ops/broadcast', guard, withIssues, may('service.manage'), async (re
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Send a text blast',
         active: '/ops/broadcast',
         body: broadcastBody({
@@ -10252,6 +10276,8 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Partners',
         active: '/ops/partners',
         body: partnerListBody({
@@ -10272,6 +10298,8 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
 router.get('/ops/partners/new', guard, withIssues, may('partners.manage'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Add a partner',
       active: '/ops/partners',
       body: partnerFormBody({ problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null }),
@@ -10317,6 +10345,8 @@ router.get('/ops/partners/:id/edit', guard, withIssues, may('partners.manage'), 
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: `Edit ${partner.name}`,
         active: '/ops/partners',
         body: partnerFormBody({
@@ -10384,6 +10414,8 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: partner.name,
         active: '/ops/partners',
         body: partnerDetailBody({
@@ -10661,6 +10693,8 @@ router.get('/ops/leads', guard, withIssues, may('customers.view'), async (req, r
 
     res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Leads',
         active: '/ops/leads',
         body,
@@ -10848,7 +10882,9 @@ router.get('/ops/partners/enquiries', guard, withIssues, may('partners.view'), a
              </div>`
       }`;
 
-    res.type('html').send(adminPage({ title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true, title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -11024,7 +11060,9 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
       `;
 
-    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true, title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -11092,6 +11130,8 @@ router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, r
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: person.name,
         active: '/ops/team',
         body: teamMemberBody({
@@ -11264,6 +11304,8 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
 function notFoundPage(res, message) {
   return res.status(404).type('html').send(
     adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Not found',
       body: `
       <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0 0 12px;">Not found</h1>

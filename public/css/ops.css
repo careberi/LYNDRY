@@ -644,13 +644,29 @@ body > main.container {
 /* THE DRIVER'S BUTTONS STAY BIG, AND THIS IS THE ONE PLACE THE SKIN GIVES WAY.
    CLAUDE.md: a control on the run is 56px and full width because it is tapped
    on a doorstep with one hand full, and no touch target goes below 44px. A
-   13px toolbar button is right at a desk and wrong in a stairwell. */
-.ops-terminal .btn-lg,
-.ops-terminal .btn-full {
+   13px toolbar button is right at a desk and wrong in a stairwell.
+
+   ONLY WHERE SOMEBODY IS STANDING UP. This was every terminal page until slice
+   four, which was wrong the moment the desk screens arrived: it made the text
+   blast's Send it a 52px slab, when the spec asks for exactly the opposite -
+   a dangerous action should be a small button, not a hero. .ops-touch is set
+   on the route by adminPage, so it is a decision rather than a guess about a
+   URL. */
+.ops-terminal.ops-touch .btn-lg,
+.ops-terminal.ops-touch .btn-full {
   min-height: 52px;
   padding: 14px 18px;
   font-size: 16px;
   font-weight: 700;
+}
+
+/* At a desk a big button is just a button. Full width is kept where the markup
+   asked for it - that is layout, not a target size. */
+.ops-terminal:not(.ops-touch) .btn-lg {
+  min-height: 0;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .ops-terminal .btn-full { width: 100%; display: block; }
@@ -680,8 +696,8 @@ body > main.container {
 }
 
 /* The scan box and the weight box are typed at a door, so they keep a real
-   target. Same reasoning as the buttons above. */
-.ops-terminal .input-lg {
+   target. Same reasoning as the buttons above, and scoped the same way. */
+.ops-terminal.ops-touch .input-lg {
   padding: 12px 12px;
   font-size: 16px;
   min-height: 48px;
