@@ -3274,7 +3274,35 @@ REQUESTED - which looks like the booking never finished. `REQUESTED` is two
 different situations and it was showing one word for both. **Derived, not a new
 status**: the fact lives on the customer and a fourth row in the state machine
 would be a second copy of it that could disagree.
-That is what keeps an unbillable order off the driver's run sheet. The order is
+**AND IT IS A GATE NOW, NOT ONLY A BADGE.** That sentence used to read "that
+is what keeps an unbillable order off the driver's run sheet", and nothing
+anywhere read it - neither `dispatch.js` nor `run.js` looked at a card at all.
+Order #2063 was sitting on the next morning's board badged AWAITING CARD with a
+driver due at 8am. Neil, 13 September: *"no card means no collection, she is off
+the route."*
+
+`dispatch.collectable()` is the rule and both front doors follow it: the route
+leaves the stop out, and `fulfilment.collect()` refuses it. Both, because a
+screen that hides a control while the route behind it still fires is not a
+guard - the same rule the reconciliation refusal keeps, and the JSON API reaches
+the same function. **A WAIVED order is collected as normal**: nothing to charge
+is not the same as cannot charge, and confusing the two would strand exactly the
+customers we have decided to do a favour for. It fails **open** where Stripe is
+switched off entirely, because `needsCardOnFile()` already answers false there -
+a sandbox with no key must not quietly empty the round.
+
+**They come off the round, they do not disappear.** `board()` returns
+`uncollectable` and the routing screen draws it as a red card naming each order,
+because a stop that silently vanishes reads as the board losing one - the exact
+failure this is meant to prevent. Same doctrine as the unassigned-order banner.
+
+**The card fields had to be added to two select lists to make any of it work**,
+`BOARD_FIELDS` and `RUN_FIELDS`. An unselected column is undefined, which is
+indistinguishable from an absent card, so the first version would have filtered
+**every** pickup off the run rather than the one that deserved it. Third time
+that trap has bitten in this file.
+
+The order is
 still written *before* the card is asked for — a customer sent away to pay
 before their booking exists comes back to nothing, which happened to a real one.
 Saving the card confirms it automatically from the webhook.

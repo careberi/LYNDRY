@@ -265,6 +265,45 @@ function statCard(label, value, tone) {
   </div>`;
 }
 
+// WHO IS NOT ON THE ROUND, AND WHY.
+//
+// Neil, 13 September: "no card means no collection, she is off the route."
+// dispatch.collectable() takes them out; this is what stops that being a
+// disappearance. A stop that silently vanishes reads as the board losing an
+// order - which is the exact failure the rule is meant to prevent, not cause -
+// so it is said out loud, in the same red the issues banner uses, with a way
+// into the order to fix it.
+//
+// It names the order rather than the customer for a driver, like everything
+// else on this screen.
+function offTheRound(board, showNames) {
+  const off = board.uncollectable || [];
+  if (!off.length) return '';
+
+  const rows = off
+    .map((o) => {
+      const who = showNames && o.customers && o.customers.name ? escapeHtml(o.customers.name) : '';
+      return `<li style="margin:0 0 6px;">
+        <a href="/ops/orders/${o.order_number}" style="color:var(--paper-050);font-weight:700;">
+          #${o.order_number}</a>${who ? ` &middot; ${who}` : ''}
+      </li>`;
+    })
+    .join('');
+
+  return `
+  <div class="card" style="padding:18px 22px;margin:0 0 22px;background:var(--stain-500);color:var(--paper-050);">
+    <div class="eyebrow" style="margin:0 0 6px;color:var(--paper-050);">Not on the round</div>
+    <p style="margin:0 0 10px;font-family:var(--font-display);font-weight:900;font-size:20px;line-height:1.15;">
+      ${off.length} ${off.length === 1 ? 'pickup has' : 'pickups have'} no payment method on file
+    </p>
+    <ul style="margin:0 0 10px;padding-left:20px;font-size:15px;line-height:1.6;">${rows}</ul>
+    <p style="margin:0;font-size:14px;line-height:1.55;">
+      Nothing can be billed for these, so they are off the route. Ask for a card
+      from the order page, or waive the order, and they come back on.
+    </p>
+  </div>`;
+}
+
 function routingBoardBody({
   board,
   quote,
@@ -394,6 +433,8 @@ function routingBoardBody({
                    background:var(--stain-500);color:var(--paper-050);font-weight:700;">${escapeHtml(problem)}</p>`
       : ''
   }
+
+  ${offTheRound(board, showNames)}
 
   <div class="card card-xl" style="padding:22px;margin-bottom:26px;">
     <form method="get" action="/ops/routing" class="db-when">

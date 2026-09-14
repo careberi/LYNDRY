@@ -4,6 +4,7 @@ const db = require('../db');
 const geocode = require('./geocode');
 const booking = require('./booking');
 const partnersCore = require('./partners');
+const billing = require('./billing');
 const { config } = require('../config');
 
 // ---------------------------------------------------------------------------
@@ -54,7 +55,37 @@ function minutesFor(miles) {
 
 const RUN_FIELDS =
   'id, order_number, status, stop_number, loaded_at, pickup_date, weight_lb, ' +
-  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb)';
+  // THE CARD FIELDS, because collectable() reads them and an absent column is
+  // indistinguishable from an absent card - which would have filtered every
+  // pickup off this run rather than the one that deserved it. Same trap as the
+  // order page reading payment_attempts it had never selected.
+  'payment_status, ' +
+  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, ' +
+  'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
+
+// CAN THIS ORDER BE COLLECTED AT ALL?
+//
+// Neil, 13 September, on order #2063 sitting on tomorrow's board as AWAITING
+// CARD: "no card means no collection, she is off the route."
+//
+// It closes a gap CLAUDE.md already claimed was closed. The board has badged an
+// unbillable order AWAITING CARD for a long time and the note beside it said
+// that was "what keeps an unbillable order off the driver's run sheet" - but
+// nothing anywhere read it. The badge was a label, not a gate, and a driver
+// would have been sent to a doorstep for laundry that could not be billed.
+//
+// A WAIVED ORDER NEEDS NO CARD. That is the whole point of waiving one, and
+// treating "nothing to charge" as "cannot charge" would strand exactly the
+// customers we have decided to do a favour for.
+//
+// It fails OPEN when payments are switched off entirely, because
+// needsCardOnFile() already answers false there - a sandbox with no Stripe key
+// must not quietly empty the round.
+function collectable(order) {
+  if (!order) return false;
+  if (order.payment_status === 'WAIVED') return true;
+  return !billing.needsCardOnFile(order.customers || {});
+}
 
 // Every stop on today's run, in the order it will be driven.
 //
@@ -84,9 +115,12 @@ async function todaysRun() {
 
   if (pickupError) throw pickupError;
 
+  // The same rule the board follows: a pickup nobody can bill is not a stop on
+  // today's run, so it must not be in the shape of the day a quote is measured
+  // against either.
   const stops = [
     ...(loaded || []).map((o) => ({ order: o, kind: 'deliver' })),
-    ...(pickups || []).map((o) => ({ order: o, kind: 'collect' })),
+    ...(pickups || []).filter(collectable).map((o) => ({ order: o, kind: 'collect' })),
   ];
 
   for (const stop of stops) {
@@ -214,7 +248,13 @@ const BOARD_FIELDS =
   // in this query. It looked exactly like a customer who had not answered
   // rather than like a bug, which is why it survived this long.
   'preferences, ' +
-  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, preferences)';
+  // NO CARD MEANS NO COLLECTION, so the board has to be able to see one.
+  // payment_status rides along because a WAIVED order needs no card at all and
+  // must never be mistaken for an unbillable one - the same trap as reading a
+  // blank capacity as zero.
+  'payment_status, ' +
+  'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, preferences, ' +
+  'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
 // WHAT ONE BAG WEIGHS WHEN NOBODY HAS WEIGHED IT YET.
 //
@@ -835,8 +875,15 @@ async function board(dateIso, fromTime, driverId = null) {
     .in('status', ['REQUESTED', 'ASSIGNED', 'DEPOSITED']);
   if (driverId) pickupQuery = pickupQuery.eq('driver_id', driverId);
 
-  const { data: allPickups, error: pickupError } = await pickupQuery;
+  const { data: pickedUpQuery, error: pickupError } = await pickupQuery;
   if (pickupError) throw pickupError;
+
+  // NO CARD, NO STOP. See collectable(). Split rather than filtered away so the
+  // screens can SAY who came off and why - a stop that vanishes with no
+  // explanation reads as the board losing an order, which is the bug this is
+  // meant to prevent rather than cause.
+  const allPickups = (pickedUpQuery || []).filter(collectable);
+  const uncollectable = (pickedUpQuery || []).filter((o) => !collectable(o));
 
   // Bags we are holding that still need washing, and bags a laundromat has
   // finished. Not filtered by date: a bag collected yesterday and still in the
@@ -958,6 +1005,7 @@ async function board(dateIso, fromTime, driverId = null) {
   // --- the laundromats ------------------------------------------------------
 
   const partnersCore = require('./partners');
+const billing = require('./billing');
   const laundromats = (await partnersCore.list({ type: 'LAUNDROMAT' })).filter(
     (p) => p.status === 'ACTIVE'
   );
@@ -1414,6 +1462,12 @@ async function board(dateIso, fromTime, driverId = null) {
     route: activeRound,
     overdue,
     laterToday,
+    // WHO CAME OFF THE ROUND AND WHY. A stop that simply vanishes reads as the
+    // board losing an order, which is the failure this rule exists to prevent
+    // rather than cause - the same reason an unassigned order gets its own red
+    // banner instead of being hidden. The screens above decide how loudly to
+    // say it; this is the list.
+    uncollectable,
     vehicle,
     load: {
       ...capacity,
@@ -1586,6 +1640,7 @@ function estimatedBill(lb) {
 module.exports = {
   LEGS,
   board,
+  collectable,
   chooseLaundromat,
   dropoffGroups,
   orderDropStops,

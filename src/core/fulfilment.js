@@ -123,6 +123,28 @@ function waivedWeighInText(pounds) {
 }
 
 async function collect(order, { bagCount, by = {} } = {}) {
+  // NO CARD, NO COLLECTION. Neil, 13 September: "no card means no collection,
+  // she is off the route."
+  //
+  // The route already leaves these stops out - see dispatch.collectable() -
+  // and this is the half that makes that a guard rather than a hidden button.
+  // A screen that omits a control while the route behind it still fires is not
+  // access control, which is the rule the reconciliation refusal already
+  // follows: all the doors refuse together, or none of them do. The JSON API
+  // reaches this same function.
+  //
+  // A WAIVED order is collected as normal. There is nothing to charge, which
+  // is the point of waiving it.
+  if (order.payment_status !== 'WAIVED' && billing.needsCardOnFile(order.customers || {})) {
+    return {
+      ok: false,
+      error: 'no_card_on_file',
+      detail:
+        `Order #${order.order_number} has no payment method on file, so it cannot be billed. ` +
+        `Ask them for a card from the order page, or waive it, before collecting.`,
+    };
+  }
+
   // The one new fact: we have the bag. The turnaround was promised in the
   // confirmation; repeating it in every text is what Neil flagged.
   const result = await step(order, 'IN_PROCESS', (updated) => collectedMessage(updated), by);
