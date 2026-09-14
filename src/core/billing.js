@@ -669,6 +669,40 @@ async function markFailed(order, reason, paymentIntentId, declineCode = null) {
     .eq('id', order.id);
 
   if (error) console.error('Could not record the failed payment:', error.message);
+
+  // ENTERING PAYMENT HOLD RINGS THE OFFICE, IMMEDIATELY. Neil's lock, 14
+  // September: no 24-hour clock, no waiting for a sweep to notice.
+  //
+  // This is the one line in the system where an order becomes FAILED, so it is
+  // the only honest place to call it "the moment it entered hold" - the hold
+  // itself is derived and therefore has no moment of its own.
+  //
+  // ONLY WHILE THE LAUNDRY IS OURS. A card refused at a doorstep is not a hold:
+  // declinedAtTheDoor() leaves the bags on the step and uncollects the order, so
+  // nothing is being held and nobody needs paging.
+  //
+  // issues.raise() already refuses to open a second issue for a customer who has
+  // one open, so a retry that fails again does not raise a second.
+  //
+  // BEST EFFORT AND LAST. Recording the failure is the thing that must not fail;
+  // paging about it is not allowed to throw away the record.
+  const orders = require('./orders');
+  if (orders.IN_OUR_HANDS.includes(order.status)) {
+    const issues = require('./issues');
+    const customer = order.customers || (order.customer_id ? { id: order.customer_id } : null);
+    if (customer) {
+      await issues
+        .raise({
+          customer,
+          order,
+          reason:
+            `Payment hold: ${money(order.price_cents)} outstanding on #${order.order_number} and we are ` +
+            `holding the laundry. It will not go out for delivery until the balance is nothing. ` +
+            `Ring them.`,
+        })
+        .catch((err) => console.error(`Could not raise the payment hold issue: ${err.message}`));
+    }
+  }
 }
 
 // Retries every unpaid order for a customer who has just fixed their card.

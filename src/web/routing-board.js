@@ -304,6 +304,45 @@ function offTheRound(board, showNames) {
   </div>`;
 }
 
+// LAUNDRY WE ARE HOLDING THAT HAS NOT BEEN PAID FOR.
+//
+// Neil's lock, 14 September: a held order still gets retrieved off the
+// laundromat - their shelf is not our warehouse - but it never reaches a
+// doorstep until the balance is nothing. So it is NOT "off the round", and this
+// is a separate card from offTheRound() rather than a second entry in it.
+//
+// Said out loud for the same reason: a delivery that silently stops happening
+// reads as the board losing an order.
+function onPaymentHold(board, showNames, showMoney) {
+  const held = board.held || [];
+  if (!held.length) return '';
+
+  const rows = held
+    .map((o) => {
+      const who = showNames && o.customers && o.customers.name ? escapeHtml(o.customers.name) : '';
+      const owed = showMoney && o.price_cents ? ` &middot; ${escapeHtml(money(o.price_cents))} outstanding` : '';
+      return `<li style="margin:0 0 6px;">
+        <a href="/ops/orders/${o.order_number}" style="color:var(--paper-050);font-weight:700;">
+          #${o.order_number}</a>${who ? ` &middot; ${who}` : ''}${owed}
+      </li>`;
+    })
+    .join('');
+
+  return `
+  <div class="card" style="padding:18px 22px;margin:0 0 22px;background:var(--stain-500);color:var(--paper-050);">
+    <div class="eyebrow" style="margin:0 0 6px;color:var(--paper-050);">On payment hold</div>
+    <p style="margin:0 0 10px;font-family:var(--font-display);font-weight:900;font-size:20px;line-height:1.15;">
+      ${held.length} ${held.length === 1 ? 'order is' : 'orders are'} not going out until they are paid
+    </p>
+    <ul style="margin:0 0 10px;padding-left:20px;font-size:15px;line-height:1.6;">${rows}</ul>
+    <p style="margin:0;font-size:14px;line-height:1.55;">
+      We still collect these back off the laundromat, so nobody else is storing
+      them. They do not get a delivery stop. Take the payment, record cash
+      against the order, or waive it, and they go out on the next round.
+    </p>
+  </div>`;
+}
+
 function routingBoardBody({
   board,
   quote,
@@ -435,6 +474,7 @@ function routingBoardBody({
   }
 
   ${offTheRound(board, showNames)}
+  ${onPaymentHold(board, showNames, showMoney)}
 
   <div class="card card-xl" style="padding:22px;margin-bottom:26px;">
     <form method="get" action="/ops/routing" class="db-when">

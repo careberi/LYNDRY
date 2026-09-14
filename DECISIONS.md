@@ -657,9 +657,19 @@ sentence in `src/core/billing.js` says the amount is worked out after weighing
 and that we text the total every time. Read it before changing it — it is what
 makes an off-session charge authorised rather than a surprise.
 
-**A declined card does not hold up a delivery.** We deliver and chase by text.
-Holding someone's clothes over a decline is a bad look and legally murky, and
-the exposure is one order's revenue. `/ops/waive` is the lever for writing one
+**A declined card DOES hold up a delivery, reversed 14 September.** This entry
+used to read *"a declined card does not hold up a delivery - we deliver and chase
+by text"*, and that was right while the card was charged at delivery: refusing
+then would have stranded a driver on a step with an armful of clean laundry.
+
+The charge moved to the door on 12 September. A card that fails at a doorstep now
+leaves the bags where they were found, so the only laundry that can reach a
+decline-while-we-hold-it is laundry already taken in good faith. Neil, on #2060:
+it does not go back to a doorstep until the balance is nothing.
+
+What did NOT change: we still retrieve held bags off the laundromat rather than
+leaving them on somebody else's shelf, and the order is paused rather than
+cancelled. See `dispatch.paymentHold()`, and CLAUDE.md for the leg-by-leg rule. `/ops/waive` is the lever for writing one
 off; it records WAIVED rather than marking it paid, so the books distinguish
 money that arrived from money that was let go.
 

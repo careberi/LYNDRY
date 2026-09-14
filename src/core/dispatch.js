@@ -5,6 +5,7 @@ const geocode = require('./geocode');
 const booking = require('./booking');
 const partnersCore = require('./partners');
 const billing = require('./billing');
+const orders = require('./orders');
 const { config } = require('../config');
 
 // ---------------------------------------------------------------------------
@@ -58,10 +59,75 @@ const RUN_FIELDS =
   // THE CARD FIELDS, because collectable() reads them and an absent column is
   // indistinguishable from an absent card - which would have filtered every
   // pickup off this run rather than the one that deserved it. Same trap as the
-  // order page reading payment_attempts it had never selected.
-  'payment_status, ' +
+  // order page reading payment_attempts it had never selected. price_cents is
+  // balance()'s, and leaving it out makes every hold evaluate to nothing.
+  'payment_status, price_cents, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
+
+// WHAT IS STILL OWED ON AN ORDER, IN CENTS.
+//
+// TODAY THERE IS NO PARTIAL PAYMENT, so this is all-or-nothing: a charge that
+// was attempted and refused leaves the whole price outstanding, and every other
+// state leaves nothing. It is written as a balance rather than as
+// `payment_status === 'FAILED'` because the cash ledger is coming and will make
+// it partial - card $80, cash $15, balance $0 - and the rule below must not have
+// to be re-opened when it does. Neil, 14 September: derive the word from the
+// number, never the other way round.
+//
+// UNPAID IS DELIBERATELY ZERO, and this is the part that looks wrong and is not.
+// A bag weighed on a doorstep is priced by recordWeight() a minute before
+// loadVan() charges for it, so IN_PROCESS + priced + UNPAID is the NORMAL state
+// of an order with the driver standing in front of it. Treating that as money
+// owed would put his current stop on hold underneath him. Only a charge that
+// was tried and refused creates a balance.
+function balance(order) {
+  if (!order) return 0;
+  if (order.payment_status !== 'FAILED') return 0;
+  return Number(order.price_cents || 0);
+}
+
+// WE ARE HOLDING THEIR LAUNDRY AND THEIR MONEY HAS NOT ARRIVED.
+//
+// Neil, 14 September, on order #2060 - collected, weighed, charged, refused, and
+// still drawable as a delivery stop because collectable() only ever gated the
+// pickup door.
+//
+// DERIVED, NEVER STORED. There is no payment_hold column and no PART_PAID on the
+// status enum. A stored flag would need every future writer to remember not to
+// clear it when a customer merely saves a card - and one of them eventually
+// would. Deriving it means a hold can only be released by a payment actually
+// succeeding, a waiver, or cash recorded against it, because those are the only
+// things that move the number.
+function paymentHold(order) {
+  if (!order) return false;
+  return orders.IN_OUR_HANDS.includes(order.status) && balance(order) > 0;
+}
+
+// WHICH OF THESE CUSTOMERS HAVE LAUNDRY OF OURS AND AN UNPAID BALANCE.
+//
+// Neil's lock: a customer holding one unsettled order has their OTHER pickups
+// parked until it is cleared. That is a question about the customer, so
+// paymentHold(order) cannot answer it - it only ever sees one row.
+//
+// ONE QUERY FOR THE WHOLE BOARD, keyed by customer, not one per order. A board
+// of thirty stops must not be thirty round trips; same shape as
+// promotions.expectedForMany().
+async function heldCustomerIds(customerIds = []) {
+  const ids = [...new Set((customerIds || []).filter(Boolean))];
+  if (!ids.length) return new Set();
+
+  const { data, error } = await db
+    .from('orders')
+    .select('customer_id, status, payment_status, price_cents')
+    .in('customer_id', ids)
+    .in('status', orders.IN_OUR_HANDS)
+    .eq('payment_status', 'FAILED');
+
+  if (error) throw error;
+
+  return new Set((data || []).filter((o) => balance(o) > 0).map((o) => o.customer_id));
+}
 
 // CAN THIS ORDER BE COLLECTED AT ALL?
 //
@@ -252,7 +318,13 @@ const BOARD_FIELDS =
   // payment_status rides along because a WAIVED order needs no card at all and
   // must never be mistaken for an unbillable one - the same trap as reading a
   // blank capacity as zero.
-  'payment_status, ' +
+  //
+  // price_cents is what balance() reads. Leaving it out does not throw: every
+  // balance evaluates to zero, so NOTHING is ever on payment hold and #2060
+  // stays a delivery stop. Caught by running the board against real rows rather
+  // than by a test. SIXTH time an unselected column has quietly decided what a
+  // screen can know.
+  'payment_status, price_cents, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, preferences, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
@@ -882,8 +954,23 @@ async function board(dateIso, fromTime, driverId = null) {
   // screens can SAY who came off and why - a stop that vanishes with no
   // explanation reads as the board losing an order, which is the bug this is
   // meant to prevent rather than cause.
-  const allPickups = (pickedUpQuery || []).filter(collectable);
-  const uncollectable = (pickedUpQuery || []).filter((o) => !collectable(o));
+  // A CUSTOMER WITH LAUNDRY OF OURS AND AN UNPAID BALANCE IS PARKED ENTIRELY.
+  // Neil's lock: #2061 waits until #2060 is settled. One query for the board.
+  // Only the customers with a pickup today need asking about - heldCustomerIds
+  // goes and finds their in-hand orders itself.
+  const blocked = await heldCustomerIds(
+    (pickedUpQuery || []).map((o) => o.customer_id)
+  ).catch((err) => {
+    // Best effort, and it fails OPEN. A ledger lookup that is down must not
+    // quietly empty the round; the per-order card gate below still applies.
+    console.error(`Could not work out who is on payment hold: ${err.message}`);
+    return new Set();
+  });
+
+  const routable = (o) => collectable(o) && !blocked.has(o.customer_id);
+
+  const allPickups = (pickedUpQuery || []).filter(routable);
+  const uncollectable = (pickedUpQuery || []).filter((o) => !routable(o));
 
   // Bags we are holding that still need washing, and bags a laundromat has
   // finished. Not filtered by date: a bag collected yesterday and still in the
@@ -1059,8 +1146,18 @@ const billing = require('./billing');
   //
   // OUT_FOR_DELIVERY is on the van now. READY is at a laundromat and will be on
   // the van once leg 2 has happened, which is exactly why leg 2 comes first.
+  // HOLD KEEPS THE BAG OUT OF THE CUSTOMER'S DOORWAY, NOT OFF THE LAUNDROMAT'S
+  // FLOOR. Neil's lock, 14 September. The retrieval leg above is deliberately
+  // NOT gated: refusing to collect finished work would leave our bags on
+  // somebody else's shelf at their cost. We bring it back and hold it here.
+  //
+  // The drop-off leg needs nothing either - loadVan() charges before it writes
+  // van_confirmed_at, and only a stamped order reaches that leg, so new unpaid
+  // work cannot get to a laundromat by accident.
+  const held = (inHand || []).filter(paymentHold);
   const deliverStops = (inHand || [])
     .filter((o) => o.status === 'OUT_FOR_DELIVERY' || o.status === 'READY')
+    .filter((o) => !paymentHold(o))
     .map((o) => ({ kind: 'deliver', order: o }));
 
   for (const stop of [...collectStops, ...deliverStops]) {
@@ -1468,6 +1565,10 @@ const billing = require('./billing');
     // banner instead of being hidden. The screens above decide how loudly to
     // say it; this is the list.
     uncollectable,
+    // Laundry we are holding that has not been paid for. It is NOT off the
+    // round - it is still retrieved off the laundromat - it simply never
+    // reaches a doorstep until the balance is nothing.
+    held,
     vehicle,
     load: {
       ...capacity,
@@ -1641,6 +1742,9 @@ module.exports = {
   LEGS,
   board,
   collectable,
+  balance,
+  paymentHold,
+  heldCustomerIds,
   chooseLaundromat,
   dropoffGroups,
   orderDropStops,
