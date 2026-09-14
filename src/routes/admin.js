@@ -6381,8 +6381,6 @@ router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res
 
     return res.type('html').send(
       adminPage({
-        // Live day: the terminal skin. See adminPage().
-        terminal: true,
         title: 'Weight and money report',
         active: '/ops/reports',
         body: reportsBody({ report, partners: partnerRows || [], form }),
@@ -6617,6 +6615,8 @@ async function renderLoadout(req, res, { built = false } = {}) {
 
   return res.type('html').send(
     adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
       title: 'Load the van',
       // Highlighted as the route, because that is what it is a step of. A nav
       // that lights up nothing while you are standing on a page reads as
@@ -7538,9 +7538,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>`;
 
     return res.type('html').send(
-      adminPage({
-        // Live day: the terminal skin. See adminPage().
-        terminal: true, title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     return next(err);
