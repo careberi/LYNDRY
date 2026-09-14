@@ -1759,13 +1759,23 @@ from the camera app is not something to bet a driver's afternoon on. If his
 session has lapsed he lands on the sign-in page, which is honest.
 
 **The in-page scanner stays**, and so does jsQR. It is one tap when it works.
-What could not be established is why it does not: the vendored decoder is served
-correctly, the URL regex is right, the video carries `playsinline`, and jsQR was
-tested directly against a rendered tag at every size down to a fifth of the
-frame - it reads them all. Whatever is wrong is in the lens rather than the code,
-and reproducing it needs the driver's own phone. **That is the argument for this
-change rather than against it**: the camera app has autofocus, exposure, a torch
-and years of tuning that a canvas and 250 KB of JavaScript will never match.
+
+**AND ONE REASON IT DOES NOT IS NOW KNOWN, AND THIS PARAGRAPH USED TO DENY IT.**
+It said "the URL regex is right". It is not. `codeFrom()` in `scanner.js` matches
+`/o/([0-9A-Za-z]+)`, with no hyphen in the class, so a scan of a return sticker
+`0H7Y2S-1` yields `0H7Y2S` - the parent tag. The form then posts the wrong bag
+and the driver confirms a bag he is not holding. Found 14 September by reading
+the source against a written spec that claimed it; the spec was right and this
+file was wrong. **Nothing else in the old sentence has been re-checked since**,
+so treat "the decoder is served correctly" and "playsinline is there" as
+unverified rather than as findings.
+
+The rest of the original note still stands and is the argument for the camera
+app rather than against it: jsQR was tested directly against a rendered tag at
+every size down to a fifth of the frame and read them all, so whatever else is
+wrong is in the lens rather than the decoder, and reproducing it needs the
+driver's own phone. The camera app has autofocus, exposure, a torch and years of
+tuning that a canvas and 250 KB of JavaScript will never match.
 
 
 **The camera is an accelerator, never the mechanism.** Every scan field is a
