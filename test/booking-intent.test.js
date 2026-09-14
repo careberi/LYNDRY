@@ -24,13 +24,32 @@ const bookingIntents = require('../src/core/booking-intents');
 const booking = require('../src/core/booking');
 const { googleTag } = require('../src/web/layout');
 
-const SRC = (...bits) => fs.readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8');
+// LINE ENDINGS ARE NORMALISED ON THE WAY IN, and that is not tidiness.
+//
+// These tests read source and slice it on newlines. Git checks this repo out
+// with CRLF on Windows, so endOfFn() looking for a bare LF found nothing, the
+// slice ran to the end of the file, and a test that passed on the branch failed
+// the moment the same bytes were checked out again after a merge. It would fail
+// on any fresh clone, and the failure points at the product code rather than at
+// the test, which is the worst kind.
+const SRC = (...bits) =>
+  fs
+    .readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8')
+    .split(String.fromCharCode(13) + String.fromCharCode(10))
+    .join(String.fromCharCode(10));
 
 // The end of a top-level function: the first line that is just a closing brace.
-// Built from a char code because this file is generated through a shell heredoc
+// Built from a char code because this file is written through a shell heredoc
 // and a backslash escape does not survive the trip.
 const NL = String.fromCharCode(10);
-const endOfFn = (src, at) => src.indexOf(NL + '}' + NL, at);
+const endOfFn = (src, at) => {
+  const end = src.indexOf(NL + '}' + NL, at);
+  // A function we cannot find the end of must fail loudly rather than quietly
+  // handing back the rest of the file, which is what made the CRLF bug read as
+  // a bug in booking-intents.js.
+  assert.notEqual(end, -1, 'could not find the end of the function being checked');
+  return end;
+};
 
 // --- the shape of an intent -------------------------------------------------
 
