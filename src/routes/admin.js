@@ -213,6 +213,37 @@ function statusBadge(status, order = null) {
   )}</span>`;
 }
 
+// WHAT CAME OFF, OR WHAT IS COMING OFF. Neil's ask, 13 September.
+//
+// TWO DIFFERENT CLAIMS AND THE CELL SAYS WHICH. A priced order reads its own
+// promotion_id and discount_cents - what the customer was actually charged, so
+// it is stated flat. An unweighed order is a prediction, and it is drawn in
+// grey and labelled "expected" precisely so nobody reads it as money that has
+// already moved. The board has one other rule of this shape already: Grossed
+// and Expected are two questions and must never be added.
+//
+// The NAME, not the blurb. A blurb is the sentence a customer reads; this is an
+// ops screen and the internal name is what a person here would say out loud.
+// The code is shown when there is one, because that is what gets read off a
+// door hanger and typed into a search.
+function promoCell(order, expected) {
+  const applied = order.promotions;
+
+  if (applied) {
+    const label = applied.code || applied.name;
+    const off = order.discount_cents ? `<div style="font-size:13px;color:var(--ink-500);">-${money(order.discount_cents)}</div>` : '';
+    return `<span style="font-weight:600;">${escapeHtml(label)}</span>${off}`;
+  }
+
+  if (expected) {
+    const label = expected.code || expected.name;
+    return `<span style="color:var(--ink-500);">${escapeHtml(label)}</span>
+      <div style="font-size:13px;color:var(--ink-500);">expected</div>`;
+  }
+
+  return '—';
+}
+
 function paymentBadge(order) {
   if (!order.price_cents && order.payment_status === 'UNPAID') return '';
   const tone = {
@@ -2106,7 +2137,13 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     let query = db
       .from('orders')
-      .select(`${ORDER_FIELDS}, collected_at, at_partner_at, ready_at, delivered_at, driver_id`)
+      // promotion_id and discount_cents are what a PRICED order had taken off.
+      // Read, never recomputed: fulfilment wrote them at the moment it priced,
+      // so this column can never disagree with what the customer was charged.
+      .select(
+        `${ORDER_FIELDS}, collected_at, at_partner_at, ready_at, delivered_at, driver_id, ` +
+          'customer_id, promotion_id, discount_cents, promotions (name, code)'
+      )
       .order('pickup_date', { ascending: false })
       .order('pickup_time', { ascending: true, nullsFirst: false });
 
@@ -2118,6 +2155,19 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     const all = data || [];
     const now = today();
+
+    // WHICH PROMOTION IS COMING, for the orders nobody has priced yet. A priced
+    // order answers from its own row; this covers the rest. Two queries for the
+    // whole board, and none at all if every order on it is already priced.
+    //
+    // Best effort: a board that cannot draw because the promotion ledger is
+    // down is worse than a board with one column missing.
+    const expected = roles.can(req.opsUser, 'money.view')
+      ? await promotions.expectedForMany(all).catch((err) => {
+          console.error(`Could not work out promotions for the board: ${err.message}`);
+          return {};
+        })
+      : {};
 
     // --- WHICH DAY ARE WE LOOKING AT ---------------------------------------
     //
@@ -2264,12 +2314,12 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         statusBadge(o.status, o),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
-        ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
+        ...(showMoney ? [promoCell(o, expected[o.id]), money(o.price_cents), paymentBadge(o)] : []),
       ];
     };
 
     const headings = ['Order', showNames ? 'Customer' : 'Where', 'Pickup', 'Status', 'Clock', 'Weight'];
-    if (showMoney) headings.push('Price', 'Payment');
+    if (showMoney) headings.push('Promotion', 'Price', 'Payment');
 
     // A section is only drawn when it has something in it, so the board is a
     // list of work rather than a wall of "Nothing here".

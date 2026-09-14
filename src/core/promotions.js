@@ -566,6 +566,44 @@ async function heldBy(customerId) {
     }));
 }
 
+// WHICH OF SOMEBODY'S GRANTS COULD APPLY TO ONE ORDER.
+//
+// Pulled out of discountFor() so the ORDERS BOARD can say which promotion is
+// coming without writing its own version of the rule. Neil asked for that
+// column on 13 September, and a second copy of these four conditions is
+// exactly the drift this codebase keeps a rule about: the money path and the
+// screen would disagree the first time one of them changed, and the screen is
+// what somebody trusts.
+//
+// THE PRICE IS OPTIONAL, AND THAT IS THE ONE REAL DIFFERENCE between the two
+// callers. Before a bag is weighed there is no price, so "valid on orders over
+// $30" cannot be answered - and the honest thing on a board is to show the
+// promotion they are holding rather than hide one that probably applies.
+// Nobody knows yet, us included.
+function usableOn(held, { order, delivered = 0, priceCents = null }) {
+  return held.filter((p) => {
+    // FIRST_ORDER means their first DELIVERED order, counted by the caller.
+    if (p.applies_to === 'FIRST_ORDER' && (delivered || 0) > 0) return false;
+
+    // A CAPPED PROMOTION ONLY DISCOUNTS THE ORDER THAT CLAIMED ITS SLOT.
+    //
+    // The slot is taken when the pickup is booked, so by the time anything is
+    // priced the answer is already settled and written down - which is the
+    // point: the customer was told at booking whether this one was free, and
+    // this is where that promise is kept. Somebody holding it who booked after
+    // the twenty were gone has no claim, and pays.
+    if (p.max_orders && p.claimedOrderId !== order.id) return false;
+
+    // "Valid on orders over $30", checked against the price BEFORE the discount
+    // comes off - otherwise a promotion could take an order under its own
+    // minimum and disqualify itself. Not to be confused with the $25 order
+    // minimum in config.pricing, which is the floor on what anything costs.
+    if (priceCents != null && p.min_order_cents && priceCents < p.min_order_cents) return false;
+
+    return true;
+  });
+}
+
 // What comes off an order, in cents, and which promotion did it.
 //
 // Returns { cents, promotion, grantId } or null. Never applies more than one:
@@ -586,26 +624,7 @@ async function discountFor(customer, order, priceCents) {
     .eq('status', 'DELIVERED')
     .neq('id', order.id);
 
-  const usable = held.filter((p) => {
-    if (p.applies_to === 'FIRST_ORDER' && (delivered || 0) > 0) return false;
-
-    // A CAPPED PROMOTION ONLY DISCOUNTS THE ORDER THAT CLAIMED ITS SLOT.
-    //
-    // The slot is taken when the pickup is booked, so by the time anything is
-    // priced the answer is already settled and written down - which is the
-    // point: the customer was told at booking whether this one was free, and
-    // this is where that promise is kept. Somebody holding it who booked after
-    // the twenty were gone has no claim, and pays.
-    if (p.max_orders && p.claimedOrderId !== order.id) return false;
-
-    // "Valid on orders over $30", checked against the price BEFORE the discount
-    // comes off - otherwise a promotion could take an order under its own
-    // minimum and disqualify itself. Not to be confused with the $25 order
-    // minimum in config.pricing, which is the floor on what anything costs.
-    if (p.min_order_cents && priceCents < p.min_order_cents) return false;
-
-    return true;
-  });
+  const usable = usableOn(held, { order, delivered, priceCents });
   if (!usable.length) return null;
 
   // The one worth the most to them. If two are somehow held, the customer gets
@@ -627,6 +646,88 @@ async function discountFor(customer, order, priceCents) {
   // Never more than the price. A discount cannot hand money back.
   if (best) best.cents = Math.max(0, Math.min(best.cents, priceCents));
   return best && best.cents > 0 ? best : null;
+}
+
+// WHICH PROMOTION IS COMING ON EACH OF THESE ORDERS, for a whole board at once.
+//
+// Neil, 13 September: "on this screen, I should be able to see what promotion
+// is being applied to this order."
+//
+// TWO DIFFERENT QUESTIONS, AND THE COLUMN MUST NOT BLUR THEM. An order that has
+// been priced already carries the answer on its own row - fulfilment writes
+// promotion_id and discount_cents at the moment it prices - so that one is a
+// FACT and is read, never recomputed. An order nobody has weighed is a
+// PREDICTION, worked out here from what they hold.
+//
+// Only the prediction needs this function, so a board of finished orders makes
+// no queries at all.
+//
+// TWO QUERIES FOR THE WHOLE BOARD, not two per row. A board can carry thirty
+// orders and this runs on every page load; asking per order is how a screen
+// that works at six stops gets slow at sixty.
+async function expectedForMany(orders = []) {
+  const pending = (orders || []).filter((o) => o && o.customer_id && !o.promotion_id);
+  if (!pending.length) return {};
+
+  const customerIds = [...new Set(pending.map((o) => o.customer_id))];
+
+  const [{ data: grants, error }, { data: done, error: doneError }] = await Promise.all([
+    db
+      .from('customer_promotions')
+      .select(
+        `id, customer_id, granted_at, redeemed_at, expires_at, uses, use_limit, ` +
+          `claimed_order_id, promotions (${FIELDS})`
+      )
+      .in('customer_id', customerIds)
+      .is('redeemed_at', null),
+    // Their DELIVERED count, which is what FIRST_ORDER turns on. Counting rows
+    // here rather than asking the database per customer, for the same reason.
+    db.from('orders').select('id, customer_id').in('customer_id', customerIds).eq('status', 'DELIVERED'),
+  ]);
+
+  if (error) throw error;
+  if (doneError) throw doneError;
+
+  const deliveredBy = {};
+  for (const row of done || []) {
+    deliveredBy[row.customer_id] = (deliveredBy[row.customer_id] || 0) + 1;
+  }
+
+  // Same shape heldBy() returns, and the same two filters, so a promotion that
+  // has ended or expired never appears on the board as though it were coming.
+  const heldBy_ = {};
+  for (const row of grants || []) {
+    if (!honoured(row.promotions) || expired(row)) continue;
+    (heldBy_[row.customer_id] = heldBy_[row.customer_id] || []).push({
+      grantId: row.id,
+      grantedAt: row.granted_at,
+      expiresAt: row.expires_at,
+      uses: row.uses || 0,
+      grantLimit: row.use_limit != null ? row.use_limit : limitOf(row.promotions),
+      claimedOrderId: row.claimed_order_id || null,
+      ...row.promotions,
+    });
+  }
+
+  const out = {};
+
+  for (const order of pending) {
+    const held = heldBy_[order.customer_id] || [];
+    if (!held.length) continue;
+
+    // A DELIVERED order of their own does not count against itself.
+    const delivered = Math.max(0, (deliveredBy[order.customer_id] || 0) - (order.status === 'DELIVERED' ? 1 : 0));
+
+    const usable = usableOn(held, { order, delivered });
+    if (!usable.length) continue;
+
+    // No price yet, so "the one worth the most" cannot be worked out in money.
+    // The first held is what discountFor() would start from, and on every
+    // promotion running today there is only ever one.
+    out[order.id] = usable[0];
+  }
+
+  return out;
 }
 
 // Spend it. Written at the moment the order is priced, so a promotion is used
@@ -833,6 +934,8 @@ module.exports = {
   heldBy,
   holders,
   discountFor,
+  usableOn,
+  expectedForMany,
   redeem,
   describe,
   live,
