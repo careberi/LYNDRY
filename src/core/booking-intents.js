@@ -101,19 +101,10 @@ function firstDateFor(intent) {
   if (!intent) return '';
   if (!isRepeat(intent)) return intent.pickup_date || '';
 
-  const from = booking.today();
-
-  const dates = weekdaysOf(intent)
-    .map((weekday) =>
-      recurring.nextDate(
-        { status: 'ACTIVE', cadence: intent.cadence, weekday, started_on: from },
-        from
-      )
-    )
-    .filter(Boolean)
-    .sort();
-
-  return dates[0] || '';
+  // recurring owns this, because recurring owns schedules. A copy here would be
+  // a second answer to "which day would this land on", and the two would
+  // disagree the first time either moved.
+  return recurring.firstRepeatDate({ cadence: intent.cadence, weekdays: weekdaysOf(intent) }) || '';
 }
 
 // The one still being worked on, if there is one.
@@ -301,61 +292,20 @@ async function convert(customer, intent) {
   const mine = await claim(intent);
   if (!mine) return { ok: false, reason: 'already_claimed' };
 
-  let firstDate = null;
-  const madeSchedules = [];
-
-  // ONLY WHAT THIS CALL MADE. Every undo below deletes these ids and nothing
-  // else - see the note on recurring.remove(). It used to call
-  // recurring.stop(customer), which ends EVERY schedule the customer has, so a
-  // refused Friday checkout would have quietly cancelled the Tuesday pickup
-  // they had had for a month.
-  const undoSchedules = async () => {
-    if (!madeSchedules.length) return;
-    await recurring
-      .remove(customer, madeSchedules.map((s) => s && s.id))
-      .catch((err) => console.error('Could not undo a standing order: ' + err.message));
-  };
-
-  if (isRepeat(mine)) {
-    try {
-      for (const weekday of weekdaysOf(mine)) {
-        madeSchedules.push(
-          await recurring.addSchedule(customer, {
-            cadence: mine.cadence,
-            weekday,
-            timeOfDay: mine.pickup_time || null,
-            // The wizard is the web door and the schedule remembers it, so
-            // every pickup this arrangement books is known to be a web
-            // customer's. See recurring.addSchedule() and cardDestination().
-            placedVia: booking.DOORS.WEB,
-          })
-        );
-      }
-      const dates = madeSchedules.map((s) => recurring.nextDate(s)).filter(Boolean).sort();
-      firstDate = dates[0] || null;
-    } catch (err) {
-      console.error('Could not set up a standing order from an intent: ' + err.message);
-      // HALF A STANDING ORDER IS WORSE THAN NONE. Two weekdays asked for and
-      // one row written leaves an arrangement nobody chose, so the ones that
-      // did get created come out again.
-      await undoSchedules();
-      await release(mine);
-      return { ok: false, reason: 'schedule_failed' };
-    }
-  }
-
-  const result = await booking.bookPickup(customer, {
-    pickupDate: firstDate || mine.pickup_date || '',
+  // THE PICKUP IS BOOKED BEFORE THE REPEAT IS SET UP, through the one function
+  // both doors use. This used to create the schedule first, read the date off
+  // it and then book - which meant a refused booking had to undo a standing
+  // order, and every version of that undo was wrong in a different way. Nothing
+  // is created before the booking now, so there is nothing to undo after it.
+  const result = await recurring.bookAndSchedule(customer, {
+    pickupDate: mine.pickup_date || '',
     pickupTime: mine.pickup_time || '',
-    fromSchedule: Boolean(firstDate),
     notes: mine.notes || null,
+    cadence: mine.cadence,
+    weekdays: weekdaysOf(mine),
   });
 
   if (!result.ok) {
-    // The repeat goes with it. It was created a moment ago only so the first
-    // pickup's date could be worked out, and leaving it behind would give
-    // somebody a standing order for a pickup that was refused.
-    await undoSchedules();
     await blocked(mine, result.detail || result.say || result.reason);
     // HANDED BACK, because a refused intent stays open on purpose: they pick
     // another time and this runs again.

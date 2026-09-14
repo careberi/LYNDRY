@@ -75,11 +75,11 @@ test('THE WIZARD DOES NOT BOOK A PICKUP FOR SOMEBODY WITH NO CARD', () => {
   const body = src.slice(at);
 
   const gate = body.indexOf('billing.needsCardOnFile(customer)');
-  const book = body.indexOf('booking.bookPickup(customer');
+  const book = body.indexOf('recurring.bookAndSchedule(customer');
 
   assert.notEqual(gate, -1, 'the wizard never checks for a payment method');
   assert.notEqual(book, -1, 'the wizard never books at all');
-  assert.ok(gate < book, 'bookPickup() is reachable before the card is checked');
+  assert.ok(gate < book, 'the booking is reachable before the card is checked');
 });
 
 test('the no-card branch writes an intent and returns without booking', () => {
@@ -189,7 +189,17 @@ test('conversion re-runs the real booking rules rather than trusting the intent'
   const src = SRC('core', 'booking-intents.js');
   const at = src.indexOf('async function convert(');
   const body = src.slice(at, endOfFn(src, at));
-  assert.ok(body.includes('booking.bookPickup('), 'convert() does not re-validate');
+  // Through recurring.bookAndSchedule(), which calls bookPickup() itself. One
+  // implementation for both doors, so a rule can never apply to one and not
+  // the other.
+  assert.ok(body.includes('recurring.bookAndSchedule('), 'convert() does not re-validate');
+  const helper = SRC('core', 'recurring.js');
+  const hat = helper.indexOf('async function bookAndSchedule(');
+  assert.notEqual(hat, -1, 'the shared helper does not exist');
+  assert.ok(
+    helper.slice(hat, endOfFn(helper, hat)).includes('booking.bookPickup('),
+    'the shared helper does not go through bookPickup()'
+  );
 });
 
 test('A REFUSED PICKUP KEEPS THE CARD AND LEAVES THE INTENT OPEN', () => {
@@ -210,49 +220,87 @@ test('A REFUSED PICKUP KEEPS THE CARD AND LEAVES THE INTENT OPEN', () => {
   assert.ok(!branch.includes('complete('), 'a refused booking still completes the intent');
 });
 
-test('AND A REFUSED REPEAT DELETES ONLY THE SCHEDULES IT JUST MADE', () => {
-  // It called recurring.stop(customer), which ENDS EVERY schedule that customer
-  // has. So a refused Friday checkout would have quietly cancelled the Tuesday
-  // pickup they had had for a month - silent, irreversible, and nothing on
-  // their account would have said why.
-  const src = SRC('core', 'booking-intents.js');
-  const at = src.indexOf('async function convert(');
+test('THE PICKUP IS BOOKED BEFORE ANY SCHEDULE IS CREATED', () => {
+  // Neil, 14 September: do not create a standing schedule before the pickup
+  // exists. Both doors used to do the opposite, because the schedule is what
+  // decides the first date - so a refused booking had to undo an arrangement,
+  // and every version of that undo was wrong in its own way.
+  const src = SRC('core', 'recurring.js');
+  const at = src.indexOf('async function bookAndSchedule(');
+  assert.notEqual(at, -1, 'the shared helper does not exist');
   const body = src.slice(at, endOfFn(src, at));
 
-  assert.ok(body.includes('recurring.remove('), 'it does not delete the schedules it made');
-  assert.ok(
-    body.includes('madeSchedules.map((s) => s && s.id)'),
-    'it does not scope the delete to the ids it created'
-  );
+  const booked = body.indexOf('booking.bookPickup(');
+  const scheduled = body.indexOf('addSchedule(');
+  const refused = body.indexOf('if (!result.ok) return result;');
+
+  assert.ok(booked < scheduled, 'a schedule is still created before the booking');
+  assert.ok(refused > booked && refused < scheduled, 'a refusal can still reach addSchedule()');
 });
 
-test('recurring.stop(customer) IS NOT REACHABLE FROM HERE AT ALL', () => {
-  // The strong version of the test above. Any call to stop() without a schedule
-  // id ends the lot, so the safest rule is that this file never calls it.
-  const code = SRC('core', 'booking-intents.js')
+test('SO THERE IS NO UNDO AT ALL, WHICH IS THE POINT', () => {
+  // The undo was the dangerous part. recurring.stop(customer) ends EVERY
+  // schedule a customer has, so a refused Friday checkout would have cancelled
+  // the Tuesday pickup they had had for a month. Deleting by id was not safe
+  // either: addSchedule() REUSES an existing row for the same weekday and
+  // cadence, including an ended one, so the id handed back can be a row that
+  // predates this booking entirely.
+  const code = SRC('core', 'recurring.js')
     .split(NL)
     .filter((line) => !/^\s*\/\//.test(line))
     .join(NL);
 
-  assert.ok(!/recurring\s*\.\s*stop\s*\(/.test(code), 'convert() can still end every schedule');
+  const at = code.indexOf('async function bookAndSchedule(');
+  const body = code.slice(at, endOfFn(code, at));
+
+  assert.ok(!body.includes('stop('), 'the helper can still end schedules');
+  assert.ok(!body.includes('delete('), 'the helper can still delete schedules');
 });
 
-test('and a half-made standing order is undone too', () => {
-  // Two weekdays asked for and one row written is an arrangement nobody chose.
-  const src = SRC('core', 'booking-intents.js');
-  const at = src.indexOf('async function convert(');
-  const body = src.slice(at, endOfFn(src, at));
-  const thrown = body.slice(body.indexOf('} catch (err) {'));
-  assert.ok(thrown.includes('undoSchedules('), 'a failed schedule loop leaves rows behind');
+test('AND NOTHING ANYWHERE ENDS EVERY SCHEDULE ON A REFUSED BOOKING', () => {
+  // The one legitimate caller of stop(customer) is the customer pressing "stop
+  // repeating", which is a request to end the lot. Anywhere else it is a
+  // refused booking taking an arrangement with it.
+  // Code only. The note explaining why this rule exists names the call it is
+  // warning about, and a naive count finds its own prose.
+  const account = SRC('routes', 'account.js')
+    .split(NL)
+    .filter((line) => !/^\s*(\/\/|\*)/.test(line))
+    .join(NL);
+
+  const calls = account.split('recurring.stop(customer)').length - 1;
+  assert.equal(calls, 1, 'account.js ends every schedule somewhere other than the stop button');
+
+  const at = account.indexOf('recurring.stop(customer)');
+  const before = account.slice(Math.max(0, at - 700), at);
+  assert.ok(before.includes('/account/repeat/stop'), 'the one call is not the stop-repeating button');
+
+  const intents = SRC('core', 'booking-intents.js');
+  assert.ok(!/recurring\s*\.\s*stop\s*\(/.test(intents), 'convert() can still end every schedule');
 });
 
-test('the delete is scoped to the owner as well as the ids', () => {
+test('the hard delete helper is gone, not just unused', () => {
+  // An unused destructive helper is a loaded gun, and this one could delete a
+  // schedule addSchedule() had merely reused.
+  const recurring = require('../src/core/recurring');
+  assert.equal(recurring.remove, undefined, 'recurring.remove() is still exported');
+});
+
+test('a booking that survives but whose repeat fails keeps the order', () => {
+  // The pickup is real and the customer is about to be texted about it.
+  // Throwing it away because the arrangement behind it did not save is the
+  // worse of the two failures.
   const src = SRC('core', 'recurring.js');
-  const at = src.indexOf('async function remove(');
-  assert.notEqual(at, -1, 'recurring.remove() does not exist');
+  const at = src.indexOf('async function bookAndSchedule(');
   const body = src.slice(at, endOfFn(src, at));
-  assert.ok(body.includes("eq('customer_id'"), 'remove() is not scoped to the customer');
-  assert.ok(body.includes("in('id'"), 'remove() does not filter by id');
+  const caught = body.slice(body.indexOf('} catch (err) {'));
+  assert.ok(caught.includes('scheduleFailed'), 'a failed schedule is not reported');
+  assert.ok(!caught.includes('cancel'), 'a failed schedule cancels the order');
+});
+
+test('and both doors say so rather than swallowing it', () => {
+  const account = SRC('routes', 'account.js');
+  assert.ok(account.includes('result.scheduleFailed'), 'the wizard ignores a failed repeat');
 });
 
 // --- the race the webhook and the return page run every time ----------------
@@ -267,12 +315,11 @@ test('THE INTENT IS CLAIMED BEFORE ANYTHING IS CREATED', () => {
   const body = src.slice(at, endOfFn(src, at));
 
   const claimed = body.indexOf('await claim(intent)');
-  const scheduled = body.indexOf('recurring.addSchedule(');
-  const booked = body.indexOf('booking.bookPickup(');
+  const booked = body.indexOf('recurring.bookAndSchedule(');
 
   assert.notEqual(claimed, -1, 'convert() never claims the intent');
+  assert.notEqual(booked, -1, 'convert() never books');
   assert.ok(claimed < booked, 'it books before it claims');
-  assert.ok(scheduled === -1 || claimed < scheduled, 'it creates a schedule before it claims');
 });
 
 test('and the loser of the race does nothing', () => {

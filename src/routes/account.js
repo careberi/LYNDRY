@@ -1605,38 +1605,6 @@ function weekdaysFrom(form) {
   return days.sort((a, b) => a - b);
 }
 
-// ---------------------------------------------------------------------------
-// Setting up a standing order, and working out when its first pickup is.
-//
-// ONE SCHEDULE PER WEEKDAY. recurring_schedules is one row per arrangement, so
-// "every Monday and Thursday" is two rows - which is what lets somebody stop
-// one of them later without stopping both.
-//
-// IT RETURNS THE FIRST DATE so the caller can book a real pickup for it. The
-// nightly pass would get there on its own, but only the day before - and
-// somebody who has just set up a weekly pickup should see a pickup, not an
-// empty board and a promise.
-async function startSchedules(customer, { cadence, weekdays, timeOfDay }) {
-  const made = [];
-
-  for (const weekday of weekdays) {
-    // THE WIZARD IS THE WEB DOOR, and the schedule remembers it, so every
-    // pickup this arrangement books is known to be a web customer's. See
-    // recurring.addSchedule() and billing.cardDestination().
-    made.push(
-      await recurring.addSchedule(customer, {
-        cadence,
-        weekday,
-        timeOfDay,
-        placedVia: booking.DOORS.WEB,
-      })
-    );
-  }
-
-  const dates = made.map((s) => recurring.nextDate(s)).filter(Boolean).sort();
-  return { schedules: made, firstDate: dates[0] || null };
-}
-
 async function saveWash(customer, form) {
   // VALIDATED THROUGH wash.js. No defaults and no guessing: an unanswered
   // option is refused rather than filled in, which is the rule that exists
@@ -2712,39 +2680,46 @@ router.post('/account/book', async (req, res, next) => {
       });
     }
 
-    // A STANDING ORDER IS SET UP BEFORE ITS FIRST PICKUP IS BOOKED, because the
-    // schedule is what decides which day that pickup falls on. A one-off books
-    // the date they picked and creates nothing.
-    let firstDate = null;
-    let schedules = [];
-
-    if (cadence && recurring.CADENCES[cadence]) {
-      try {
-        const started = await startSchedules(customer, {
-          cadence,
-          weekdays: String(form.weekdays || '').split(',').map(Number).filter((n) => !Number.isNaN(n)),
-          timeOfDay: String(form.pickup_time || '') || null,
-        });
-        firstDate = started.firstDate;
-        schedules = started.schedules;
-      } catch (err) {
-        console.error(`Could not set up a standing order for ${customer.phone}: ${err.message}`);
-        return reshow('when', 'We could not set that up. Try again, or text us and we will do it.');
-      }
-    }
-
-    const result = await booking.bookPickup(customer, {
-      pickupDate: firstDate || String(form.pickup_date || ''),
+    // THE PICKUP IS BOOKED FIRST, THEN THE REPEAT IS SET UP. Neil, 14 September:
+    // do not create a standing schedule before the pickup exists.
+    //
+    // This used to create the schedule, read the first date off it, and then
+    // book - because the schedule is what decides the day. The cost was that a
+    // refused booking had to undo a standing order, and the undo was
+    // recurring.stop(customer), which ENDS EVERY schedule that customer has. So
+    // a refused Friday checkout would have silently cancelled the Tuesday
+    // pickup they had had for a month, with nothing on their account saying
+    // why and no text to tell them.
+    //
+    // recurring.bookAndSchedule() works the first date out without writing
+    // anything, books, and only then creates the arrangement - so nothing
+    // exists before the booking and there is nothing to undo after it. The same
+    // function turns a booking intent into an order, so the two doors cannot
+    // drift.
+    const result = await recurring.bookAndSchedule(customer, {
+      pickupDate: String(form.pickup_date || ''),
       pickupTime: String(form.pickup_time || ''),
-      // MARKED AS THE SCHEDULE'S, because it is: the date came from the
-      // schedule we just created, not from a day they picked. It is what lets
-      // "stop repeating" call this pickup off with the rest, and what makes the
-      // change log say the standing order booked it rather than the customer.
-      fromSchedule: Boolean(firstDate),
-      // pickupMethod is not passed. The bag is always left out - see the note on
-      // PICKUP_METHODS in src/core/booking.js.
+      // pickupMethod is not passed. The bag is always left out - see the note
+      // on PICKUP_METHODS in src/core/booking.js.
       notes: String(form.notes || '').trim().slice(0, 500) || null,
+      cadence,
+      weekdays: String(form.weekdays || '')
+        .split(',')
+        .map((n) => String(n).trim())
+        .filter((n) => n !== '')
+        .map(Number),
     });
+
+    // BOOKED, BUT THE REPEAT DID NOT SAVE. The pickup is real and is about to
+    // be confirmed by text, so it stands - throwing away a booking because the
+    // arrangement behind it failed is the worse of the two failures. Said out
+    // loud rather than swallowed, because the customer asked for a repeat and
+    // has not got one.
+    if (result.ok && result.scheduleFailed) {
+      console.error(
+        `Order #${result.order.order_number} booked but its standing order did not save.`
+      );
+    }
 
     if (!result.ok) {
       const message = bookingRefusal(result);
@@ -2762,16 +2737,6 @@ router.post('/account/book', async (req, res, next) => {
       // is no order - and startRepeat() is below this branch, so a booking that
       // fails cannot leave a standing order behind for a pickup that never
       // existed.
-      // THE SCHEDULES GO WITH IT. They were created a moment ago so the first
-      // pickup's date could be worked out; if that pickup is then refused,
-      // leaving them behind would give somebody a standing order they never
-      // successfully placed - which is exactly the confusion Neil hit.
-      if (schedules.length) {
-        await recurring
-          .stop(customer)
-          .catch((err) => console.error(`Could not undo a standing order: ${err.message}`));
-      }
-
       return reshow('when', message || 'That did not work.');
     }
 
