@@ -1,0 +1,755 @@
+/* ---------------------------------------------------------------------------
+   THE BACK OFFICE IS A WAREHOUSE TERMINAL.
+
+   Neil, 13 September: "one header, one exception line, then tables." And on 14
+   September, for the rest of it: every ops page inherits this, starting with
+   the bar.
+
+   This is the ops visual language, and it is deliberately NOT the public
+   site's. The marketing pages are a line drawing on cream paper with hard
+   shadows and display type; that is right for somebody deciding whether to
+   hand over a card and wrong for somebody reading a 47-line change log at a
+   desk or a bag table on a doorstep. Ops gets hairlines, a gray header row,
+   tabular numbers, and colour only where it means something.
+
+   ONE FILE OWNS THIS LOOK. Neil's instruction: do not make a second one. So
+   the page chrome below and the order console further down live together, and
+   anything added for another screen belongs here too.
+
+   IT IS LOADED BY adminPage() FOR EVERY /ops PAGE, after lyndry.css, so
+   anything it names wins. That is what lets a page nobody has rewritten yet
+   still wear the right bar and the right ground. Fingerprinted under
+   /css/<hash>/ like every other file in this directory, so a change here
+   reaches every phone on the next deploy.
+
+   IT IS NEVER LOADED ON A PUBLIC PAGE. The selectors below name `body`, which
+   would repaint the marketing site if this sheet ever reached it. It is linked
+   in one place and that place renders ops only.
+   --------------------------------------------------------------------------- */
+
+/* --- the page itself ------------------------------------------------------
+
+   THE GROUND IS GREY AND THE TYPE IS SMALL, which is the whole difference. A
+   marketing page is read once at arm's length; this is read all day, and the
+   thing that matters is how much of a table fits above the fold.
+
+   System fonts, not the brand faces. Grandstander and Outfit are the public
+   voice, they cost a network round trip, and nobody reading a bag list needs a
+   display face. The ops bar drops them; a page that has not been rewritten yet
+   still asks for them in its own markup, and will stop as it is rewritten. */
+body {
+  background: var(--c-bg, #f3f4f6);
+  color: var(--c-ink, #111827);
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Tokens at the page level, so the bar and every later screen read the same
+   ones the console already uses. The console re-declares them on itself and
+   that is deliberate: it stays self-contained if this block ever moves. */
+body {
+  --c-bg: #f3f4f6;
+  --c-ink: #111827;
+  --c-muted: #6b7280;
+  --c-line: #d1d5db;
+  --c-line-strong: #9ca3af;
+  --c-head: #e5e7eb;
+  --c-row: #ffffff;
+  --c-row-alt: #f9fafb;
+  --c-green: #166534;
+  --c-green-bg: #dcfce7;
+  --c-amber: #92400e;
+  --c-amber-bg: #fef3c7;
+  --c-red: #991b1b;
+  --c-red-bg: #fee2e2;
+  --c-blue: #1e40af;
+  --c-link: #1d4ed8;
+  --c-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* A MARKETING SURFACE HAS NO BUSINESS ON AN OPS PAGE.
+
+   .hero paints a full-width band of Suds green and is the public site's
+   opening gesture. The ops sign-in borrowed it, so the first screen anybody
+   sees at a desk was a green field with a bubble card floating on it.
+
+   There is exactly one .hero under /ops and it is that sign-in. Neutralising
+   it here rather than editing the page keeps this pass to the shell: no body
+   markup moves, and if another screen ever borrows the same class it inherits
+   the correction for free. */
+.hero {
+  background: none;
+  padding-top: 24px;
+  padding-bottom: 0;
+}
+
+/* --- the bar --------------------------------------------------------------
+
+   40px of dark, and nothing else. It was the public site's header: cream, a
+   3px ink underline, a hard shadow and a 44px logo, which is a lot of a phone
+   spent on chrome before the driver sees a stop.
+
+   THE MARKUP IS UNTOUCHED. This is the same header, the same four <details>
+   menus and the same Sign out button that were already there - restyled, not
+   rebuilt. That is what makes this safe to ship before any page body is
+   rewritten: nothing moved, so nothing can have moved wrongly. */
+.site-header {
+  background: #111827;
+  border: 0;
+  box-shadow: none;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.site-header-bar.ops-bar {
+  min-height: 40px;
+  height: auto;
+  padding: 0 12px;
+  gap: 14px;
+  max-width: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* THE MARK IS A WORD HERE, NOT THE ARTWORK.
+   CLAUDE.md is explicit that `compact` at 38px is the smallest the wordmark
+   stays readable at, and a 40px bar cannot hold 38px of logo. Squeezing it to
+   22px turned LYNDRY into a smear, which is the exact failure that rule exists
+   to prevent - so the bar wears a text wordmark instead, as the mockups do.
+   The artwork is untouched and still the mark everywhere else. */
+.ops-bar .ops-mark {
+  color: #fff;
+  font: 700 13px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  white-space: nowrap;
+  flex: none;
+}
+.ops-bar .ops-mark:hover { text-decoration: none; color: #fff; }
+
+.ops-bar .site-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* A menu title, and the one link a single-item group collapses to. */
+.ops-bar .ops-menu > summary,
+.ops-bar .ops-menu-solo {
+  color: #d1d5db;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  box-shadow: none;
+  padding: 5px 9px;
+  font: 600 13px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  list-style: none;
+  text-decoration: none;
+  /* INLINE-FLEX, NOT INLINE-BLOCK. The caret is a ::after child of this
+     element, so a display that does not lay its children out in a row drops
+     the triangle onto its own line above the word. It did. */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* Smaller than the public site's, to match 13px type. */
+.ops-bar .ops-menu > summary::after {
+  border-left-width: 3px;
+  border-right-width: 3px;
+  border-top-width: 4px;
+}
+
+.ops-bar .ops-menu > summary::-webkit-details-marker { display: none; }
+.ops-bar .ops-menu > summary::marker { content: ''; }
+
+.ops-bar .ops-menu > summary:hover,
+.ops-bar .ops-menu-solo:hover { background: #1f2937; color: #fff; text-decoration: none; }
+
+/* WHERE YOU ARE, said quietly. A highlighted word rather than an opened panel
+   covering the page you just asked for - the rule the nav already followed. */
+.ops-bar .ops-menu[data-here="1"] > summary,
+.ops-bar .ops-menu-solo[aria-current="page"] { color: #fff; background: #1f2937; }
+
+.ops-bar .ops-menu[open] > summary { background: #1f2937; color: #fff; }
+
+/* The panel is a plain white card on a hairline, not a floating marketing
+   surface. It opens with no script, exactly as it did. */
+.ops-bar .ops-menu-panel {
+  position: absolute;
+  z-index: 50;
+  margin-top: 6px;
+  min-width: 190px;
+  background: #fff;
+  color: var(--c-ink);
+  border: 1px solid var(--c-line-strong);
+  border-radius: 3px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ops-bar .ops-menu-panel a {
+  color: var(--c-ink);
+  padding: 6px 10px;
+  border-radius: 2px;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ops-bar .ops-menu-panel a:hover { background: var(--c-row-alt); text-decoration: none; }
+.ops-bar .ops-menu-panel a[aria-current="page"] { font-weight: 700; }
+
+/* Who is signed in, and the way out. */
+.ops-bar .eyebrow {
+  color: #9ca3af !important;
+  font: 500 12px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ops-bar .btn,
+.ops-bar .btn-outline.btn-sm {
+  background: transparent;
+  color: #d1d5db;
+  border: 1px solid #374151;
+  border-radius: 3px;
+  box-shadow: none;
+  height: auto;
+  min-height: 0;
+  padding: 4px 9px;
+  font: 500 12px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  transform: none;
+}
+
+.ops-bar .btn:hover { background: #1f2937; color: #fff; transform: none; box-shadow: none; }
+
+/* ON A PHONE THE BAR EARNS ITS 40px AND NOT A PIXEL MORE.
+
+   At 375px the mark, four menus, a name, a role and a Sign out button wrapped
+   onto three rows - 88px of chrome before the first stop. Neil runs this as a
+   home-screen app, so that is a third of the screen spent saying who he is.
+
+   The name goes first because it is the only thing here nobody needs: you know
+   who you are signed in as, and the one case where it matters, being signed in
+   as the wrong person, is answered by the Sign out button beside it. */
+@media (max-width: 719px) {
+  .ops-bar .eyebrow { display: none; }
+  .site-header-bar.ops-bar { padding: 0 10px; gap: 10px; }
+  /* TWO ROWS, NOT THREE. The mark and the way out share the top line; the
+     menus take the one below. Left to wrap on their own the three groups
+     landed on three separate rows, which is 80px of a 812px screen. */
+  .ops-bar .site-nav { gap: 0; order: 3; flex-basis: 100%; }
+  .site-header-bar.ops-bar > form { margin-left: auto !important; }
+  .ops-bar .ops-menu > summary,
+  .ops-bar .ops-menu-solo { padding: 5px 7px; }
+}
+
+/* The content starts right under the bar. 36px of air above a table is a third
+   of a phone screen. The wrapper keeps its own padding for a bare page, which
+   is the driver's route and is deliberately still roomy. */
+body > main.container {
+  max-width: none;
+  padding-top: 14px !important;
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-bottom: 48px !important;
+}
+
+.console {
+  --c-bg: #f3f4f6;
+  --c-ink: #111827;
+  --c-muted: #6b7280;
+  --c-line: #d1d5db;
+  --c-line-strong: #9ca3af;
+  --c-head: #e5e7eb;
+  --c-row: #ffffff;
+  --c-row-alt: #f9fafb;
+  --c-green: #166534;
+  --c-green-bg: #dcfce7;
+  --c-amber: #92400e;
+  --c-amber-bg: #fef3c7;
+  --c-red: #991b1b;
+  --c-red-bg: #fee2e2;
+  --c-link: #1d4ed8;
+  --c-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--c-ink);
+  /* NO GROUND OF ITS OWN. Neil, 13 September: "this background should match
+     the background surrounding it." Painting --c-bg here drew the console as a
+     gray box with a cream seam down both sides. It inherits the page instead;
+     when every ops screen is a console, the ground is set once in the chrome
+     and this still inherits. --c-bg stays a token for the day that happens. */
+  background: transparent;
+  padding: 8px 16px 40px;
+  max-width: 1280px;
+  font-variant-numeric: tabular-nums;
+}
+.console a { color: var(--c-link); text-decoration: none; }
+.console a:hover { text-decoration: underline; }
+.console .mono { font-family: var(--c-mono); font-size: 12px; }
+.console .muted { color: var(--c-muted); }
+
+/* --- identity row ---------------------------------------------------------- */
+.console .crumb { color: var(--c-muted); font-size: 12px; margin: 0 0 6px; }
+.console .title-row {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 6px;
+}
+.console h1 { font: 700 20px/1.2 inherit; letter-spacing: -0.02em; margin: 0; }
+.console .id { font-family: var(--c-mono); color: var(--c-muted); font-size: 13px; }
+.console .meta { color: var(--c-muted); margin: 0 0 10px; }
+.console .meta span { margin-right: 14px; white-space: nowrap; }
+.console .meta b { color: var(--c-ink); font-weight: 600; }
+
+/* --- chips: small, flat, and only the true ones ---------------------------- */
+.console .chip {
+  display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px;
+  border-radius: 3px; background: var(--c-head); color: #374151;
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+.console .chip.ok { background: var(--c-green-bg); color: var(--c-green); }
+.console .chip.warn { background: var(--c-amber-bg); color: var(--c-amber); }
+.console .chip.bad { background: var(--c-red-bg); color: var(--c-red); }
+
+/* --- toolbar: small buttons, real forms ------------------------------------
+   Every button is a <form method="post"> to a route that already exists. On a
+   phone they go full width, because a driver taps these with one hand at a
+   door and 44px is the floor for a touch target - the warehouse look does not
+   get to make the doorstep worse. */
+.console .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; align-items: flex-start; }
+.console .toolbar form { margin: 0; display: contents; }
+.console .cbtn {
+  background: #fff; border: 1px solid var(--c-line-strong); padding: 5px 10px;
+  border-radius: 3px; cursor: pointer; color: var(--c-ink); font: inherit;
+  min-height: 30px; text-decoration: none; display: inline-block;
+}
+.console .cbtn:hover { background: #f3f4f6; text-decoration: none; }
+.console .cbtn.primary { background: #111827; color: #fff; border-color: #111827; }
+.console .cbtn.primary:hover { background: #000; }
+.console .cbtn.danger { color: var(--c-red); border-color: #fca5a5; }
+.console .toolbar .field { display: inline-flex; gap: 6px; align-items: center; }
+.console .toolbar input, .console .toolbar select {
+  font: inherit; padding: 4px 6px; border: 1px solid var(--c-line-strong); border-radius: 3px;
+  min-height: 30px; background: #fff;
+}
+@media (max-width: 720px) {
+  .console .toolbar form { display: flex; width: 100%; }
+  .console .cbtn { min-height: 44px; flex: 1; text-align: center; }
+  .console .toolbar .field { width: 100%; }
+  .console .toolbar input, .console .toolbar select { min-height: 44px; flex: 1; }
+}
+
+/* --- the one exception strip ----------------------------------------------- */
+.console .strip {
+  border: 1px solid #f59e0b; background: var(--c-amber-bg); padding: 8px 10px; margin: 0 0 12px;
+}
+.console .strip.open { border-color: #ef4444; background: var(--c-red-bg); }
+.console .strip b { font-weight: 700; }
+.console .strip .row { margin-top: 4px; }
+.console .strip .bad { color: var(--c-red); font-weight: 600; }
+
+/* --- stage rail ------------------------------------------------------------- */
+.console .rail {
+  display: flex; background: #fff; border: 1px solid var(--c-line); margin: 0 0 4px; overflow-x: auto;
+}
+.console .rail .s { flex: 1; min-width: 110px; padding: 6px 10px; border-right: 1px solid var(--c-line); }
+.console .rail .s:last-child { border-right: 0; }
+.console .rail .s .n { font-weight: 700; font-size: 12px; }
+.console .rail .s .t { color: var(--c-muted); font-size: 11px; }
+.console .rail .s.on { background: var(--c-green-bg); }
+.console .rail .s.now { background: var(--c-amber-bg); }
+
+/* --- two columns, one below 960 ------------------------------------------- */
+.console .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 960px) { .console .layout { grid-template-columns: 1fr; } }
+.console .side { position: sticky; top: 8px; }
+@media (max-width: 960px) { .console .side { position: static; } }
+
+.console h2 {
+  font: 700 11px/1.3 inherit; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #4b5563; margin: 16px 0 6px;
+}
+.console h2:first-child { margin-top: 0; }
+
+/* --- tables ----------------------------------------------------------------- */
+.console table.data { width: 100%; border-collapse: collapse; background: var(--c-row); font-size: 13px; }
+.console table.data th {
+  text-align: left; font-size: 11px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #4b5563; background: var(--c-head); border: 1px solid var(--c-line); padding: 5px 8px; white-space: nowrap;
+}
+.console table.data td { border: 1px solid var(--c-line); padding: 5px 8px; vertical-align: top; background: var(--c-row); }
+.console table.data tbody tr:nth-child(even) td { background: var(--c-row-alt); }
+.console table.data td.num, .console table.data th.num { text-align: right; }
+.console table.data td.mono { font-family: var(--c-mono); font-size: 12px; }
+.console table.data tfoot td { font-weight: 700; background: var(--c-head); }
+.console table.data td.who { white-space: nowrap; color: var(--c-muted); }
+.console .tablewrap { overflow-x: auto; }
+
+/* --- key/value --------------------------------------------------------------- */
+.console table.kv { width: 100%; border-collapse: collapse; background: #fff; }
+.console table.kv th, .console table.kv td {
+  border: 1px solid var(--c-line); padding: 5px 8px; text-align: left; font-weight: 400; vertical-align: top;
+}
+.console table.kv th { width: 38%; background: var(--c-head); color: #4b5563; font-size: 12px; }
+
+/* --- log filters: links, not scripts --------------------------------------- */
+.console .filters { color: var(--c-muted); font-size: 12px; margin: -2px 0 6px; }
+.console .filters a, .console .filters span { margin-right: 12px; }
+.console .filters span.on { color: var(--c-ink); font-weight: 700; }
+
+/* --- thread ------------------------------------------------------------------ */
+.console .thread { background: #fff; border: 1px solid var(--c-line); }
+.console .thread .m { padding: 7px 8px; border-bottom: 1px solid var(--c-line); white-space: pre-wrap; word-break: break-word; }
+.console .thread .m:last-child { border-bottom: 0; }
+.console .thread .m.in { background: var(--c-row-alt); }
+.console .thread .when { color: var(--c-muted); font-size: 11px; margin-bottom: 2px; white-space: normal; }
+.console .hint { color: var(--c-muted); font-size: 12px; margin-top: 6px; }
+
+/* --- the page-level banners the route already passes ----------------------- */
+.console .flash { padding: 8px 10px; margin: 0 0 12px; border: 1px solid var(--c-line-strong); background: #fff; }
+.console .flash.problem { border-color: #ef4444; background: var(--c-red-bg); color: var(--c-red); }
+.console .flash.done { border-color: #16a34a; background: var(--c-green-bg); color: var(--c-green); }
+/* --- the shared table, off inline styles ---------------------------------
+
+   admin.js's table() used to write padding, borders and type onto every cell.
+   An inline style beats every stylesheet rule, so no skin could reach the one
+   piece of markup the restyle is actually about. The rules below reproduce
+   what those inline styles said, exactly, so the four Admin screens that also
+   call table() look the way they did before this moved.
+
+   The terminal override is further down and applies only under
+   .ops-terminal. */
+.ops-table-wrap { overflow-x: auto; }
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.ops-table th {
+  text-align: left;
+  padding: 10px 14px 10px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  border-bottom: 2px solid var(--ink-900);
+  white-space: nowrap;
+}
+
+.ops-table td {
+  padding: 14px 14px 14px 0;
+  border-bottom: 1px solid var(--ink-100);
+  vertical-align: top;
+}
+
+.ops-empty { font-size: 16px; color: var(--ink-500); margin: 0; }
+
+/* ===========================================================================
+   THE TERMINAL SKIN.
+
+   Neil, 14 September, slice two: the live day only - the orders board, the
+   route, routing and the load-out. Everything under .ops-terminal, so a page
+   that has not been converted keeps the look its body was written for. Adding
+   a later slice is adding the flag to those routes.
+
+   WHAT THIS IS DOING is restyling the primitives those pages already use -
+   cards, tables, badges, buttons, labels - rather than rewriting four large
+   page bodies. The markup on these screens is load-bearing: the run page is a
+   driver's only screen and the routing board decides where a van goes. A skin
+   that leaves the structure alone cannot reorder a stop or hide a control,
+   which a rewrite of 200KB of markup very much could.
+   =========================================================================== */
+
+/* --- the page ------------------------------------------------------------- */
+
+/* WRITTEN OUT, NOT AS A font SHORTHAND. `font: 700 20px/1.2 inherit` looks
+   right and is invalid - the shorthand will not take `inherit` as the family,
+   so the browser throws the WHOLE declaration away and the heading stayed at
+   the design system's 40px. It failed silently and looked like a specificity
+   problem.
+
+   AND THEY SHOUT, because fifty headings across the ops pages are written as
+   <h1 style="font-family:var(--font-display);font-size:38px;...">, and an
+   inline style beats every ordinary rule. Without !important this block did
+   nothing at all on most of the screens slices two to four converted - they
+   kept 38px of display type over a 13px table.
+
+   I did not catch that when those slices shipped because I checked the skin
+   against markup I had injected myself, which carried no inline styles. The
+   right test was a real page, and it is what found this one. */
+.ops-terminal h1 {
+  font-family: inherit !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.02em !important;
+  margin: 0 0 10px;
+}
+
+.ops-terminal h2 {
+  font-family: inherit !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0 !important;
+  margin: 0 0 8px;
+}
+
+.ops-terminal h3 {
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  margin: 0 0 6px;
+}
+
+/* The display classes are the public voice and are used for headings on these
+   pages too. Same treatment. */
+.ops-terminal .display-1,
+.ops-terminal .display-2,
+.ops-terminal .display-3 {
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* An eyebrow becomes a plain small label. The mono uppercase is the public
+   site's voice and costs a line of height for four words. */
+.ops-terminal .eyebrow {
+  font: 600 11px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin: 0 0 4px;
+}
+
+/* --- cards become panels --------------------------------------------------
+
+   The design system's card is cream, ink-outlined and casts a hard 6px
+   shadow. Six of those stacked down a routing board is a lot of furniture
+   around three numbers. Here a card is a white panel on a hairline. */
+.ops-terminal .card,
+.ops-terminal .card-xl {
+  background: var(--c-row);
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  padding: 12px 14px !important;
+  margin-bottom: 12px;
+  /* !important because these pages write their shadows INLINE, and an inline
+     style beats every ordinary rule. It is the one declaration here that has
+     to shout, and it is shouting at markup this slice deliberately does not
+     touch - rewriting four page bodies to remove a shadow is not worth the
+     risk to a driver's only screen. */
+  box-shadow: none !important;
+}
+
+.ops-terminal .card-sunken { background: var(--c-row-alt); }
+
+/* Colour still means something. A card the page painted red or amber keeps
+   its meaning and loses only the shadow - these are the exception lines and
+   they are the one thing that must not get quieter. */
+.ops-terminal .card[style*="--stain"],
+.ops-terminal .card[style*="stain-500"] {
+  border-color: #ef4444;
+}
+
+/* --- tables --------------------------------------------------------------- */
+
+.ops-terminal .ops-table { font-size: 13px; }
+
+.ops-terminal .ops-table th {
+  background: var(--c-head);
+  border-bottom: 1px solid var(--c-line-strong);
+  border-top: 1px solid var(--c-line);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--c-ink);
+  padding: 6px 10px;
+}
+
+.ops-terminal .ops-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--c-line);
+  vertical-align: top;
+}
+
+.ops-terminal .ops-table tbody tr:nth-child(even) { background: var(--c-row-alt); }
+.ops-terminal .ops-table tbody tr:nth-child(odd) { background: var(--c-row); }
+
+/* Any other table on these pages, not only the shared helper. The run and
+   routing pages build their own. */
+.ops-terminal table { border-collapse: collapse; }
+.ops-terminal .ops-empty { font-size: 13px; color: var(--c-muted); }
+
+/* Figures line up. A column of weights you cannot compare at a glance is a
+   column you have to read twice. */
+.ops-terminal td, .ops-terminal .num { font-variant-numeric: tabular-nums; }
+
+/* --- badges become chips -------------------------------------------------- */
+
+.ops-terminal .badge {
+  display: inline-block;
+  border: 0;
+  border-radius: 2px;
+  box-shadow: none;
+  padding: 1px 6px;
+  font: 700 11px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  background: var(--c-head);
+  color: var(--c-ink);
+  vertical-align: baseline;
+}
+
+/* --- buttons -------------------------------------------------------------- */
+
+.ops-terminal .btn {
+  height: auto;
+  min-height: 0;
+  border-radius: 3px;
+  border: 1px solid var(--c-line-strong);
+  background: #fff;
+  color: var(--c-ink);
+  box-shadow: none;
+  padding: 5px 10px;
+  font: 600 13px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  transform: none;
+}
+
+.ops-terminal .btn:hover { background: var(--c-row-alt); transform: none; box-shadow: none; }
+.ops-terminal .btn:active { transform: none; box-shadow: none; }
+
+.ops-terminal .btn-primary {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: #fff;
+}
+.ops-terminal .btn-primary:hover { background: #000; }
+
+/* THE DRIVER'S BUTTONS STAY BIG, AND THIS IS THE ONE PLACE THE SKIN GIVES WAY.
+   CLAUDE.md: a control on the run is 56px and full width because it is tapped
+   on a doorstep with one hand full, and no touch target goes below 44px. A
+   13px toolbar button is right at a desk and wrong in a stairwell.
+
+   ONLY WHERE SOMEBODY IS STANDING UP. This was every terminal page until slice
+   four, which was wrong the moment the desk screens arrived: it made the text
+   blast's Send it a 52px slab, when the spec asks for exactly the opposite -
+   a dangerous action should be a small button, not a hero. .ops-touch is set
+   on the route by adminPage, so it is a decision rather than a guess about a
+   URL. */
+.ops-terminal.ops-touch .btn-lg,
+.ops-terminal.ops-touch .btn-full {
+  min-height: 52px;
+  padding: 14px 18px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* At a desk a big button is just a button. Full width is kept where the markup
+   asked for it - that is layout, not a target size. */
+.ops-terminal:not(.ops-touch) .btn-lg {
+  min-height: 0;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ops-terminal .btn-full { width: 100%; display: block; }
+
+.ops-terminal .btn-sm {
+  min-height: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+/* --- fields --------------------------------------------------------------- */
+
+.ops-terminal .input,
+.ops-terminal .select,
+.ops-terminal input[type="text"],
+.ops-terminal input[type="date"],
+.ops-terminal input[type="time"],
+.ops-terminal input[type="number"],
+.ops-terminal select {
+  height: auto;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 3px;
+  box-shadow: none;
+  background: #fff;
+  padding: 5px 8px;
+  font: 13px/1.3 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* The scan box and the weight box are typed at a door, so they keep a real
+   target. Same reasoning as the buttons above, and scoped the same way. */
+.ops-terminal.ops-touch .input-lg {
+  padding: 12px 12px;
+  font-size: 16px;
+  min-height: 48px;
+}
+
+.ops-terminal .field-label {
+  font: 600 11px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin-bottom: 3px;
+}
+
+/* --- links ---------------------------------------------------------------- */
+
+.ops-terminal a { color: var(--c-link); }
+.ops-terminal a:hover { text-decoration: underline; }
+
+/* --- THE MAP IS NOT OURS TO SKIN ----------------------------------------
+
+   The route planner is the one ops page with a runtime dependency: Leaflet,
+   OpenStreetMap tiles and OSRM. Leaflet builds its own controls out of plain
+   anchors and divs, and styles them from its own stylesheet - so a blanket
+   link colour or a table rule reaching inside the map restyles somebody
+   else's component, which is how a zoom button ends up blue and 13px.
+
+   Everything under the map keeps its own look. The planner already paints the
+   tiles and its tooltips deliberately; that is its business, not this file's. */
+.ops-terminal #rp-map a,
+.ops-terminal .leaflet-container a {
+  color: inherit;
+}
+
+.ops-terminal #rp-map,
+.ops-terminal .leaflet-container {
+  font-size: initial;
+}
+
+.ops-terminal .leaflet-container table,
+.ops-terminal .leaflet-container .btn {
+  all: revert;
+}
+
+/* A card that is a link keeps no lift and no shadow. */
+.ops-terminal a .card:hover { transform: none; box-shadow: none; }

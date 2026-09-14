@@ -23,6 +23,7 @@ const reminders = require('../core/reminders');
 const { nudgePanel } = require('../web/nudge-panel');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
+const { orderConsoleBody } = require('../web/order-console');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const {
@@ -68,6 +69,7 @@ const leads = require('../core/leads');
 const leadOutreach = require('../core/lead-outreach');
 const bookingIntents = require('../core/booking-intents');
 const { checkoutsBody } = require('../web/checkouts-page');
+const messageView = require('../core/message-view');
 const settings = require('../core/settings');
 const sitePopup = require('../core/site-popup');
 const promotions = require('../core/promotions');
@@ -489,7 +491,28 @@ function opsNav(user, active) {
 // route planner's map library, and so far nothing else. Kept as a parameter
 // rather than letting pages write their own <head> so that every ops screen
 // still gets the same stylesheets, the same noindex and the same furniture.
-function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '', serviceClosed = false, bare = false }) {
+// `terminal` puts a page into the warehouse-terminal skin: tables, hairlines,
+// small buttons, no marketing cards. It is a FLAG rather than the default
+// because the restyle ships a slice at a time - the live day first, at Neil's
+// instruction - and a page that has not been converted yet must keep the look
+// its body was written for. Flipping a later slice on is adding the flag to
+// those routes; nothing else has to change.
+function adminPage({
+  title,
+  active = '',
+  body,
+  user = null,
+  openIssues = 0,
+  head = '',
+  serviceClosed = false,
+  bare = false,
+  terminal = false,
+  // A SCREEN USED AT A DOOR OR A COUNTER, not at a desk. It keeps 52px
+  // buttons and real input targets; a desk screen gets toolbar-sized ones.
+  // CLAUDE.md: nothing a driver taps goes below 44px. Set on the route, not
+  // guessed from the URL, so a page that moves keeps the right targets.
+  touch = false,
+}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -528,9 +551,24 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0, head
   <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
   <link rel="stylesheet" href="${CSS_BASE}/icons.css">
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
+  <!-- THE OPS SKIN, LAST, SO IT WINS. Every /ops page gets it, including the
+       ones nobody has rewritten yet - which is the point: they inherit the bar
+       and the ground before their bodies are touched.
+
+       ONE FILE OWNS THE LOOK, Neil's instruction, 14 September. The order
+       console used to link this itself; loading it here means there is one
+       loader and no page can be missed. Through CSS_BASE, so it is
+       fingerprinted like every other stylesheet in public/css and a change
+       reaches a phone on the next deploy.
+
+       NEVER ADD IT TO THE PUBLIC LAYOUT. It names the body element, so it would repaint
+       the marketing site - and the bag tag page at /o/<code>, which a
+       laundromat scans and which is deliberately the public look. The only two
+       places it is linked are this wrapper and the sign-in shell below. -->
+  <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 ${head}
 </head>
-<body>
+<body${terminal ? ` class="ops-terminal${touch ? ' ops-touch' : ''}"` : ''}>
   ${
     // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
     // should look like the bag tag page - the logo and nothing else.
@@ -550,7 +588,15 @@ ${head}
          </div>`
       : `<header class="site-header">
     <div class="container site-header-bar ops-bar">
-      ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
+      <!-- A WORD, NOT THE ARTWORK, and only here. CLAUDE.md records that the
+           compact logo at 38px is the smallest the wordmark stays readable at;
+           the ops bar is 40px tall, so the mark would have to shrink below its
+           own documented floor and LYNDRY becomes a smear. The supplied
+           mockups use a text wordmark for the same reason.
+
+           The artwork is untouched and is still the mark on the public site,
+           on the bag tag page, and on the driver's bare route screen. -->
+      <a class="ops-mark" href="/ops" aria-label="LYNDRY ops">LYNDRY OPS</a>
       <!-- Only the tabs this person may actually open. A driver never sees a
            Customers link they would be refused at. -->
       <nav class="site-nav">
@@ -661,34 +707,33 @@ ${body}
 </html>`;
 }
 
-// A compact table. Plain HTML — this is a list of orders, not an app.
+// A compact table. Plain HTML - this is a list of orders, not an app.
+//
+// IT EMITS CLASSES NOW, NOT INLINE STYLES, and that is what lets the terminal
+// skin reach it. An inline style beats every stylesheet rule, so while the
+// padding and the borders were written onto each cell no CSS could restyle
+// this table - which is the one piece of markup on the orders board that the
+// whole restyle is about.
+//
+// THE DEFAULT LOOK IS UNCHANGED. ops.css reproduces exactly what these inline
+// styles said, so the four screens that also call this - customers, one
+// customer, conversations and team - render as they did this morning. Only a
+// page carrying .ops-terminal gets the new one, which today is the live day
+// and nothing else.
 function table(headings, rows) {
   if (!rows.length) {
-    return `<p style="font-size:16px;color:var(--ink-500);margin:0;">Nothing here.</p>`;
+    return `<p class="ops-empty">Nothing here.</p>`;
   }
 
   return `
-  <div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:15px;">
+  <div class="ops-table-wrap">
+    <table class="ops-table">
       <thead>
-        <tr>${headings
-          .map(
-            (h) =>
-              `<th style="text-align:left;padding:10px 14px 10px 0;font-family:var(--font-mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-500);border-bottom:2px solid var(--ink-900);white-space:nowrap;">${h}</th>`
-          )
-          .join('')}</tr>
+        <tr>${headings.map((h) => `<th>${h}</th>`).join('')}</tr>
       </thead>
       <tbody>
         ${rows
-          .map(
-            (cells) =>
-              `<tr>${cells
-                .map(
-                  (c) =>
-                    `<td style="padding:14px 14px 14px 0;border-bottom:1px solid var(--ink-100);vertical-align:top;">${c}</td>`
-                )
-                .join('')}</tr>`
-          )
+          .map((cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`)
           .join('')}
       </tbody>
     </table>
@@ -1754,6 +1799,10 @@ function loginShell({ heading, intro, error = '', form }) {
   <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
   <link rel="stylesheet" href="${CSS_BASE}/icons.css">
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
+  <!-- The sign-in is an ops page and wears the ops skin. Same tokens, no
+       public-site card. See adminPage() above for why this file is linked in
+       exactly two places and never in the public layout. -->
+  <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 </head>
 <body>
   <main class="hero" style="min-height:100vh;display:flex;align-items:center;">
@@ -2572,6 +2621,8 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: isToday ? 'Orders' : `Orders - ${longDate(viewDate)}`,
         active: '/ops',
         body,
@@ -3107,6 +3158,23 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           // which is the exact question anybody opens this card to answer, and
           // the whole reason migration 0091 stored the code at all.
           'payment_decline_code, payment_attempts, ' +
+          // THE NAMES BEHIND TWO IDS. The console's exception strip and stage
+          // rail say "Fancy K 27.6 lb", not "partner 27.6 lb", and the Order
+          // key/value names the promotion that came off. Joined here rather
+          // than fetched again per page, the same way the board reads them.
+          // orders has TWO foreign keys to partners - partner_id (who had the
+          // bag) and intended_partner_id (who was planned) - so the embed has
+          // to name the relationship or PostgREST refuses it as ambiguous. The
+          // console wants the laundromat that actually held the laundry.
+          'promotion_id, discount_cents, partners!orders_partner_id_fkey(name), promotions(name, code), ' +
+          // ready_at and delivered_at. ORDER_FIELDS carries collected_at and
+          // at_partner_at and stops there; the board added these two, this
+          // page never had. Without delivered_at the console's stage rail read
+          // "Delivered -" on a delivered order and its thread window ran to
+          // infinity - every later order's texts on a closed ticket, which is
+          // the exact thing the spec forbids. Fourth time a select list has
+          // quietly decided what a page can know.
+          'ready_at, delivered_at, ' +
           'weight_photo_path, partner_weight_lb, partner_weight_at, driver_id, ' +
           // A held weight is money that is deliberately stuck. Without these
           // two the page cannot tell a settled order from one waiting on a
@@ -3156,12 +3224,18 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
     // The conversation around this order. There is no order id on a message,
     // so this is the customer's recent thread rather than a per-order log.
+    // FROM THE BOOKING ONWARD, NOT THE LAST TWELVE. The console shows the
+    // texts sent while THIS order was live - booking to delivery - and the
+    // customer's twelve most recent never reach back that far on anybody with
+    // a history (#1992's thread has 28). The window bounds it: a day for a
+    // closed order, and an open one is short by definition. sent_by rides along
+    // so a line a person typed can be told from one the system sent.
     const { data: messages } = await db
       .from('messages')
-      .select('direction, body, created_at')
+      .select('direction, body, created_at, sent_by')
       .eq('customer_id', c.id)
-      .order('created_at', { ascending: false })
-      .limit(12);
+      .gte('created_at', order.created_at)
+      .order('created_at', { ascending: true });
 
     const detail = (label, value) => `
       <div style="display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
@@ -3211,7 +3285,86 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       labels: doorScan.labels || [],
     };
 
-    const body = `
+    // THE WAREHOUSE TERMINAL. Neil, 13 September: "one header, one exception
+    // line, then tables." src/web/order-console.js renders it from exactly what
+    // this route already loaded; the permission answers are the same four calls
+    // they always were, passed through by name so a driver still sees the stop
+    // and not the customer. The old template below is kept as _legacyBody -
+    // parsed, unused - until the console has been driven for a few days; every
+    // card helper it calls is untouched, so going back is one rename.
+    // The same four permission calls the rest of this route makes; called here
+    // rather than read from seeCustomer/seeThread/seeAudit because those are
+    // declared further down and this block runs first.
+    const can = {
+      act: roles.can(req.opsUser, 'orders.act'),
+      override: roles.can(req.opsUser, 'orders.override'),
+      customers: roles.can(req.opsUser, 'customers.view'),
+      messages: roles.can(req.opsUser, 'messages.view'),
+      money: showMoney,
+      audit: roles.can(req.opsUser, 'orders.audit'),
+      text: canAskOnOrder,
+    };
+    const driverRow = team.find((d) => d.id === order.driver_id) || null;
+    const consoleOrder = {
+      ...order,
+      driverName: driverRow ? driverRow.name : order.driver_id && order.driver_id === req.opsUser.id ? req.opsUser.name : null,
+      partnerName: order.partners ? order.partners.name : null,
+      promotionName: order.promotions ? order.promotions.code || order.promotions.name : null,
+    };
+    const askedView = String(req.query.log || '').trim();
+    const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
+    const banner = req.query.problem
+      ? `<div class="flash problem">${escapeHtml(String(req.query.problem))}</div>`
+      : req.query.done
+        ? `<div class="flash done">${escapeHtml(String(req.query.done))}</div>`
+        : '';
+    // Everything with a form on it that the toolbar links to by anchor. These
+    // are the existing cards, unchanged, so every mutation posts exactly where
+    // it always did.
+    const sideExtras = [
+      order.weight_held_at && showMoney ? `<div id="settle">${heldWeightCard(order, can.override)}</div>` : '',
+      `<div id="release">${returnCheckCard(order, can.override)}</div>`,
+      showMoney && order.payment_status === 'FAILED' ? `<div id="declined">${declinedCard(order, can.override, roles.can(req.opsUser, 'messages.send'))}</div>` : '',
+      stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override)}</div>` : '',
+      orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
+      can.customers && stillRunning
+        ? `<h2>Driver</h2><div id="driver"><form method="post" action="/ops/orders/${order.order_number}/driver" style="margin:0;display:flex;gap:8px;flex-wrap:wrap;">
+             <select name="driver_id" style="font:inherit;padding:4px 6px;border:1px solid #9ca3af;border-radius:3px;min-height:30px;">
+               <option value=""${order.driver_id ? '' : ' selected'}>Nobody yet</option>
+               ${team.map((d) => `<option value="${escapeHtml(d.id)}"${d.id === order.driver_id ? ' selected' : ''}>${escapeHtml(d.name)}${d.base_city ? ` - ${escapeHtml(d.base_city)}` : ''}</option>`).join('')}
+             </select>
+             <button class="cbtn" type="submit">Move</button>
+           </form></div>`
+        : '',
+      // Only while the order is live. The gaps are facts about the PERSON -
+      // "nothing booked" is true of everybody whose last pickup ran - and on a
+      // finished order the only sentence worth sending is "make it regular".
+      can.customers && stillRunning && orderGaps.length
+        ? `<h2 id="send">Send</h2>${nudgePanel({ gaps: orderGaps, action: `/ops/customers/${c.id}/ask?order=${order.order_number}`, canSend: canAskOnOrder, heading: 'Still needed from them' })}`
+        : '',
+    ].join('');
+
+    const body = orderConsoleBody({
+      order: consoleOrder,
+      customer: c,
+      events: history,
+      labels,
+      messages: messages || [],
+      tasks: pickupTasks,
+      team,
+      laundromats,
+      limits: null,
+      can,
+      view,
+      banner,
+      money,
+      shortDate,
+      labelState,
+      sideExtras,
+    });
+
+    // eslint-disable-next-line no-unused-vars
+    const _legacyBody = `
       <a href="/ops" style="font-size:15px;font-weight:600;">&larr; All orders</a>
 
       <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin:18px 0 32px;">
@@ -3528,7 +3681,16 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       </div>`;
       })()}`;
 
-    res.type('html').send(adminPage({ title: 'Order', active: '/ops', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(
+      adminPage({
+        title: `#${order.order_number}`,
+        active: '/ops',
+        body,
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
   } catch (err) {
     next(err);
   }
@@ -3589,7 +3751,9 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
       </div>
       ${table(headings, rows)}`;
 
-    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -3759,6 +3923,8 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
 router.get('/ops/customers/new', guard, withIssues, may('customers.view'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
       title: 'New customer',
       active: '/ops/customers',
       body: phoneCustomerForm(),
@@ -3775,6 +3941,8 @@ router.post('/ops/customers/new', guard, may('customers.view'), async (req, res,
   const reshow = (problem) =>
     res.type('html').send(
       adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
         title: 'New customer',
         active: '/ops/customers',
         body: phoneCustomerForm({ values: form, problem }),
@@ -3971,6 +4139,8 @@ router.get('/ops/customers/:id/order', guard, withIssues, may('customers.view'),
 
     return res.type('html').send(
       adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Book a pickup',
         active: '/ops/customers',
         body: phoneOrderForm({ customer }),
@@ -4002,6 +4172,8 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
     const reshow = (problem) =>
       res.type('html').send(
         adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
           title: 'Book a pickup',
           active: '/ops/customers',
           body: phoneOrderForm({ customer, values: form, problem }),
@@ -4395,7 +4567,9 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         ])
       )}`;
 
-    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -5083,6 +5257,9 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
         title: 'Your route',
         active: '/ops/run',
         // NO NAV ON THE ROUTE. One stop, one thing to do - see adminPage.
@@ -5237,6 +5414,12 @@ router.get('/ops/run/door/:id', guard, withIssues, may('orders.drive'), async (r
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
         title: `${found.label.code}-${found.label.sticker_seq}`,
         active: '/ops/run',
         bare: true,
@@ -5412,6 +5595,12 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
         title: `Bag #${position}`,
         active: '/ops/run',
         bare: true,
@@ -5438,6 +5627,9 @@ router.get('/ops/run/bag/:id', guard, withIssues, may('orders.drive'), async (re
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
         title: `${found.label.code}-${found.label.sticker_seq}`,
         active: '/ops/run',
         bare: true,
@@ -6213,6 +6405,8 @@ router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res
 
     return res.type('html').send(
       adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Weight and money report',
         active: '/ops/reports',
         body: reportsBody({ report, partners: partnerRows || [], form }),
@@ -6306,6 +6500,8 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: 'Routing',
         active: '/ops/routing',
         head: routePlannerHead(),
@@ -6445,6 +6641,9 @@ async function renderLoadout(req, res, { built = false } = {}) {
 
   return res.type('html').send(
     adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        touch: true,
       title: 'Load the van',
       // Highlighted as the route, because that is what it is a step of. A nav
       // that lights up nothing while you are standing on a page reads as
@@ -7366,7 +7565,9 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>`;
 
     return res.type('html').send(
-      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true, title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     return next(err);
@@ -7540,6 +7741,8 @@ router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req
 
     return res.type('html').send(
       adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
         title: `Bag tag ${code}`,
         active: '/ops/labels',
         body: await labelDetailBody(label, {
@@ -7584,6 +7787,8 @@ router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req
 router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Unit economics',
       active: '/ops/economics',
       body: runEconomicsBody(),
@@ -7605,6 +7810,8 @@ router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) =>
 router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Route planner',
       active: '/ops/planner',
       head: routePlannerHead(),
@@ -7636,6 +7843,8 @@ router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
 router.get('/ops/journey', guard, withIssues, (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'What happens to a bag',
       active: '/ops/journey',
       body: journeyBody(),
@@ -7648,6 +7857,8 @@ router.get('/ops/journey', guard, withIssues, (req, res) => {
 router.get('/ops/process', guard, withIssues, (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'How it all works',
       active: '/ops/process',
       // The page is built for the person reading it - a driver is never sent
@@ -7821,7 +8032,9 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     `;
 
     res.type('html').send(
-      adminPage({ title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true, title: 'Issues', active: '/ops/issues', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -7921,7 +8134,22 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     if (error) throw error;
 
     const scanned = (data || []).length;
-    const threads = groupIntoThreads(data || []);
+    let threads = groupIntoThreads(data || []);
+
+    // ALERTS WE SEND OURSELVES GO LAST, AND ARE SAID TO BE WHAT THEY ARE.
+    //
+    // Neil, 14 September: make ops noise quieter, delete nothing that went to a
+    // customer. issues.js and order-alerts.js page the team with a null
+    // customer, and this screen groups by phone number - so a team member's own
+    // number shows up as a conversation with twenty-nine messages in it.
+    //
+    // SORTED, NOT HIDDEN. Those alerts are how anybody knows an issue was
+    // raised at three in the morning. And the rule cannot reach a real thread:
+    // one inbound message, or one message with a customer on it, and it is a
+    // conversation again. See src/core/message-view.js.
+    const { data: teamRows } = await db.from('ops_users').select('phone');
+    const teamPhones = messageView.teamPhoneSet(teamRows || []);
+    threads = messageView.conversationsFirst(threads, teamPhones);
 
     // Numbers with no customer row. These are people who texted and never
     // signed up — worth chasing, and invisible everywhere else in ops.
@@ -7965,9 +8193,16 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     });
 
     const row = (t) => {
+      // "Not a customer" is true of an alert thread and useless on it - it is
+      // our own number. Saying which of the two it is stops somebody opening it
+      // expecting a person.
+      const ours = messageView.isOpsAlertThread(t, teamPhones);
+
       const who = t.customer
         ? `<span style="font-weight:600;">${escapeHtml(t.customer.name || 'Unnamed')}</span>`
-        : `<span class="badge" style="background:var(--sunbeam-500);">Not a customer</span>`;
+        : ours
+          ? `<span class="badge">Ops alerts</span>`
+          : `<span class="badge" style="background:var(--sunbeam-500);">Not a customer</span>`;
 
       const stopped =
         t.customer && t.customer.status === 'UNSUBSCRIBED'
@@ -8142,7 +8377,9 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
       }`;
 
     res.type('html').send(
-      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -8213,6 +8450,8 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     if (!phone) {
       return res.status(404).type('html').send(
         adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
           title: 'Conversation',
           active: '/ops/messages',
           body: `<a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
@@ -8225,10 +8464,14 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     // The pause is NOT caught and softened into "probably fine". If we cannot
     // read the switch the AI is silent - isPaused() fails closed - and a page
     // claiming it is answering while it says nothing is the worst of both.
-    const [{ data: messages, error }, { data: customer }, pause, followUp, reminder] = await Promise.all([
+    const [{ data: messages, error }, { data: customer }, pause, followUp, reminder, { data: threadTeam }] = await Promise.all([
       db
         .from('messages')
-        .select('direction, body, created_at, delivery_status, delivery_error')
+        // customer_id and kind ride along so the view can tell an alert we
+        // sent ourselves from a text to a customer. An unselected column reads
+        // as undefined, which here would make EVERY outbound row look like an
+        // alert - the eighth time that trap would have bitten in this codebase.
+        .select('direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
       // THE WHOLE ROW, NOT SIX COLUMNS. nudges.gapsFor() asks the same
@@ -8258,11 +8501,30 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           console.error(`Could not work out the reminder for ${phone}: ${err.message}`);
           return null;
         }),
+      // Team numbers, to tell an alert thread from a conversation. See the
+      // note further down and src/core/message-view.js.
+      db.from('ops_users').select('phone'),
     ]);
 
     if (error) throw error;
 
-    const thread = messages || [];
+    // WHAT THE CUSTOMER SAW, AND WHAT WE SENT OURSELVES.
+    //
+    // Neil, 14 September: make ops noise quieter, delete nothing that went to a
+    // customer. This number is the live case that makes it worth doing at all -
+    // it is a team member's handset AND a customer, so twenty-nine internal
+    // alerts sit interleaved with a real conversation. They were never customer
+    // communication; they are pages about other people's orders.
+    //
+    // MUTED BY DEFAULT, NEVER GONE. ?all=1 shows the lot, the page says how
+    // many are folded away, and the store is untouched. A record you can tidy
+    // is not evidence of anything.
+    const everything = messages || [];
+    const threadTeamPhones = messageView.teamPhoneSet(threadTeam || []);
+    const customerSaw = messageView.customerVisible(everything, threadTeamPhones);
+    const showAll = String((req.query || {}).all || '') === '1';
+    const opsAlertCount = everything.length - customerSaw.length;
+    const thread = showAll ? everything : customerSaw;
     const digits = phone.replace(/\D/g, '');
     const canSend = roles.can(req.opsUser, 'messages.send');
 
@@ -8373,12 +8635,59 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
                 background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
 
+    // IS THIS A CONVERSATION, OR US TALKING TO OURSELVES?
+    //
+    // Neil, 14 September. issues.js and order-alerts.js page the team with a
+    // null customer, so a team member's own number opens as a thread of
+    // twenty-nine alerts with no reply. Saying so at the top is the whole of
+    // the change here: nothing is hidden, because every one of these is a text
+    // that really was sent and the log of them is how anybody knows an issue
+    // was raised overnight.
+    //
+    // It cannot fire on a customer thread. One inbound message, or one message
+    // carrying a customer, and message-view calls it a conversation.
+    const opsAlertThread = messageView.isOpsAlertThread(
+      {
+        phone,
+        customer,
+        inbound: (messages || []).filter((m) => m.direction === 'INBOUND').length,
+        total: (messages || []).length,
+        last: (messages || [])[0] || null,
+      },
+      messageView.teamPhoneSet(threadTeam || [])
+    );
+
     const body = `
       <a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
 
       <div style="margin-top:18px;">
         ${note ? strip(note, 'var(--suds-300)') : ''}
         ${problem ? strip(problem, 'var(--stain-100)') : ''}
+        ${
+          opsAlertCount
+            ? `<div class="card" style="padding:12px 14px;margin:0 0 14px;">
+                 <p class="eyebrow" style="margin:0 0 4px;">Ops alerts</p>
+                 <p style="margin:0;font-size:14px;line-height:1.5;">
+                   ${opsAlertCount} message${opsAlertCount === 1 ? '' : 's'} on this number
+                   ${opsAlertCount === 1 ? 'is' : 'are'} an alert the system sent to the team -
+                   a new order, an issue raised, a card refused. ${
+                     opsAlertThread
+                       ? 'This is our own number, so no customer has seen any of it.'
+                       : 'This handset belongs to a team member as well as a customer, so these went to the person, not to the customer.'
+                   }
+                   ${
+                     showAll
+                       ? `<a href="/ops/messages/${encodeURIComponent(
+                           phone.replace(/\D/g, '')
+                         )}">Hide them</a>`
+                       : `<a href="/ops/messages/${encodeURIComponent(
+                           phone.replace(/\D/g, '')
+                         )}?all=1">Show them</a>`
+                   }
+                 </p>
+               </div>`
+            : ''
+        }
       </div>
 
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:18px 0 6px;">
@@ -8603,7 +8912,9 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       </div>`;
 
     res.type('html').send(
-      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -8861,6 +9172,8 @@ router.get('/ops/checkouts', guard, withIssues, may('customers.view'), async (re
 
     return res.type('html').send(
       adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Unfinished checkouts',
         active: '/ops/checkouts',
         body: checkoutsBody({
@@ -8911,6 +9224,8 @@ router.get('/ops/scheduled', guard, withIssues, may('messages.view'), async (req
 
     return res.type('html').send(
       adminPage({
+        // Slice five, exceptions and money. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Customer follow-up',
         active: '/ops/scheduled',
         body: scheduledBody({
@@ -9292,6 +9607,8 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Admin dashboard',
         active: '/ops/admin',
         body: adminDashboardBody({
@@ -9332,6 +9649,8 @@ router.get('/ops/weights', guard, withIssues, may('service.manage'), async (req,
   try {
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Weight thresholds',
         active: '/ops/weights',
         body: weightLimitsBody({
@@ -9384,6 +9703,8 @@ router.get('/ops/settings', guard, withIssues, may('service.manage'), async (req
   try {
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Are we taking orders?',
         active: '/ops/settings',
         body: settingsBody({
@@ -9523,6 +9844,8 @@ router.get('/ops/promotions', guard, withIssues, may('service.manage'), async (r
   try {
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Promotions',
         active: '/ops/promotions',
         body: promotionsBody({
@@ -9557,6 +9880,8 @@ router.get('/ops/promotions/:id', guard, withIssues, may('service.manage'), asyn
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: promo.name,
         active: '/ops/promotions',
         body: promotionDetailBody({
@@ -9883,6 +10208,8 @@ router.get('/ops/broadcast', guard, withIssues, may('service.manage'), async (re
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Send a text blast',
         active: '/ops/broadcast',
         body: broadcastBody({
@@ -9969,6 +10296,8 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Partners',
         active: '/ops/partners',
         body: partnerListBody({
@@ -9989,6 +10318,8 @@ router.get('/ops/partners', guard, withIssues, may('partners.view'), async (req,
 router.get('/ops/partners/new', guard, withIssues, may('partners.manage'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Add a partner',
       active: '/ops/partners',
       body: partnerFormBody({ problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null }),
@@ -10034,6 +10365,8 @@ router.get('/ops/partners/:id/edit', guard, withIssues, may('partners.manage'), 
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: `Edit ${partner.name}`,
         active: '/ops/partners',
         body: partnerFormBody({
@@ -10101,6 +10434,8 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: partner.name,
         active: '/ops/partners',
         body: partnerDetailBody({
@@ -10378,6 +10713,8 @@ router.get('/ops/leads', guard, withIssues, may('customers.view'), async (req, r
 
     res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Leads',
         active: '/ops/leads',
         body,
@@ -10565,7 +10902,9 @@ router.get('/ops/partners/enquiries', guard, withIssues, may('partners.view'), a
              </div>`
       }`;
 
-    res.type('html').send(adminPage({ title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true, title: 'Enquiries', active: '/ops/partners', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -10741,7 +11080,9 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
       `;
 
-    res.type('html').send(adminPage({ title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true, title: 'Team', active: '/ops/team', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -10809,6 +11150,8 @@ router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, r
 
     return res.type('html').send(
       adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
         title: person.name,
         active: '/ops/team',
         body: teamMemberBody({
@@ -10981,6 +11324,8 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
 function notFoundPage(res, message) {
   return res.status(404).type('html').send(
     adminPage({
+        // Slice four, Admin and Business. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Not found',
       body: `
       <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0 0 12px;">Not found</h1>
