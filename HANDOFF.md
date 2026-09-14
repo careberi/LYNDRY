@@ -1,8 +1,8 @@
 # HANDOFF
 
-Issue: Payment Hold — laundry we hold with money outstanding never reaches the doorstep
+Issue: Payment Hold, then Booking Intents. BOTH ON MAIN AND DEPLOYED.
 Owner of the keyboard: Neil
-Status: implemented, Grok findings 1-3 fixed, finding 4 unknown and not done
+Status: shipped 14 September. Nothing in flight.
 
 ## Goal
 
@@ -231,17 +231,56 @@ retrieval stops     : [ pickup_partner ]
 
 274 tests pass.
 
-## Neil
+## Where this actually stands, 14 September
 
-Three things true right now:
+BOTH ISSUES ARE ON MAIN AND LIVE. Neil handed over the merges and the database
+rather than running them himself.
 
-1. **Nothing is merged.** `origin/main` is still `3f191b1`. This branch carries
-   the docs branch and the reminder gate underneath it, so merging it ships all
-   three.
-2. **#2060 is held the moment this is live**, and #2061 parks with it. Clearing
-   it takes a payment, cash recorded against it, or a waiver. It is not waived
-   here.
-3. **The retrieval lock has an open consequence and nothing answers it.** #2060's
-   bags come back off Best Wash wearing van clips and keep them indefinitely,
-   three of the fifty. Unclip and store at base, or leave them in the van, is
-   your call and is not in this branch.
+| | |
+|---|---|
+| Payment Hold | merged at `2ba8d20` |
+| Booking Intents | merged at `0816b47` |
+| A test fix on top | merged at `a3ca64f` |
+| Migration 0093 | APPLIED to project pauaemlehenfrnjvgzmc, checked against SUPABASE_URL rather than assumed |
+
+Merged locally with merge commits, not committed to main, because there is no
+GitHub CLI on that machine to open a pull request with.
+
+### The verification Neil asked for could not pass, and why
+
+He asked to gate the Payment Hold merge on #2060 being held and #2061 being
+parked behind it. Neither is true any more, because he had #2060 marked paid by
+hand earlier the same day - so it owes nothing, is not held, and is a delivery
+stop again, and #2061 is back on the round for 26 September with its reminder
+due the 25th. That is a working gate reporting on settled orders.
+
+The live proof of the hold is the run recorded at `2f6c76d`, before the balance
+was cleared. What was re-checked before merging is that the gate evaluates
+correctly on the current rows and that the two wiring bugs stay fixed - the
+sibling query runs, and customer_id reaches the board.
+
+### What was found while shipping, that review had not
+
+- **The schedule undo was wrong twice.** Ending every schedule was the original
+  bug. Deleting by id, which replaced it, was ALSO wrong: `addSchedule()` reuses
+  an existing row for the same weekday and cadence, including an ended one, so
+  the id handed back can belong to a row that predates the booking. Booking
+  first and scheduling second removes the undo entirely.
+- **A test failed on main with bytes identical to the branch.** Git checks this
+  repo out with CRLF; the helper looked for a bare LF, found nothing, and handed
+  back the rest of the file - so a claim-lock test failed while pointing at
+  product code. It would have broken on any fresh clone.
+- **The claim lock is now tested against Postgres**, not read. A second claim on
+  a held checkout loses, a released one can be claimed again, a stale one is
+  taken over. The test row was deleted and the table is empty.
+
+### Still open
+
+- **Nobody has click-tested the new checkout.** Neil said go without it. The
+  first real online booking by somebody with no card on file is the test.
+- **Grok's finding 4 was never recorded anywhere** and is still not done.
+- **The order console** (`feat/ops-order-console`) is still local and unpushed,
+  under a standing instruction not to push it.
+- CLEAN50 has no ceiling. The van clips a held bag ties up are undecided.
+
+Not started and not to be started: QR, cash, the $80 authorization.
