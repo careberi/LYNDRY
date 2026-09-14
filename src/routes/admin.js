@@ -7565,7 +7565,9 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>`;
 
     return res.type('html').send(
-      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true, title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     return next(err);
@@ -7739,6 +7741,8 @@ router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req
 
     return res.type('html').send(
       adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
         title: `Bag tag ${code}`,
         active: '/ops/labels',
         body: await labelDetailBody(label, {
@@ -7783,6 +7787,8 @@ router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req
 router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Unit economics',
       active: '/ops/economics',
       body: runEconomicsBody(),
@@ -7804,6 +7810,8 @@ router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) =>
 router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'Route planner',
       active: '/ops/planner',
       head: routePlannerHead(),
@@ -7835,6 +7843,8 @@ router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
 router.get('/ops/journey', guard, withIssues, (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'What happens to a bag',
       active: '/ops/journey',
       body: journeyBody(),
@@ -7847,6 +7857,8 @@ router.get('/ops/journey', guard, withIssues, (req, res) => {
 router.get('/ops/process', guard, withIssues, (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice six, Tools and Resources. The terminal skin. See adminPage().
+        terminal: true,
       title: 'How it all works',
       active: '/ops/process',
       // The page is built for the person reading it - a driver is never sent

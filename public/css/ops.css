@@ -726,5 +726,30 @@ body > main.container {
 .ops-terminal a { color: var(--c-link); }
 .ops-terminal a:hover { text-decoration: underline; }
 
+/* --- THE MAP IS NOT OURS TO SKIN ----------------------------------------
+
+   The route planner is the one ops page with a runtime dependency: Leaflet,
+   OpenStreetMap tiles and OSRM. Leaflet builds its own controls out of plain
+   anchors and divs, and styles them from its own stylesheet - so a blanket
+   link colour or a table rule reaching inside the map restyles somebody
+   else's component, which is how a zoom button ends up blue and 13px.
+
+   Everything under the map keeps its own look. The planner already paints the
+   tiles and its tooltips deliberately; that is its business, not this file's. */
+.ops-terminal #rp-map a,
+.ops-terminal .leaflet-container a {
+  color: inherit;
+}
+
+.ops-terminal #rp-map,
+.ops-terminal .leaflet-container {
+  font-size: initial;
+}
+
+.ops-terminal .leaflet-container table,
+.ops-terminal .leaflet-container .btn {
+  all: revert;
+}
+
 /* A card that is a link keeps no lift and no shadow. */
 .ops-terminal a .card:hover { transform: none; box-shadow: none; }
