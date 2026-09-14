@@ -490,7 +490,23 @@ function opsNav(user, active) {
 // route planner's map library, and so far nothing else. Kept as a parameter
 // rather than letting pages write their own <head> so that every ops screen
 // still gets the same stylesheets, the same noindex and the same furniture.
-function adminPage({ title, active = '', body, user = null, openIssues = 0, head = '', serviceClosed = false, bare = false }) {
+// `terminal` puts a page into the warehouse-terminal skin: tables, hairlines,
+// small buttons, no marketing cards. It is a FLAG rather than the default
+// because the restyle ships a slice at a time - the live day first, at Neil's
+// instruction - and a page that has not been converted yet must keep the look
+// its body was written for. Flipping a later slice on is adding the flag to
+// those routes; nothing else has to change.
+function adminPage({
+  title,
+  active = '',
+  body,
+  user = null,
+  openIssues = 0,
+  head = '',
+  serviceClosed = false,
+  bare = false,
+  terminal = false,
+}) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -546,7 +562,7 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0, head
   <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 ${head}
 </head>
-<body>
+<body${terminal ? ' class="ops-terminal"' : ''}>
   ${
     // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
     // should look like the bag tag page - the logo and nothing else.
@@ -685,34 +701,33 @@ ${body}
 </html>`;
 }
 
-// A compact table. Plain HTML — this is a list of orders, not an app.
+// A compact table. Plain HTML - this is a list of orders, not an app.
+//
+// IT EMITS CLASSES NOW, NOT INLINE STYLES, and that is what lets the terminal
+// skin reach it. An inline style beats every stylesheet rule, so while the
+// padding and the borders were written onto each cell no CSS could restyle
+// this table - which is the one piece of markup on the orders board that the
+// whole restyle is about.
+//
+// THE DEFAULT LOOK IS UNCHANGED. ops.css reproduces exactly what these inline
+// styles said, so the four screens that also call this - customers, one
+// customer, conversations and team - render as they did this morning. Only a
+// page carrying .ops-terminal gets the new one, which today is the live day
+// and nothing else.
 function table(headings, rows) {
   if (!rows.length) {
-    return `<p style="font-size:16px;color:var(--ink-500);margin:0;">Nothing here.</p>`;
+    return `<p class="ops-empty">Nothing here.</p>`;
   }
 
   return `
-  <div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:15px;">
+  <div class="ops-table-wrap">
+    <table class="ops-table">
       <thead>
-        <tr>${headings
-          .map(
-            (h) =>
-              `<th style="text-align:left;padding:10px 14px 10px 0;font-family:var(--font-mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-500);border-bottom:2px solid var(--ink-900);white-space:nowrap;">${h}</th>`
-          )
-          .join('')}</tr>
+        <tr>${headings.map((h) => `<th>${h}</th>`).join('')}</tr>
       </thead>
       <tbody>
         ${rows
-          .map(
-            (cells) =>
-              `<tr>${cells
-                .map(
-                  (c) =>
-                    `<td style="padding:14px 14px 14px 0;border-bottom:1px solid var(--ink-100);vertical-align:top;">${c}</td>`
-                )
-                .join('')}</tr>`
-          )
+          .map((cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`)
           .join('')}
       </tbody>
     </table>
@@ -2600,6 +2615,8 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: isToday ? 'Orders' : `Orders - ${longDate(viewDate)}`,
         active: '/ops',
         body,
@@ -5222,6 +5239,8 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: 'Your route',
         active: '/ops/run',
         // NO NAV ON THE ROUTE. One stop, one thing to do - see adminPage.
@@ -5376,6 +5395,10 @@ router.get('/ops/run/door/:id', guard, withIssues, may('orders.drive'), async (r
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: `${found.label.code}-${found.label.sticker_seq}`,
         active: '/ops/run',
         bare: true,
@@ -5551,6 +5574,10 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: `Bag #${position}`,
         active: '/ops/run',
         bare: true,
@@ -5577,6 +5604,8 @@ router.get('/ops/run/bag/:id', guard, withIssues, may('orders.drive'), async (re
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: `${found.label.code}-${found.label.sticker_seq}`,
         active: '/ops/run',
         bare: true,
@@ -6352,6 +6381,8 @@ router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: 'Weight and money report',
         active: '/ops/reports',
         body: reportsBody({ report, partners: partnerRows || [], form }),
@@ -6445,6 +6476,8 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
 
     return res.type('html').send(
       adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true,
         title: 'Routing',
         active: '/ops/routing',
         head: routePlannerHead(),
@@ -7505,7 +7538,9 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       </div>`;
 
     return res.type('html').send(
-      adminPage({ title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Live day: the terminal skin. See adminPage().
+        terminal: true, title: 'Bag stickers', active: '/ops/labels', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     return next(err);

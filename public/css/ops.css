@@ -425,3 +425,280 @@ body > main.container {
 .console .flash { padding: 8px 10px; margin: 0 0 12px; border: 1px solid var(--c-line-strong); background: #fff; }
 .console .flash.problem { border-color: #ef4444; background: var(--c-red-bg); color: var(--c-red); }
 .console .flash.done { border-color: #16a34a; background: var(--c-green-bg); color: var(--c-green); }
+/* --- the shared table, off inline styles ---------------------------------
+
+   admin.js's table() used to write padding, borders and type onto every cell.
+   An inline style beats every stylesheet rule, so no skin could reach the one
+   piece of markup the restyle is actually about. The rules below reproduce
+   what those inline styles said, exactly, so the four Admin screens that also
+   call table() look the way they did before this moved.
+
+   The terminal override is further down and applies only under
+   .ops-terminal. */
+.ops-table-wrap { overflow-x: auto; }
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.ops-table th {
+  text-align: left;
+  padding: 10px 14px 10px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  border-bottom: 2px solid var(--ink-900);
+  white-space: nowrap;
+}
+
+.ops-table td {
+  padding: 14px 14px 14px 0;
+  border-bottom: 1px solid var(--ink-100);
+  vertical-align: top;
+}
+
+.ops-empty { font-size: 16px; color: var(--ink-500); margin: 0; }
+
+/* ===========================================================================
+   THE TERMINAL SKIN.
+
+   Neil, 14 September, slice two: the live day only - the orders board, the
+   route, routing and the load-out. Everything under .ops-terminal, so a page
+   that has not been converted keeps the look its body was written for. Adding
+   a later slice is adding the flag to those routes.
+
+   WHAT THIS IS DOING is restyling the primitives those pages already use -
+   cards, tables, badges, buttons, labels - rather than rewriting four large
+   page bodies. The markup on these screens is load-bearing: the run page is a
+   driver's only screen and the routing board decides where a van goes. A skin
+   that leaves the structure alone cannot reorder a stop or hide a control,
+   which a rewrite of 200KB of markup very much could.
+   =========================================================================== */
+
+/* --- the page ------------------------------------------------------------- */
+
+/* WRITTEN OUT, NOT AS A font SHORTHAND. `font: 700 20px/1.2 inherit` looks
+   right and is invalid - the shorthand will not take `inherit` as the family,
+   so the browser throws the WHOLE declaration away and the heading stayed at
+   the design system's 40px. It failed silently and looked like a specificity
+   problem. */
+.ops-terminal h1 {
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0 0 10px;
+}
+
+.ops-terminal h2 {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+}
+
+.ops-terminal h3 {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0 0 6px;
+}
+
+/* The display classes are the public voice and are used for headings on these
+   pages too. Same treatment. */
+.ops-terminal .display-1,
+.ops-terminal .display-2,
+.ops-terminal .display-3 {
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* An eyebrow becomes a plain small label. The mono uppercase is the public
+   site's voice and costs a line of height for four words. */
+.ops-terminal .eyebrow {
+  font: 600 11px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin: 0 0 4px;
+}
+
+/* --- cards become panels --------------------------------------------------
+
+   The design system's card is cream, ink-outlined and casts a hard 6px
+   shadow. Six of those stacked down a routing board is a lot of furniture
+   around three numbers. Here a card is a white panel on a hairline. */
+.ops-terminal .card,
+.ops-terminal .card-xl {
+  background: var(--c-row);
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  padding: 12px 14px !important;
+  margin-bottom: 12px;
+  /* !important because these pages write their shadows INLINE, and an inline
+     style beats every ordinary rule. It is the one declaration here that has
+     to shout, and it is shouting at markup this slice deliberately does not
+     touch - rewriting four page bodies to remove a shadow is not worth the
+     risk to a driver's only screen. */
+  box-shadow: none !important;
+}
+
+.ops-terminal .card-sunken { background: var(--c-row-alt); }
+
+/* Colour still means something. A card the page painted red or amber keeps
+   its meaning and loses only the shadow - these are the exception lines and
+   they are the one thing that must not get quieter. */
+.ops-terminal .card[style*="--stain"],
+.ops-terminal .card[style*="stain-500"] {
+  border-color: #ef4444;
+}
+
+/* --- tables --------------------------------------------------------------- */
+
+.ops-terminal .ops-table { font-size: 13px; }
+
+.ops-terminal .ops-table th {
+  background: var(--c-head);
+  border-bottom: 1px solid var(--c-line-strong);
+  border-top: 1px solid var(--c-line);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--c-ink);
+  padding: 6px 10px;
+}
+
+.ops-terminal .ops-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--c-line);
+  vertical-align: top;
+}
+
+.ops-terminal .ops-table tbody tr:nth-child(even) { background: var(--c-row-alt); }
+.ops-terminal .ops-table tbody tr:nth-child(odd) { background: var(--c-row); }
+
+/* Any other table on these pages, not only the shared helper. The run and
+   routing pages build their own. */
+.ops-terminal table { border-collapse: collapse; }
+.ops-terminal .ops-empty { font-size: 13px; color: var(--c-muted); }
+
+/* Figures line up. A column of weights you cannot compare at a glance is a
+   column you have to read twice. */
+.ops-terminal td, .ops-terminal .num { font-variant-numeric: tabular-nums; }
+
+/* --- badges become chips -------------------------------------------------- */
+
+.ops-terminal .badge {
+  display: inline-block;
+  border: 0;
+  border-radius: 2px;
+  box-shadow: none;
+  padding: 1px 6px;
+  font: 700 11px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  background: var(--c-head);
+  color: var(--c-ink);
+  vertical-align: baseline;
+}
+
+/* --- buttons -------------------------------------------------------------- */
+
+.ops-terminal .btn {
+  height: auto;
+  min-height: 0;
+  border-radius: 3px;
+  border: 1px solid var(--c-line-strong);
+  background: #fff;
+  color: var(--c-ink);
+  box-shadow: none;
+  padding: 5px 10px;
+  font: 600 13px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  transform: none;
+}
+
+.ops-terminal .btn:hover { background: var(--c-row-alt); transform: none; box-shadow: none; }
+.ops-terminal .btn:active { transform: none; box-shadow: none; }
+
+.ops-terminal .btn-primary {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: #fff;
+}
+.ops-terminal .btn-primary:hover { background: #000; }
+
+/* THE DRIVER'S BUTTONS STAY BIG, AND THIS IS THE ONE PLACE THE SKIN GIVES WAY.
+   CLAUDE.md: a control on the run is 56px and full width because it is tapped
+   on a doorstep with one hand full, and no touch target goes below 44px. A
+   13px toolbar button is right at a desk and wrong in a stairwell. */
+.ops-terminal .btn-lg,
+.ops-terminal .btn-full {
+  min-height: 52px;
+  padding: 14px 18px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ops-terminal .btn-full { width: 100%; display: block; }
+
+.ops-terminal .btn-sm {
+  min-height: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+/* --- fields --------------------------------------------------------------- */
+
+.ops-terminal .input,
+.ops-terminal .select,
+.ops-terminal input[type="text"],
+.ops-terminal input[type="date"],
+.ops-terminal input[type="time"],
+.ops-terminal input[type="number"],
+.ops-terminal select {
+  height: auto;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 3px;
+  box-shadow: none;
+  background: #fff;
+  padding: 5px 8px;
+  font: 13px/1.3 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* The scan box and the weight box are typed at a door, so they keep a real
+   target. Same reasoning as the buttons above. */
+.ops-terminal .input-lg {
+  padding: 12px 12px;
+  font-size: 16px;
+  min-height: 48px;
+}
+
+.ops-terminal .field-label {
+  font: 600 11px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin-bottom: 3px;
+}
+
+/* --- links ---------------------------------------------------------------- */
+
+.ops-terminal a { color: var(--c-link); }
+.ops-terminal a:hover { text-decoration: underline; }
+
+/* A card that is a link keeps no lift and no shadow. */
+.ops-terminal a .card:hover { transform: none; box-shadow: none; }
