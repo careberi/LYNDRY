@@ -89,16 +89,25 @@ Nothing else. `dispatch.js` was read, not edited.
 
 Implemented on `fix/reminder-collectable`. `npm test`: 247 pass, 0 fail.
 
-Verified against live rows, read-only — `sendDue()` was deliberately not called
+Checked against live rows, read-only — `sendDue()` was deliberately not called
 because it texts real people:
 
-| Order | | Before | After |
+| Order | | After the change | Proves the change? |
 |---|---|---|---|
-| #2063 ashley | no card, off the route | reminder scheduled | **no reminder, no badge** |
-| #2062 Trisha | waived | reminder scheduled | reminder scheduled, goes tonight |
-| #2061 Shamar | card on file | reminder scheduled | reminder scheduled |
+| #2063 ashley | no card, off the route | no reminder, no badge | **No.** Her pickup is today, so the reminder evening (13 Sep) had already passed and `pendingFor()` would return null from the pre-existing date check with or without this branch |
+| #2062 Trisha | waived | still scheduled, goes tonight | Yes, in the useful direction: waived must keep its reminder |
+| #2061 Shamar | card on file | still scheduled | Yes, nothing collectable was lost |
 
-Still to do before merge: paste the diff to Grok, then click it.
+**No live row can currently distinguish the two behaviours.** That would need an
+order with no card AND a pickup at least two days out, and there is not one. The
+proof is the unit tests, which call `collectable()` with no dates involved and
+read the source to pin that all three queries carry the card fields.
+
+**Grok review: deferred by Neil on 14 Sep.**
+
+- Accepted on unit tests + the `pendingFor()` select fix.
+- Ashley thread is not proof (reminder evening already passed).
+- No live `sendDue()` against customers.
 
 One thing deliberately left alone, per the brief: a customer who adds a card
 after the reminder evening but before the pickup gets no reminder and is on the
