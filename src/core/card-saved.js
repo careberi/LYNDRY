@@ -29,6 +29,8 @@ const orders = require('./orders');
 const billing = require('./billing');
 const booking = require('./booking');
 const promotions = require('./promotions');
+const bookingIntents = require('./booking-intents');
+const { site } = require('../web/site');
 const { sendAndLog } = require('./notify');
 
 // The link, unless somebody has already dealt with it.
@@ -51,9 +53,18 @@ async function linkFor(match) {
   return data.completed_at ? null : data;
 }
 
+// IT RETURNS { customer, order } NOW, NOT A CUSTOMER.
+//
+// The order is the one a booking intent became, when this card save is what
+// completed an online checkout. Callers need it: the page they land on thanks
+// that order by number and counts the completed-order conversion against its
+// id, and neither is knowable from the customer alone.
+//
+// Null order is the ordinary case - a card added from the settings page, a
+// texted link, a customer who had no checkout open.
 async function cardWasSaved(link) {
   const customer = await billing.recordSavedCard(link);
-  if (!customer) return null;
+  if (!customer) return { customer: null, order: null };
 
   const card = billing.describeCard(customer);
 
@@ -61,15 +72,94 @@ async function cardWasSaved(link) {
   // do anything else.
   const settled = await billing.retryOutstanding(customer);
 
+  const settledLine = settled.length
+    ? ` We've settled the ${billing.money(
+        settled.reduce((sum, s) => sum + s.order.price_cents, 0)
+      )} outstanding.`
+    : '';
+
+  // ---------------------------------------------------------------------
+  // THE CHECKOUT THEY WERE IN THE MIDDLE OF BECOMES A REAL ORDER, HERE.
+  //
+  // Neil's decision lock, 14 September: no payment method, no order. So the
+  // card being saved is the event that creates one, and this is the only place
+  // all three doors pass through - the webhook, the texted link's return page
+  // and the account's own return page. Putting it in a route would mean the
+  // customer who closes the browser on Stripe's page never gets their pickup,
+  // which is the exact case Neil called out.
+  //
+  // THE RULES ARE RE-RUN, NOT REMEMBERED. convert() calls bookPickup(), so a
+  // pickup that has gone stale while they typed their card is refused by the
+  // rule that would have refused it at the time. Neil: keep the payment method
+  // saved and send them back to choose another time. Never create an invalid
+  // order.
+  //
+  // IT IS TRIED BEFORE THE SETTLED-MONEY BRANCH, so somebody who both owed us
+  // something and had a checkout open gets their pickup booked rather than one
+  // fact quietly beating the other. They still get ONE text.
+  // ---------------------------------------------------------------------
+  const intent = await bookingIntents.openFor(customer.id).catch((err) => {
+    console.error(`Could not look for a booking intent: ${err.message}`);
+    return null;
+  });
+
+  if (intent) {
+    const booked = await bookingIntents.convert(customer, intent).catch((err) => {
+      console.error(`Could not turn a booking intent into an order: ${err.message}`);
+      return { ok: false, reason: 'threw' };
+    });
+
+    if (booked.ok) {
+      const free = await promotions
+        .claimedFreeOrder(booked.order.id)
+        .catch(() => ({ freeOrder: false, freeUpToLb: null }));
+
+      await sendAndLog(
+        customer.phone,
+        booking.confirmationMessage(customer, booked.order, {
+          // The confirmation names the card itself, so the opener must not
+          // name it again - a real customer got the card number twice in one
+          // text.
+          opener: 'Card saved',
+          source: booking.DOORS.WEB,
+          rolled: booked.rolled,
+          freeOrder: free.freeOrder,
+          freeUpToLb: free.freeUpToLb,
+        }) + settledLine,
+        customer.id
+      );
+
+      return { customer, order: booked.order };
+    }
+
+    // THE CARD IS KEPT AND THE PICKUP IS NOT BOOKED. Neil's rule for exactly
+    // this: the time has passed or another booking rule now refuses it, so we
+    // hold onto the payment method and ask them to choose another time. The
+    // intent stays open, which is what lets them do that without starting over.
+    //
+    // It says WHICH pickup it could not make, because "pick another time" with
+    // no day in it reads as a system that has lost track of them.
+    const asked = booking.readableDate(intent.pickup_date);
+    await sendAndLog(
+      customer.phone,
+      `Card saved: ${card}.${settledLine} We could not hold ${
+        asked ? asked : 'that pickup'
+      } though - ${
+        booked.say || booked.detail || 'that time has gone'
+      } Pick another time at ${site.domain}/account and we will get you booked.`,
+      customer.id
+    );
+
+    return { customer, order: null };
+  }
+
   if (settled.length > 0) {
     await sendAndLog(
       customer.phone,
-      `Card saved: ${card}. We've settled the ${billing.money(
-        settled.reduce((sum, s) => sum + s.order.price_cents, 0)
-      )} outstanding. Thanks.`,
+      `Card saved: ${card}.${settledLine} Thanks.`,
       customer.id
     );
-    return customer;
+    return { customer, order: null };
   }
 
   // Finish the booking they were in the middle of.
@@ -122,7 +212,7 @@ async function cardWasSaved(link) {
       }) + alsoLine,
       customer.id
     );
-    return customer;
+    return { customer, order: pending };
   }
 
   await sendAndLog(
@@ -130,7 +220,7 @@ async function cardWasSaved(link) {
     `Card saved: ${card}. Text us whenever you want a pickup.`,
     customer.id
   );
-  return customer;
+  return { customer, order: null };
 }
 
 module.exports = { claim: linkFor, cardWasSaved };

@@ -79,6 +79,7 @@ function adminDashboardBody({
   orderCounts = {},
   scheduled = {},
   leads = {},
+  checkouts = 0,
   notice,
   problem,
 }) {
@@ -207,6 +208,22 @@ ${banner(problem, 'bad')}
       eyebrow: 'Waiting on a person',
       title: 'Issues',
       line: openIssues ? `${openIssues} open` : 'Nothing open',
+    },
+    {
+      // UNFINISHED ONLINE CHECKOUTS. Neil's ask, 14 September, made as part of
+      // the booking intent change: "I do not want unfinished online customers
+      // to disappear simply because they are no longer represented as orders."
+      //
+      // Before the change they showed up on the orders board badged AWAITING
+      // CARD, which is how anybody knew to ring them. No order is written now,
+      // so without this card they would be invisible - and somebody who got as
+      // far as an address and a day is the warmest lead in the business.
+      href: '/ops/checkouts',
+      eyebrow: 'Got as far as the card',
+      title: 'Unfinished checkouts',
+      line: checkouts
+        ? `${checkouts} ${checkouts === 1 ? 'person' : 'people'} to ring`
+        : 'Nobody stalled',
     },
     {
       href: '/ops',

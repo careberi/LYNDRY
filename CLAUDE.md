@@ -3277,6 +3277,9 @@ costs $25 and is billed in one go with the rest. `deposit_*` and
 rules and their money has to stay refundable; nothing writes a new one.
 
 **A booking is confirmed by having a card on file, not by a cleared payment.**
+For an online order there is now no booking at all until that card exists - see
+the booking intent section below. For a pickup booked over text the sentence
+still reads exactly as it did.
 
 **The board says BOOKED or AWAITING CARD, never bare REQUESTED.** Neil watched a
 customer save a card, get "Order #1973 is booked", and the board still read
@@ -3312,10 +3315,81 @@ indistinguishable from an absent card, so the first version would have filtered
 **every** pickup off the run rather than the one that deserved it. Third time
 that trap has bitten in this file.
 
-The order is
-still written *before* the card is asked for — a customer sent away to pay
-before their booking exists comes back to nothing, which happened to a real one.
-Saving the card confirms it automatically from the webhook.
+**AN ONLINE ORDER IS NOT WRITTEN UNTIL A CARD IS SAVED, AND THAT REVERSES WHAT
+THIS FILE SAID UNTIL 14 SEPTEMBER.** It read: *"The order is still written
+before the card is asked for - a customer sent away to pay before their booking
+exists comes back to nothing, which happened to a real one."*
+
+Neil's decision lock, 14 September: **for online bookings, no payment method
+means no order, while the Booking Intent preserves everything the customer
+already entered.**
+
+**The old rule was solving the right problem the only way it could at the
+time.** A customer sent to Stripe with nothing saved came back to an empty
+account, and the order was written early because an order was the only thing in
+this system that could remember what somebody had chosen. `booking_intents`
+(migration 0093) is that missing memory, so the order no longer has to stand in
+for one - and the thing the old rule protected is protected better, because they
+come back to every answer they gave rather than to a pickup they cannot use.
+
+**What it holds is only what has no other home.** The wash and the address are
+already written to the customer row at the address step of the wizard, which is
+where a guest becomes a customer and where consent is recorded - so those
+already survived a trip to Stripe. What is left is the day, the time, the note
+and the repeat, none of which existed anywhere until the order did. **Copying
+the preferences in would be a second copy of a fact the database already holds**,
+which is the thing this codebase refuses everywhere else.
+
+**THE STANDING ORDER IS NOT CREATED EITHER.** The wizard used to make the
+schedule first, because the schedule decides the first pickup's date. That is
+the early-order mistake one table along: somebody who never finished paying
+would be left with a weekly arrangement. The cadence rides on the intent and
+`bookingIntents.convert()` creates the schedule at the moment the order is made,
+undoing it if the pickup is then refused.
+
+**THE RULES ARE RE-RUN WHEN THE CARD LANDS, NOT REMEMBERED.** `convert()` calls
+`bookPickup()` - the same function both front doors call - so a pickup that went
+stale while somebody typed their card is refused by exactly the rule that would
+have refused it at the time. **The card stays saved and the intent stays open**,
+and they are asked to pick another time. Neil's case: a card added at 7:55am for
+an 8-10am window. Never create an invalid order.
+
+**THERE ARE NO SLOTS AND NOTHING IS RESERVED.** Neil, 14 September: there is no
+capacity limit on a pickup window and none is being built. Re-checking at
+conversion is about the clock and the ordinary booking rules. Do not add slot
+holding; there is nothing to hold.
+
+**`cardWasSaved()` IS WHERE AN ONLINE ORDER COMES INTO EXISTENCE**, which is why
+it lives in `src/core/card-saved.js` and not in a route: the webhook, the texted
+link's return page and the account's own return page all pass through it. Neil's
+case for that is the customer who closes the browser on Stripe's page - the
+webhook still books their pickup. It returns `{ customer, order }` now.
+
+**UNFINISHED CHECKOUTS STAY VISIBLE TO OPS**, Neil's ask in the same breath:
+*"I do not want unfinished online customers to disappear simply because they are
+no longer represented as orders."* Before this they sat on the board badged
+AWAITING CARD, which is how anybody knew to ring them. `/ops/checkouts` is the
+replacement, with a card on the Admin dashboard - the same treatment Issues and
+Customer follow-up get. **It is a query, not a stored "abandoned" flag**, so
+nothing sweeps and nothing goes stale.
+
+**The abandoned-payment chase moved with the state it reads.**
+`card-chase.js` looked for an order awaiting collection whose customer had no
+card. An online customer without a payment method no longer has one of those, so
+the sweep reads intents as well, sends the same `setupLinkMessage()`, and stamps
+`booking_intents.card_link_sent_at`. One chase, ever, exactly as before.
+
+**AND THE ADVERTISING SPLIT CHANGED WITH IT.** Reaching the payment step used to
+fire the full lead conversion with the order id. There is no order there any
+more, and somebody stalled at the card has not placed one. The card step now
+fires a plain `begin_checkout` event with **no `send_to`** - that argument is
+what makes an event the Google Ads conversion - and the completed-order
+conversion fires from `/account/card/done` once the card is saved and the order
+exists. Adding `send_to` to the checkout-start event would quietly undo the
+whole change.
+
+**An existing customer with a payment method never sees any of this** and goes
+straight to `bookPickup()`, exactly as before.
 
 **A DECLINED CARD DOES HOLD UP A DELIVERY NOW, AND THAT REVERSES WHAT THIS FILE
 SAID UNTIL 14 SEPTEMBER.** It read: *"A declined card never holds up a delivery.

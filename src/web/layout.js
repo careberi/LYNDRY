@@ -347,6 +347,9 @@ function renderPage({
   // The customer or order id of a real save, on the page that save leads to.
   // Becomes Google's transaction_id. See src/core/ad-attribution.js.
   conversionId = null,
+  // Somebody has reached the payment step. A plain event, never the ads
+  // conversion - see googleTag() for why that distinction is the whole point.
+  checkoutStart = false,
   // Report no query string at all. For a page whose URL carries answers.
   stripQuery = false,
   // THE OFFER POPUP, ALREADY DRAWN. A string, never a decision: whether a
@@ -368,7 +371,7 @@ function renderPage({
   const html = `<!doctype html>
 <html lang="en">
 <head>
-  ${tracking ? googleTag({ conversionId, stripQuery }) : ''}
+  ${tracking ? googleTag({ conversionId, checkoutStart, stripQuery }) : ''}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${fullTitle}</title>
@@ -627,7 +630,12 @@ const ICON_LINKS = [
 // /account/login/code carries only ?next=/account. Enhanced conversions, which
 // would send a hashed phone or email, are deliberately not used.
 // ---------------------------------------------------------------------------
-function googleTag({ conversionId = null, stripQuery = false, ads = config.googleAds } = {}) {
+function googleTag({
+  conversionId = null,
+  checkoutStart = false,
+  stripQuery = false,
+  ads = config.googleAds,
+} = {}) {
   // `ads` defaults to config and is a parameter only so the tests can exercise
   // the on, off and malformed cases without restarting the process.
   if (!ads || !ads.enabled || !ads.id) return '';
@@ -655,6 +663,21 @@ function googleTag({ conversionId = null, stripQuery = false, ads = config.googl
     txn && sendTo
       ? `\n  gtag('event', 'conversion', {send_to: '${sendTo}', value: ${value}, currency: '${currency}', transaction_id: '${txn}'});`
       : '';
+
+  // REACHING THE PAYMENT STEP IS NOT A COMPLETED ORDER, AND MUST NOT COUNT AS
+  // ONE. Neil's brief, 14 September: the payment step may be tracked as a
+  // checkout-start, and the primary completed-order conversion fires only once
+  // the payment method is saved and the order actually exists.
+  //
+  // DELIBERATELY NOT `send_to`. That argument is what makes an event the Google
+  // Ads conversion; this is a plain event, so it can be read in reports and
+  // built into an audience without ever counting as a lead. Adding send_to here
+  // would quietly undo the whole point of the change.
+  //
+  // It carries no id. There is no order yet - that is the entire reason this
+  // event exists - and a booking intent's id is not something to hand an
+  // advertising account.
+  const started = checkoutStart ? `\n  gtag('event', 'begin_checkout');` : '';
 
   // A TAP ON A TEXT OR CALL LINK COUNTS AS A LEAD TOO, Neil's brief. Somebody
   // who taps "text us" off an advert has done the same thing as filling in a
@@ -722,7 +745,7 @@ function googleTag({ conversionId = null, stripQuery = false, ads = config.googl
     lyPage.page_location = lyHere.toString();
     lyPage.page_referrer = document.referrer ? new URL(document.referrer).origin + '/' : '';
   } catch (e) {}
-  gtag('config', '${ads.id}', lyPage);${fire}${taps}
+  gtag('config', '${ads.id}', lyPage);${fire}${started}${taps}
   </script>`;
 }
 
