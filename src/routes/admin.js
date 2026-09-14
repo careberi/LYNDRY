@@ -67,6 +67,8 @@ const wash = require('../core/wash');
 const onboarding = require('../core/onboarding');
 const leads = require('../core/leads');
 const leadOutreach = require('../core/lead-outreach');
+const bookingIntents = require('../core/booking-intents');
+const { checkoutsBody } = require('../web/checkouts-page');
 const settings = require('../core/settings');
 const sitePopup = require('../core/site-popup');
 const promotions = require('../core/promotions');
@@ -8950,6 +8952,44 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
 });
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// GET /ops/checkouts - online orders nobody finished
+//
+// Neil's ask, 14 September: unfinished online customers must not disappear
+// simply because they are no longer represented as orders. See
+// src/web/checkouts-page.js for what the screen is and is not.
+//
+// BEHIND customers.view, NOT orders.view. Every row is a person, their phone
+// number and where they live, and none of it is a stop on anybody's round - so
+// it draws the line the customer screens draw rather than the one the board
+// does. A driver has no reason to read it.
+//
+// REACHED FROM THE ADMIN DASHBOARD, NOT THE MENU, the same treatment Issues and
+// Customer follow-up get: a menu is where you go looking for a screen, and this
+// is not one you go looking for daily.
+// ---------------------------------------------------------------------------
+router.get('/ops/checkouts', guard, withIssues, may('customers.view'), async (req, res, next) => {
+  try {
+    const intents = await bookingIntents.unfinished();
+
+    return res.type('html').send(
+      adminPage({
+        title: 'Unfinished checkouts',
+        active: '/ops/checkouts',
+        body: checkoutsBody({
+          intents,
+          showNames: roles.can(req.opsUser, 'customers.view'),
+          minutes: bookingIntents.UNFINISHED_AFTER_MINUTES,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // GET /ops/scheduled - everything queued to text a customer on its own
 //
 // Neil's ask. Two things go out unprompted - a chase and a pickup reminder -
@@ -9357,6 +9397,12 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
       return { toRing: count('NEW'), tried: count('TRIED'), reached: count('REACHED') };
     })().catch(() => ({}));
 
+    // HOW MANY ONLINE CHECKOUTS NOBODY FINISHED. Caught rather than awaited
+    // into a failure, like the counts above: a dashboard card is not worth
+    // taking the whole page down for, and the screen it links to says it
+    // properly.
+    const unfinishedCheckouts = await bookingIntents.unfinishedCount().catch(() => 0);
+
     return res.type('html').send(
       adminPage({
         title: 'Admin dashboard',
@@ -9375,6 +9421,7 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
           openIssues: req.openIssues,
           orderCounts,
           leads: leadCounts,
+          checkouts: unfinishedCheckouts,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),

@@ -3,6 +3,9 @@
 const db = require('../db');
 const orders = require('./orders');
 const billing = require('./billing');
+// For paymentHold()/balance(). No cycle: dispatch reaches billing, orders,
+// booking, partners and geocode, and none of those reach back here.
+const dispatch = require('./dispatch');
 const bags = require('./bags');
 const booking = require('./booking');
 const loadout = require('./loadout');
@@ -586,6 +589,28 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
 // --- Out for delivery -------------------------------------------------------
 
 async function outForDelivery(order, { by = {} } = {}) {
+  // NOT WHILE THEIR MONEY IS OUTSTANDING. Neil's lock, 14 September, reversing
+  // the old deliver-and-chase rule for laundry we are already holding.
+  //
+  // The routing board leaves a held order off the delivery leg, and this is what
+  // makes that a guard rather than a hidden button: the JSON API and the order
+  // page both reach this function, and a screen that omits a control while the
+  // route behind it still fires is not access control. The same shape as the
+  // reconciliation refusal below.
+  //
+  // Retrieval off the laundromat is deliberately NOT gated - the bags come back
+  // to us rather than living on somebody else's shelf. It is the doorstep this
+  // stops at.
+  if (dispatch.paymentHold(order)) {
+    return {
+      ok: false,
+      reason: 'payment_hold',
+      detail:
+        `Order #${order.order_number} has ${money(dispatch.balance(order))} outstanding, so it does not go ` +
+        `out for delivery. Take the payment, record cash against it, or waive it.`,
+    };
+  }
+
   // Same rule as the partner drop: a bag must never get on the van without a
   // weight on record, because the doorstep is the last place it could be
   // weighed and by then it is too late.
@@ -677,6 +702,32 @@ async function outForDelivery(order, { by = {} } = {}) {
 async function deliver(orderIn, file, { by = {} } = {}) {
   // Reassigned as settlement updates it below, so it cannot be a const.
   let order = orderIn;
+
+  // NOT WHILE THEIR MONEY IS OUTSTANDING, AND THIS IS THE SECOND DOOR.
+  //
+  // Grok's review, 14 September. outForDelivery() stops a held order being put
+  // in the van. This stops one that was ALREADY in the van when the charge
+  // failed, and it is what makes the rule true of the JSON API and of anybody
+  // who reaches the order page directly rather than through the run. A screen
+  // that omits a control while the route behind it still fires is not a guard,
+  // and that applies to a step just as much as to a stop.
+  //
+  // FIRST, BEFORE THE PHOTO. A driver who is going to be refused should not be
+  // sent to take a picture on the way to being refused, and nothing belongs in
+  // the bucket for a delivery that is not happening.
+  //
+  // It is NOT the weight hold below, which is two scales disagreeing and is
+  // deliberately delivered anyway. This is money we are owed for laundry we are
+  // holding, which is the one thing that does stop at the door.
+  if (dispatch.paymentHold(order)) {
+    return {
+      ok: false,
+      reason: 'payment_hold',
+      detail:
+        `Order #${order.order_number} has ${money(dispatch.balance(order))} outstanding, so it is not ` +
+        `handed over. Take the payment, record cash against it, or waive it.`,
+    };
+  }
   // NO PHOTO, NO DELIVERY.
   //
   // The photo is the proof. It is the answer to "you never delivered it" and

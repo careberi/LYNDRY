@@ -375,6 +375,100 @@ async function pauseUntil(customer, date, scheduleId = null) {
   return data || [];
 }
 
+
+// WHICH DAY A REPEAT WOULD FIRST LAND ON, WITHOUT CREATING ANYTHING.
+//
+// nextDate() is pure and reads only the fields set here, which is what makes it
+// safe to ask about a schedule that does not exist yet.
+//
+// FORTNIGHTLY IS ANCHORED ON TODAY, which is right for a new arrangement and
+// approximate for a weekday this customer already had a schedule for - see
+// addSchedule(), which reuses that row and keeps its original started_on. The
+// booked pickup is whatever this returns; the arrangement then continues from
+// its own anchor. Worth knowing, not worth a second copy of the anchoring rule.
+function firstRepeatDate({ cadence, weekdays = [], from = booking.today() }) {
+  const days = (weekdays || [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+
+  if (!CADENCES[cadence] || !days.length) return null;
+
+  const dates = days
+    .map((weekday) => nextDate({ status: 'ACTIVE', cadence, weekday, started_on: from }, from))
+    .filter(Boolean)
+    .sort();
+
+  return dates[0] || null;
+}
+
+// BOOK THE PICKUP FIRST, THEN SET UP THE REPEAT. ONE IMPLEMENTATION, TWO DOORS.
+//
+// Neil, 14 September: do not create a standing schedule before the pickup
+// exists. Both doors used to do the opposite - create the schedule, read the
+// first date off it, then book - because the schedule is what decides the day.
+// firstRepeatDate() answers that question without writing anything, so the
+// order can come first.
+//
+// WHAT THAT REMOVES IS THE ENTIRE UNDO PATH, and the undo was the dangerous
+// part. The wizard called recurring.stop(customer) when a booking was refused,
+// which ENDS EVERY schedule the customer has - so a refused Friday checkout
+// would have cancelled the Tuesday pickup they had had for a month. Deleting
+// by id instead was not safe either: addSchedule() REUSES an existing row for
+// the same weekday and cadence, including an ended one, so the id handed back
+// may be a row that predates this booking entirely.
+//
+// Nothing is created before the booking, so there is nothing to undo after it.
+//
+// A SCHEDULE THAT FAILS AFTER A SUCCESSFUL BOOKING LEAVES THE ORDER STANDING.
+// The pickup is real and the customer has been told about it; throwing it away
+// because the repeat did not save would be the worse of the two failures. It
+// says so in the result and shouts in the log.
+async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadence, weekdays }) {
+  const days = (weekdays || [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+
+  const repeat = Boolean(CADENCES[cadence] && days.length);
+  const firstDate = repeat ? firstRepeatDate({ cadence, weekdays: days }) : pickupDate;
+
+  const result = await booking.bookPickup(customer, {
+    pickupDate: firstDate || '',
+    pickupTime: pickupTime || '',
+    // The date came from the arrangement rather than from a day they picked,
+    // which is what lets "stop repeating" call this pickup off with the rest.
+    fromSchedule: repeat,
+    notes: notes || null,
+  });
+
+  // NOTHING WAS CREATED, so a refusal is just a refusal.
+  if (!result.ok) return result;
+
+  if (!repeat) return result;
+
+  const schedules = [];
+  try {
+    for (const weekday of days) {
+      schedules.push(
+        await addSchedule(customer, {
+          cadence,
+          weekday,
+          timeOfDay: pickupTime || null,
+          // The wizard is the web door and the schedule remembers it, so every
+          // pickup this arrangement books is known to be a web customer's.
+          placedVia: booking.DOORS.WEB,
+        })
+      );
+    }
+  } catch (err) {
+    console.error(
+      `Booked #${result.order.order_number} but could not set up the standing order: ${err.message}`
+    );
+    return { ...result, scheduleFailed: true, schedules };
+  }
+
+  return { ...result, schedules };
+}
+
 module.exports = {
   CADENCES,
   DAY_NAMES,
@@ -390,6 +484,8 @@ module.exports = {
   dueOn,
   bookDue,
   addSchedule,
+  firstRepeatDate,
+  bookAndSchedule,
   bookNext,
   stop,
   pauseUntil,

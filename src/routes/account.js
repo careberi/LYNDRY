@@ -14,6 +14,7 @@ const cardSaved = require('../core/card-saved');
 const promotions = require('../core/promotions');
 const auth = require('../core/customer-auth');
 const adAttribution = require('../core/ad-attribution');
+const bookingIntents = require('../core/booking-intents');
 const payments = require('../providers/payments');
 const { sendAndLog } = require('../core/notify');
 const { site } = require('../web/site');
@@ -48,7 +49,15 @@ const router = express.Router();
 // reports the browser's REAL address rather than the `path` below - so turning
 // it on here for everyone would hand those tokens to Google. See googleTag() in
 // src/web/layout.js.
-function accountPage(res, { title, body, status = 200, tracking = false, conversionId = null, stripQuery = false }) {
+function accountPage(res, {
+  title,
+  body,
+  status = 200,
+  tracking = false,
+  conversionId = null,
+  checkoutStart = false,
+  stripQuery = false,
+}) {
   res
     .status(status)
     .type('html')
@@ -61,6 +70,7 @@ function accountPage(res, { title, body, status = 200, tracking = false, convers
         noindex: true,
         tracking,
         conversionId,
+        checkoutStart,
         stripQuery,
       })
     );
@@ -491,9 +501,70 @@ function mdy(iso) {
 
 // The same shape whenLine() gives, with the date in figures:
 // "09/14/2026 between 10am and 12pm".
+// WHAT A REFUSED BOOKING SAYS, IN ONE PLACE.
+//
+// TWO DOORS REACH IT NOW. A customer with a card on file is refused by
+// bookPickup() as they press the button; a customer without one is refused by
+// checkSlot() a screen earlier, before a booking intent is written. Both owe
+// them the same sentence, and a second copy would drift the first time one of
+// them learned something the other did not - the rule booking.js itself
+// follows for the AI and the web form.
+//
+// It takes the whole result rather than a reason, because half of these
+// sentences ARE the result: bad_date, bad_time and before_opening carry their
+// own detail from booking.js, and time_unavailable carries the sentence the
+// text thread would have said.
+function bookingRefusal(result) {
+  return {
+      // The web form is the other front door, and it has to be shut too -
+      // bookPickup() refuses either way, but a customer deserves the reason
+      // rather than "that did not work".
+      not_taking_orders: result.detail
+        ? `We’re not booking pickups just yet. ${result.detail}`
+        : 'We’re not booking pickups just yet. We’ll be in touch the moment we are.',
+      no_address: 'We need your address before we can pick up. Email us and we’ll add it.',
+      out_of_area: `We don’t reach your address just yet. We cover ${site.serviceArea} right now.`,
+      no_preferences: 'Tell us how you like it washed first. Text us and we’ll get you set up in a minute.',
+      bad_date: result.detail,
+      bad_time: result.detail,
+      // Booked before the van starts. The same sentence the text thread
+      // gives, from the same function, so the two doors cannot explain the
+      // same refusal two different ways.
+      before_opening: result.detail,
+      already_booked: 'You already have a pickup booked. Move it rather than booking a second.',
+      // Exactly what the text thread says, from the same function - the two
+      // doors must not explain the same refusal two different ways.
+      time_unavailable: result.say,
+    }[result.reason] || null;
+}
+
 function whenLineMdy(order) {
   const window = booking.arrivalWindow(order);
   return [mdy(order.pickup_date), window].filter(Boolean).join(' ');
+}
+
+// THE SAME LINE, FOR SOMETHING THAT IS NOT AN ORDER YET.
+//
+// A booking intent holds the day and the time they asked for and has no window
+// on it, because a window is decided when the order is written. This asks
+// booking.windowFor() - the function bookPickup() itself calls - so the band on
+// the card screen is the band they would be given, rather than a second guess
+// at it.
+//
+// A repeat has no date of its own until the schedule exists, so the date comes
+// from bookingIntents.firstDateFor(), which works it out without creating one.
+function whenLineForIntent(intent) {
+  if (!intent) return '';
+
+  const date = bookingIntents.firstDateFor(intent);
+  if (!date) return '';
+
+  const slot = booking.windowFor(date, intent.pickup_time || '');
+  const window = slot
+    ? booking.arrivalWindow({ pickup_window_start: slot.start, pickup_window_end: slot.end })
+    : null;
+
+  return [mdy(slot ? slot.date : date), window].filter(Boolean).join(' ');
 }
 
 function money(cents) {
@@ -650,6 +721,21 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
     const upcoming = (live || []).filter((o) => orders.AWAITING_COLLECTION.includes(o.status));
     const current = (live || []).filter((o) => orders.IN_OUR_HANDS.includes(o.status));
 
+    // THE CHECKOUT THEY DID NOT FINISH, IF THERE IS ONE.
+    //
+    // Neil's spec: an abandoned booking intent can be resumed instead of making
+    // the customer start over. This is the page they come back to, so this is
+    // where it has to be said - a half-finished order that is invisible on the
+    // one page they would look at is the same failure as losing it.
+    //
+    // Caught rather than awaited into a failure: their orders matter more than
+    // this card, and a dashboard that will not load because of it is worse than
+    // one without it.
+    const openIntent = await bookingIntents.openFor(customer.id).catch((err) => {
+      console.error(`Could not read a booking intent for ${customer.phone}: ${err.message}`);
+      return null;
+    });
+
     // Their standing orders, so the dashboard can show them and offer a way
     // out. Without this the only way to stop one is to ask the AI, which is a
     // poor answer for something that books itself every week.
@@ -778,6 +864,46 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
       ];
     });
 
+    // WHAT THE UNFINISHED CHECKOUT SAYS, AND WHICH OF TWO THINGS IT ASKS FOR.
+    //
+    // blocked_reason set means the card IS saved and the day they wanted was
+    // refused when we went to book it - so the thing to do is pick another day,
+    // not add a card. Telling somebody who has just handed over a card that we
+    // need a card is the kind of message that loses a customer.
+    const resumeCard = !openIntent
+      ? ''
+      : openIntent.blocked_reason
+        ? `
+  <div class="card card-xl" style="padding:26px 30px;margin-bottom:26px;background:var(--sunbeam-100);
+       box-shadow:6px 6px 0 var(--sunbeam-500);">
+    <p class="eyebrow" style="margin:0 0 8px;">Nearly there</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 10px;">
+      Your payment method is saved. We need a new pickup time.
+    </h2>
+    <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 18px;">
+      ${escapeHtml(openIntent.blocked_reason)}
+    </p>
+    <a href="/account/book" class="btn btn-primary btn-lg">Pick a time {{ICON_ARROW}}</a>
+  </div>`
+        : `
+  <div class="card card-xl" style="padding:26px 30px;margin-bottom:26px;background:var(--sunbeam-100);
+       box-shadow:6px 6px 0 var(--sunbeam-500);">
+    <p class="eyebrow" style="margin:0 0 8px;">Not finished</p>
+    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 10px;">
+      You were booking ${escapeHtml(whenLineForIntent(openIntent) || 'a pickup')}
+    </h2>
+    <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 18px;">
+      We have kept everything you chose. A payment method is required to confirm
+      the pickup - {{PRICE_PER_LB}} a pound, {{MINIMUM}} minimum, and nothing is charged
+      until we have weighed your laundry.
+    </p>
+    <form method="post" action="/account/card" style="margin:0;">
+      <button type="submit" class="btn btn-primary btn-lg">
+        Add payment method {{ICON_ARROW}}
+      </button>
+    </form>
+  </div>`;
+
     const body = `
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:900px;padding-top:60px;padding-bottom:44px;">
@@ -790,6 +916,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
 
 <section class="container" style="max-width:900px;padding-top:40px;padding-bottom:96px;">
   ${flash}
+  ${resumeCard}
   ${setup.placeOrderButton(schedules)}
   ${setup.summaryCards(customer, { needsCardNow: needsCard && Boolean(live && live.length) })}
 
@@ -1084,6 +1211,7 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
     if (!link) return back(res, '');
 
     let customer = req.customer;
+    let booked = null;
 
     if (!link.completed_at) {
       // THE WHOLE JOB, THROUGH THE ONE PATH BOTH OTHER DOORS USE. It records
@@ -1095,11 +1223,15 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
       //
       // They may have closed the page rather than finished, in which case there
       // is no card to read and this quietly returns null.
-      const updated = await cardSaved.cardWasSaved(link).catch((err) => {
+      const done = await cardSaved.cardWasSaved(link).catch((err) => {
         console.error('Could not finish saving the card:', err.message);
-        return null;
+        return { customer: null, order: null };
       });
-      if (updated) customer = updated;
+      if (done.customer) customer = done.customer;
+      // THE ORDER THIS CARD JUST CREATED, if it created one. Under the booking
+      // intent model this is the normal way an online order comes into
+      // existence, so it is what the thank-you page below thanks.
+      booked = done.order;
     }
 
     // NOT SAVED IS NOT AN ERROR. They changed their mind or closed the tab, and
@@ -1115,10 +1247,26 @@ router.get('/account/card/done/:token', auth.requireCustomer, async (req, res, n
     // here, so the address bar stops carrying the payment token and a refresh
     // is harmless. A number that matches none of their pickups falls through
     // to the page below rather than an error.
+    // THE ORDER THE BOOKING INTENT BECAME COMES FIRST, because under the
+    // decision lock that is how an online order is made: there was nothing to
+    // name in the URL on the way out to Stripe, so there is nothing to look up
+    // on the way back. ?order= survives only for a card saved against a pickup
+    // that already existed - a thread booking chased by a texted link.
     const placed = String(req.query.order || '').replace(/\D/g, '');
-    const order = placed ? waiting.find((o) => String(o.order_number) === placed) : null;
+    const order =
+      booked || (placed ? waiting.find((o) => String(o.order_number) === placed) : null);
 
-    if (order) return res.redirect(303, `/account/thanks?order=${order.order_number}`);
+    if (order) {
+      // THE COMPLETED-ORDER CONVERSION FIRES HERE AND NOWHERE EARLIER. Neil's
+      // brief, 14 September: the payment step counts as a checkout start, and
+      // the primary conversion waits until the payment method is saved and the
+      // order actually exists. Both of those are true exactly now.
+      //
+      // Through the same one-shot marker the card-on-file path uses, scoped to
+      // /account/thanks, so a refresh cannot count a second lead.
+      adAttribution.markLead(res, order.id, '/account/thanks');
+      return res.redirect(303, `/account/thanks?order=${order.order_number}`);
+    }
 
     // NO ORDER TO THANK, SO BACK INTO THEIR ACCOUNT. Neil, 13 September, after
     // replacing his own card from the portal: the page that used to render here
@@ -1455,38 +1603,6 @@ function weekdaysFrom(form) {
   const raw = form.weekday === undefined ? [] : [].concat(form.weekday);
   const days = [...new Set(raw.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))];
   return days.sort((a, b) => a - b);
-}
-
-// ---------------------------------------------------------------------------
-// Setting up a standing order, and working out when its first pickup is.
-//
-// ONE SCHEDULE PER WEEKDAY. recurring_schedules is one row per arrangement, so
-// "every Monday and Thursday" is two rows - which is what lets somebody stop
-// one of them later without stopping both.
-//
-// IT RETURNS THE FIRST DATE so the caller can book a real pickup for it. The
-// nightly pass would get there on its own, but only the day before - and
-// somebody who has just set up a weekly pickup should see a pickup, not an
-// empty board and a promise.
-async function startSchedules(customer, { cadence, weekdays, timeOfDay }) {
-  const made = [];
-
-  for (const weekday of weekdays) {
-    // THE WIZARD IS THE WEB DOOR, and the schedule remembers it, so every
-    // pickup this arrangement books is known to be a web customer's. See
-    // recurring.addSchedule() and billing.cardDestination().
-    made.push(
-      await recurring.addSchedule(customer, {
-        cadence,
-        weekday,
-        timeOfDay,
-        placedVia: booking.DOORS.WEB,
-      })
-    );
-  }
-
-  const dates = made.map((s) => recurring.nextDate(s)).filter(Boolean).sort();
-  return { schedules: made, firstDate: dates[0] || null };
 }
 
 async function saveWash(customer, form) {
@@ -1885,8 +2001,17 @@ function midSentence(text) {
   return s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
 }
 
-function cardStep({ customer, order }) {
-  const when = whenLineMdy(order);
+// THE CARD SCREEN NOW DESCRIBES AN INTENT, NOT AN ORDER.
+//
+// Neil's decision lock, 14 September: no payment method, no order. So by the
+// time anybody reads this screen there is nothing in `orders` to describe, and
+// what it says back to them is the booking intent they are halfway through.
+//
+// The window is worked out the same way bookPickup() works it out, through
+// booking.windowFor(), rather than being read off a row that does not exist -
+// so the band shown here is the band they would actually be given.
+function cardStep({ customer, intent }) {
+  const when = whenLineForIntent(intent);
   const where = [customer.address_line1, customer.address_line2, customer.city]
     .filter(Boolean)
     .join(', ');
@@ -1957,15 +2082,27 @@ function cardStep({ customer, order }) {
        place, tested, for the day that trade looks different. -->
   <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
     <p class="eyebrow" style="margin-bottom:6px;">Payment method</p>
+
+    <!-- IT SAYS WHAT IS REQUIRED AND WHAT IT COSTS, BEFORE THE BUTTON. Neil's
+         spec, 14 September: say plainly that a payment method is needed to
+         confirm the pickup, and show the price rule before payment rather than
+         after it.
+
+         The figures are tokens, never typed. {{PRICE_PER_LB}} and {{MINIMUM}} come
+         from src/web/site.js, which reads config.pricing - so the sentence a
+         customer agrees to here cannot drift from the number that bills them. -->
+    <p style="font-size:15px;line-height:1.55;color:var(--ink-900);margin:0 0 10px;font-weight:600;">
+      A payment method is required to confirm your pickup.
+    </p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      Nothing is charged now. We keep this on file and charge it once, after we
-      weigh your laundry.
+      {{PRICE_PER_LB}} a pound, {{MINIMUM}} minimum. Nothing is charged now. We keep
+      this on file and charge it once, after we weigh your laundry.
     </p>
 
     <form method="post" action="/account/card" style="margin:0;">
-      <!-- WHICH ORDER THIS CARD IS FOR, carried to Stripe and back so the page
-           they return to can say "thank you for your order" about this one. -->
-      <input type="hidden" name="order" value="${escapeHtml(String(order.order_number))}">
+      <!-- NO ORDER NUMBER TO CARRY ANY MORE. There is no order until the card
+           is saved, so the page they come back to finds their open booking
+           intent and turns THAT into the order. See /account/card/done. -->
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         Add payment method {{ICON_ARROW}}
       </button>
@@ -1976,8 +2113,19 @@ function cardStep({ customer, order }) {
     </p>
   </div>
 
+  <!-- WHAT THIS LINE USED TO CLAIM IS NO LONGER TRUE, so it says something
+       else. It promised the pickup was already reserved, which was fair while
+       an order was written before the card and is now a promise about a row
+       that does not exist. There is no reservation behind it either - Neil, 14
+       September: there are no capacity-limited pickup windows and none are
+       being built. What IS true is that we have kept every answer they gave
+       and will book it the moment a payment method is saved.
+
+       A test pins the old wording out of this template, so keep the phrasing
+       here describing the change rather than quoting it. -->
   <p style="margin:22px 0 0;font-size:15px;color:var(--ink-500);">
-    Your pickup is held. It is confirmed the moment a card is saved.
+    We have saved your answers. Your pickup is booked as soon as the payment
+    method is saved, and you will get a text confirming it.
   </p>
 </section>`;
 }
@@ -2444,62 +2592,137 @@ router.post('/account/book', async (req, res, next) => {
     const step = from ? nextStep(from, who.customer) : bookingStep(customer, form);
     if (step !== 'book') return reshow(step);
 
-    // A STANDING ORDER IS SET UP BEFORE ITS FIRST PICKUP IS BOOKED, because the
-    // schedule is what decides which day that pickup falls on. A one-off books
-    // the date they picked and creates nothing.
-    let firstDate = null;
-    let schedules = [];
+    // -----------------------------------------------------------------------
+    // NO PAYMENT METHOD, NO ORDER. Neil's decision lock, 14 September.
+    //
+    // This is the reversal. Until now the order was written here and the card
+    // asked for afterwards, because an order was the only thing in the system
+    // that could remember what somebody had chosen - so a customer sent away to
+    // Stripe before it existed came back to nothing. That happened to a real
+    // customer and CLAUDE.md recorded the ordering as deliberate because of it.
+    //
+    // A booking intent is that missing memory. With it, the order no longer has
+    // to be created early to stand in for one, and the thing the old rule was
+    // protecting is protected better: they come back to every answer they gave.
+    //
+    // NOTHING IS WRITTEN UNTIL IT IS VALID. checkSlot() is the same set of rules
+    // bookPickup() enforces and it writes nothing at all, so a refusal here
+    // costs an intent row nobody wanted and tells them the same sentence they
+    // would have been told a second later.
+    //
+    // THE STANDING ORDER IS NOT CREATED EITHER. It used to be made first,
+    // because the schedule decides the first pickup's date. Creating one now
+    // would leave somebody who never finished paying with a weekly arrangement
+    // - the early-order mistake, one table along. The cadence rides on the
+    // intent and the schedule is made at conversion.
+    //
+    // AN EXISTING CUSTOMER WITH A CARD NEVER SEES ANY OF THIS. They fall
+    // straight through to bookPickup() below, exactly as before.
+    // -----------------------------------------------------------------------
+    if (billing.needsCardOnFile(customer)) {
+      const wanted = {
+        pickupDate: String(form.pickup_date || ''),
+        pickupTime: String(form.pickup_time || ''),
+        notes: String(form.notes || '').trim().slice(0, 500) || null,
+        cadence: cadence || null,
+        weekdays: cadence ? String(form.weekdays || '') : null,
+      };
 
-    if (cadence && recurring.CADENCES[cadence]) {
-      try {
-        const started = await startSchedules(customer, {
-          cadence,
-          weekdays: String(form.weekdays || '').split(',').map(Number).filter((n) => !Number.isNaN(n)),
-          timeOfDay: String(form.pickup_time || '') || null,
-        });
-        firstDate = started.firstDate;
-        schedules = started.schedules;
-      } catch (err) {
-        console.error(`Could not set up a standing order for ${customer.phone}: ${err.message}`);
-        return reshow('when', 'We could not set that up. Try again, or text us and we will do it.');
+      // The shape bookingIntents reads, so the date a repeat would land on is
+      // worked out by the one function that knows how - without creating the
+      // schedule that would normally answer it.
+      const shape = {
+        pickup_date: wanted.pickupDate,
+        pickup_time: wanted.pickupTime,
+        cadence: wanted.cadence,
+        weekdays: wanted.weekdays,
+      };
+
+      const check = await booking.checkSlot(customer, {
+        pickupDate: bookingIntents.firstDateFor(shape),
+        pickupTime: wanted.pickupTime,
+      });
+
+      if (!check.ok) {
+        return reshow('when', bookingRefusal(check) || 'That did not work.');
       }
+
+      // IF THIS CANNOT BE SAVED, NOTHING GOES FORWARD. Sending them to Stripe
+      // with nowhere to come back to is precisely the failure this whole change
+      // exists to remove, so a broken intent is refused on the form with their
+      // answers still in it rather than papered over.
+      let intent;
+      try {
+        intent = await bookingIntents.save(customer, wanted);
+      } catch (err) {
+        console.error(`Could not save a booking intent for ${customer.phone}: ${err.message}`);
+        return reshow(
+          'when',
+          'We could not hold onto your answers just then. Press continue again, ' +
+            'or text us and we will book it for you.'
+        );
+      }
+
+      return accountPage(res, {
+        title: 'Payment method',
+        body: cardStep({ customer, intent }),
+
+        // REACHING THE PAYMENT STEP IS A CHECKOUT START, NOT A COMPLETED ORDER.
+        // Neil's brief, 14 September. It used to count the full lead conversion
+        // here using the order id, which is no longer honest in either half:
+        // there is no order, and somebody who stalls at the card has not placed
+        // one. The completed-order conversion fires after the card is saved and
+        // the order exists - see /account/card/done.
+        tracking: true,
+        checkoutStart: true,
+        conversionId: null,
+        stripQuery: true,
+      });
     }
 
-    const result = await booking.bookPickup(customer, {
-      pickupDate: firstDate || String(form.pickup_date || ''),
+    // THE PICKUP IS BOOKED FIRST, THEN THE REPEAT IS SET UP. Neil, 14 September:
+    // do not create a standing schedule before the pickup exists.
+    //
+    // This used to create the schedule, read the first date off it, and then
+    // book - because the schedule is what decides the day. The cost was that a
+    // refused booking had to undo a standing order, and the undo was
+    // recurring.stop(customer), which ENDS EVERY schedule that customer has. So
+    // a refused Friday checkout would have silently cancelled the Tuesday
+    // pickup they had had for a month, with nothing on their account saying
+    // why and no text to tell them.
+    //
+    // recurring.bookAndSchedule() works the first date out without writing
+    // anything, books, and only then creates the arrangement - so nothing
+    // exists before the booking and there is nothing to undo after it. The same
+    // function turns a booking intent into an order, so the two doors cannot
+    // drift.
+    const result = await recurring.bookAndSchedule(customer, {
+      pickupDate: String(form.pickup_date || ''),
       pickupTime: String(form.pickup_time || ''),
-      // MARKED AS THE SCHEDULE'S, because it is: the date came from the
-      // schedule we just created, not from a day they picked. It is what lets
-      // "stop repeating" call this pickup off with the rest, and what makes the
-      // change log say the standing order booked it rather than the customer.
-      fromSchedule: Boolean(firstDate),
-      // pickupMethod is not passed. The bag is always left out - see the note on
-      // PICKUP_METHODS in src/core/booking.js.
+      // pickupMethod is not passed. The bag is always left out - see the note
+      // on PICKUP_METHODS in src/core/booking.js.
       notes: String(form.notes || '').trim().slice(0, 500) || null,
+      cadence,
+      weekdays: String(form.weekdays || '')
+        .split(',')
+        .map((n) => String(n).trim())
+        .filter((n) => n !== '')
+        .map(Number),
     });
 
+    // BOOKED, BUT THE REPEAT DID NOT SAVE. The pickup is real and is about to
+    // be confirmed by text, so it stands - throwing away a booking because the
+    // arrangement behind it failed is the worse of the two failures. Said out
+    // loud rather than swallowed, because the customer asked for a repeat and
+    // has not got one.
+    if (result.ok && result.scheduleFailed) {
+      console.error(
+        `Order #${result.order.order_number} booked but its standing order did not save.`
+      );
+    }
+
     if (!result.ok) {
-      const message = {
-        // The web form is the other front door, and it has to be shut too -
-        // bookPickup() refuses either way, but a customer deserves the reason
-        // rather than "that did not work".
-        not_taking_orders: result.detail
-          ? `We’re not booking pickups just yet. ${result.detail}`
-          : 'We’re not booking pickups just yet. We’ll be in touch the moment we are.',
-        no_address: 'We need your address before we can pick up. Email us and we’ll add it.',
-        out_of_area: `We don’t reach your address just yet. We cover ${site.serviceArea} right now.`,
-        no_preferences: 'Tell us how you like it washed first. Text us and we’ll get you set up in a minute.',
-        bad_date: result.detail,
-        bad_time: result.detail,
-        // Booked before the van starts. The same sentence the text thread
-        // gives, from the same function, so the two doors cannot explain the
-        // same refusal two different ways.
-        before_opening: result.detail,
-        already_booked: 'You already have a pickup booked. Move it rather than booking a second.',
-        // Exactly what the text thread says, from the same function - the two
-        // doors must not explain the same refusal two different ways.
-        time_unavailable: result.say,
-      }[result.reason];
+      const message = bookingRefusal(result);
 
       // A REFUSAL STAYS ON THE FORM. It used to bounce to the dashboard with the
       // reason in a banner, which threw away the day, the time, the note and the
@@ -2514,70 +2737,33 @@ router.post('/account/book', async (req, res, next) => {
       // is no order - and startRepeat() is below this branch, so a booking that
       // fails cannot leave a standing order behind for a pickup that never
       // existed.
-      // THE SCHEDULES GO WITH IT. They were created a moment ago so the first
-      // pickup's date could be worked out; if that pickup is then refused,
-      // leaving them behind would give somebody a standing order they never
-      // successfully placed - which is exactly the confusion Neil hit.
-      if (schedules.length) {
-        await recurring
-          .stop(customer)
-          .catch((err) => console.error(`Could not undo a standing order: ${err.message}`));
-      }
-
       return reshow('when', message || 'That did not work.');
     }
 
-    // Booked, but we have no way to bill it. The pickup is real and stays on
-    // their account; it is simply not confirmed until a card is saved, and the
-    // link goes by text because the website never touches card details.
+    // THERE IS NO "BOOKED BUT UNBILLABLE" BRANCH ANY MORE, AND THERE CANNOT BE.
     //
-    // The same shape as the SMS door: record the pickup first, ask for the
-    // card second. Somebody who is sent away to pay before their booking
-    // exists comes back to nothing.
+    // This is where an order with no card used to land: written, then the card
+    // asked for, with the screen promising the pickup was held. Neil's decision
+    // lock removed that state - a customer without a payment method is handled
+    // above and never reaches bookPickup() at all.
+    //
+    // It is unreachable by construction rather than by convention, which is the
+    // only kind worth relying on: the branch above tests
+    // billing.needsCardOnFile(customer) and bookPickup() computes its own
+    // needsCard from billing.needsCardOnFile(customer) - the same pure function
+    // on the same object, a few lines apart. If the first says no the second
+    // cannot say yes.
+    //
+    // Left as a guard rather than deleted in silence, because "an order exists
+    // and nothing can bill it" is exactly the state this change was made to
+    // remove, and if it ever appears again somebody should hear about it
+    // immediately rather than find it on a driver's run sheet.
     if (result.needsCard) {
-      // NO TEXT YET, AND THIS IS THE WHOLE OF NEIL'S POINT. The card button is
-      // on the very next thing they see, so a text telling them to add a card
-      // arrives while they are adding one. src/core/card-chase.js sends it half
-      // an hour later, and only if there is still no card by then - which for
-      // most people there will be, so most of these texts now never happen.
-
-      // THE CARD OPENS UNDERNEATH, IT DOES NOT LEAD ANYWHERE. Neil's sequence:
-      // details in, Continue, the address confirmed, then a panel with the
-      // card field in it - all on one screen. Sending somebody to a page
-      // headed "One last thing" is what made this read as a surprise bill.
-      //
-      // A HOSTED LINK IS MINTED ALONGSIDE IT, and that is not waste: it is
-      // what the panel falls back to when Stripe's script does not load, and
-      // it costs one API call on the one screen where somebody is waiting for
-      // a card field anyway.
-      //
-      // IF ANY OF THIS FAILS WE STILL HAVE A BOOKED ORDER, so the old page is
-      // where we land rather than an error. The pickup is real either way and
-      // the text with the link has already gone.
-      // NOTHING IS CREATED AT STRIPE HERE ANY MORE. The screen is the address
-      // said back to them and a button; the session is minted when they press
-      // it, in POST /account/card. Minting one now would burn a checkout
-      // session on every booking, including everyone who closes the tab.
-      return accountPage(res, {
-        title: 'Payment method',
-        body: cardStep({ customer, order: result.order }),
-        // AN ONLINE ORDER IS A LEAD, COUNTED HERE, Neil's brief. The order row
-        // exists already - it is written before the card is asked for - so this
-        // is the moment it was placed. Counted now rather than after the card,
-        // on purpose: somebody who got as far as a day, an address and a wash
-        // and then stalled at the card is exactly the lead the ads should learn
-        // from. Whether they became a paying customer is the separate question
-        // the stored click id answers later.
-        //
-        // In this response, not via a marker: there is no redirect, the card
-        // panel is rendered straight back. The URL is the POST's - no query
-        // string - and stripQuery makes sure of it.
-        tracking: true,
-        conversionId: result.order.id,
-        stripQuery: true,
-      });
+      console.error(
+        `Order #${result.order.order_number} was created without a payment method. ` +
+          'That should be impossible - see the booking intent branch above.'
+      );
     }
-
 
     // Confirm by text, exactly as a booking made over SMS would be — same
     // wording, from the same function, so the messages table reads the same
