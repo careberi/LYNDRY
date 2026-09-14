@@ -375,6 +375,37 @@ async function pauseUntil(customer, date, scheduleId = null) {
   return data || [];
 }
 
+
+// DELETE SCHEDULES BY ID, SCOPED TO THEIR OWNER.
+//
+// For one caller and one situation: bookingIntents.convert() creates a schedule
+// so it can work out the first pickup's date, and the pickup is then refused.
+// Those rows existed for milliseconds, booked nothing and were never an
+// arrangement anybody agreed to, so there is no history in them worth keeping.
+//
+// NOT stop(). That ENDS a schedule, which is the right answer for one somebody
+// really had, and it leaves a row saying an arrangement existed. Worse, called
+// without an id it ends EVERY schedule the customer has - so using it to undo
+// one failed checkout would quietly cancel the weekly pickup they have had for
+// a month. That was the bug this replaced.
+//
+// customer_id is in the filter as well as the ids. The ids come from rows we
+// just created for this customer, so it can never matter - which is exactly why
+// it costs nothing and is worth having the day somebody passes the wrong list.
+async function remove(customer, ids = []) {
+  const wanted = (ids || []).filter(Boolean);
+  if (!customer || !customer.id || !wanted.length) return 0;
+
+  const { error, count } = await db
+    .from('recurring_schedules')
+    .delete({ count: 'exact' })
+    .eq('customer_id', customer.id)
+    .in('id', wanted);
+
+  if (error) throw error;
+  return count || 0;
+}
+
 module.exports = {
   CADENCES,
   DAY_NAMES,
@@ -392,5 +423,6 @@ module.exports = {
   addSchedule,
   bookNext,
   stop,
+  remove,
   pauseUntil,
 };

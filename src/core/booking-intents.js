@@ -55,7 +55,8 @@ const UNFINISHED_AFTER_MINUTES = 20;
 
 const FIELDS =
   'id, customer_id, pickup_date, pickup_time, notes, cadence, weekdays, ' +
-  'order_id, completed_at, blocked_reason, card_link_sent_at, created_at, updated_at';
+  'order_id, completed_at, claimed_at, blocked_reason, card_link_sent_at, ' +
+  'created_at, updated_at';
 
 // The customer fields the ops list needs. Named rather than a star, because an
 // unselected column reads as undefined and this codebase has been bitten seven
@@ -217,6 +218,68 @@ async function blocked(intent, reason) {
   return null;
 }
 
+// HOW LONG A CLAIM IS RESPECTED.
+//
+// Long enough to cover a bookPickup() that is being slow, short enough that a
+// process dying mid-convert does not lock somebody out of booking for the rest
+// of the day. A stale claim is taken over rather than cleared by a sweep, so
+// there is nothing to run and nothing to forget.
+const CLAIM_STALE_SECONDS = 120;
+
+// I AM TURNING THIS ONE INTO AN ORDER. NOBODY ELSE START.
+//
+// The webhook and the return page race on every card save: Stripe redirects the
+// browser the instant the card is saved and the webhook lands seconds behind.
+// payment_links.completed_at does not close that window on its own, because
+// both callers can read the link before either has stamped it - so both would
+// pass openFor(), both would call bookPickup(), and the customer would get two
+// pickups and two confirmation texts.
+//
+// IT IS ONE CONDITIONAL UPDATE, which is what makes it a lock rather than a
+// check. Reading claimed_at and then writing it would have the same race one
+// level down. Postgres decides who wins; the loser gets no row back.
+//
+// completed_at cannot do this job. It is stamped once the order exists, which
+// is exactly too late, and stamping it early would close an intent whose
+// booking then got refused - and that one has to stay open so they can pick
+// another time without starting over.
+async function claim(intent, { staleAfterSeconds = CLAIM_STALE_SECONDS } = {}) {
+  if (!intent) return null;
+
+  const cutoff = new Date(Date.now() - staleAfterSeconds * 1000).toISOString();
+
+  const { data, error } = await db
+    .from('booking_intents')
+    .update({ claimed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', intent.id)
+    .is('completed_at', null)
+    // Free, or abandoned by whoever had it. A claim nobody ever released must
+    // not strand the customer for ever.
+    .or(`claimed_at.is.null,claimed_at.lt.${cutoff}`)
+    .select(FIELDS)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+// Hand it back, so they can try again.
+//
+// Only ever called after a REFUSED booking, where the intent stays open by
+// design. Best effort: a claim left behind goes stale on its own in two
+// minutes, so failing here costs a short wait rather than a lost checkout.
+async function release(intent) {
+  if (!intent) return;
+
+  const { error } = await db
+    .from('booking_intents')
+    .update({ claimed_at: null, updated_at: new Date().toISOString() })
+    .eq('id', intent.id)
+    .is('completed_at', null);
+
+  if (error) console.error('Could not release a booking intent: ' + error.message);
+}
+
 // TURN IT INTO A REAL ORDER, IF THE RULES STILL ALLOW IT.
 //
 // The whole of the decision lock lives here. It re-runs bookPickup(), which is
@@ -233,17 +296,34 @@ async function blocked(intent, reason) {
 async function convert(customer, intent) {
   if (!customer || !intent) return { ok: false, reason: 'no_intent' };
 
+  // CLAIMED BEFORE ANYTHING IS CREATED. Nothing below this line may run twice
+  // for one checkout, and the webhook and the return page both get here.
+  const mine = await claim(intent);
+  if (!mine) return { ok: false, reason: 'already_claimed' };
+
   let firstDate = null;
   const madeSchedules = [];
 
-  if (isRepeat(intent)) {
+  // ONLY WHAT THIS CALL MADE. Every undo below deletes these ids and nothing
+  // else - see the note on recurring.remove(). It used to call
+  // recurring.stop(customer), which ends EVERY schedule the customer has, so a
+  // refused Friday checkout would have quietly cancelled the Tuesday pickup
+  // they had had for a month.
+  const undoSchedules = async () => {
+    if (!madeSchedules.length) return;
+    await recurring
+      .remove(customer, madeSchedules.map((s) => s && s.id))
+      .catch((err) => console.error('Could not undo a standing order: ' + err.message));
+  };
+
+  if (isRepeat(mine)) {
     try {
-      for (const weekday of weekdaysOf(intent)) {
+      for (const weekday of weekdaysOf(mine)) {
         madeSchedules.push(
           await recurring.addSchedule(customer, {
-            cadence: intent.cadence,
+            cadence: mine.cadence,
             weekday,
-            timeOfDay: intent.pickup_time || null,
+            timeOfDay: mine.pickup_time || null,
             // The wizard is the web door and the schedule remembers it, so
             // every pickup this arrangement books is known to be a web
             // customer's. See recurring.addSchedule() and cardDestination().
@@ -255,32 +335,35 @@ async function convert(customer, intent) {
       firstDate = dates[0] || null;
     } catch (err) {
       console.error('Could not set up a standing order from an intent: ' + err.message);
-      await recurring.stop(customer).catch(() => {});
+      // HALF A STANDING ORDER IS WORSE THAN NONE. Two weekdays asked for and
+      // one row written leaves an arrangement nobody chose, so the ones that
+      // did get created come out again.
+      await undoSchedules();
+      await release(mine);
       return { ok: false, reason: 'schedule_failed' };
     }
   }
 
   const result = await booking.bookPickup(customer, {
-    pickupDate: firstDate || intent.pickup_date || '',
-    pickupTime: intent.pickup_time || '',
+    pickupDate: firstDate || mine.pickup_date || '',
+    pickupTime: mine.pickup_time || '',
     fromSchedule: Boolean(firstDate),
-    notes: intent.notes || null,
+    notes: mine.notes || null,
   });
 
   if (!result.ok) {
     // The repeat goes with it. It was created a moment ago only so the first
     // pickup's date could be worked out, and leaving it behind would give
     // somebody a standing order for a pickup that was refused.
-    if (madeSchedules.length) {
-      await recurring
-        .stop(customer)
-        .catch((err) => console.error('Could not undo a standing order: ' + err.message));
-    }
-    await blocked(intent, result.detail || result.say || result.reason);
+    await undoSchedules();
+    await blocked(mine, result.detail || result.say || result.reason);
+    // HANDED BACK, because a refused intent stays open on purpose: they pick
+    // another time and this runs again.
+    await release(mine);
     return result;
   }
 
-  await complete(intent, result.order);
+  await complete(mine, result.order);
   return result;
 }
 
@@ -369,10 +452,13 @@ async function stampCardLink(intentId) {
 
 module.exports = {
   UNFINISHED_AFTER_MINUTES,
+  CLAIM_STALE_SECONDS,
   FIELDS,
   WITH_CUSTOMER,
   openFor,
   save,
+  claim,
+  release,
   complete,
   blocked,
   convert,

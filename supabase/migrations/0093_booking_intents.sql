@@ -58,6 +58,24 @@ create table if not exists booking_intents (
   order_id      uuid references orders(id) on delete set null,
   completed_at  timestamptz,
 
+  -- SOMEBODY IS TURNING THIS INTO AN ORDER RIGHT NOW.
+  --
+  -- The webhook and the return page race on every card save - Stripe redirects
+  -- the browser the instant the card is saved and the webhook lands seconds
+  -- behind - and payment_links.completed_at does not close that window on its
+  -- own, because both callers can read the link before either has stamped it.
+  --
+  -- Without this, both would pass openFor(), both would call bookPickup(), and
+  -- the customer would get TWO pickups and two confirmation texts. completed_at
+  -- cannot do this job: it is stamped after the order exists, which is exactly
+  -- too late, and stamping it early would close an intent whose booking then
+  -- got refused and which has to stay resumable.
+  --
+  -- A CLAIM GOES STALE. If the process holding it dies between claiming and
+  -- finishing, an intent that could never be claimed again would be a customer
+  -- who can never book. See CLAIM_STALE_SECONDS in booking-intents.js.
+  claimed_at    timestamptz,
+
   -- ONE ABANDONED-CHECKOUT CHASE, EVER. The same column orders carries and for
   -- the same reason: it makes a second text impossible rather than discouraged.
   -- Before booking intents this chase hung off the order that used to be

@@ -132,6 +132,17 @@ async function cardWasSaved(link) {
       return { customer, order: booked.order };
     }
 
+    // SOMEBODY ELSE IS ALREADY DOING THIS ONE, SO SAY NOTHING AT ALL.
+    //
+    // The webhook and the return page race on every card save, and the winner
+    // books the pickup and sends the confirmation. The loser must not text
+    // anything: "we could not hold that pickup" would arrive beside a
+    // confirmation for the pickup we just held, from the same card save,
+    // seconds apart.
+    //
+    // It is not an error and nothing is wrong. It is the lock working.
+    if (booked.reason === 'already_claimed') return { customer, order: null };
+
     // THE CARD IS KEPT AND THE PICKUP IS NOT BOOKED. Neil's rule for exactly
     // this: the time has passed or another booking rule now refuses it, so we
     // hold onto the payment method and ask them to choose another time. The

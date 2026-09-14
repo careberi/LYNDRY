@@ -26,6 +26,12 @@ const { googleTag } = require('../src/web/layout');
 
 const SRC = (...bits) => fs.readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8');
 
+// The end of a top-level function: the first line that is just a closing brace.
+// Built from a char code because this file is generated through a shell heredoc
+// and a backslash escape does not survive the trip.
+const NL = String.fromCharCode(10);
+const endOfFn = (src, at) => src.indexOf(NL + '}' + NL, at);
+
 // --- the shape of an intent -------------------------------------------------
 
 test('a one-off intent lands on the day they picked', () => {
@@ -94,7 +100,7 @@ test('THE CARD SCREEN NO LONGER PROMISES A HELD PICKUP', () => {
   // that does not exist.
   const src = SRC('routes', 'account.js');
   const at = src.indexOf('function cardStep(');
-  const fn = src.slice(at, src.indexOf('\n}\n', at));
+  const fn = src.slice(at, endOfFn(src, at));
 
   // THE MARKUP, NOT THE REASONING ABOVE IT. The note explaining why that
   // sentence went quotes the sentence, and a naive search finds its own prose -
@@ -113,7 +119,7 @@ test('and it shows the price rule before the button', () => {
   // cannot drift from the number that bills them.
   const src = SRC('routes', 'account.js');
   const at = src.indexOf('function cardStep(');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = src.slice(at, endOfFn(src, at));
 
   assert.ok(body.includes('{{PRICE_PER_LB}}'), 'the price is not shown before payment');
   assert.ok(body.includes('{{MINIMUM}}'), 'the minimum is not shown before payment');
@@ -182,7 +188,7 @@ test('THE CARD BEING SAVED IS WHAT CREATES THE ORDER, IN THE SHARED PATH', () =>
 test('conversion re-runs the real booking rules rather than trusting the intent', () => {
   const src = SRC('core', 'booking-intents.js');
   const at = src.indexOf('async function convert(');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = src.slice(at, endOfFn(src, at));
   assert.ok(body.includes('booking.bookPickup('), 'convert() does not re-validate');
 });
 
@@ -192,7 +198,7 @@ test('A REFUSED PICKUP KEEPS THE CARD AND LEAVES THE INTENT OPEN', () => {
   // to stay open or "pick another time" means starting over.
   const src = SRC('core', 'booking-intents.js');
   const at = src.indexOf('async function convert(');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = src.slice(at, endOfFn(src, at));
 
   const refused = body.indexOf('if (!result.ok)');
   assert.notEqual(refused, -1);
@@ -204,12 +210,137 @@ test('A REFUSED PICKUP KEEPS THE CARD AND LEAVES THE INTENT OPEN', () => {
   assert.ok(!branch.includes('complete('), 'a refused booking still completes the intent');
 });
 
-test('and a refused repeat does not leave a standing order behind', () => {
+test('AND A REFUSED REPEAT DELETES ONLY THE SCHEDULES IT JUST MADE', () => {
+  // It called recurring.stop(customer), which ENDS EVERY schedule that customer
+  // has. So a refused Friday checkout would have quietly cancelled the Tuesday
+  // pickup they had had for a month - silent, irreversible, and nothing on
+  // their account would have said why.
   const src = SRC('core', 'booking-intents.js');
   const at = src.indexOf('async function convert(');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
-  const refused = body.slice(body.indexOf('if (!result.ok)'));
-  assert.ok(refused.includes('recurring'), 'the schedule is not undone when the pickup is refused');
+  const body = src.slice(at, endOfFn(src, at));
+
+  assert.ok(body.includes('recurring.remove('), 'it does not delete the schedules it made');
+  assert.ok(
+    body.includes('madeSchedules.map((s) => s && s.id)'),
+    'it does not scope the delete to the ids it created'
+  );
+});
+
+test('recurring.stop(customer) IS NOT REACHABLE FROM HERE AT ALL', () => {
+  // The strong version of the test above. Any call to stop() without a schedule
+  // id ends the lot, so the safest rule is that this file never calls it.
+  const code = SRC('core', 'booking-intents.js')
+    .split(NL)
+    .filter((line) => !/^\s*\/\//.test(line))
+    .join(NL);
+
+  assert.ok(!/recurring\s*\.\s*stop\s*\(/.test(code), 'convert() can still end every schedule');
+});
+
+test('and a half-made standing order is undone too', () => {
+  // Two weekdays asked for and one row written is an arrangement nobody chose.
+  const src = SRC('core', 'booking-intents.js');
+  const at = src.indexOf('async function convert(');
+  const body = src.slice(at, endOfFn(src, at));
+  const thrown = body.slice(body.indexOf('} catch (err) {'));
+  assert.ok(thrown.includes('undoSchedules('), 'a failed schedule loop leaves rows behind');
+});
+
+test('the delete is scoped to the owner as well as the ids', () => {
+  const src = SRC('core', 'recurring.js');
+  const at = src.indexOf('async function remove(');
+  assert.notEqual(at, -1, 'recurring.remove() does not exist');
+  const body = src.slice(at, endOfFn(src, at));
+  assert.ok(body.includes("eq('customer_id'"), 'remove() is not scoped to the customer');
+  assert.ok(body.includes("in('id'"), 'remove() does not filter by id');
+});
+
+// --- the race the webhook and the return page run every time ----------------
+
+test('THE INTENT IS CLAIMED BEFORE ANYTHING IS CREATED', () => {
+  // Stripe redirects the browser the instant a card is saved and the webhook
+  // lands seconds behind, so both reach convert() for the same checkout.
+  // Without a claim, both pass openFor(), both call bookPickup(), and the
+  // customer gets two pickups and two confirmation texts.
+  const src = SRC('core', 'booking-intents.js');
+  const at = src.indexOf('async function convert(');
+  const body = src.slice(at, endOfFn(src, at));
+
+  const claimed = body.indexOf('await claim(intent)');
+  const scheduled = body.indexOf('recurring.addSchedule(');
+  const booked = body.indexOf('booking.bookPickup(');
+
+  assert.notEqual(claimed, -1, 'convert() never claims the intent');
+  assert.ok(claimed < booked, 'it books before it claims');
+  assert.ok(scheduled === -1 || claimed < scheduled, 'it creates a schedule before it claims');
+});
+
+test('and the loser of the race does nothing', () => {
+  const src = SRC('core', 'booking-intents.js');
+  const at = src.indexOf('async function convert(');
+  const body = src.slice(at, endOfFn(src, at));
+  assert.match(body, /if \(!mine\) return \{ ok: false, reason: 'already_claimed' \}/);
+});
+
+test('THE CLAIM IS ONE CONDITIONAL UPDATE, not a read and then a write', () => {
+  // Reading claimed_at and then writing it would have the same race one level
+  // down. Postgres decides who wins; the loser gets no row back.
+  const src = SRC('core', 'booking-intents.js');
+  const at = src.indexOf('async function claim(');
+  const body = src.slice(at, endOfFn(src, at));
+
+  assert.ok(body.includes('.update('), 'the claim does not write');
+  // No read before the write. A select() in here would mean the decision was
+  // taken in Node rather than by Postgres, which is the same race one level
+  // down: two callers both read "free" and both then claim it.
+  assert.ok(!/\.select\(FIELDS\)[\s\S]*\.update\(/.test(body), 'the claim reads before it writes');
+  assert.ok(body.includes("is('completed_at', null)"), 'a finished intent could be claimed again');
+  assert.ok(body.includes('claimed_at.is.null'), 'a free intent cannot be claimed');
+});
+
+test('a claim goes stale, so a dead process cannot lock somebody out for ever', () => {
+  const src = SRC('core', 'booking-intents.js');
+  const at = src.indexOf('async function claim(');
+  const body = src.slice(at, endOfFn(src, at));
+  assert.ok(body.includes('claimed_at.lt.'), 'an abandoned claim is never taken over');
+  assert.ok(bookingIntents.CLAIM_STALE_SECONDS > 0);
+});
+
+test('A REFUSED BOOKING HANDS THE CLAIM BACK, a successful one completes', () => {
+  // A refused intent stays open by design - they pick another time and this
+  // runs again - so holding its claim would make the retry impossible until it
+  // went stale.
+  const src = SRC('core', 'booking-intents.js');
+  const at = src.indexOf('async function convert(');
+  const body = src.slice(at, endOfFn(src, at));
+
+  const refused = body.indexOf('if (!result.ok)');
+  const branch = body.slice(refused, body.indexOf('return result;', refused));
+  assert.ok(branch.includes('release('), 'a refused booking keeps the claim');
+
+  const after = body.slice(body.indexOf('return result;', refused));
+  assert.ok(after.includes('complete(mine, result.order)'), 'a booked intent is never completed');
+});
+
+test('and the winner is the only one that texts', () => {
+  // "We could not hold that pickup" arriving beside a confirmation for the
+  // pickup we just held, from one card save, seconds apart.
+  const src = SRC('core', 'card-saved.js');
+  assert.ok(
+    src.includes("booked.reason === 'already_claimed'"),
+    'the loser of the race still writes to the customer'
+  );
+});
+
+test('claimed_at is selected, which is the trap this codebase keeps falling into', () => {
+  // Eighth time would be an unselected claimed_at reading as undefined - which
+  // looks exactly like a free intent, so every caller would claim it.
+  assert.match(bookingIntents.FIELDS, /claimed_at/);
+  const sql = fs.readFileSync(
+    path.join(__dirname, '..', 'supabase', 'migrations', '0093_booking_intents.sql'),
+    'utf8'
+  );
+  assert.match(sql, /claimed_at\s+timestamptz/);
 });
 
 // --- it is not an order, and nothing may treat it as one --------------------
@@ -246,7 +377,7 @@ test('THE ABANDONED-CHECKOUT CHASE MOVED WITH THE STATE IT READS', () => {
 test('one chase ever, because the stamp is a column and not a counter', () => {
   const src = SRC('core', 'booking-intents.js');
   const at = src.indexOf('async function dueForCardChase(');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = src.slice(at, endOfFn(src, at));
   assert.ok(body.includes("is('card_link_sent_at', null)"), 'a checkout can be chased twice');
 });
 
@@ -264,7 +395,7 @@ test('UNFINISHED CHECKOUTS ARE VISIBLE TO OPS', () => {
 test('the list is a query about the clock, not a stored abandoned flag', () => {
   const src = SRC('core', 'booking-intents.js');
   const at = src.indexOf('async function unfinished(');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = src.slice(at, endOfFn(src, at));
   assert.ok(body.includes("is('completed_at', null)"));
   assert.ok(body.includes('created_at'), 'nothing decides what counts as unfinished');
   assert.ok(!/abandoned/i.test(SRC('core', 'booking-intents.js').replace(/\/\/.*$/gm, '')));
