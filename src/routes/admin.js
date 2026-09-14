@@ -69,6 +69,7 @@ const leads = require('../core/leads');
 const leadOutreach = require('../core/lead-outreach');
 const bookingIntents = require('../core/booking-intents');
 const { checkoutsBody } = require('../web/checkouts-page');
+const messageView = require('../core/message-view');
 const settings = require('../core/settings');
 const sitePopup = require('../core/site-popup');
 const promotions = require('../core/promotions');
@@ -3745,7 +3746,9 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
       </div>
       ${table(headings, rows)}`;
 
-    res.type('html').send(adminPage({ title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: 'Customers', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -3915,6 +3918,8 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
 router.get('/ops/customers/new', guard, withIssues, may('customers.view'), (req, res) => {
   res.type('html').send(
     adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
       title: 'New customer',
       active: '/ops/customers',
       body: phoneCustomerForm(),
@@ -3931,6 +3936,8 @@ router.post('/ops/customers/new', guard, may('customers.view'), async (req, res,
   const reshow = (problem) =>
     res.type('html').send(
       adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
         title: 'New customer',
         active: '/ops/customers',
         body: phoneCustomerForm({ values: form, problem }),
@@ -4127,6 +4134,8 @@ router.get('/ops/customers/:id/order', guard, withIssues, may('customers.view'),
 
     return res.type('html').send(
       adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
         title: 'Book a pickup',
         active: '/ops/customers',
         body: phoneOrderForm({ customer }),
@@ -4158,6 +4167,8 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
     const reshow = (problem) =>
       res.type('html').send(
         adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
           title: 'Book a pickup',
           active: '/ops/customers',
           body: phoneOrderForm({ customer, values: form, problem }),
@@ -4551,7 +4562,9 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         ])
       )}`;
 
-    res.type('html').send(adminPage({ title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
+    res.type('html').send(adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: person.name || 'Customer', active: '/ops/customers', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed }));
   } catch (err) {
     next(err);
   }
@@ -8093,7 +8106,22 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     if (error) throw error;
 
     const scanned = (data || []).length;
-    const threads = groupIntoThreads(data || []);
+    let threads = groupIntoThreads(data || []);
+
+    // ALERTS WE SEND OURSELVES GO LAST, AND ARE SAID TO BE WHAT THEY ARE.
+    //
+    // Neil, 14 September: make ops noise quieter, delete nothing that went to a
+    // customer. issues.js and order-alerts.js page the team with a null
+    // customer, and this screen groups by phone number - so a team member's own
+    // number shows up as a conversation with twenty-nine messages in it.
+    //
+    // SORTED, NOT HIDDEN. Those alerts are how anybody knows an issue was
+    // raised at three in the morning. And the rule cannot reach a real thread:
+    // one inbound message, or one message with a customer on it, and it is a
+    // conversation again. See src/core/message-view.js.
+    const { data: teamRows } = await db.from('ops_users').select('phone');
+    const teamPhones = messageView.teamPhoneSet(teamRows || []);
+    threads = messageView.conversationsFirst(threads, teamPhones);
 
     // Numbers with no customer row. These are people who texted and never
     // signed up — worth chasing, and invisible everywhere else in ops.
@@ -8137,9 +8165,16 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     });
 
     const row = (t) => {
+      // "Not a customer" is true of an alert thread and useless on it - it is
+      // our own number. Saying which of the two it is stops somebody opening it
+      // expecting a person.
+      const ours = messageView.isOpsAlertThread(t, teamPhones);
+
       const who = t.customer
         ? `<span style="font-weight:600;">${escapeHtml(t.customer.name || 'Unnamed')}</span>`
-        : `<span class="badge" style="background:var(--sunbeam-500);">Not a customer</span>`;
+        : ours
+          ? `<span class="badge">Ops alerts</span>`
+          : `<span class="badge" style="background:var(--sunbeam-500);">Not a customer</span>`;
 
       const stopped =
         t.customer && t.customer.status === 'UNSUBSCRIBED'
@@ -8314,7 +8349,9 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
       }`;
 
     res.type('html').send(
-      adminPage({ title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -8385,6 +8422,8 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     if (!phone) {
       return res.status(404).type('html').send(
         adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true,
           title: 'Conversation',
           active: '/ops/messages',
           body: `<a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
@@ -8397,10 +8436,14 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     // The pause is NOT caught and softened into "probably fine". If we cannot
     // read the switch the AI is silent - isPaused() fails closed - and a page
     // claiming it is answering while it says nothing is the worst of both.
-    const [{ data: messages, error }, { data: customer }, pause, followUp, reminder] = await Promise.all([
+    const [{ data: messages, error }, { data: customer }, pause, followUp, reminder, { data: threadTeam }] = await Promise.all([
       db
         .from('messages')
-        .select('direction, body, created_at, delivery_status, delivery_error')
+        // customer_id and kind ride along so the view can tell an alert we
+        // sent ourselves from a text to a customer. An unselected column reads
+        // as undefined, which here would make EVERY outbound row look like an
+        // alert - the eighth time that trap would have bitten in this codebase.
+        .select('direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
       // THE WHOLE ROW, NOT SIX COLUMNS. nudges.gapsFor() asks the same
@@ -8430,11 +8473,30 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           console.error(`Could not work out the reminder for ${phone}: ${err.message}`);
           return null;
         }),
+      // Team numbers, to tell an alert thread from a conversation. See the
+      // note further down and src/core/message-view.js.
+      db.from('ops_users').select('phone'),
     ]);
 
     if (error) throw error;
 
-    const thread = messages || [];
+    // WHAT THE CUSTOMER SAW, AND WHAT WE SENT OURSELVES.
+    //
+    // Neil, 14 September: make ops noise quieter, delete nothing that went to a
+    // customer. This number is the live case that makes it worth doing at all -
+    // it is a team member's handset AND a customer, so twenty-nine internal
+    // alerts sit interleaved with a real conversation. They were never customer
+    // communication; they are pages about other people's orders.
+    //
+    // MUTED BY DEFAULT, NEVER GONE. ?all=1 shows the lot, the page says how
+    // many are folded away, and the store is untouched. A record you can tidy
+    // is not evidence of anything.
+    const everything = messages || [];
+    const threadTeamPhones = messageView.teamPhoneSet(threadTeam || []);
+    const customerSaw = messageView.customerVisible(everything, threadTeamPhones);
+    const showAll = String((req.query || {}).all || '') === '1';
+    const opsAlertCount = everything.length - customerSaw.length;
+    const thread = showAll ? everything : customerSaw;
     const digits = phone.replace(/\D/g, '');
     const canSend = roles.can(req.opsUser, 'messages.send');
 
@@ -8545,12 +8607,59 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
                 background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
 
+    // IS THIS A CONVERSATION, OR US TALKING TO OURSELVES?
+    //
+    // Neil, 14 September. issues.js and order-alerts.js page the team with a
+    // null customer, so a team member's own number opens as a thread of
+    // twenty-nine alerts with no reply. Saying so at the top is the whole of
+    // the change here: nothing is hidden, because every one of these is a text
+    // that really was sent and the log of them is how anybody knows an issue
+    // was raised overnight.
+    //
+    // It cannot fire on a customer thread. One inbound message, or one message
+    // carrying a customer, and message-view calls it a conversation.
+    const opsAlertThread = messageView.isOpsAlertThread(
+      {
+        phone,
+        customer,
+        inbound: (messages || []).filter((m) => m.direction === 'INBOUND').length,
+        total: (messages || []).length,
+        last: (messages || [])[0] || null,
+      },
+      messageView.teamPhoneSet(threadTeam || [])
+    );
+
     const body = `
       <a href="/ops/messages" style="font-size:15px;font-weight:600;">&larr; All conversations</a>
 
       <div style="margin-top:18px;">
         ${note ? strip(note, 'var(--suds-300)') : ''}
         ${problem ? strip(problem, 'var(--stain-100)') : ''}
+        ${
+          opsAlertCount
+            ? `<div class="card" style="padding:12px 14px;margin:0 0 14px;">
+                 <p class="eyebrow" style="margin:0 0 4px;">Ops alerts</p>
+                 <p style="margin:0;font-size:14px;line-height:1.5;">
+                   ${opsAlertCount} message${opsAlertCount === 1 ? '' : 's'} on this number
+                   ${opsAlertCount === 1 ? 'is' : 'are'} an alert the system sent to the team -
+                   a new order, an issue raised, a card refused. ${
+                     opsAlertThread
+                       ? 'This is our own number, so no customer has seen any of it.'
+                       : 'This handset belongs to a team member as well as a customer, so these went to the person, not to the customer.'
+                   }
+                   ${
+                     showAll
+                       ? `<a href="/ops/messages/${encodeURIComponent(
+                           phone.replace(/\D/g, '')
+                         )}">Hide them</a>`
+                       : `<a href="/ops/messages/${encodeURIComponent(
+                           phone.replace(/\D/g, '')
+                         )}?all=1">Show them</a>`
+                   }
+                 </p>
+               </div>`
+            : ''
+        }
       </div>
 
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:18px 0 6px;">
@@ -8775,7 +8884,9 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       </div>`;
 
     res.type('html').send(
-      adminPage({ title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+      adminPage({
+        // Slice three, People. The terminal skin. See adminPage().
+        terminal: true, title: heading, active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
