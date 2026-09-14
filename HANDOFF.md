@@ -2,7 +2,7 @@
 
 Issue: Payment Hold — laundry we hold with money outstanding never reaches the doorstep
 Owner of the keyboard: Neil
-Status: spec
+Status: implemented on feat/payment-hold at fd7d60b, pushed, awaiting Grok
 
 ## Goal
 
@@ -113,18 +113,68 @@ Hold keeps the bag out of the customer's doorway, not off Best Wash's floor.
 Not on this branch: the cash ledger, the $80 auth, QR, the order console, any
 telephony.
 
+## What shipped
+
+Branch `feat/payment-hold`, cut from `fix/reminder-collectable`, pushed at
+`fd7d60b`. Seven files, +463 / -11. `npm test`: 264 pass, 0 fail.
+
+| File | |
+|---|---|
+| `src/core/dispatch.js` | `balance()`, `paymentHold()`, `heldCustomerIds()`; the delivery leg filtered; the sibling block in `board()`; `held` returned; `price_cents` added to **both** field lists |
+| `src/core/fulfilment.js` | `outForDelivery()` refuses a held order, so the hidden stop is not the only guard |
+| `src/core/billing.js` | `markFailed()` raises an issue and pages, only while `IN_OUR_HANDS` |
+| `src/web/routing-board.js` | `onPaymentHold()`, a red card naming each held order and saying why |
+| `CLAUDE.md`, `DECISIONS.md` | deliver-and-chase reversed in both |
+| `test/payment-hold.test.js` | 17 tests, new file |
+
+Four decisions worth a reviewer's attention, because each could reasonably have
+gone the other way:
+
+1. **`UNPAID` returns a balance of zero.** `recordWeight()` prices a bag a minute
+   before `loadVan()` charges for it, so `IN_PROCESS` + priced + `UNPAID` is the
+   normal state of an order with the driver standing in front of it. Counting it
+   as money owed would put his current stop on hold underneath him. Only a charge
+   that was tried and refused creates a balance.
+2. **The sibling block fails open.** A lookup that is down returns an empty set
+   and the round is drawn as normal. A ledger query must not be able to empty a
+   day's work; the per-order card gate still applies underneath it.
+3. **Retrieval is not gated, and there is no clause for the plant drop-off.**
+   Both are Neil's locks. `loadVan()` charges before it writes
+   `van_confirmed_at`, and only a stamped order reaches the drop-off leg, so a
+   second guard there would be a second copy of the rule.
+4. **The issue is raised in `markFailed()`, not on entering hold.** The hold is
+   derived and so has no moment of its own; `markFailed()` is the one line where
+   an order becomes `FAILED`.
+
+One bug found late and worth recording: `BOARD_FIELDS` carried `payment_status`
+but not `price_cents`, so every balance evaluated to zero, nothing was ever held,
+and #2060 stayed a delivery stop. It did not throw. It was caught by running the
+board against real rows, not by a test, and is now pinned by one. Sixth time an
+unselected column has quietly decided what a screen can know.
+
+Verified against the live board for 14 September:
+
+```
+on payment hold : 2060
+retrieval stops still present: 1
+Shamar blocked by the sibling rule: true
+```
+
 ## Grok review
 
 (empty until Grok has seen a diff)
 
 ## Neil
 
-Spec only. Nothing implemented — say go.
+Three things true right now:
 
-Two things true right now that this file does not fix:
-
-1. **Neither PR is merged.** `origin/main` is still `3f191b1`, so the reminder
-   gate is not live either. This branch is cut from `fix/reminder-collectable`
-   and carries both it and the docs.
-2. **#2060 can still be drawn as a delivery stop** until this ships. That is the
-   live hole, and the only thing stopping it today is somebody knowing not to.
+1. **Nothing is merged.** `origin/main` is still `3f191b1`. This branch carries
+   the docs branch and the reminder gate underneath it, so merging it ships all
+   three.
+2. **#2060 is held the moment this is live**, and #2061 parks with it. Clearing
+   it takes a payment, cash recorded against it, or a waiver. It is not waived
+   here.
+3. **The retrieval lock has an open consequence and nothing answers it.** #2060's
+   bags come back off Best Wash wearing van clips and keep them indefinitely,
+   three of the fifty. Unclip and store at base, or leave them in the van, is
+   your call and is not in this branch.
