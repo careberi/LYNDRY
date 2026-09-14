@@ -56,6 +56,9 @@ function minutesFor(miles) {
 
 const RUN_FIELDS =
   'id, order_number, status, stop_number, loaded_at, pickup_date, weight_lb, ' +
+  // The sibling block groups on this. See BOARD_FIELDS below for what leaving
+  // it out does, which is nothing, silently.
+  'customer_id, ' +
   // THE CARD FIELDS, because collectable() reads them and an absent column is
   // indistinguishable from an absent card - which would have filtered every
   // pickup off this run rather than the one that deserved it. Same trap as the
@@ -153,6 +156,33 @@ function collectable(order) {
   return !billing.needsCardOnFile(order.customers || {});
 }
 
+// CAN THIS PICKUP ACTUALLY BE DRIVEN TODAY - BOTH RULES, ONE OWNER.
+//
+// There are two reasons a booked pickup is not a stop, and they are asked at
+// different levels: collectable() is about the order, and the sibling block is
+// about the customer. Grok's review, 14 September: the board applied both, the
+// quote applied one, and the reminders applied one - so a customer with laundry
+// of ours and an unpaid balance was off the round and still being told to put
+// the bag out at eight in the morning. Exactly the failure the reminder gate
+// was built for, one rule along.
+//
+// IT TAKES A LIST AND RETURNS A PREDICATE, which is the shape that makes one
+// query serve a whole board. Thirty stops must not be thirty round trips, and
+// three callers must not be three copies of an `&&`.
+//
+// IT FAILS OPEN. A ledger lookup that is down must not empty a day's work or
+// silence every reminder in the system; collectable() still applies underneath.
+async function routableCheck(pickups = []) {
+  const blocked = await heldCustomerIds((pickups || []).map((o) => o && o.customer_id)).catch(
+    (err) => {
+      console.error(`Could not work out who is on payment hold: ${err.message}`);
+      return new Set();
+    }
+  );
+
+  return (order) => collectable(order) && !blocked.has(order && order.customer_id);
+}
+
 // Every stop on today's run, in the order it will be driven.
 //
 // TWO KINDS, AND UNTIL NOW ONLY ONE OF THEM WAS HERE. The load-out pass builds
@@ -181,12 +211,23 @@ async function todaysRun() {
 
   if (pickupError) throw pickupError;
 
-  // The same rule the board follows: a pickup nobody can bill is not a stop on
-  // today's run, so it must not be in the shape of the day a quote is measured
-  // against either.
+  // THE SAME TWO RULES THE BOARD FOLLOWS, THROUGH THE SAME FUNCTION.
+  //
+  // This is the quote's picture of the day - what /ops/routing measures a new
+  // order against before saying yes to it - so a stop drawn here that will not
+  // be driven pads the run, and a stop missing from here makes the afternoon
+  // look emptier than it is. Neither answer may be a second reading of rules
+  // the board already owns. It said `filter(collectable)` and so knew nothing
+  // about the sibling block at all.
+  //
+  // A HELD ORDER IS NOT A DELIVERY. Its bag may well be in the van; it is not
+  // going to a doorstep until the balance is nothing, so counting it as a stop
+  // quotes the day against a delivery nobody is going to make.
+  const routable = await routableCheck(pickups || []);
+
   const stops = [
-    ...(loaded || []).map((o) => ({ order: o, kind: 'deliver' })),
-    ...(pickups || []).filter(collectable).map((o) => ({ order: o, kind: 'collect' })),
+    ...(loaded || []).filter((o) => !paymentHold(o)).map((o) => ({ order: o, kind: 'deliver' })),
+    ...(pickups || []).filter(routable).map((o) => ({ order: o, kind: 'collect' })),
   ];
 
   for (const stop of stops) {
@@ -269,6 +310,17 @@ const LEGS = Object.freeze({
 
 const BOARD_FIELDS =
   'id, order_number, status, stop_number, loaded_at, pickup_date, pickup_window_start, ' +
+  // customer_id is what the sibling block groups on, and leaving it out was the
+  // SEVENTH time an unselected column quietly decided what a screen can know -
+  // this one shipped inside the very commit whose message boasted about
+  // catching the sixth, and Grok's review is what found it.
+  //
+  // It does not throw. Undefined on every row means heldCustomerIds() is handed
+  // a list of nothing, returns an empty set, and blocks nobody, so the sibling
+  // rule was dead code from the moment it was written. No test noticed because
+  // the helper was checked on its own rather than through the board - which is
+  // the same mistake as checking a screen and not the route behind it.
+  'customer_id, ' +
   'pickup_window_end, pickup_time, bag_count, weight_lb, partner_id, ' +
   // The guided run reads its position from these, so they travel with the board
   // rather than being fetched again per stop.
@@ -955,19 +1007,10 @@ async function board(dateIso, fromTime, driverId = null) {
   // explanation reads as the board losing an order, which is the bug this is
   // meant to prevent rather than cause.
   // A CUSTOMER WITH LAUNDRY OF OURS AND AN UNPAID BALANCE IS PARKED ENTIRELY.
-  // Neil's lock: #2061 waits until #2060 is settled. One query for the board.
-  // Only the customers with a pickup today need asking about - heldCustomerIds
-  // goes and finds their in-hand orders itself.
-  const blocked = await heldCustomerIds(
-    (pickedUpQuery || []).map((o) => o.customer_id)
-  ).catch((err) => {
-    // Best effort, and it fails OPEN. A ledger lookup that is down must not
-    // quietly empty the round; the per-order card gate below still applies.
-    console.error(`Could not work out who is on payment hold: ${err.message}`);
-    return new Set();
-  });
-
-  const routable = (o) => collectable(o) && !blocked.has(o.customer_id);
+  // Neil's lock: #2061 waits until #2060 is settled. One query for the board,
+  // and it is routableCheck() rather than an `&&` written out here, so the
+  // quote and the reminders cannot answer this differently.
+  const routable = await routableCheck(pickedUpQuery || []);
 
   const allPickups = (pickedUpQuery || []).filter(routable);
   const uncollectable = (pickedUpQuery || []).filter((o) => !routable(o));
@@ -1745,6 +1788,7 @@ module.exports = {
   balance,
   paymentHold,
   heldCustomerIds,
+  routableCheck,
   chooseLaundromat,
   dropoffGroups,
   orderDropStops,

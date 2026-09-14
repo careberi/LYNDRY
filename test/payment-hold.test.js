@@ -191,3 +191,96 @@ test('BOTH FIELD LISTS CARRY WHAT balance() READS', () => {
     assert.match(block, /payment_status/, `${list} does not select payment_status`);
   }
 });
+
+// --- what Grok found, 14 September ------------------------------------------
+
+test('THE QUOTE MUST NOT DRAW A HELD ORDER AS A DELIVERY', () => {
+  // todaysRun() is the picture of the day that /ops/routing measures a new
+  // order against. A held bag may well be in the van, and it is not going to a
+  // doorstep, so counting it as a stop quotes the afternoon against a delivery
+  // nobody is going to drive.
+  const src = SOURCE('dispatch.js');
+  const at = src.indexOf('async function todaysRun');
+  assert.notEqual(at, -1);
+  const body = src.slice(at, src.indexOf('function sequence', at));
+  assert.ok(body.includes('!paymentHold(o)'), 'the quote still delivers held orders');
+});
+
+test('AND ITS PICKUPS USE THE SAME SIBLING BLOCK THE BOARD USES', () => {
+  // It said filter(collectable), which is one of the two reasons a pickup is
+  // not a stop. It knew nothing about the sibling block at all.
+  const src = SOURCE('dispatch.js');
+  const at = src.indexOf('async function todaysRun');
+  const body = src.slice(at, src.indexOf('function sequence', at));
+  assert.ok(body.includes('routableCheck('), 'the quote does not apply the sibling block');
+});
+
+test('ONE OWNER FOR ROUTABLE, so three readers cannot answer differently', () => {
+  // board(), todaysRun() and reminders.js all ask "can this pickup be driven
+  // today". The answer is two rules - a card, and nothing outstanding - and
+  // each caller writing its own `&&` is how one of them ends up with one rule.
+  const src = SOURCE('dispatch.js');
+  const at = src.indexOf('async function board');
+  const body = src.slice(at, at + 8000);
+  assert.ok(body.includes('routableCheck('), 'board() stopped using the shared check');
+  assert.ok(
+    !body.includes('collectable(o) &&'),
+    'board() has grown its own copy of the rule again'
+  );
+});
+
+test('THE DELIVERY DOOR REFUSES, NOT ONLY THE VAN DOOR', () => {
+  // outForDelivery() stops a held order being loaded. deliver() stops one that
+  // was already in the van when the charge failed, and is what makes the rule
+  // true of the JSON API and of the order page reached directly.
+  const src = SOURCE('fulfilment.js');
+  const at = src.indexOf('async function deliver(');
+  assert.notEqual(at, -1);
+  const body = src.slice(at, at + 1600);
+  assert.ok(body.includes('dispatch.paymentHold(order)'), 'deliver() does not refuse a hold');
+  assert.ok(body.includes('payment_hold'), 'deliver() does not name the refusal');
+});
+
+test('IT REFUSES BEFORE THE PHOTO, so nothing is uploaded for a delivery that is not happening', () => {
+  const src = SOURCE('fulfilment.js');
+  const at = src.indexOf('async function deliver(');
+  const body = src.slice(at, at + 4000);
+  assert.ok(
+    body.indexOf('dispatch.paymentHold(order)') < body.indexOf('A photo is required'),
+    'the driver is asked for a photo on the way to being refused'
+  );
+});
+
+test('BOTH REFUSALS SAY reason, which is the word both front doors read', () => {
+  // ops.js send() switches on result.reason and the order page renders
+  // result.detail. A refusal keyed on anything else is a refusal nothing can
+  // tell apart from any other - it shipped once as `error`.
+  const src = SOURCE('fulfilment.js');
+  for (const fn of ['async function outForDelivery', 'async function deliver(']) {
+    const at = src.indexOf(fn);
+    const body = src.slice(at, at + 1600);
+    assert.ok(
+      body.includes("reason: 'payment_hold'"),
+      `${fn} does not refuse with reason: 'payment_hold'`
+    );
+  }
+});
+
+test('BOTH FIELD LISTS CARRY customer_id, AND THIS IS THE SEVENTH TIME', () => {
+  // The sibling block groups on customer_id and neither select list asked for
+  // it, so every row came back undefined, heldCustomerIds() was handed a list
+  // of nothing, and the rule blocked nobody from the moment it was written.
+  //
+  // It did not throw. The live check that was supposed to prove it worked had
+  // called heldCustomerIds() directly with a real id rather than going through
+  // board() - so it tested the helper and not the wiring, which is the same
+  // mistake as checking a screen and not the route behind it. Grok found it.
+  const src = SOURCE('dispatch.js');
+  for (const list of ['BOARD_FIELDS', 'RUN_FIELDS']) {
+    const at = src.indexOf(`const ${list} =`);
+    assert.notEqual(at, -1, `${list} not found`);
+    const block = src.slice(at, src.indexOf(';', src.indexOf('customers', at)));
+    const naked = block.split('stripe_customer_id').join('');
+    assert.ok(naked.includes('customer_id'), `${list} does not select customer_id`);
+  }
+});

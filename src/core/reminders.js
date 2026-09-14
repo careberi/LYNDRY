@@ -60,6 +60,26 @@ function collectable(order) {
   return dispatch.collectable(order);
 }
 
+// AND NO CARD WAS ONLY HALF OF IT. Grok's review, 14 September.
+//
+// There are two reasons the van is not coming, and this file knew one. A
+// customer with laundry of ours and an unpaid balance has their other pickups
+// parked by the sibling block, and nothing here knew it: #2061 is booked for 26
+// September behind #2060, so it comes off the round that morning and would have
+// been sent a text the evening before telling them to have the bag out. That is
+// the same failure this file was written to fix, one rule along, and worse than
+// the first because the customer has done nothing wrong.
+//
+// SO IT CALLS dispatch.routableCheck(), WHICH IS THE ROUTE'S OWN ANSWER TO
+// BOTH. Not a second card check and not an `&&` written out again here: "can
+// this pickup be driven" has one owner, and a copy in this file would disagree
+// with the round the first time either moved. It is async because the sibling
+// half is a query, and it takes the whole list so one query serves a pass.
+//
+// A WAIVED ORDER IS STILL REMINDED. Nothing to charge is not cannot charge, and
+// a waived order has no balance, so neither half of this touches it.
+const routableCheck = dispatch.routableCheck;
+
 // WHAT collectable() HAS TO BE HANDED, AND WHY IT IS A CONSTANT.
 //
 // It reads orders.payment_status and the customer's stripe_customer_id and
@@ -151,6 +171,9 @@ async function sendDue({ date = null } = {}) {
       'id, order_number, pickup_date, pickup_window_start, pickup_window_end, ' +
         'pickup_method, preferences, created_at, ' +
         `${CARD_FIELDS}, ` +
+        // customer_id is what the sibling half groups on. Unselected it is
+        // undefined, nobody is blocked, and this gate quietly does half its job.
+        'customer_id, ' +
         `customers(id, name, phone, status, preferences, ${CUSTOMER_CARD_FIELDS})`
     )
     .eq('pickup_date', target)
@@ -158,6 +181,10 @@ async function sendDue({ date = null } = {}) {
     .is('reminder_sent_at', null);
 
   if (error) throw error;
+
+  // ONE QUERY FOR THE WHOLE PASS, before the loop. Asking per order would be a
+  // round trip per reminder on a night with thirty of them.
+  const routable = await routableCheck(data || []);
 
   const sent = [];
   const skipped = [];
@@ -177,12 +204,13 @@ async function sendDue({ date = null } = {}) {
       continue;
     }
 
-    // Nothing can be billed for this one, so the van is not coming. Telling
+    // Nothing can be billed for this one, or the customer is parked behind an
+    // unpaid order of their own, so the van is not coming either way. Telling
     // them to put the bag out would be the system contradicting its own round.
     // NOT STAMPED, for the same reason STOP is not: if a card arrives before
     // the pass runs again the column must still mean "we sent it".
-    if (!collectable(order)) {
-      skipped.push({ order, reason: 'no card on file' });
+    if (!routable(order)) {
+      skipped.push({ order, reason: collectable(order) ? 'payment hold' : 'no card on file' });
       continue;
     }
 
@@ -243,7 +271,7 @@ async function pendingFor(customerId) {
     // promise a text for an order that was off the route.
     .select(
       'id, order_number, pickup_date, pickup_window_start, pickup_window_end, reminder_sent_at, ' +
-        `${CARD_FIELDS}, customers(${CUSTOMER_CARD_FIELDS})`
+        `${CARD_FIELDS}, customer_id, customers(${CUSTOMER_CARD_FIELDS})`
     )
     .eq('customer_id', customerId)
     .in('status', orders.AWAITING_COLLECTION)
@@ -259,7 +287,9 @@ async function pendingFor(customerId) {
   // wrong order, which is a quieter version of the bug being fixed.
   const order = (data || [])[0];
   if (!order) return null;
-  if (!collectable(order)) return null;
+
+  const routable = await routableCheck([order]);
+  if (!routable(order)) return null;
 
   // The evening before. A pickup TODAY has no reminder left to send - the
   // evening before it has already gone by.
@@ -281,7 +311,7 @@ async function allPending() {
     .from('orders')
     .select(
       'id, order_number, pickup_date, pickup_window_start, pickup_window_end, ' +
-        `${CARD_FIELDS}, ` +
+        `${CARD_FIELDS}, customer_id, ` +
         `customers (id, name, phone, status, ${CUSTOMER_CARD_FIELDS})`
     )
     .in('status', orders.AWAITING_COLLECTION)
@@ -291,6 +321,8 @@ async function allPending() {
 
   if (error) throw error;
 
+  const routable = await routableCheck(data || []);
+
   return (data || [])
     .map((order) => ({
       order,
@@ -299,7 +331,7 @@ async function allPending() {
       goesOn: booking.addDays(order.pickup_date, -1),
       window: booking.arrivalWindow(order),
     }))
-    .filter((row) => row.phone && row.goesOn >= today && collectable(row.order));
+    .filter((row) => row.phone && row.goesOn >= today && routable(row.order));
 }
 
 module.exports = {
@@ -308,6 +340,7 @@ module.exports = {
   pendingFor,
   allPending,
   collectable,
+  routableCheck,
   CARD_FIELDS,
   CUSTOMER_CARD_FIELDS,
   JUST_BOOKED_HOURS,

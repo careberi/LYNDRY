@@ -91,6 +91,14 @@ test('a missing customer is refused rather than crashing the night’s pass', ()
 
 // --- the select lists, which are the half that fails silently ---------------
 
+// Everything from a function's opening line to the start of the next one.
+function bodyOf(fnName) {
+  const at = SOURCE.indexOf(`async function ${fnName}(`);
+  assert.notEqual(at, -1, `${fnName} not found in reminders.js`);
+  const next = SOURCE.indexOf('async function ', at + 20);
+  return SOURCE.slice(at, next === -1 ? SOURCE.length : next);
+}
+
 // Everything between `.from('orders')` and the end of that query.
 function queryFor(fnName) {
   const at = SOURCE.indexOf(`async function ${fnName}(`);
@@ -124,10 +132,44 @@ test('THE THREE FUNCTIONS ARE ALL GATED, not just the one that sends', () => {
   // A badge that promises a text nobody will send is the same failure in a
   // quieter place: sendDue texts, pendingFor draws "PICKUP REMINDER SCHEDULED"
   // in the thread, allPending fills /ops/scheduled.
+  //
+  // IT IS routableCheck() AND NOT collectable(), which is Grok's finding of 14
+  // September. No card is only ONE of the two reasons the van is not coming.
+  // The other is the sibling block, and a customer parked behind their own
+  // unpaid order was still being told to have the bag out in the morning.
   for (const fn of ['sendDue', 'pendingFor', 'allPending']) {
-    const at = SOURCE.indexOf(`async function ${fn}(`);
-    const body = SOURCE.slice(at, SOURCE.indexOf('\n}\n', at));
-    assert.ok(/collectable\(/.test(body), `${fn} never calls collectable()`);
+    const body = bodyOf(fn);
+    assert.ok(body.includes('routableCheck('), `${fn} never calls routableCheck()`);
+    assert.ok(body.includes('routable('), `${fn} never applies the predicate`);
+  }
+});
+
+test('ROUTABLE IS THE SAME FUNCTION THE ROUTE USES, not a second copy', () => {
+  // The whole finding in one assertion. If this file ever grows its own version
+  // of "a card, and nothing outstanding", this is what catches it.
+  assert.equal(reminders.routableCheck, dispatch.routableCheck);
+});
+
+test('ALL THREE QUERIES CARRY customer_id, which the sibling half groups on', () => {
+  // SEVENTH TIME. Unselected, customer_id is undefined on every row, so the set
+  // of held customers is built out of nothing, nobody is blocked, and this gate
+  // silently does half its job. It does not throw and nothing looks wrong.
+  for (const fn of ['sendDue', 'pendingFor', 'allPending']) {
+    assert.match(queryFor(fn), /customer_id/, `${fn} does not select customer_id`);
+  }
+});
+
+test('with nobody held, routable IS collectable - so a waived order still gets one', async () => {
+  // routableCheck() short-circuits on an empty list, so this reaches no
+  // database. What it pins is the composition: the sibling half must never
+  // change the answer for somebody who is holding nothing of ours.
+  const routable = await reminders.routableCheck([]);
+  for (const order of [
+    { payment_status: 'UNPAID', customers: withCard },
+    { payment_status: 'UNPAID', customers: noCard },
+    { payment_status: 'WAIVED', customers: noCard },
+  ]) {
+    assert.equal(routable(order), dispatch.collectable(order), JSON.stringify(order));
   }
 });
 
@@ -145,7 +187,7 @@ test('a skipped order is not stamped, so a card arriving later can still earn on
   // reminder_sent_at means "we sent it". Stamping an order we deliberately said
   // nothing about would mean nobody is ever reminded, even if the card lands an
   // hour later and the pass runs again.
-  const at = SOURCE.indexOf("reason: 'no card on file'");
+  const at = SOURCE.indexOf("'no card on file'");
   assert.notEqual(at, -1, 'the skip reason is not there');
   const around = SOURCE.slice(at - 600, at + 200);
   assert.ok(!/reminder_sent_at/.test(around), 'a stamp crept into the no-card skip');

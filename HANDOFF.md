@@ -2,7 +2,7 @@
 
 Issue: Payment Hold — laundry we hold with money outstanding never reaches the doorstep
 Owner of the keyboard: Neil
-Status: implemented on feat/payment-hold at fd7d60b, pushed, awaiting Grok
+Status: implemented, Grok findings 1-3 fixed, finding 4 unknown and not done
 
 ## Goal
 
@@ -162,7 +162,74 @@ Shamar blocked by the sibling rule: true
 
 ## Grok review
 
-(empty until Grok has seen a diff)
+Neil relayed three findings on 14 September and told me to act on them. **The
+review itself was never pasted into this file** - the section below is what he
+said in chat, not Grok's own words, and a fourth finding he referred to as
+"finding 4 if cheap" is not recorded anywhere I can read. It was not acted on,
+because guessing at it would be worse than leaving it.
+
+| # | Finding | |
+|---|---|---|
+| 1 | `todaysRun()` drew a held order as a delivery, and its pickups used `collectable()` without the sibling block | fixed |
+| 2 | `deliver()` did not refuse a hold the way `outForDelivery()` does | fixed |
+| 3 | reminders used a card check alone, not the sibling block | fixed |
+| 4 | not in this file, not in the message | **not done** |
+
+All three were real, and the third one mattered most: a customer parked behind
+their own unpaid order was off the round and still being sent a night-before
+text telling them to have the bag out. That is the failure the reminder gate was
+built for, one rule along, and worse than the original because the customer has
+done nothing wrong.
+
+**AND CHASING THEM FOUND A SEVENTH SELECT-LIST BUG, IN MY OWN COMMIT.** Neither
+`BOARD_FIELDS` nor `RUN_FIELDS` selected `customer_id`, which is the column the
+sibling block groups on. Every row came back with it undefined,
+`heldCustomerIds()` was handed a list of nothing, and it blocked nobody. The
+sibling rule had never once fired.
+
+It did not throw, and the "verified live" line in the commit below is what let
+it through: that check called `heldCustomerIds()` directly with a real customer
+id, so it proved the helper worked and proved nothing about the board that calls
+it. Testing the helper instead of the wiring is the same mistake as checking a
+screen while the route behind it still fires - which is a rule this codebase
+already writes down in four places.
+
+### What changed for it
+
+- `dispatch.routableCheck(pickups)` is now the single owner of "can this pickup
+  be driven today". It takes the list, asks the ledger once, and returns a
+  synchronous predicate. `board()`, `todaysRun()` and all three reminder
+  functions call it, so the three cannot answer differently. It still fails open.
+- `customer_id` added to `BOARD_FIELDS`, `RUN_FIELDS` and the three reminder
+  selects, each pinned by a test.
+- `todaysRun()` drops held orders from the delivery leg.
+- `deliver()` refuses a hold, before the photo, so nothing is uploaded for a
+  delivery that is not happening.
+- `outForDelivery()` refused with `error:` where every other refusal in
+  `fulfilment.js` uses `reason:`, and `ops.js` reads `reason`. Both say `reason`
+  now.
+
+### Verified against live rows, through the real functions this time
+
+`board('2026-09-26')`, the day #2061 is actually booked:
+
+```
+26 Sep pickups ON the round   : []
+26 Sep OFF the round          : [ 2061 ]
+   #2061 card ok? true | customer_id selected? true
+reminder pending for Shamar   : none
+```
+
+#2061's own card is fine, so it was the sibling block that removed it and not
+the card gate. And today's board still reads:
+
+```
+held (board.held)   : [ 2060 ]
+deliver stops       : []
+retrieval stops     : [ pickup_partner ]
+```
+
+274 tests pass.
 
 ## Neil
 
