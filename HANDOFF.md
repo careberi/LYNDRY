@@ -1,72 +1,86 @@
 # HANDOFF
 
-Issue: Rebuild `/ops/orders/:id` as an internal data console (no Issue number yet)
+Issue: Reminders must use `dispatch.collectable()`
 Owner of the keyboard: Neil
-Status: review
+Status: spec
 
 ## Goal
 
-The ops order page used the public site's visual language — big rounded cream
-cards, display headings, a stack of state cards — and showed the same chrome
-whatever state the order was in, so a delivered and paid order still offered
-"Correct a weight" as its hero, a cancelling lecture, and "still needed from
-them". Rebuild that one page as a warehouse terminal: one header, one exception
-line, then tables. Presentation and information architecture only. No change to
-customer-facing text, pricing, weighing rules, or the append-only history store.
+`src/core/reminders.js` never looks at whether an order can actually be
+collected. It selects the order, the customer's name, phone, status and
+preferences, and nothing else. So a pickup with no card on file — which
+`dispatch.collectable()` already keeps off the driver's route — still gets the
+night-before "have the bag out" text, and still shows **PICKUP REMINDER
+SCHEDULED** in the thread. The reminder must ask the same question the route
+asks, by calling the same function, so the two cannot drift.
+
+Order #2063 is the live example: badged AWAITING CARD, off the route since
+13 September, and still carrying a scheduled reminder on the customer page.
 
 ## Must happen
 
-- One header, one exception strip, then tables. Hairline borders, gray header
-  rows, tabular numbers, mono only for codes and timestamps.
-- Toolbar is state-aware. The step offered comes from `run.js`, so the order page
-  and the driver's run cannot drift.
-- Exception strip is one block carrying our weight, the partner's weight against
-  tolerance, the return against billed, whether a charge was held, and how it was
-  settled. Absent when there is no exception.
-- Bags are one table: door bag, lb, return bag, lb, lineage, status. Footer
-  carries counts, billed, returned, and whether they match.
-- Charge is a ledger of rows that actually happened. The partner's figure has no
-  dollar amount.
-- Log defaults to Human. Filters are `?log=` links, not radio buttons.
-- Texts are only this order's, with a count and a link for the rest.
-- Every button posts to a route that already existed.
+- The reminder sweep skips an order `dispatch.collectable()` says no to.
+- The thread badge and the scheduled list skip it too. **Three functions in
+  `reminders.js` decide this, not one**, and all three need the gate:
+  - `sendDue()` — the nightly sweep, what actually texts
+  - `pendingFor(customerId)` — the "PICKUP REMINDER SCHEDULED" box in the thread
+  - `allPending()` — the list on `/ops/scheduled`
+- **The card fields have to be added to all three select lists.**
+  `collectable()` reads `order.payment_status` and the customer's
+  `stripe_customer_id` / `default_payment_method_id`. None of the three selects
+  carry them today, and an unselected column is undefined, which is
+  indistinguishable from an absent card — so without this the gate would skip
+  *every* reminder rather than the ones that deserve it. That trap has now bitten
+  five times in this codebase; see `BOARD_FIELDS`, `RUN_FIELDS`, the order page's
+  `payment_attempts`, and its `ready_at` / `delivered_at`.
+- One implementation. Call `dispatch.collectable()`; do not re-derive "has a
+  card" here.
+- A waived order is still reminded. `collectable()` already answers true for it.
+- The screen and the sweep must agree, which is the existing rule for this file:
+  both read the same rows and call the same function, so a badge can never
+  promise a text that will not be sent.
 
 ## Must not happen
 
-- No JavaScript on this page. A driver reads it on two bars of signal.
-- A driver must still see the stop and not the customer: no name in the heading,
-  no phone, no card, no money, no change log, no thread.
-- No rewriting or deleting rows in `order_events`. Filter and group only.
-- No cancel copy on a delivered order. No booking SMS on an order that has run.
-- No new mutation routes, no change to what any existing button does.
+- No second copy of the card rule.
+- Do not stamp `reminder_sent_at` on a skipped order. It has not been reminded,
+  and stamping it would mean nothing ever reminds them if a card arrives in time.
+- Do not change the reminder's wording, its timing, the evening-before rule, the
+  three-hour just-booked skip, or quiet hours.
+- Do not touch routing, payment, or `fulfilment.js`. The route gate already
+  exists and is not being re-opened.
+- Do not make the reminder a second gate on collection. It reads the rule; it
+  does not own it.
 
 ## Edge cases
 
-- A message has no order id, so "texts for this order" is a window: booking to
-  ten minutes after delivery. A text about this order sent an hour later falls
-  to the next one.
-- There is no `out_for_delivery_at` column. The stage rail reads each stage off
-  the order column when it has one and off the STATUS event otherwise.
-- `orders` has two foreign keys to `partners`, so the embed must name
-  `orders_partner_id_fkey` or PostgREST refuses it as ambiguous.
-- A PRICE event with no WEIGHT beside it is the old weigh-in rule pricing off the
-  laundromat's scale; its pounds and promotion are in the sentence and nowhere
-  else.
-- "Correct a weight" is offered only while the laundry is in our hands.
-  Correcting a weight on a charged order re-prices money that has already moved.
+- **A card added after the reminder evening but before the pickup.** They are
+  back on the route and correctly get no reminder, because the evening has
+  passed. That is the right outcome and not a gap to close — but it means the
+  first they hear is the driver arriving, so say whether that is acceptable.
+- **Standing orders already carry the stamp.** `recurring.bookDue()` sets
+  `reminder_sent_at` at the moment it books, so a non-collectable standing order
+  is already skipped by accident. The gate must not double-count that.
+- **Stripe switched off entirely** (`needsCardOnFile()` answers false): every
+  order is collectable and everybody is reminded. Correct — a sandbox with no key
+  must not silently empty the reminder pass, the same way it must not empty the
+  round.
+- **An order that becomes uncollectable after the reminder went.** The reminder
+  was true when sent. The morning route is the authority; nothing here should
+  chase it back.
+- `pendingFor()` returns the soonest pickup only. If that one is not collectable
+  it must not silently fall through to a later one and badge the wrong order.
 
 ## Files Claude expects to touch
 
-- `src/routes/admin.js` — the `/ops/orders/:id` route only. Builds `can` from the
-  four existing permission calls, widens the messages query to the booking
-  onward, adds `ready_at, delivered_at, promotion_id, discount_cents` and the two
-  named embeds to the select, calls the console. Old template kept as
-  `_legacyBody`, parsed and unused, so reverting is one rename.
-- `public/css/ops.css` — new. Fingerprinted under `/css/<hash>/` like every other
-  file in that directory.
-- `src/web/order-console.js` — new. `humanEvents`, `chargeRows`, `bagRows`,
-  `messagesForOrder`, `exceptionFor`, `actionsFor`, `stageRail`.
-- `test/order-console.test.js` — new. 20 tests pinned against order #1992.
+- `src/core/reminders.js` — the three selects and the three gates.
+- `test/` — a new test file. Pin: no card means no reminder in all three
+  functions; waived still reminded; a card on file still reminded; the select
+  lists actually carry the fields, so the "undefined reads as no card" failure
+  cannot come back.
+- `HANDOFF.md`
+
+Nothing else. `dispatch.js` is read, not edited.
 
 ## Grok review
 
@@ -74,12 +88,14 @@ customer-facing text, pricing, weighing rules, or the append-only history store.
 
 ## Neil
 
-Not yet. Uncommitted on the working tree, nothing pushed. Seen on the dev server
-at localhost:3000 and verified against #1992, #2060 and #2063. Still open:
+Spec only. Nothing implemented yet — say go.
 
-- Five cards still render in the old cream style in the side column (held weight,
-  declined card, corrections, cancel, return check) plus the nudge panel. Passed
-  through unchanged under anchor ids so every mutation posts where it always did.
-- No standalone "send a template" route, so "Text: make it regular" scrolls to a
-  Send box rather than posting.
-- Nothing else in `/ops` has the terminal look yet.
+Branch state, so nothing is lost:
+
+- `feat/ops-order-console` — the warehouse-terminal order page, committed off
+  `main`, 255 tests passing, unreviewed and unpushed.
+- `docs/ai-workflow` — AGENTS.md, HANDOFF.md, and the CLAUDE.md correction about
+  the QR regex.
+- `fix/reminder-collectable` — this branch, cut from `docs/ai-workflow` because
+  HANDOFF.md only exists there. Merge the docs branch first or this one carries
+  it along.
