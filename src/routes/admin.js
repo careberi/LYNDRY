@@ -23,7 +23,7 @@ const reminders = require('../core/reminders');
 const { nudgePanel } = require('../web/nudge-panel');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
-const { orderConsoleBody, orderConsoleHead } = require('../web/order-console');
+const { orderConsoleBody } = require('../web/order-console');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const {
@@ -529,6 +529,21 @@ function adminPage({ title, active = '', body, user = null, openIssues = 0, head
   <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
   <link rel="stylesheet" href="${CSS_BASE}/icons.css">
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
+  <!-- THE OPS SKIN, LAST, SO IT WINS. Every /ops page gets it, including the
+       ones nobody has rewritten yet - which is the point: they inherit the bar
+       and the ground before their bodies are touched.
+
+       ONE FILE OWNS THE LOOK, Neil's instruction, 14 September. The order
+       console used to link this itself; loading it here means there is one
+       loader and no page can be missed. Through CSS_BASE, so it is
+       fingerprinted like every other stylesheet in public/css and a change
+       reaches a phone on the next deploy.
+
+       NEVER ADD IT TO THE PUBLIC LAYOUT. It names the body element, so it would repaint
+       the marketing site - and the bag tag page at /o/<code>, which a
+       laundromat scans and which is deliberately the public look. The only two
+       places it is linked are this wrapper and the sign-in shell below. -->
+  <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 ${head}
 </head>
 <body>
@@ -551,7 +566,15 @@ ${head}
          </div>`
       : `<header class="site-header">
     <div class="container site-header-bar ops-bar">
-      ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
+      <!-- A WORD, NOT THE ARTWORK, and only here. CLAUDE.md records that the
+           compact logo at 38px is the smallest the wordmark stays readable at;
+           the ops bar is 40px tall, so the mark would have to shrink below its
+           own documented floor and LYNDRY becomes a smear. The supplied
+           mockups use a text wordmark for the same reason.
+
+           The artwork is untouched and is still the mark on the public site,
+           on the bag tag page, and on the driver's bare route screen. -->
+      <a class="ops-mark" href="/ops" aria-label="LYNDRY ops">LYNDRY OPS</a>
       <!-- Only the tabs this person may actually open. A driver never sees a
            Customers link they would be refused at. -->
       <nav class="site-nav">
@@ -1755,6 +1778,10 @@ function loginShell({ heading, intro, error = '', form }) {
   <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
   <link rel="stylesheet" href="${CSS_BASE}/icons.css">
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
+  <!-- The sign-in is an ops page and wears the ops skin. Same tokens, no
+       public-site card. See adminPage() above for why this file is linked in
+       exactly two places and never in the public layout. -->
+  <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 </head>
 <body>
   <main class="hero" style="min-height:100vh;display:flex;align-items:center;">
@@ -3636,7 +3663,6 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         title: `#${order.order_number}`,
         active: '/ops',
         body,
-        head: orderConsoleHead(),
         user: req.opsUser,
         openIssues: req.openIssues,
         serviceClosed: req.serviceClosed,

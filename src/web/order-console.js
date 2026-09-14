@@ -789,13 +789,8 @@ function orderConsoleBody({
 </div>`;
 }
 
-function orderConsoleHead() {
-  return `  <link rel="stylesheet" href="${CSS_BASE}/ops.css">`;
-}
-
 module.exports = {
   orderConsoleBody,
-  orderConsoleHead,
   humanEvents,
   chargeRows,
   bagRows,

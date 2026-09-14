@@ -1,7 +1,9 @@
 /* ---------------------------------------------------------------------------
    THE BACK OFFICE IS A WAREHOUSE TERMINAL.
 
-   Neil, 13 September: "one header, one exception line, then tables."
+   Neil, 13 September: "one header, one exception line, then tables." And on 14
+   September, for the rest of it: every ops page inherits this, starting with
+   the bar.
 
    This is the ops visual language, and it is deliberately NOT the public
    site's. The marketing pages are a line drawing on cream paper with hard
@@ -10,12 +12,264 @@
    desk or a bag table on a doorstep. Ops gets hairlines, a gray header row,
    tabular numbers, and colour only where it means something.
 
-   It sits AFTER lyndry.css in the head, so anything it names wins. The four-
-   menu nav (.ops-bar, .ops-menu) is untouched and stays as it is - this file
-   is everything under the nav. Fingerprinted under /css/<hash>/ like every
-   other file in this directory, so a change here reaches every phone on the
-   next deploy.
+   ONE FILE OWNS THIS LOOK. Neil's instruction: do not make a second one. So
+   the page chrome below and the order console further down live together, and
+   anything added for another screen belongs here too.
+
+   IT IS LOADED BY adminPage() FOR EVERY /ops PAGE, after lyndry.css, so
+   anything it names wins. That is what lets a page nobody has rewritten yet
+   still wear the right bar and the right ground. Fingerprinted under
+   /css/<hash>/ like every other file in this directory, so a change here
+   reaches every phone on the next deploy.
+
+   IT IS NEVER LOADED ON A PUBLIC PAGE. The selectors below name `body`, which
+   would repaint the marketing site if this sheet ever reached it. It is linked
+   in one place and that place renders ops only.
    --------------------------------------------------------------------------- */
+
+/* --- the page itself ------------------------------------------------------
+
+   THE GROUND IS GREY AND THE TYPE IS SMALL, which is the whole difference. A
+   marketing page is read once at arm's length; this is read all day, and the
+   thing that matters is how much of a table fits above the fold.
+
+   System fonts, not the brand faces. Grandstander and Outfit are the public
+   voice, they cost a network round trip, and nobody reading a bag list needs a
+   display face. The ops bar drops them; a page that has not been rewritten yet
+   still asks for them in its own markup, and will stop as it is rewritten. */
+body {
+  background: var(--c-bg, #f3f4f6);
+  color: var(--c-ink, #111827);
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Tokens at the page level, so the bar and every later screen read the same
+   ones the console already uses. The console re-declares them on itself and
+   that is deliberate: it stays self-contained if this block ever moves. */
+body {
+  --c-bg: #f3f4f6;
+  --c-ink: #111827;
+  --c-muted: #6b7280;
+  --c-line: #d1d5db;
+  --c-line-strong: #9ca3af;
+  --c-head: #e5e7eb;
+  --c-row: #ffffff;
+  --c-row-alt: #f9fafb;
+  --c-green: #166534;
+  --c-green-bg: #dcfce7;
+  --c-amber: #92400e;
+  --c-amber-bg: #fef3c7;
+  --c-red: #991b1b;
+  --c-red-bg: #fee2e2;
+  --c-blue: #1e40af;
+  --c-link: #1d4ed8;
+  --c-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* A MARKETING SURFACE HAS NO BUSINESS ON AN OPS PAGE.
+
+   .hero paints a full-width band of Suds green and is the public site's
+   opening gesture. The ops sign-in borrowed it, so the first screen anybody
+   sees at a desk was a green field with a bubble card floating on it.
+
+   There is exactly one .hero under /ops and it is that sign-in. Neutralising
+   it here rather than editing the page keeps this pass to the shell: no body
+   markup moves, and if another screen ever borrows the same class it inherits
+   the correction for free. */
+.hero {
+  background: none;
+  padding-top: 24px;
+  padding-bottom: 0;
+}
+
+/* --- the bar --------------------------------------------------------------
+
+   40px of dark, and nothing else. It was the public site's header: cream, a
+   3px ink underline, a hard shadow and a 44px logo, which is a lot of a phone
+   spent on chrome before the driver sees a stop.
+
+   THE MARKUP IS UNTOUCHED. This is the same header, the same four <details>
+   menus and the same Sign out button that were already there - restyled, not
+   rebuilt. That is what makes this safe to ship before any page body is
+   rewritten: nothing moved, so nothing can have moved wrongly. */
+.site-header {
+  background: #111827;
+  border: 0;
+  box-shadow: none;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.site-header-bar.ops-bar {
+  min-height: 40px;
+  height: auto;
+  padding: 0 12px;
+  gap: 14px;
+  max-width: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* THE MARK IS A WORD HERE, NOT THE ARTWORK.
+   CLAUDE.md is explicit that `compact` at 38px is the smallest the wordmark
+   stays readable at, and a 40px bar cannot hold 38px of logo. Squeezing it to
+   22px turned LYNDRY into a smear, which is the exact failure that rule exists
+   to prevent - so the bar wears a text wordmark instead, as the mockups do.
+   The artwork is untouched and still the mark everywhere else. */
+.ops-bar .ops-mark {
+  color: #fff;
+  font: 700 13px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  white-space: nowrap;
+  flex: none;
+}
+.ops-bar .ops-mark:hover { text-decoration: none; color: #fff; }
+
+.ops-bar .site-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* A menu title, and the one link a single-item group collapses to. */
+.ops-bar .ops-menu > summary,
+.ops-bar .ops-menu-solo {
+  color: #d1d5db;
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  box-shadow: none;
+  padding: 5px 9px;
+  font: 600 13px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  list-style: none;
+  text-decoration: none;
+  /* INLINE-FLEX, NOT INLINE-BLOCK. The caret is a ::after child of this
+     element, so a display that does not lay its children out in a row drops
+     the triangle onto its own line above the word. It did. */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* Smaller than the public site's, to match 13px type. */
+.ops-bar .ops-menu > summary::after {
+  border-left-width: 3px;
+  border-right-width: 3px;
+  border-top-width: 4px;
+}
+
+.ops-bar .ops-menu > summary::-webkit-details-marker { display: none; }
+.ops-bar .ops-menu > summary::marker { content: ''; }
+
+.ops-bar .ops-menu > summary:hover,
+.ops-bar .ops-menu-solo:hover { background: #1f2937; color: #fff; text-decoration: none; }
+
+/* WHERE YOU ARE, said quietly. A highlighted word rather than an opened panel
+   covering the page you just asked for - the rule the nav already followed. */
+.ops-bar .ops-menu[data-here="1"] > summary,
+.ops-bar .ops-menu-solo[aria-current="page"] { color: #fff; background: #1f2937; }
+
+.ops-bar .ops-menu[open] > summary { background: #1f2937; color: #fff; }
+
+/* The panel is a plain white card on a hairline, not a floating marketing
+   surface. It opens with no script, exactly as it did. */
+.ops-bar .ops-menu-panel {
+  position: absolute;
+  z-index: 50;
+  margin-top: 6px;
+  min-width: 190px;
+  background: #fff;
+  color: var(--c-ink);
+  border: 1px solid var(--c-line-strong);
+  border-radius: 3px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ops-bar .ops-menu-panel a {
+  color: var(--c-ink);
+  padding: 6px 10px;
+  border-radius: 2px;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ops-bar .ops-menu-panel a:hover { background: var(--c-row-alt); text-decoration: none; }
+.ops-bar .ops-menu-panel a[aria-current="page"] { font-weight: 700; }
+
+/* Who is signed in, and the way out. */
+.ops-bar .eyebrow {
+  color: #9ca3af !important;
+  font: 500 12px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.ops-bar .btn,
+.ops-bar .btn-outline.btn-sm {
+  background: transparent;
+  color: #d1d5db;
+  border: 1px solid #374151;
+  border-radius: 3px;
+  box-shadow: none;
+  height: auto;
+  min-height: 0;
+  padding: 4px 9px;
+  font: 500 12px/1.2 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  transform: none;
+}
+
+.ops-bar .btn:hover { background: #1f2937; color: #fff; transform: none; box-shadow: none; }
+
+/* ON A PHONE THE BAR EARNS ITS 40px AND NOT A PIXEL MORE.
+
+   At 375px the mark, four menus, a name, a role and a Sign out button wrapped
+   onto three rows - 88px of chrome before the first stop. Neil runs this as a
+   home-screen app, so that is a third of the screen spent saying who he is.
+
+   The name goes first because it is the only thing here nobody needs: you know
+   who you are signed in as, and the one case where it matters, being signed in
+   as the wrong person, is answered by the Sign out button beside it. */
+@media (max-width: 719px) {
+  .ops-bar .eyebrow { display: none; }
+  .site-header-bar.ops-bar { padding: 0 10px; gap: 10px; }
+  /* TWO ROWS, NOT THREE. The mark and the way out share the top line; the
+     menus take the one below. Left to wrap on their own the three groups
+     landed on three separate rows, which is 80px of a 812px screen. */
+  .ops-bar .site-nav { gap: 0; order: 3; flex-basis: 100%; }
+  .site-header-bar.ops-bar > form { margin-left: auto !important; }
+  .ops-bar .ops-menu > summary,
+  .ops-bar .ops-menu-solo { padding: 5px 7px; }
+}
+
+/* The content starts right under the bar. 36px of air above a table is a third
+   of a phone screen. The wrapper keeps its own padding for a bare page, which
+   is the driver's route and is deliberately still roomy. */
+body > main.container {
+  max-width: none;
+  padding-top: 14px !important;
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-bottom: 48px !important;
+}
 
 .console {
   --c-bg: #f3f4f6;
