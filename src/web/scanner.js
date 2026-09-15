@@ -314,10 +314,30 @@ function scannerScript() {
   // The QR holds a whole URL - https://lyndry.com/o/K3F9QP?t=... - so the code
   // has to be pulled back out of it. Falls back to treating the text as a bare
   // code, in case a sticker is ever printed with just the characters.
+  // WHAT THE CAMERA READ, TURNED BACK INTO WHAT IS PRINTED ON THE STICKER.
+  //
+  // Two shapes arrive here. A QR holds a URL - /o/<code>?t=<sig>&s=<number> -
+  // and the sticker number is in the QUERY STRING, not the path. The human
+  // line beside it reads L4XK92-2, hyphen and all.
+  //
+  // This used to return the bare code from a URL and throw the sticker number
+  // away, and its character class had no hyphen in it, so the typed form
+  // survived only by falling through untouched. Both now produce the SAME
+  // thing: code-number, which is what the server parses.
+  //
+  // It does not validate. bags.parseCode() on the server is the one place that
+  // decides whether a code is ours, and a second opinion written in a browser
+  // would be a second copy of that rule.
   function codeFrom(text) {
     var value = String(text || '').trim();
-    var match = value.match(/\\/o\\/([0-9A-Za-z]+)/);
-    return match ? match[1] : value;
+    var match = value.match(/\\/o\\/([0-9A-Za-z-]+)/);
+    if (!match) return value;
+
+    var code = match[1];
+    // The sticker number off the query string, put back on the end so the
+    // box shows what the sticker itself says.
+    var seq = value.match(/[?&]s=(\\d{1,2})/);
+    return seq && code.indexOf('-') === -1 ? code + '-' + seq[1] : code;
   }
 
   // NO CAMERA API IN THIS BROWSER AT ALL. Nothing below will run, so a
