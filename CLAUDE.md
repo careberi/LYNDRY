@@ -1840,7 +1840,58 @@ mostly pins.
 from the camera app is not something to bet a driver's afternoon on. If his
 session has lapsed he lands on the sign-in page, which is honest.
 
-**The in-page scanner stays**, and so does jsQR. It is one tap when it works.
+**THE IN-PAGE SCANNER IS A STILL PHOTO NOW, NOT A LIVE VIDEO.** Neil's locked
+brief, 14 September: tapping **Scan with camera** opens the phone's own camera,
+the driver takes one photo, we read it, and the code goes in the box.
+
+**A file input with `capture="environment"` is the whole mechanism.** It opens
+the real camera - the one with the autofocus, the exposure and the torch - on
+both iPhone and Android, with no App Store app, no permission prompt of ours to
+refuse, and no live stream to keep alive. Most of what used to go wrong was in
+that stream.
+
+**jsQR SURVIVES AND IS NOW FED SOMETHING WORTH DECODING.** The decoder was never
+the weak part; what it was being fed was - 640px frames off a live preview,
+thirty a run, each one whatever the lens happened to be focused on. It reads one
+sharp photo now, at up to 1400px, in **two passes**: the whole frame, then the
+middle of it at full detail, because a tag photographed at arm's length is a
+small square in a big picture. Verified against real generated tags in a browser
+with no BarcodeDetector, which is the iPhone path.
+
+**AND THE OLD LOOP CALLED `form.submit()` THE INSTANT IT DECODED ANYTHING**,
+which is the hard constraint of the brief broken in one line: a code caught out
+of the corner of the lens bound a bag nobody had looked at. **Nothing in the
+scanner submits a form now**, and a test refuses `.submit(` anywhere in it.
+Filling the box is not confirming the bag; the tap that follows is the driver
+saying this is the bag in his hand.
+
+**THE BROWSER DECIDES WHETHER A CODE IS OURS, NEVER WHETHER IT IS VALID**, and
+the difference is what makes `lyndryCode()` allowed to exist. Validity is
+`bags.parseCode()`'s and a second copy in a browser would be a second rule. This
+only asks whether the thing in the photo belongs to LYNDRY at all - a driver
+photographing a wall of stickers in a laundromat can easily catch somebody
+else's QR, and pasting a competitor's web address into the box is not a decision
+to defer to the server. **A URL of ours yields its code, any other URL is
+refused, and a bare token is passed through for the server to judge.**
+
+**TWO TAGS IN ONE PHOTO ARE NEVER GUESSED BETWEEN.** Which bag he is holding is
+the entire question the step asks. BarcodeDetector returns every code it sees,
+so Android says so precisely. **jsQR finds one QR per pass and two tags confuse
+it into finding neither** - tested - so an iPhone cannot honestly say which
+happened, and the wording covers both causes. The behaviour is identical on
+both: nothing filled, nothing confirmed, take another photo.
+
+**A BAD PHOTO DOES NOT HAND BACK TYPING ON A CAMERA-ONLY STEP.** Blurry is a
+reason to take another photo, not a reason to let somebody type past a step that
+exists to prove the bag is in their hand. `letHimType()` has exactly one caller
+and it is the browser that cannot take a photo at all.
+
+**Cancelling the camera changes nothing and says nothing** - no file, no
+message, the form exactly as he left it.
+
+**The Camera.app path is unchanged and is still offered on every field.** It is
+the backup that needs nothing from us, and the crumb that brings a scan back is
+untouched.
 
 **AND ONE REASON IT DOES NOT WAS A HYPHEN. FIXED 14 SEPTEMBER.** This paragraph
 used to say "the URL regex is right". It was not, and the fault ran deeper than
