@@ -2834,7 +2834,12 @@ function historyCard(events) {
 // ---------------------------------------------------------------------------
 
 function bagRow(order, l, total, canAct, done, parents = []) {
-  const retired = Boolean(l.released_at);
+  // RETIRED MEANS THE ORDER IS FINISHED, not that a flag is set. Third screen
+  // with this rule, and the same reason as the other two: released_at is a
+  // column any code path can write, one did, and #2067's tag was described as
+  // delivered while the bag sat at a laundromat.
+  const finished = order.status === 'DELIVERED' || order.status === 'CANCELED';
+  const retired = Boolean(l.released_at) && finished;
   const url = l.code ? bags.labelUrl(l.code, l.sticker_seq) : null;
 
   // Which collected bag this one came out of. One bag in becomes any number of
@@ -2881,7 +2886,9 @@ function bagRow(order, l, total, canAct, done, parents = []) {
                    ${escapeHtml(url)}
                  </div>
                  <div style="font-size:12px;color:var(--ink-500);margin-top:3px;">
-                   Stopped working when the order was delivered.
+                   Stopped working when the order was ${
+                     order.status === 'CANCELED' ? 'called off' : 'delivered'
+                   }.
                  </div>`
               : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"
                     style="display:inline-block;font-family:var(--font-mono);font-size:12px;
@@ -7531,8 +7538,26 @@ router.post('/ops/orders/:id/label/:labelId/release', guard, may('orders.act'), 
 //   EXPIRED      the order it was on has been delivered. The code is kept so
 //                the order page can still show which sticker was on which bag,
 //                but the link is dead.
-function labelState(label) {
-  if (label.released_at) return 'EXPIRED';
+// WHICH OF THE THREE A TAG IS IN, AND THE ORDER DECIDES, NOT THE FLAG.
+//
+// Neil, 15 September: #2067's tag was listed Expired with "dead - the order was
+// delivered" beside it, on a bag sitting at a laundromat. Nothing had been
+// delivered. `released_at` is a column any code path can set and a buggy one
+// did, so reading it alone let a flag make a claim about a fact nobody checked.
+//
+// EXPIRED now requires the ORDER to be finished. A released label on an order
+// still in our hands is a contradiction rather than a state, and the truthful
+// answer is the one the tag page already gives: the bag is ours, so the tag is
+// in use. That also means a wrongly retired tag heals on both screens at once
+// rather than needing a row edited by hand.
+//
+// releaseOrder() never clears order_id, so a released label always has one and
+// nothing falls through to OUTSTANDING by losing its order.
+function labelState(label, order = null) {
+  const status = order ? order.status : (label.orders && label.orders.status) || null;
+  const finished = status === 'DELIVERED' || status === 'CANCELED';
+
+  if (label.released_at && finished) return 'EXPIRED';
   if (label.order_id) return 'IN_USE';
   return 'OUTSTANDING';
 }
@@ -7540,7 +7565,7 @@ function labelState(label) {
 const LABEL_STATES = Object.freeze({
   OUTSTANDING: { label: 'Outstanding', colour: 'var(--lilac-500)', blurb: 'Printed, not yet on a bag' },
   IN_USE: { label: 'In use', colour: 'var(--suds-500)', blurb: 'On a bag right now, QR opens' },
-  EXPIRED: { label: 'Expired', colour: 'var(--paper-300)', blurb: 'Order delivered, link dead' },
+  EXPIRED: { label: 'Expired', colour: 'var(--paper-300)', blurb: 'Order finished, link dead' },
   // Kept in step with the sheet: a tag is one printed thing however many
   // stickers are on it, so nothing here counts in fours.
 });
@@ -7557,7 +7582,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
     // sticker_seq is the tag itself, which is the thing this page is about.
     const { data: all, error: labelError } = await db
       .from('bag_labels')
-      .select('*, orders(order_number)')
+      .select('*, orders(order_number, status)')
       .is('sticker_seq', null)
       .order('printed_at', { ascending: false })
       .limit(600);
@@ -7618,7 +7643,11 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
               ? `<div style="font-family:var(--font-mono);font-size:12px;line-height:1.5;margin-top:5px;
                              color:var(--ink-500);overflow-wrap:anywhere;">
                    <s>${escapeHtml(url)}</s><br>
-                   <span style="color:var(--stain-500);font-weight:700;">dead - the order was delivered</span>
+                   <span style="color:var(--stain-500);font-weight:700;">dead - ${
+                     l.orders && l.orders.status === 'CANCELED'
+                       ? 'the order was called off'
+                       : 'the order was delivered'
+                   }</span>
                  </div>`
               : `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"
                     style="display:block;font-family:var(--font-mono);font-size:12px;line-height:1.5;
@@ -11569,4 +11598,7 @@ function notFoundPage(res, message) {
 // statusBadge goes out so a test can ask it what it would draw, rather than
 // reading this file for the shape of a rule. It is the one piece of display
 // logic here that decides something a person acts on.
-module.exports = { router, statusBadge };
+// labelState is exported for the same reason readyForPartner is: it is a pure
+// rule about what a tag is, and it decides whether a screen tells a laundromat
+// their bag was delivered. Testable without a database or a browser.
+module.exports = { router, statusBadge, labelState };

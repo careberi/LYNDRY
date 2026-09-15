@@ -393,7 +393,7 @@ async function labelDetailBody(label, { order = null, state, scans = [] }) {
       ${
         dead
           ? `<s>${esc(url)}</s><br><span style="color:var(--stain-500);font-weight:700;">
-               dead - the order was delivered
+               dead - the order was ${order && order.status === 'CANCELED' ? 'called off' : 'delivered'}
              </span>`
           : `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`
       }
