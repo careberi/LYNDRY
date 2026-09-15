@@ -563,18 +563,34 @@ button {
 .check-text { font-size: 13px; line-height: 1.5; color: var(--ink-700); }
 .check-text a { color: var(--suds-700); text-decoration: underline; }
 
-/* Links sitting ON Suds green are ink, not the usual --suds-700.
+/* A BUTTON IN THERE IS NOT A LINK IN THIS SENSE, AND THE :not() IS LOAD-BEARING.
+
+   This rule is `.card-brand a`, which is a class plus an element and therefore
+   beats `.btn-ink`, which is one class. So the ink button on the green CTA band
+   had its paper text overwritten with ink and rendered as a black rectangle
+   with black writing on it - invisible, on "Book a Pickup", the most important
+   control on all seventy town pages. Its arrow went with it, because an icon
+   mask paints in currentColor.
+
+   The bug was half-noticed once already: the rule underneath used to be
+   `.hero a.btn, .card-brand a.btn { text-decoration: none; }`, which is
+   somebody hitting exactly this collision, fixing the underline it caused and
+   not seeing that the same line was also setting a colour. Excluding buttons
+   from the match rather than patching each property they leak into is what
+   stops the next property doing it again - and it makes that rule unnecessary,
+   because .btn already sets text-decoration: none and now has nothing beating
+   it.
+
+   Links sitting ON Suds green are ink, not the usual --suds-700.
    ONE DEPARTURE FROM THE SPEC, and a deliberate one: the handoff asks for
    --suds-700 links on the green consent block, which measures 2.39:1 against
    --suds-500. That fails WCAG AA for body text by a wide margin. Ink on the
    same green is 5.92:1 and passes. The underline stays, so the link is still
    obviously a link. */
-.hero a,
-.card-brand a { color: var(--ink-900); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.hero a:hover,
-.card-brand a:hover { color: var(--suds-700); }
-/* Buttons inside those areas are not links in this sense. */
-.hero a.btn, .card-brand a.btn { text-decoration: none; }
+.hero a:not(.btn),
+.card-brand a:not(.btn) { color: var(--ink-900); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.hero a:not(.btn):hover,
+.card-brand a:not(.btn):hover { color: var(--suds-700); }
 
 /* ---------------------------------------------------------------------------
    Badge

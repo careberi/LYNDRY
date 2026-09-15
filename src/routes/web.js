@@ -167,6 +167,27 @@ const PAGES = [
     // the argument it is making.
     popup: false,
 
+    // AND IT IS NOT A PAGE TO BE FOUND. Neil, 14 September: this should not be
+    // public. It is the page we SEND to a laundromat owner somebody has already
+    // met - /ops/partners texts the link - so the URL has to keep working while
+    // the page stops being part of the website. Out of the sitemap, and it
+    // carries a noindex.
+    //
+    // NOT DISALLOWED IN robots.txt, AND THAT IS THE POINT RATHER THAN AN
+    // OVERSIGHT. Disallow stops the crawl, and a crawl is how Google reads the
+    // noindex - so a page already in the index would be blocked from ever being
+    // told to leave it, and would sit there indefinitely. Disallow is for pages
+    // nobody must fetch; noindex is for pages nobody must find. This is the
+    // second.
+    noindex: true,
+
+    // AND IT STOPS TELLING AN ADVERTISING ACCOUNT WHO READ IT. Being in PAGES
+    // is the opt-in for the Google tag, on the reasoning that every entry is a
+    // public page an ad click lands on. This one is neither of those now: no
+    // advert points at it, and the people who open it are named businesses we
+    // sent the link to.
+    tracking: false,
+
     title: 'For laundromats',
     fullTitle: 'Laundromat Partners, Wash and Fold Work from LYNDRY',
     description:

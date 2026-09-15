@@ -196,6 +196,24 @@ inline style beats the media query and the page then refuses to collapse on a
 phone. Add a modifier to `lyndry.css` instead — `.grid-2-wide`,
 `.grid-2-narrow` and so on.
 
+**A CONTEXT RULE MUST EXCLUDE BUTTONS, NOT OUT-SPECIFY THEM.** `.card-brand a`
+is a class plus an element, so it beats `.btn-ink`, which is one class - and it
+overwrote that button's paper text with ink, giving a black button with black
+writing on it. Invisible, on **Book a Pickup**, the main control on all seventy
+town pages, with its arrow gone too because an icon mask paints in
+`currentColor`. Neil found it on the live site.
+
+It had been half-noticed already: a rule reading `.hero a.btn, .card-brand a.btn
+{ text-decoration: none; }` is somebody hitting this exact collision, fixing the
+underline it caused, and not seeing that the same line also set a colour. **The
+fix is `a:not(.btn)` on the context rule** - excluding buttons from the match
+rather than patching each property they leak into, so the next property added
+there cannot do it again.
+
+The general rule: when a container styles `a`, buttons inside it are not links
+in that sense. `.btn-ink` is the only variant with paper text, so it is the only
+one that ever fails visibly - which is why this survived.
+
 **Icons go through `{{ICON_*}}` tokens or `icon()` in `layout.js`.** Never
 inline SVG path data in a page. Adding a glyph means editing `icons.css` and
 the token list, and nothing else.
@@ -470,6 +488,25 @@ already met - what their part is, what we handle, why it is worth having, and
 ten FAQs. `/ops/partners` has a box to text somebody the link, behind
 `partners.manage` rather than `partners.view` because sending something to a
 real phone is a different act from reading a list.
+
+**AND IT IS NOT PUBLIC.** Neil, 14 September. It was in the sitemap, indexable,
+carrying the Google tag, and linked from a button on `/partners` - which is the
+page strangers land on, so the pitch we send to one named owner was one click
+from the open web.
+
+It is `noindex: true` and `tracking: false` in `PAGES`, and the button is gone.
+**The URL still works, deliberately**: the whole purpose of the page is to be
+sent, and `/ops/partners` texts that link. Not public here means not findable,
+not indexed and not linked - the same treatment `/bergen` gets, and for the same
+reason.
+
+**IT IS NOT DISALLOWED IN `robots.txt`, AND THAT IS THE POINT.** The instinct is
+to add a line there and it would make things worse: `Disallow` stops the crawl,
+and a crawl is how Google reads the `noindex`. A page already in the index would
+be blocked from ever being told to leave it and would sit there indefinitely.
+**Disallow is for pages nobody may fetch; noindex is for pages nobody should
+find.** If this ever does need disallowing, it goes in after the page has
+actually dropped out of the index, never at the same time.
 
 **The same no-commercial-terms rule applies to it, and harder.** It is a sales
 page, so it is exactly where a rate would feel natural and would then be quoted
