@@ -30,7 +30,33 @@ const payments = require('../src/core/payments');
 const dispatch = require('../src/core/dispatch');
 const orders = require('../src/core/orders');
 
-const SRC = (...bits) => fs.readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8');
+// NORMALISED AT THE READ, AND THE BOUNDARY IS ASSERTED.
+//
+// This file passed on its branch and failed the moment it reached main, with
+// identical bytes on both sides. The checkout writes CRLF, so the search for a
+// bare newline-brace found nothing, returned -1, and slice(at, -1) handed back
+// the whole rest of the file - which contains the word FAILED inside a function
+// the failing assertion is not about.
+//
+// Two fixes, and the second is the one that matters: normalise the line endings
+// so the search can succeed, and make a search that fails say so. A
+// source-slicing test that cannot find its own boundary has to fail loudly
+// rather than quietly widen to the end of the file.
+const SRC = (...bits) =>
+  fs
+    .readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8')
+    .split('\r\n')
+    .join('\n');
+
+function bodyOf(src, signature) {
+  const at = src.indexOf(signature);
+  assert.notEqual(at, -1, `${signature} has moved`);
+
+  const end = src.indexOf('\n}\n', at);
+  assert.notEqual(end, -1, `could not find the end of ${signature}`);
+
+  return src.slice(at, end);
+}
 
 // #2060 as it was: collected, weighed, charged $84.00, refused.
 const held = {
@@ -171,11 +197,9 @@ test('and cash never writes WAIVED', () => {
 
 test('THE ONLY STATUS CASH EVER WRITES IS PAID, AND ONLY WHEN COVERED', () => {
   const src = SRC('core', 'payments.js');
-  const at = src.indexOf('async function resettle');
   // Comments stripped: the note explaining that a part-paid order STAYS
   // FAILED contains the word, and a naive search finds its own prose.
-  const body = src
-    .slice(at, src.indexOf('\n}\n', at))
+  const body = bodyOf(src, 'async function resettle')
     .split('\n')
     .filter((line) => !/^\s*(\/\/|\*)/.test(line))
     .join('\n');
@@ -203,8 +227,7 @@ test('EVERY REFUSAL IS IN THE CORE, not only in the form', () => {
   // The route can be posted to directly. A form that merely omits a control is
   // not a guard - the rule this codebase keeps everywhere else.
   const src = SRC('core', 'payments.js');
-  const at = src.indexOf('async function recordCash');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = bodyOf(src, 'async function recordCash');
 
   for (const reason of ['not_failed', 'not_in_our_hands', 'nothing_owed', 'bad_amount', 'more_than_owed']) {
     assert.match(body, new RegExp(reason), `recordCash does not refuse ${reason}`);
@@ -214,8 +237,7 @@ test('EVERY REFUSAL IS IN THE CORE, not only in the form', () => {
 
 test('more than is owed is refused, because the rest would be change', () => {
   const src = SRC('core', 'payments.js');
-  const at = src.indexOf('async function recordCash');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = bodyOf(src, 'async function recordCash');
   assert.match(body, /amount > outstanding/);
 });
 
@@ -230,8 +252,7 @@ test('THE SUM IS RECOMPUTED FROM THE ROWS, never incremented', () => {
   // Two people recording cash at once would each write their own idea of the
   // total. The ledger is the record; the column is a cache of it.
   const src = SRC('core', 'payments.js');
-  const at = src.indexOf('async function resettle');
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = bodyOf(src, 'async function resettle');
   assert.match(body, /forOrder\(order\.id\)/, 'resettle does not re-read the rows');
   assert.ok(!/amount_paid_cents\s*\+/.test(body), 'the cache is incremented rather than recomputed');
 });
