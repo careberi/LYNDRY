@@ -1629,20 +1629,44 @@ the eighty-first is the one somebody edits.
 **EVERY FIGURE IS READ FROM THE RUNNING SYSTEM**, the rule `/ops/process` and
 `/ops/journey` already follow. The sticker count is `bags.STICKERS_PER_TAG` -
 which CLAUDE.md is emphatic about, because it went from four to three - and the
-turnaround and both phone numbers come from `site` and `config`. A test refuses
-a typed sticker count and a typed phone number.
+turnaround and the business number come from `site`. A test refuses a typed
+sticker count and a typed phone number.
 
-**THE ESCALATION NUMBER IS NEIL'S OWN MOBILE, AND IT IS OPTIONAL.** He put it in
-the guide deliberately, for a laundromat that cannot get through on the business
-line. It renders **only if `SUPPORT_PHONE` is set**, so blanking that takes it
-off the page with no code change. It is worth knowing that this is the one place
-that number reaches a page with no login on it - the rule everywhere else is
-that it is never published, and this is a deliberate exception rather than a
-lapse.
+**THE OWNER CELL IS NEVER ON THIS PAGE.** Neil, 15 September: show only the
+business number. His own guide had his mobile on it as an escalation for a
+laundromat that could not get through on the business line, and that is a
+reasonable thing to want and the wrong page for it - this one has no login on
+it, a customer can open their own bag tag and reach it, so a personal mobile
+here is published to anybody holding a sticker. The rule everywhere else in this
+file is that Neil's number lives in `.env` and is never published; this is no
+longer an exception to it.
 
-**The label translates; the guide does not.** One entry in the `ES` table gives
-the link its Spanish label, because that sits on a bilingual screen. The guide
-behind it is English only for now.
+**The guide does not read the setting at all**, rather than rendering it only
+when it is set. There is no value anybody could put in `SUPPORT_PHONE` that
+would put it back, which is the difference between a rule and a default, and a
+test refuses both the setting and the old variable by name.
+
+**THE GUIDE IS FULLY BILINGUAL, LIKE THE BAG PAGES UNDER IT.** Neil's ask, 15
+September: the same eleven steps and the same four rules in Spanish, because the
+bag page already switches language and a guide that did not would be an English
+page hanging off a Spanish screen.
+
+**EVERY VISIBLE STRING IS AN `{ en, es }` PAIR**, picked by `s()` when it is
+escaped text and `r()` when it carries markup. Not a lookup with a fallback: a
+missing Spanish string renders as `undefined`, which is loud, where a fallback
+would render quiet English in the middle of Spanish and look finished. On an
+instruction about not mixing two customers' laundry, that is the difference
+between a blemish and a page nobody reads twice.
+
+**The turnaround needed a Spanish form of its own.** It is read from
+`site.turnaround`, which is English prose, so `TURNAROUND_ES` maps it - without
+that the page would read "LYNDRY garantiza entrega next day". An unmapped
+turnaround falls through to the English rather than to `undefined`, because a
+visible oddity is better than a hole.
+
+**The Spanish is plain ASCII, like the sixty `ES` entries in `bag.js`.** Two
+conventions on one screen reads as a mistake, and the link sits directly under
+those entries.
 
 **Partners are added by hand and are not the same thing as enquiries.**
 `partners` is the short list of businesses we work with, typed in by Neil;

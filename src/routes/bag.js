@@ -1103,7 +1103,7 @@ router.get('/processing', (req, res) => {
       lang,
       guideLink: false,
       title: 'Processing guide',
-      body: processingGuide.processingGuideBody(),
+      body: processingGuide.processingGuideBody(lang),
     })
   );
 });

@@ -10,7 +10,8 @@
 //   not a button        no form, no submit, no confirmation
 //   no state change     opening it, refreshing it and going Back do nothing
 //   no second scan      it takes no code, no token and no sign-in
-//   nothing private     it takes no parameters, so there is nothing to leak
+//   nothing private     it takes no code and no order, so there is nothing
+//                       to leak - only a language, which decides wording
 //   not duplicated      one page, linked from the shared shell
 //
 // Nothing here touches the database.
@@ -23,7 +24,7 @@ const path = require('node:path');
 
 const bags = require('../src/core/bags');
 const { site } = require('../src/web/site');
-const { processingGuideBody } = require('../src/web/processing-guide');
+const { processingGuideBody, TURNAROUND_ES } = require('../src/web/processing-guide');
 
 const SRC = (...bits) =>
   fs
@@ -92,10 +93,12 @@ test('AND THE PAGE HAS NOTHING TO SUBMIT', () => {
 
 // --- it needs nothing to open ------------------------------------------------
 
-test('IT TAKES NO PARAMETERS AT ALL', () => {
-  // Which is what makes "nothing private" true by construction rather than by
-  // care: there is nothing for it to look up.
-  assert.equal(processingGuideBody.length, 0, 'the guide takes an argument');
+test('IT TAKES NOTHING BUT A LANGUAGE', () => {
+  // No code, no token, no order - which is what makes "nothing private" true by
+  // construction rather than by care: there is nothing for it to look up. The
+  // language is the one argument, and it decides wording and nothing else.
+  assert.equal(processingGuideBody.length, 0, 'the guide takes a required argument');
+  assert.notEqual(processingGuideBody('en'), processingGuideBody('es'));
 
   const at = bagRoute.indexOf("router.get('/processing'");
   const body = bagRoute.slice(at, bagRoute.indexOf('\n});\n', at));
@@ -138,23 +141,87 @@ test('THE STICKER COUNT IS THE CONSTANT, never a typed number', () => {
   assert.ok(!/three detachable/i.test(src), 'the sticker count is typed into the copy');
 });
 
-test('and the turnaround and the phone numbers are read, not typed', () => {
+test('and the turnaround and the phone number are read, not typed', () => {
   assert.match(guide, new RegExp(site.turnaround));
 
   const src = SRC('web', 'processing-guide.js').replace(/^\s*\/\/.*$/gm, '');
   assert.match(src, /site\.turnaround/);
   assert.match(src, /site\.callPhoneDisplay/);
-  assert.match(src, /config\.supportPhone/);
   assert.ok(!/\d{3}-\d{3}-\d{4}/.test(src), 'a phone number is typed into the guide');
 });
 
-test('THE ESCALATION NUMBER IS OPTIONAL AND FORMATTED', () => {
-  // It is Neil's own mobile. It renders only when SUPPORT_PHONE is set, so
-  // blanking that takes it off the page without a code change - and it goes
-  // through the display lock like every other number.
-  const src = SRC('web', 'processing-guide.js');
-  assert.match(src, /format\.displayPhone\(config\.supportPhone\)/);
-  assert.match(src, /ownerCell\s*\n?\s*\?/, 'the escalation line is unconditional');
+test('THE OWNER CELL IS NEVER ON THIS PAGE', () => {
+  // Neil, 15 September: only the business number. His guide had the owner cell
+  // as an escalation for a laundromat that could not get through - but this
+  // page has no login on it and a customer can open their own bag tag and reach
+  // it, so a personal mobile here is published to anybody holding a sticker.
+  //
+  // The guide does not read the setting AT ALL, so there is no value anybody
+  // could set that would put it back.
+  const src = SRC('web', 'processing-guide.js').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/supportPhone/.test(src), 'the guide reads the owner cell setting');
+  assert.ok(!/ownerCell/.test(src), 'the owner cell survived');
+
+  for (const lang of ['en', 'es']) {
+    const body = processingGuideBody(lang);
+    const numbers = [...new Set(body.match(/\d{3}-\d{3}-\d{4}/g) || [])];
+    assert.deepEqual(numbers, [site.callPhoneDisplay], `${lang} shows more than the business line`);
+  }
+});
+
+// --- both languages ----------------------------------------------------------
+
+test('THE GUIDE IS FULLY TRANSLATED, and a gap cannot hide', () => {
+  // Neil, 15 September: the bag page already switches language, so the guide
+  // has to match. Every string is an { en, es } pair rather than a lookup that
+  // falls back - a miss renders as undefined rather than as quiet English,
+  // which on an instruction about not mixing two customers' laundry is the
+  // difference between a blemish and a page that looks translated and is not.
+  const es = processingGuideBody('es');
+
+  assert.ok(!/undefined/.test(es), 'a Spanish string is missing');
+  assert.match(es, /Guia de procesamiento/);
+  assert.match(es, /Para la lavanderia/);
+});
+
+test('with the same eleven steps and the same four rules', () => {
+  const es = processingGuideBody('es');
+
+  const steps = [...es.matchAll(/>Paso (\d+)</g)].map((m) => Number(m[1]));
+  assert.deepEqual(steps, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+
+  for (const rule of [
+    /Nunca mezcle pedidos de LYNDRY/,
+    /sin calcomania/,
+    /bolsa desechable en que llego/,
+    /deben ser igual a las bolsas terminadas/,
+  ]) {
+    assert.match(es, rule);
+  }
+});
+
+test('and the Spanish carries no accents, like the rest of the bag pages', () => {
+  // bag.js's sixty ES entries are plain ASCII and this link sits directly under
+  // them. Two conventions on one screen reads as a mistake.
+  const es = processingGuideBody('es');
+  const accented = es.match(/[À-ɏ]/g) || [];
+  assert.deepEqual([...new Set(accented)], [], 'an accent crept into the Spanish');
+});
+
+test('THE TURNAROUND IS SAID IN SPANISH TOO', () => {
+  // It is read from site.turnaround, so it needed a Spanish form or the page
+  // would read "LYNDRY garantiza entrega next day".
+  assert.equal(TURNAROUND_ES[site.turnaround], 'al dia siguiente');
+  assert.match(processingGuideBody('es'), /entrega al dia siguiente/);
+
+  // An unmapped turnaround falls through to the English rather than to
+  // undefined: visible on the page, which is the point.
+  assert.equal(TURNAROUND_ES.somethingElse, undefined);
+});
+
+test('and the page follows the language the bag page was in', () => {
+  const route = SRC('routes', 'bag.js');
+  assert.match(route, /processingGuideBody\(lang\)/, 'the guide ignores the language');
 });
 
 // --- the guide itself --------------------------------------------------------
