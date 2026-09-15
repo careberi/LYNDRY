@@ -1,4 +1,5 @@
 'use strict';
+const format = require('../core/format');
 
 // ---------------------------------------------------------------------------
 // The three pre-launch screens: the switch, promotions, and the text blast.
@@ -400,7 +401,7 @@ ${
         reminded their pickup is tomorrow.
         ${
           ran
-            ? `Last ran <strong>${escapeHtml(booking.readableDate(ran))}</strong>.`
+            ? `Last ran <strong>${escapeHtml(format.displayDate(ran, { empty: '' }))}</strong>.`
             : `<strong>Has not run yet.</strong>`
         }
         ${recent ? '' : 'It runs between 6pm and 9pm New Jersey time, every evening.'}
@@ -518,7 +519,7 @@ ${
   <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 10px;">
     ${
       settings.opens_on
-        ? `Booking now, collecting from ${escapeHtml(String(settings.opens_on).slice(0, 10))}`
+        ? `Booking now, collecting from ${escapeHtml(format.displayDate(String(settings.opens_on).slice(0, 10), { empty: '' }))}`
         : 'Collecting any day'
     }
   </h2>
@@ -801,7 +802,7 @@ function promotionDetailBody({ promo, holders, notice, problem, popupOn = false,
   const when = (iso) => {
     if (!iso) return '';
     const d = new Date(iso);
-    return `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short', timeZone: 'America/New_York' })}`;
+    return format.displayDate(d, { empty: '' });
   };
 
   const cell = 'padding:12px 10px;border-bottom:1px solid var(--ink-100);';
@@ -1204,7 +1205,7 @@ function broadcastBody({ counts, recent, notice, problem, draft = '' }) {
       <tr>
         <td style="padding:11px 12px 11px 0;border-bottom:1px solid var(--ink-100);
                    font-family:var(--font-mono);font-size:13px;white-space:nowrap;vertical-align:top;">
-          ${escapeHtml(new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}
+          ${escapeHtml(format.displayDate(b.created_at, { empty: '' }))}
         </td>
         <td style="padding:11px 12px 11px 0;border-bottom:1px solid var(--ink-100);vertical-align:top;">
           ${escapeHtml(b.body)}

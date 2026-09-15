@@ -1,4 +1,5 @@
 'use strict';
+const format = require('../core/format');
 
 const { escapeHtml } = require('./layout');
 
@@ -22,28 +23,18 @@ const { escapeHtml } = require('./layout');
 // conversation.
 // ---------------------------------------------------------------------------
 
+// MM/DD/YYYY with the time beside it, through the one owner. Both of these
+// used to build their own en-GB string with a weekday in it, which is a third
+// shape of a date on a screen somebody opens straight after the board.
 function when(date) {
-  if (!date) return '';
-  const d = date instanceof Date ? date : new Date(date);
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(d);
+  return date ? format.displayDateTime(date, { empty: '' }) : '';
 }
 
+// MIDDAY, NOT MIDNIGHT, and that has to stay. A date-only string pinned to
+// T12:00:00Z survives the conversion to New Jersey without sliding onto the
+// day before, which midnight does not.
 function onlyDay(iso) {
-  if (!iso) return '';
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(`${iso}T12:00:00Z`));
+  return iso ? format.displayDate(String(iso).slice(0, 10), { empty: '' }) : '';
 }
 
 const digitsOf = (phone) => String(phone || '').replace(/\D/g, '');

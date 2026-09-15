@@ -4011,6 +4011,58 @@ any question and reaches for en dashes however firmly the prompt asks it not to.
 Em dashes in comments and on web pages are fine and are the house style. This
 rule is only about text messages.
 
+## How a date and a phone number are written
+
+**MM/DD/YYYY AND XXX-XXX-XXXX, EVERYWHERE A PERSON SEES ONE.** Neil's decision
+lock, 14 September. `src/core/format.js` is the single owner -
+`displayDate()`, `displayDateTime()`, `displayTime()`, `displayPhone()` - and
+everything else delegates to it.
+
+**DISPLAY ONLY, AND THAT IS THE WHOLE CONSTRAINT.** Dates are still stored as
+ISO date strings and `timestamptz`; phone numbers are still `+1` and ten digits,
+which is what `normalisePhone()` writes, what the carrier sends from, and what
+an inbound text is matched against. **Never pass a dashed number to Telnyx or
+Stripe** - that is the one way this change could break something real, which is
+why the formatting lives in its own file nowhere near the code that sends.
+
+**IT REPLACED SEVEN FORMATTERS.** Three for phones (`core/phone.js`,
+`web/site.js`, and hand-written brackets in the form placeholders) and four for
+dates (`shortDate`, `longDate`, `dateTime`, and the portal's own `mdy`). A rule
+with seven copies is seven rules, and it showed: one screen said
+`(201) 554-1877` while another said `+12015541877`, and `Tue 26 Aug` sat next to
+`Tuesday 26 August 2026`.
+
+**A DATE-ONLY STRING IS READ OFF THE STRING, NEVER PARSED.** `2026-09-15` as a
+`Date` is UTC midnight, which is the evening of the 14th in New Jersey - so it
+renders as the day before for everybody who matters. A real timestamp genuinely
+needs converting and is converted to New Jersey, because Railway runs in UTC.
+
+**THE TIME FORMAT IS NOT WHAT CHANGED.** Neil's rule: when a time is shown too,
+the date takes the new shape and the time keeps the one it had. Most of ops
+reads `10:31 PM`; the order console's stage rail has always read `22:31`. Both
+survive, via `{ hour12: false }`.
+
+**A NUMBER THAT IS NOT A US NUMBER IS SHOWN AS IT WAS GIVEN**, never forced into
+the shape - a half-typed number displayed as though it were whole is worse than
+an obviously odd one, because somebody will read it out. **A missing date shows
+the not-set state and is never invented.**
+
+**`<input type="date">` KEEPS ITS ISO VALUE.** The browser requires `YYYY-MM-DD`
+in the attribute and displays it in the visitor's own locale. Three of those
+exist and none of them is ours to reformat.
+
+**THE ONE DELIBERATE EXCEPTION IS A TEXT MESSAGE.** `booking.readableDate()`
+still writes "Wednesday 16 Sep" and every confirmation, reminder and weigh-in
+text is built on it. A text is prose read on a phone, and `09/16/2026` in the
+middle of a sentence reads as a form - and the weekday is load-bearing, because
+it is how a customer checks we understood which day they meant. **A screen
+reaching for `readableDate()` is the drift this lock exists to prevent**, and a
+test refuses it.
+
+**WHAT THE LOCK COSTS, so nobody is surprised:** the weekday is gone from every
+ops screen. "Tuesday 26 August" told a driver which day a round was without
+counting, and `09/15/2026` does not.
+
 ## Business facts
 
 - **Service:** wash, dry and fold only

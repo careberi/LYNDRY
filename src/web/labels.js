@@ -1,5 +1,7 @@
 'use strict';
 
+const format = require('../core/format');
+
 const QRCode = require('qrcode');
 
 const bags = require('../core/bags');
@@ -421,7 +423,7 @@ ${
     <div style="display:flex;flex-wrap:wrap;gap:10px 18px;padding:10px 0;
                 border-bottom:1px solid var(--ink-100);font-size:14px;">
       <span style="font-variant-numeric:tabular-nums;color:var(--ink-500);min-width:150px;">
-        ${esc(String(sc.created_at).slice(0, 16).replace('T', ' '))}
+        ${esc(format.displayDateTime(sc.created_at, { empty: '' }))}
       </span>
       <span style="font-weight:600;">${esc(sc.outcome || '')}</span>
     </div>`

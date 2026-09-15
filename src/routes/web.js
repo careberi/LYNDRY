@@ -154,7 +154,7 @@ const PAGES = [
     path: '/contact',
     file: 'contact.html',
     title: 'Contact',
-    fullTitle: 'Contact LYNDRY, Text (201) 554-1877 | Bergen County Laundry',
+    fullTitle: `Contact LYNDRY, Text ${site.publicPhoneDisplay} | Bergen County Laundry`,
     description: `Book by text at ${site.publicPhoneDisplay}. Support call ${site.callPhoneDisplay}. Email ${site.email}.`,
   },
   {

@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '6 September 2026';  // a person can take a conversation over from the AI
+const REVIEWED = '09/06/2026';  // a person can take a conversation over from the AI
 
 function esc(s) {
   return String(s == null ? '' : s)

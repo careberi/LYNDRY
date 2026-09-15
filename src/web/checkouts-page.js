@@ -1,4 +1,5 @@
 'use strict';
+const format = require('../core/format');
 
 // ---------------------------------------------------------------------------
 // UNFINISHED ONLINE CHECKOUTS.
@@ -33,7 +34,9 @@ function when(intent) {
   const date = bookingIntents.firstDateFor(intent);
   if (!date) return 'No day chosen';
 
-  const readable = booking.readableDate(date) || date;
+  // MM/DD/YYYY, not readableDate(). That one writes 'Monday 14 Sep', which is
+  // right in a text message and wrong in a column - see src/core/format.js.
+  const readable = format.displayDate(date, { empty: '' }) || date;
   const slot = booking.windowFor(date, intent.pickup_time || '');
   const window = slot
     ? booking.arrivalWindow({ pickup_window_start: slot.start, pickup_window_end: slot.end })
