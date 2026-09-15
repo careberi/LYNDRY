@@ -129,6 +129,12 @@ function priceBlock() {
         after we pick it up, and your card is charged once, after we weigh it.
         Nothing is charged when you book. No delivery fee and no membership.
       </p>
+      <p style="margin-top:14px;font-size:18px;line-height:1.6;color:var(--ink-800);max-width:52ch;">
+        On a subscription it is ${escapeHtml(site.subscriptionPricePerLb)} a pound,
+        with pickups ${escapeHtml(site.subscriptionFrequencies)}. Same
+        ${escapeHtml(MINIMUM)} minimum, same charge after we weigh it. It is a
+        rate, not a membership: nothing to join and no minimum number of pickups.
+      </p>
       <p style="margin-top:22px;font-size:16px;">
         <a href="/pricing">See the full wash and fold pricing</a>.
       </p>

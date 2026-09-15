@@ -90,7 +90,15 @@ const PAGES = [
           ],
           [
             'Is there a subscription?',
-            'No. There is no membership and no minimum number of pickups. You pay for the laundry you send.',
+            // A RATE, NOT A MEMBERSHIP, and the distinction is Neil's. There is
+            // a cheaper per-pound rate for people who want pickups booked
+            // automatically; there is still no club, no joining fee and no
+            // minimum number of pickups, which is why "no membership" survives
+            // everywhere else on the site.
+            `Yes, and it is a rate rather than a membership. A one-time pickup is ` +
+              `${site.pricePerLb} a pound. A subscription is ${site.subscriptionPricePerLb} a pound ` +
+              `with pickups ${site.subscriptionFrequencies}. There is nothing to join, no joining fee ` +
+              `and no minimum number of pickups, and you can change how often we come or cancel at any time.`,
           ],
         ]),
       ]),
@@ -98,7 +106,7 @@ const PAGES = [
     // "charged once on delivery", which is the model that was replaced when the
     // charge point moved to the laundromat's scale - and the same brief says not
     // to change the charge rule. The rule wins over the sentence describing it.
-    description: `${site.pricePerLb} a pound, $25 minimum. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
+    description: `${site.pricePerLb} a pound, or ${site.subscriptionPricePerLb} on a subscription. $25 minimum. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
   },
   {
     path: '/faq',
@@ -131,7 +139,7 @@ const PAGES = [
           ],
           [
             'How does the price work?',
-            '{{PRICE_PER_LB}} a pound, weighed after we pick it up. There is no subscription and no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed at the laundromat, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we take up to {{MAX_ORDER}} in one pickup.',
+            '{{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with pickups {{SUBSCRIPTION_FREQUENCIES}}. A subscription is a rate, not a membership: nothing to join and no minimum number of pickups. There is no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed at the laundromat, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we take up to {{MAX_ORDER}} in one pickup.',
           ],
           [
             'What bags can I put it in?',
@@ -885,12 +893,13 @@ router.get('/llms.txt', (req, res) => {
     '',
     '## What it costs',
     '',
-    `- ${site.pricePerLb} per pound, weighed after pickup`,
+    `- ${site.pricePerLb} per pound for a one-time pickup, weighed after pickup`,
+    `- ${site.subscriptionPricePerLb} per pound on a subscription, with pickups ${site.subscriptionFrequencies}`,
     `- ${tokens.MINIMUM} minimum on a paid order`,
     `- Up to ${site.maxOrder} in one pickup`,
     `- A typical bag is ${site.typicalBagWeight}, which comes to about ${site.estimateRange}`,
     '- No delivery fee',
-    '- No subscription and no membership',
+    '- No membership. A subscription is a lower rate, not a club: nothing to join, no joining fee, no minimum number of pickups',
     '',
     '## How it works',
     '',
