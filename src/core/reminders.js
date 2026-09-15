@@ -3,6 +3,7 @@
 const db = require('../db');
 const orders = require('./orders');
 const booking = require('./booking');
+const subscription = require('./subscription');
 const notify = require('./notify');
 const dispatch = require('./dispatch');
 const billing = require('./billing');
@@ -142,9 +143,37 @@ function reminderMessage(order) {
   const when = booking.arrivalWindow(order);
   const spot = spotOf(order);
 
-  const head = when
-    ? `Reminder: we're picking up your laundry tomorrow, ${when}.`
-    : `Reminder: we're picking up your laundry tomorrow.`;
+  // A SUBSCRIPTION PICKUP SAYS SO. Neil's rule: a subscription order is
+  // identifiable everywhere a customer meets one, and the reminder is the last
+  // message before a van arrives.
+  //
+  // It is one word in the sentence they were already getting rather than a
+  // sentence of its own, because this message has a two-segment ceiling that a
+  // standing order's SKIP line and the $25 hold clause already push against.
+  //
+  // READ OFF THE ORDER, never off the customer. Somebody who cancelled
+  // yesterday still has tomorrow's pickup at the rate they were sold, and it is
+  // still a Subscription pickup - which is exactly what Neil's "cancels after
+  // the reminder" case asks for.
+  // IT REPLACES THE OPENER RATHER THAN BEING ADDED TO IT, and that is the whole
+  // reason this reads the way it does.
+  //
+  // The obvious version - "we're picking up your Subscription laundry" - is
+  // thirteen characters longer, and the standing-order worst case this file is
+  // measured against already sat at 305 of the 306 that fit in two segments.
+  // Every pickup a subscription books now carries a plan, so that is not an
+  // edge case, it is the ordinary one: it would have put a third segment on
+  // every subscriber's reminder, every week, for ever.
+  //
+  // Naming the plan in place of "we're picking up" is two characters SHORTER
+  // than the sentence it replaces, so it costs nothing and says more.
+  const head = subscription.isSubscriptionOrder(order)
+    ? when
+      ? `Reminder: your Subscription pickup is tomorrow, ${when}.`
+      : `Reminder: your Subscription pickup is tomorrow.`
+    : when
+      ? `Reminder: we're picking up your laundry tomorrow, ${when}.`
+      : `Reminder: we're picking up your laundry tomorrow.`;
 
   // Handed over in person, so there is no bag to leave anywhere.
   const where =
@@ -206,6 +235,13 @@ async function sendDue({ date = null } = {}) {
     .select(
       'id, order_number, pickup_date, pickup_window_start, pickup_window_end, ' +
         'pickup_method, preferences, created_at, ' +
+        // WHICH PLAN, or the reminder cannot say. An unselected column reads as
+        // undefined, which is indistinguishable from a one-time pickup - so
+        // leaving it out would not break anything loudly, it would quietly send
+        // every subscriber a reminder that does not mention their plan. That
+        // trap has bitten this codebase eleven times and this is the twelfth
+        // place it could have.
+        'subscription_id, ' +
         `${CARD_FIELDS}, ` +
         // customer_id is what the sibling half groups on. Unselected it is
         // undefined, nobody is blocked, and this gate quietly does half its job.

@@ -7,6 +7,7 @@ const cardChase = require('./card-chase');
 const booking = require('./booking');
 const issues = require('./issues');
 const recurring = require('./recurring');
+const subscription = require('./subscription');
 const settings = require('./settings');
 const wash = require('./wash');
 const geocode = require('./geocode');
@@ -38,15 +39,49 @@ const { readableDate, dateProblem, timeProblem, normaliseTime, hasAddress } = bo
 // --- create_order -----------------------------------------------------------
 
 async function createOrder(customer, input) {
-  // The rules live in src/core/booking.js so the website and this agree. All
-  // that happens here is turning the result into a sentence.
-  const result = await booking.bookPickup(customer, {
-    pickupDate: input.pickup_date,
-    pickupTime: input.pickup_time,
-    pickupMethod: input.pickup_method,
-    bagCount: input.bag_count,
-    notes: input.notes,
+  // DID THEY ACTUALLY CHOOSE A SUBSCRIPTION?
+  //
+  // Both halves are required and the check is deliberately strict: the plan has
+  // to say SUBSCRIPTION and the frequency has to be one of the three. Anything
+  // else - a missing plan, a model that answered "weekly-ish", an older
+  // conversation from before this existed - is a one-time pickup.
+  //
+  // It fails towards the DEARER option on purpose. Charging $2.00 to somebody
+  // who meant to subscribe is a conversation; enrolling somebody who did not
+  // ask is a subscription they never agreed to and a chargeback. Neil's rule:
+  // the customer must intentionally choose it.
+  const subscribing = subscription.chosenWithFrequency({
+    plan: input.plan,
+    cadence: input.frequency,
   });
+
+  // A SUBSCRIPTION IS BOOKED THROUGH THE SAME DOOR AS THE WEBSITE'S.
+  //
+  // recurring.bookAndSchedule() creates the first pickup and the arrangement
+  // together, in that order, and prices the pickup as a subscription one - so
+  // the customer gets $1.80 on the very first collection, which is Neil's rule.
+  // Reusing it is what stops the AI growing a second, quietly different way to
+  // start a subscription.
+  //
+  // The weekday comes off the date they agreed, so "every week" means every
+  // week on the day they just booked. Nobody is asked which weekday twice.
+  const result = subscribing
+    ? await recurring.bookAndSchedule(customer, {
+        pickupDate: input.pickup_date,
+        pickupTime: input.pickup_time,
+        notes: input.notes,
+        cadence: input.frequency,
+        weekdays: [recurring.weekdayOf(input.pickup_date)],
+      })
+    : // The rules live in src/core/booking.js so the website and this agree. All
+      // that happens here is turning the result into a sentence.
+      await booking.bookPickup(customer, {
+        pickupDate: input.pickup_date,
+        pickupTime: input.pickup_time,
+        pickupMethod: input.pickup_method,
+        bagCount: input.bag_count,
+        notes: input.notes,
+      });
 
   if (!result.ok) {
     switch (result.reason) {
