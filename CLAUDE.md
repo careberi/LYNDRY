@@ -1955,10 +1955,68 @@ it into finding neither** - tested - so an iPhone cannot honestly say which
 happened, and the wording covers both causes. The behaviour is identical on
 both: nothing filled, nothing confirmed, take another photo.
 
-**A BAD PHOTO DOES NOT HAND BACK TYPING ON A CAMERA-ONLY STEP.** Blurry is a
-reason to take another photo, not a reason to let somebody type past a step that
-exists to prove the bag is in their hand. `letHimType()` has exactly one caller
-and it is the browser that cannot take a photo at all.
+**A BAD READ HANDS BACK TYPING NOW, AND THAT REVERSES WHAT THIS FILE SAID
+UNTIL 15 SEPTEMBER.** It read: *"A BAD PHOTO DOES NOT HAND BACK TYPING ON A
+CAMERA-ONLY STEP. Blurry is a reason to take another photo, not a reason to let
+somebody type past a step that exists to prove the bag is in their hand.
+`letHimType()` has exactly one caller and it is the browser that cannot take a
+photo at all."*
+
+**ORDER #2064 IS WHAT THAT RULE LOOKS LIKE WHEN THE PHOTO NEVER WORKS.** Sahrish
+Khan's two bags came back off Fancy K, reached her door on Scott Ct, and the
+order sat on **READY** with nothing recording any of it. The old rule assumed a
+driver who can take a better photo; it has no answer for a tag that will not
+read at all.
+
+**THE SCAN IS THE FIRST OF FOUR STEPS, WHICH IS WHY IT FROZE THE WHOLE ROUTE.**
+The per-bag walk is scan, weigh, clip, aboard - and the scan card has exactly one
+control on it. No scan meant no weigh, no clip and no `loaded_at`, and "every bag
+is aboard" refuses any bag that is not loaded, so `outForDelivery()` was never
+reached. Both stickers had `collected_at` from the list and `loaded_at` null,
+which is the signature of this.
+
+**A STRANDED STOP IS THE WORSE FAILURE, and it is worse in the direction that
+matters**: the laundry moves either way, and the only question is whether the
+system knows. What typing costs is a weaker proof; what it buys is a route that
+always has a next step.
+
+**AND IT IS NOT MUCH WEAKER.** The code is printed under the QR precisely so it
+can be read off the bag in his hand, so typing it is still a claim about a
+sticker he is holding rather than a way of skipping the bag - which is the thing
+the step actually exists to stop.
+
+**EVERY BRANCH THAT ENDS WITHOUT A CODE IN THE BOX NOW OFFERS THE BOX** - two
+tags in frame, no tag found, and the decoder itself falling over - so
+`letHimType()` has four callers and a test names each one. The camera button is
+still first and still the filled one; nothing is auto-filled and nothing is
+submitted.
+
+**THE CRUMB IS DROPPED ON EVERY DRIVER SCREEN, not only ones with a scan box.**
+It used to sit inside the "are there any scan fields" test, and the walk through
+a bag is four screens of which one has a field - so a driver who reached for his
+phone's own camera while standing on the weigh step, the clip step or the stop
+card left no crumb, `/o/<code>` had nowhere to send him, and he was stranded on
+the laundromat's page with no way back to his route. That is the second half of
+what #2064 showed. Dropping it on every load also **refreshes** it, which matters
+more than the fifteen minutes does: a laundromat stop easily runs longer than the
+crumb's life.
+
+**AND THE STICKER NUMBER SURVIVES THE ROUND TRIP, which it did not.** A printed
+QR encodes `/o/<code>?t=<sig>&s=<number>`, so the number rides in the query and
+the path is the bare tag - and `/o/` handed back the bare code. A driver who
+scanned `WZ7MZ8-1` with his phone's camera landed on his route screen with
+`WZ7MZ8` in the box, and the step was asking which STICKER, not which tag. On a
+tag whose three stickers are three different bags the bare code does not answer
+the question at all. **The in-app scanner had always reassembled it**, so one
+sticker gave two different answers depending on which camera read it; this was
+the wrong one. Express hands back an array for a repeated `?s=`, so the shape is
+checked rather than trusted and anything else falls back to the bare code.
+
+**THE CODE UNDER THE QR CONTAINS DIGITS THAT READ AS LETTERS.** Sahrish's second
+bag is `FA5PP1` - a five, not an S - and it was read back as `FASPP1`.
+`normaliseCode()` folds O to zero and I and L to one, which are the three that
+were thought worth folding; S to 5 is not folded, and nor is 5 to S. Worth
+knowing before somebody reports a typed code as a broken tag.
 
 **Cancelling the camera changes nothing and says nothing** - no file, no
 message, the form exactly as he left it.

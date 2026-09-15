@@ -1164,7 +1164,27 @@ router.get('/o/:code', async (req, res, next) => {
     // Checked AFTER the signature above, so a guessed code cannot bounce
     // somebody into ops, and BEFORE the scan is recorded, because a driver
     // passing through is not a laundromat reading a bag's instructions.
-    const back = scanner.scanReturn(readCookie(req, scanner.CRUMB), code);
+    // THE STICKER NUMBER GOES BACK WITH IT, AND IT USED TO BE DROPPED HERE.
+    //
+    // A printed QR encodes `/o/<code>?t=<sig>&s=<number>`, so the path is the
+    // bare tag and the number rides in the query. This handed back `code`
+    // alone - so a driver who scanned WZ7MZ8-1 with his phone's own camera
+    // landed on the route screen with WZ7MZ8 in the box, and the step was
+    // asking which STICKER, not which tag. On a tag whose three stickers are
+    // three different bags, the bare code does not answer the question at all.
+    //
+    // The in-app scanner has always reassembled it - codeFrom() in scanner.js
+    // reads the same `s=` and puts the hyphen back - so the two paths gave two
+    // different answers for one sticker. This is the one that was wrong.
+    //
+    // Express hands back an array for a repeated `?s=`, so the shape is checked
+    // rather than trusted: anything that is not one or two digits is ignored
+    // and the bare code goes back exactly as it did before.
+    const seqForBox = /^\d{1,2}$/.test(String(askedSeq || '')) ? String(askedSeq) : null;
+    const back = scanner.scanReturn(
+      readCookie(req, scanner.CRUMB),
+      seqForBox ? `${code}-${seqForBox}` : code
+    );
     if (back) {
       // Spent. The screen he lands on drops a fresh one, so the next bag works
       // the same way and a stale path cannot send him somewhere he has left.
