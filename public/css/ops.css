@@ -753,3 +753,143 @@ body > main.container {
 
 /* A card that is a link keeps no lift and no shadow. */
 .ops-terminal a .card:hover { transform: none; box-shadow: none; }
+
+/* ===========================================================================
+   THE OLD LOOK, DRAWN INLINE, ON TOP OF THE NEW ONE.
+
+   Neil, 14 September, reading it on his phone: cream paper, giant display
+   type, thick black outlines and hard shadows still showing through the grey
+   terminal.
+
+   He is right, and the reason is the thing that already bit once on headings.
+   The ops markup writes its look INLINE - 69 display-font declarations, 47
+   shadows, 27 cream backgrounds - and an inline style beats every ordinary
+   rule. Slices two to six restyled the primitives by class, so everything a
+   page painted on itself came straight back through.
+
+   THESE RULES MATCH THE INLINE STRING, NOT THE ELEMENT. [style*="..."] is the
+   only way to reach a declaration a page wrote on itself, and it is the point
+   of using it here: it lets this file neutralise CREAM without touching the
+   red of an exception banner or the amber of a held order. A blanket
+   background rule would have flattened both, and the one thing that must stay
+   loud is the line that says somebody has not paid.
+
+   THE REAL FIX IS TO STOP WRITING STYLE ATTRIBUTES IN THE MARKUP. That is a
+   rewrite of every ops page body and it is not this change; this is what makes
+   the screens right today without touching a single page's structure.
+   =========================================================================== */
+
+/* --- cream becomes a white panel -----------------------------------------
+
+   THE PROPERTY NAME IS IN THE MATCH, and it has to be. Matching the bare token
+   caught the red issues banner, whose inline style reads
+   `background:var(--stain-500);color:var(--paper-050);` - cream as the TEXT
+   colour on a red ground. The rule painted its background white, leaving white
+   text on white: the one line on the board that must never go quiet, gone.
+
+   Caught by rendering the real banner markup rather than a tidy copy of it.
+   Matching `background:` and `background-color:` explicitly cannot make that
+   mistake, because a colour declaration no longer looks like a background one. */
+.ops-terminal [style*="background:var(--paper-000)"],
+.ops-terminal [style*="background:var(--paper-050)"],
+.ops-terminal [style*="background:var(--paper-100)"],
+.ops-terminal [style*="background:var(--paper-200)"],
+.ops-terminal [style*="background-color:var(--paper-000)"],
+.ops-terminal [style*="background-color:var(--paper-050)"],
+.ops-terminal [style*="background-color:var(--paper-100)"],
+.ops-terminal [style*="background-color:var(--paper-200)"] {
+  background-color: var(--c-row) !important;
+}
+
+/* --- thick ink outlines become hairlines --------------------------------- */
+.ops-terminal [style*="solid var(--ink-900)"] {
+  border-color: var(--c-line) !important;
+  border-width: 1px !important;
+}
+
+/* A 14px pill radius on a panel is the public site's shape. The progress bar
+   keeps its own, further down. */
+.ops-terminal [style*="border-radius:14px"],
+.ops-terminal [style*="border-radius:16px"],
+.ops-terminal [style*="border-radius:18px"] {
+  border-radius: 3px !important;
+}
+
+/* --- hard shadows go ------------------------------------------------------
+
+   Every shadow in this markup is the design system's hard ink offset. There is
+   no blurred one to preserve. */
+.ops-terminal [style*="box-shadow"] {
+  box-shadow: none !important;
+}
+
+/* --- display type becomes the interface face ------------------------------
+
+   The family always. The SIZE only where the markup asked for something large,
+   matched on the inline string - so a 30px heading and a 32px count come down
+   and anything already small is left alone rather than being pushed UP to meet
+   a blanket size. */
+.ops-terminal [style*="var(--font-display)"] {
+  font-family: inherit !important;
+  letter-spacing: 0 !important;
+}
+
+.ops-terminal [style*="var(--font-display)"][style*="font-size:2"],
+.ops-terminal [style*="var(--font-display)"][style*="font-size:3"],
+.ops-terminal [style*="var(--font-display)"][style*="font-size:4"] {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+/* A count tile's number is the one piece of display type worth keeping big -
+   it is the whole content of the tile. Big for a terminal, not for a poster. */
+.ops-terminal .card > [style*="font-family:var(--font-display)"][style*="font-size:3"] {
+  font-size: 22px !important;
+}
+
+/* --- the driver route strip -----------------------------------------------
+
+   Its progress bar is a 12px pill with a 2px ink border, which the rules above
+   flatten to a hairline. Keeping the pill radius here is deliberate: a
+   progress bar reads as a bar, and it is the one rounded thing left. */
+.ops-terminal [style*="border-radius:999px"] {
+  border-radius: 999px !important;
+  height: 8px !important;
+}
+
+/* --- scan and weight boxes ------------------------------------------------
+
+   The load-out and the run write thick outlines on their inputs inline. They
+   stay large on the standing-up screens - that is the ops-touch rule - but a
+   3px ink frame is the public look. */
+.ops-terminal input[style*="var(--ink-900)"],
+.ops-terminal textarea[style*="var(--ink-900)"] {
+  border-color: var(--c-line-strong) !important;
+  border-width: 1px !important;
+}
+
+/* --- nothing hides under the bar -----------------------------------------
+
+   THE BAR IS STICKY AND THE APP RUNS UNDER THE STATUS BAR. adminPage sets
+   apple-mobile-web-app-status-bar-style to black-translucent so the top of the
+   screen is ours, which also means the page begins BEHIND the clock on a
+   home-screen launch. On Neil's phone the first row of tiles was arriving
+   under it.
+
+   env(safe-area-inset-top) is what that inset is called; the fallback is zero,
+   so a desktop browser is unaffected. */
+.ops-terminal .site-header {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* And a little air under the bar, so a tile that scrolls up to it is not
+   touching it at the moment it stops. */
+.ops-terminal > main.container,
+.ops-terminal body > main.container {
+  scroll-padding-top: 56px;
+}
+
+.ops-terminal .card {
+  scroll-margin-top: 56px;
+}
