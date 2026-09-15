@@ -474,9 +474,30 @@ async function uncollect(order, { by = null, reason = null } = {}) {
       collected_at: null,
       arrived_at: null,
       navigating_at: null,
-      // The sum of the bag weights, and those rows are being released. Leaving
-      // it would show a weight for laundry we do not have.
+      // The sum of the bag weights. Leaving it would show a weight for laundry
+      // we do not have.
       weight_lb: null,
+
+      // AND THE PRICE GOES WITH IT, OR THE DATABASE REFUSES THE WHOLE UPDATE.
+      //
+      // `orders_weight_and_price_together` is a CHECK constraint saying
+      // (weight_lb is null) = (price_cents is null). Every bag weighed at a
+      // door re-prices the order, so by the time anything can be left on a
+      // step there is always a price - and nulling the weight alone violated
+      // it every single time.
+      //
+      // That is not theoretical and it is not only a failed write: uncollect()
+      // is called near the END of the doorstep decline, so the throw took the
+      // rest of it with it. On #2068 the tags had already been retired and the
+      // clips returned, and then the status never moved, the customer was
+      // never texted and the office was never paged - the three things that
+      // actually matter to somebody standing at a door.
+      //
+      // Nulling both is also the truer record: no laundry, so no weight, so
+      // nothing to charge for. Tomorrow's pickup is priced from tomorrow's
+      // scale.
+      price_cents: null,
+      billable_weight_lb: null,
     })
     .eq('id', order.id)
     // Only if it is still collected, the same guard transition() uses: two

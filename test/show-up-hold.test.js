@@ -394,8 +394,24 @@ test('THE BAGS ARE PUT BACK, NOT HALF COLLECTED', () => {
   const body = bodyOf(SRC('core', 'fulfilment.js'), 'async function declinedAtTheDoor(');
 
   assert.match(body, /unclipOrder/, 'the clips stay out of the pool');
-  assert.match(body, /releaseOrder/, 'a live sticker is left on a bag on a doorstep');
   assert.match(body, /orders\.uncollect/, 'the order stays collected');
+});
+
+test('BUT THE TAGS ARE NOT RETIRED - DEAD IS ONLY FOR A FINISHED DELIVERY', () => {
+  // This assertion used to be the other way round and it was wrong. Neil, 15
+  // September, after #2068: leaving bags at a door must not mark their tags
+  // delivered.
+  //
+  // releaseOrder() is the call DELIVERY makes. Making it here stopped
+  // /o/<code> resolving for three stickers that were physically on three bags
+  // we were still holding, and counted them EXPIRED on /ops/labels beside the
+  // genuinely finished ones.
+  //
+  // Nothing was delivered and nothing was even collected: the stickers stay on
+  // the bags overnight and the same van comes back for the same order.
+  const body = bodyOf(SRC('core', 'fulfilment.js'), 'async function declinedAtTheDoor(');
+
+  assert.ok(!/releaseOrder/.test(body), 'the doorstep retires the tags like a delivery');
 });
 
 test('AND THE $25 IS NOT GIVEN BACK THERE', () => {
