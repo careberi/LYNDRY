@@ -1,6 +1,7 @@
 'use strict';
 
 const format = require('../core/format');
+const subscription = require('../core/subscription');
 
 // ---------------------------------------------------------------------------
 // Site-wide values.
@@ -195,6 +196,31 @@ const site = Object.freeze({
   // shown before that point is an estimate and has to say so — quoting a firm
   // price we then change is the fastest way to lose someone's trust.
   pricePerLb: `$${(config.pricing.perPoundCents / 100).toFixed(2)}`,
+
+  // THE OTHER RATE, BECAUSE THERE ARE TWO AND THE SITE ONLY EVER SHOWED ONE.
+  //
+  // Neil, 15 September: the marketing site contradicted the live checkout. The
+  // checkout offers $2.00 or $1.80 and every public page said $2.00 was the
+  // price, so somebody read the site, chose from a menu of one, and met a
+  // cheaper option at the till.
+  //
+  // IT IS A RATE, NOT A MEMBERSHIP, and that distinction is the whole of Neil's
+  // rule here. There is no club to join, no joining fee, no minimum number of
+  // pickups and nothing charged for having one. "No membership" on the pricing
+  // page is still TRUE and still has to be there - what was false was "is there
+  // a subscription? no".
+  //
+  // Read from src/core/subscription.js so the website, the checkout, the AI and
+  // the confirmation text cannot quote four different numbers.
+  subscriptionPricePerLb: subscription.subscriptionRate().replace('/lb', ''),
+
+  // "weekly, every 2 weeks, or every month" - Neil's words, built from the same
+  // list the checkout renders its radios from, so a frequency cannot appear on
+  // the website that the booking screen does not offer.
+  subscriptionFrequencies: (() => {
+    const labels = subscription.FREQUENCIES.map((f) => f.label.replace(/^every week$/, 'weekly'));
+    return `${labels.slice(0, -1).join(', ')}, or ${labels[labels.length - 1]}`;
+  })(),
   // "to" rather than an en dash, in both of these.
   //
   // They are used on web pages, where a dash would be house style, AND inside
@@ -300,6 +326,8 @@ const tokens = Object.freeze({
   CONTACT_SENTENCE: contactSentence(),
   SERVICE_AREA: site.serviceArea,
   PRICE_PER_LB: site.pricePerLb,
+  SUBSCRIPTION_PRICE_PER_LB: site.subscriptionPricePerLb,
+  SUBSCRIPTION_FREQUENCIES: site.subscriptionFrequencies,
   MINIMUM: `$${(config.pricing.minimumCents / 100).toFixed(0)}`,
   MINIMUM_LB: `${config.pricing.minimumCents / config.pricing.perPoundCents} lb`,
   ESTIMATE_RANGE: site.estimateRange,

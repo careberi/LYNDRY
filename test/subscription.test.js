@@ -312,3 +312,74 @@ test('A FIRST-ORDER PROMOTION COMES OFF THE SUBSCRIPTION RATE', () => {
   // And the minimum is a floor on both, unchanged by any of this.
   assert.equal(config.pricing.minimumCents, 2500);
 });
+
+// --- the marketing site agrees with the checkout -----------------------------
+
+test('THE SITE SHOWS BOTH RATES, and it used to show one', () => {
+  // Neil, 15 September: the marketing site contradicted the live checkout.
+  // Every public page quoted $2.00 as "the price" while the checkout offered
+  // $2.00 or $1.80 - so somebody read the site, chose from a menu of one, and
+  // met a cheaper option at the till.
+  const { site, tokens } = require('../src/web/site');
+
+  assert.equal(site.pricePerLb, '$2.00');
+  assert.equal(site.subscriptionPricePerLb, '$1.80');
+  assert.equal(site.subscriptionFrequencies, 'weekly, every 2 weeks, or every month');
+
+  // Rendered through the token map the pages actually use.
+  assert.equal(tokens.SUBSCRIPTION_PRICE_PER_LB, '$1.80');
+  assert.equal(tokens.SUBSCRIPTION_FREQUENCIES, 'weekly, every 2 weeks, or every month');
+});
+
+test('and both figures come off the one owner, never typed into a page', () => {
+  // Four copies of a price is four things to edit and one that will disagree.
+  const siteSrc = withoutComments(SRC('web', 'site.js'));
+  assert.match(siteSrc, /subscription\.subscriptionRate\(\)/);
+  assert.match(siteSrc, /subscription\.FREQUENCIES/);
+
+  for (const page of ['home.html', 'pricing.html', 'faq.html']) {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', page), 'utf8');
+    assert.ok(!/\$1\.80/.test(html), `${page} types the subscription rate`);
+    assert.ok(!/\$2\.00/.test(html), `${page} types the one-time rate`);
+  }
+});
+
+test('NO PAGE STILL CLAIMS THERE IS NO SUBSCRIPTION', () => {
+  // The FAQ answered "Is there a subscription? No", which is now the opposite
+  // of what the checkout does.
+  const files = [
+    ['public', 'pages', 'pricing.html'],
+    ['public', 'pages', 'faq.html'],
+    ['public', 'pages', 'home.html'],
+    ['public', 'pages', 'terms.html'],
+    ['src', 'routes', 'web.js'],
+    ['src', 'routes', 'locations.js'],
+  ];
+
+  for (const bits of files) {
+    const body = fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');
+    assert.ok(!/no subscription/i.test(body), `${bits.join('/')} still says there is no subscription`);
+  }
+});
+
+test('AND "NO MEMBERSHIP" SURVIVES, because it is still true', () => {
+  // Neil's rule: a subscription is a RATE, not a membership. There is no club,
+  // no joining fee and no minimum number of pickups - so the promise stays on
+  // the page, and the word must never be attached to the $1.80 plan.
+  const pricing = fs.readFileSync(
+    path.join(__dirname, '..', 'public', 'pages', 'pricing.html'),
+    'utf8'
+  );
+
+  assert.match(pricing, /no membership/i, 'the no-membership promise was dropped');
+  assert.match(pricing, /not a club/i);
+
+  // And nowhere calls the plan itself a membership.
+  const web = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'web.js'), 'utf8');
+  for (const body of [pricing, web]) {
+    assert.ok(
+      !/subscription is a membership|membership plan|join the subscription/i.test(body),
+      'the plan is described as a membership'
+    );
+  }
+});

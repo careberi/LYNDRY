@@ -58,15 +58,30 @@
          style="padding:30px;display:flex;flex-direction:column;" data-reveal>
       <span class="badge badge-ink" style="margin-bottom:18px;">One price</span>
       <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Wash &amp; fold</p>
+
+      <!-- BOTH RATES, BECAUSE THERE ARE TWO AND THIS PAGE SHOWED ONE.
+           The checkout offers a one-time pickup or a subscription, and every
+           public page quoted the one-time rate as "the price" - so somebody
+           read this, chose from a menu of one, and met a cheaper option at the
+           till. A subscription here is a RATE, not a club: see the FAQ below,
+           and see that "no membership" further down is still true. -->
       <div style="display:flex;align-items:baseline;gap:8px;">
         <span style="font-family:var(--font-display);font-weight:900;font-size:62px;letter-spacing:-0.05em;line-height:0.85;">{{PRICE_PER_LB}}</span>
-        <span style="font-size:15px;font-weight:600;">per pound</span>
+        <span style="font-size:15px;font-weight:600;">per pound, one-time</span>
       </div>
+
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:18px;padding-top:18px;border-top:2px solid var(--ink-100);">
+        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.04em;line-height:0.85;">{{SUBSCRIPTION_PRICE_PER_LB}}</span>
+        <span style="font-size:15px;font-weight:600;">per pound, on a subscription</span>
+      </div>
+      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:10px 0 0;">
+        Pickups {{SUBSCRIPTION_FREQUENCIES}}. Change it or cancel it any time.
+      </p>
+
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:20px 0 26px;">
-        {{MINIMUM}} minimum per pickup. That's the first {{MINIMUM_LB}}.
+        {{MINIMUM}} minimum per pickup, either way. That's the first {{MINIMUM_LB}}.
         Nothing is charged when you book. We weigh your bag after pickup, text
-        you the total, and charge once. Anything over the minimum is just
-        {{PRICE_PER_LB}} a pound. A typical bag runs {{ESTIMATE_RANGE}}.
+        you the total, and charge once. A typical bag runs {{ESTIMATE_RANGE}}.
       </p>
       <a href="/#get-started" class="btn btn-ink btn-full">Get started {{ICON_ARROW_SM}}</a>
     </div>
@@ -76,8 +91,9 @@
       <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;letter-spacing:-0.03em;margin:0 0 18px;">Nothing</h2>
       <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">
         There is no delivery fee, no rush fee and no membership.
-        {{PRICE_PER_LB}} a pound with a {{MINIMUM}} minimum is the entire
-        price.
+        The rate you choose with a {{MINIMUM}} minimum is the entire price.
+        A subscription is a lower rate, not a club: nothing to join, no joining
+        fee, and no minimum number of pickups.
       </p>
       <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">
         What we don't do yet: dry cleaning, pressing and alterations. Wash, dry
@@ -99,9 +115,9 @@
   <div data-reveal>
     <h2 class="display-4" style="margin-bottom:14px;">What a bag costs</h2>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);max-width:34ch;margin:0;">
-      Card on file, charged after the wash. No subscription and no fee for
-      having an account. You can stop the texts any time by
-      replying <strong>STOP</strong>.
+      Card on file, charged after the wash. No fee for having an account, on
+      either rate: a subscription is charged per pickup like everything else.
+      You can stop the texts any time by replying <strong>STOP</strong>.
     </p>
   </div>
 
@@ -154,7 +170,7 @@
     <div class="card card-xl card-on-ink" style="padding:8px 34px;">
       <div class="qa" style="border-top:none;">
         <h3>Is there a subscription?</h3>
-        <p>No. You pay {{PRICE_PER_LB}} a pound when you use us and nothing when you don't. We may offer a membership later for people who send laundry every week, but you will never be required to join one.</p>
+        <p>Yes, and it is a rate rather than a membership. A one-time pickup is {{PRICE_PER_LB}} a pound. A subscription is {{SUBSCRIPTION_PRICE_PER_LB}} a pound with pickups {{SUBSCRIPTION_FREQUENCIES}}. There is nothing to join, no joining fee and no minimum number of pickups, you still pay only for the laundry you send, and you can change how often we come or cancel at any time. Cancelling never changes the price of a pickup you have already had.</p>
       </div>
       <div class="qa">
         <h3>How do I know what I'll be charged?</h3>

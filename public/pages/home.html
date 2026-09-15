@@ -334,11 +334,12 @@
   <div class="container grid-2 grid-2-wide" style="gap:30px;align-items:center;">
     <div data-reveal>
       <p class="eyebrow eyebrow-lilac">Pricing</p>
-      <h2 class="display-3">{{PRICE_PER_LB}} a pound.</h2>
+      <h2 class="display-3">{{PRICE_PER_LB}} a pound.<br>{{SUBSCRIPTION_PRICE_PER_LB}} on a subscription.</h2>
       <p style="font-size:18px;line-height:1.55;color:var(--ink-800);max-width:38ch;margin:0 0 28px;">
-        {{MINIMUM}} minimum per pickup, then {{PRICE_PER_LB}} a pound weighed
-        after pickup. A typical bag runs {{ESTIMATE_RANGE}}. No membership,
-        no delivery fee, no surprise numbers.
+        {{MINIMUM}} minimum per pickup, weighed after pickup and charged once.
+        A subscription is {{SUBSCRIPTION_PRICE_PER_LB}} a pound with pickups
+        {{SUBSCRIPTION_FREQUENCIES}}. A typical bag runs {{ESTIMATE_RANGE}}.
+        No membership, no delivery fee, no surprise numbers.
       </p>
       <a href="/pricing" class="btn btn-ink btn-lg">
         See full pricing {{ICON_ARROW}}
