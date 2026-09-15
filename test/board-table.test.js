@@ -152,8 +152,18 @@ test('THE OPERATIONAL COLUMNS ARE ALL STILL THERE', () => {
 test('and the money columns still never reach a driver', () => {
   // A value that never reaches the page cannot leak from it - the rule the
   // board already kept, and one this reshuffle must not have loosened.
-  assert.match(boardHeadings(), /if \(showMoney\) headings\.push\('Promotion', 'Price', 'Payment'\)/);
+  // Plan joined them on 15 September. It belongs in this group rather than
+  // beside Status: which plan a pickup is on is a pricing fact, and a driver
+  // has no more use for it than for the price it implies.
+  assert.match(
+    boardHeadings(),
+    /if \(showMoney\) headings\.push\('Plan', 'Promotion', 'Price', 'Payment'\)/
+  );
   assert.match(boardRow(), /\.\.\.\(showMoney \?/);
+
+  // And the row's money group carries exactly the four the headings promise.
+  // A row and a heading list that disagree shift every column after the gap.
+  assert.match(boardRow(), /showMoney \? \[planCell\(o\), promoCell\(o\), money\(o\.price_cents\), paymentBadge\(o\)\]/);
 });
 
 // --- the same shape one click away ------------------------------------------

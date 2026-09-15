@@ -356,6 +356,8 @@ const BOARD_FIELDS =
   // the same mistake as checking a screen and not the route behind it.
   'customer_id, ' +
   'pickup_window_end, pickup_time, bag_count, weight_lb, partner_id, ' +
+  // Which plan the stop is on, so the board can say who is a subscriber.
+  'subscription_id, ' +
   // The guided run reads its position from these, so they travel with the board
   // rather than being fetched again per stop.
   // navigating_at rides with arrived_at because they answer two halves of the

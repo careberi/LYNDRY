@@ -8,6 +8,7 @@ const db = require('../db');
 const { config } = require('../config');
 const orders = require('../core/orders');
 const booking = require('../core/booking');
+const subscription = require('../core/subscription');
 const settings = require('../core/settings');
 const billing = require('../core/billing');
 const format = require('../core/format');
@@ -748,7 +749,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
 
     const { data: past } = await db
       .from('orders')
-      .select('order_number, status, pickup_date, collected_at, delivered_at, weight_lb, billable_weight_lb, price_cents')
+      .select('order_number, status, pickup_date, collected_at, delivered_at, weight_lb, billable_weight_lb, price_cents, subscription_id, price_per_lb_cents')
       .eq('customer_id', customer.id)
       .in('status', ['DELIVERED', 'CANCELED'])
       .order('pickup_date', { ascending: false })
@@ -860,6 +861,18 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
             ? '<br><span class="badge" style="background:var(--paper-200);">Canceled</span>'
             : ''
         }`,
+        // WHAT THIS PICKUP WAS, read off the pickup itself.
+        //
+        // A customer who subscribed for a month and then cancelled should see
+        // those pickups still described as Subscription pickups at the rate
+        // they paid - which is the truth, and is also the answer to "why was
+        // that one cheaper". Reading it off their CURRENT plan would rewrite
+        // their own history every time they changed it.
+        subscription.isSubscriptionOrder(o)
+          ? `Subscription<br><span style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);">${escapeHtml(
+              subscription.rate(o.price_per_lb_cents || subscription.subscriptionCents())
+            )}</span>`
+          : '<span style="color:var(--ink-500);">One-time</span>',
         day(o.collected_at),
         day(o.delivered_at),
         lbs ? `${escapeHtml(String(lbs))} lb` : '<span style="color:var(--ink-500);">&mdash;</span>',
@@ -944,7 +957,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
 
   ${table(
     { eyebrow: 'Finished', title: 'Past orders' },
-    ['Order', 'Picked up', 'Delivered', 'Weight', 'Billed'],
+    ['Order', 'Plan', 'Picked up', 'Delivered', 'Weight', 'Billed'],
     pastRows,
     'Nothing yet. Your first order will show here once it is done.'
   )}
@@ -1755,16 +1768,39 @@ function previousStep(from, customer) {
 // unable to skip a blank screen only because the next-screen calculation was
 // the same one that noticed the blank. Now that they are separate, the check
 // has to be written down.
+// IS THIS A SUBSCRIPTION? ONE PLACE ASKS, AND EVERYTHING ELSE CALLS IT.
+//
+// The wizard used to carry `regular`, a yes/empty string, and read it as
+// `given.regular === 'yes'` in eight places. It is a plan now, with a price
+// attached to it, so the comparison is written down once - eight copies of a
+// string test is eight chances to get the dearer answer by accident, and the
+// accident charges somebody $2.00.
+function subscribing(given) {
+  return given.plan === subscription.PLANS.SUBSCRIPTION;
+}
+
 function unanswered(step, given) {
-  if (step === 'repeat' && given.regular === undefined) {
-    return 'Please choose whether this is a regular pickup.';
+  if (step === 'repeat') {
+    // NOTHING IS PRESELECTED, so nothing is chosen until they choose it.
+    // Neil's rule: they cannot continue until they have picked one-time or a
+    // plan. An absent `plan` is not a default, it is an unanswered question.
+    if (given.plan !== subscription.PLANS.ONE_TIME && !subscribing(given)) {
+      return 'Please choose One-Time or Subscription.';
+    }
+
+    // AND A SUBSCRIPTION WITHOUT A FREQUENCY IS NOT A CHOICE YET. Picking the
+    // plan and leaving how often blank would otherwise book a pickup with a
+    // cadence nobody selected.
+    if (subscribing(given) && !subscription.isFrequency(given.cadence)) {
+      return 'Please choose how often we should collect.';
+    }
   }
 
   if (step === 'when') {
-    if (given.regular === 'yes' && !String(given.weekdays || '').trim()) {
+    if (subscribing(given) && !String(given.weekdays || '').trim()) {
       return 'Please pick at least one day.';
     }
-    if (given.regular !== 'yes' && !given.pickup_date) return 'Please pick a day.';
+    if (!subscribing(given) && !given.pickup_date) return 'Please pick a day.';
     if (!given.pickup_time) return 'Please pick a time.';
   }
 
@@ -1783,9 +1819,9 @@ function bookingStep(customer, given) {
   // form is always irrelevant. `regular` is present on every submission from
   // that step, including "no", so an empty string is an answer and undefined
   // is "not asked yet".
-  if (given.regular === undefined) return 'repeat';
+  if (given.plan === undefined) return 'repeat';
 
-  const regular = given.regular === 'yes';
+  const regular = subscribing(given);
   if (regular && !String(given.weekdays || '').trim()) return 'when';
   if (!regular && !given.pickup_date) return 'when';
   if (!given.pickup_time) return 'when';
@@ -1797,7 +1833,7 @@ function bookingStep(customer, given) {
 
 // Everything the wizard has been told so far, in the order it was asked for.
 const ANSWERS = [
-  'pickup_date', 'pickup_time', 'notes', 'regular', 'cadence', 'weekdays',
+  'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
   'water_temp', 'fabric_softener', 'name', 'address_line1', 'address_line2',
   'city', 'postal_code', 'spot', 'access_notes',
 ];
@@ -1821,8 +1857,8 @@ const ANSWERS = [
 // so the browser would meet it with a "confirm form resubmission" page.
 const ASKED_ON = {
   wash: ['water_temp', 'fabric_softener'],
-  repeat: ['regular'],
-  when: ['pickup_date', 'pickup_time', 'weekdays', 'cadence', 'regular'],
+  repeat: ['plan', 'cadence'],
+  when: ['pickup_date', 'pickup_time', 'weekdays', 'plan'],
   address: ['name', 'address_line1', 'address_line2', 'city', 'postal_code',
             'spot', 'access_notes'],
 };
@@ -1910,13 +1946,13 @@ function stepPage({ customer, step, given, error = '', opensOn = null, guest = f
   // dropped while the index kept climbing and it read "step 3 of 2". Carrying a
   // total through the flow would fix the arithmetic and still be a number nobody
   // needs; the step's own name says where you are and cannot go wrong.
-  const labels = { wash: 'wash preferences', repeat: 'how often', when: 'when', address: 'where' };
+  const labels = { wash: 'wash preferences', repeat: 'your option', when: 'when', address: 'where' };
 
-  const regular = given.regular === 'yes';
+  const regular = subscribing(given);
 
   const heads = {
     wash: ['How would you like it washed?', 'We save this and use it on every pickup. Change it any time by text.'],
-    repeat: ['One pickup, or regularly?', 'You can change or cancel a regular pickup any time.'],
+    repeat: ['One-Time or Subscription?', 'Choose what works for you. You can change or cancel your subscription anytime.'],
     when: regular
       ? ['Which days?', 'Pick as many as you like. We come at the same time on each.']
       : ['Schedule your pickup', 'Any day. There are no fixed route days.'],
@@ -2143,12 +2179,80 @@ function cardStep({ customer, intent }) {
 // date at all. Asking both on one screen leaves half of it always irrelevant,
 // and there is no JavaScript here to hide the half that is.
 //
-// DEFAULTS TO JUST ONCE. A repeating pickup books itself every week without
-// anybody visiting the site, so it is never the thing somebody gets by not
-// reading a screen.
+// NOTHING IS PRESELECTED, AND THAT IS A DECISION RATHER THAN AN OVERSIGHT.
+//
+// This screen used to default to "No, just this once" - which is the DEARER
+// option, so the customer who does not read the screen lands on $2.00 a pound
+// by not choosing. Neil, 15 September: preselecting the $2.00 option subtly
+// works against getting people onto subscriptions, and it is worse than that -
+// a default nobody read is not a choice, and this is the screen where the price
+// is decided.
+//
+// So both radios start empty and unanswered() refuses to leave until one of
+// them is picked.
+//
+// THE PRICE IS ON EACH OPTION, IN FULL. It said "one pickup, or regularly?"
+// with no money on the screen at all, so there was no economic reason visible
+// to pick the subscription - the discount was real and invisible. "Starting at
+// $1.80/lb" is the right line for a homepage where somebody is browsing; this
+// is the moment somebody is deciding, and a decision needs both numbers.
+//
+// IT WORKS WITH NO JAVASCRIPT. The frequency options are always in the markup
+// rather than revealed by a script, and the server is what refuses a
+// subscription with no frequency on it. A checkout that needs a script to be
+// completable is one that cannot be completed on a bad connection.
 // ---------------------------------------------------------------------------
+function planChoice({ value, title, price, blurb, checked, children = '' }) {
+  return `
+          <label class="check" style="align-items:flex-start;">
+            <input type="radio" name="plan" value="${value}"${checked ? ' checked' : ''}>
+            <span class="check-box check-box-round">{{ICON_CHECK}}</span>
+            <span style="flex:1;min-width:0;">
+              <span style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;">
+                <span style="font-size:16px;font-weight:600;color:var(--ink-900);">${escapeHtml(title)}</span>
+                <span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--ink-900);">${escapeHtml(price)}</span>
+              </span>
+              <span style="display:block;font-size:14px;color:var(--ink-500);margin-top:2px;">${escapeHtml(blurb)}</span>
+            </span>
+          </label>${children}`;
+}
+
 function repeatForm(given) {
-  const regular = given.regular === 'yes';
+  const chosen = String(given.plan || '');
+  const saving = subscription.savingPercent();
+
+  // The saving is derived from the two rates, so it disappears rather than
+  // going stale if either of them moves to a figure that is not a round
+  // percentage. Both prices are on the screen either way.
+  const savingWord = saving ? `Save ${saving}% with automatic service ` : 'Automatic service ';
+
+  // HOW OFTEN, ASKED ON THE SAME SCREEN AS THE PLAN IT BELONGS TO.
+  //
+  // Neil: if they pick Subscription they must also pick how often. Nested under
+  // the option it qualifies rather than pushed to a step of its own, because it
+  // is the second half of one decision - and a screen that asks "how often"
+  // after you have already left the pricing screen has lost the reason you were
+  // choosing.
+  //
+  // The labels come from subscription.FREQUENCIES so the website, the AI and
+  // the ops screens all name the three the same way.
+  const frequencies = `
+          <span class="stack" style="display:block;margin:4px 0 0 34px;padding-left:16px;border-left:2px solid var(--ink-100);">
+            <span class="eyebrow" style="display:block;margin-bottom:10px;">How often?</span>
+            ${subscription.FREQUENCIES.map(
+              (f) => `
+            <label class="check" style="margin-bottom:10px;">
+              <input type="radio" name="cadence" value="${f.cadence}"${
+                given.cadence === f.cadence ? ' checked' : ''
+              }>
+              <span class="check-box check-box-round">{{ICON_CHECK}}</span>
+              <span style="font-size:16px;color:var(--ink-900);text-transform:capitalize;">${escapeHtml(
+                f.label
+              )}</span>
+            </label>`
+            ).join('')}
+            <span class="field-hint" style="display:block;">Every month means every 4 weeks, on the same weekday.</span>
+          </span>`;
 
   return `
     <form method="post" action="/account/book" id="wizard">
@@ -2156,25 +2260,24 @@ function repeatForm(given) {
       ${carried(given, 'repeat')}
 
       <fieldset style="border:0;padding:0;margin:0;">
-        <legend class="field-label" style="padding:0;">Make this a regular pickup?</legend>
-        <div style="display:flex;flex-direction:column;gap:14px;margin-top:12px;">
-          <label class="check">
-            <input type="radio" name="regular" value=""${regular ? '' : ' checked'}>
-            <span class="check-box check-box-round">{{ICON_CHECK}}</span>
-            <span>
-              <span style="font-size:16px;font-weight:600;color:var(--ink-900);">No, just this once</span><br>
-              <span style="font-size:14px;color:var(--ink-500);">Pick a day and time next.</span>
-            </span>
-          </label>
+        <legend class="field-label" style="padding:0;">Choose your option</legend>
+        <div style="display:flex;flex-direction:column;gap:18px;margin-top:12px;">
+          ${planChoice({
+            value: subscription.PLANS.ONE_TIME,
+            title: 'One-Time Pickup',
+            price: subscription.oneTimeRate(),
+            blurb: 'Book whenever you need us.',
+            checked: chosen === subscription.PLANS.ONE_TIME,
+          })}
 
-          <label class="check">
-            <input type="radio" name="regular" value="yes"${regular ? ' checked' : ''}>
-            <span class="check-box check-box-round">{{ICON_CHECK}}</span>
-            <span>
-              <span style="font-size:16px;font-weight:600;color:var(--ink-900);">Yes, same days each or every other week</span><br>
-              <span style="font-size:14px;color:var(--ink-500);">Pick days and time next.</span>
-            </span>
-          </label>
+          ${planChoice({
+            value: subscription.PLANS.SUBSCRIPTION,
+            title: 'Subscription',
+            price: subscription.subscriptionRate(),
+            blurb: `${savingWord}${subscription.FREQUENCIES.map((f) => f.label).join(', ')}.`,
+            checked: chosen === subscription.PLANS.SUBSCRIPTION,
+            children: frequencies,
+          })}
         </div>
       </fieldset>
 
@@ -2199,7 +2302,7 @@ function repeatForm(given) {
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function whenForm(customer, given, opensOn) {
-  const regular = given.regular === 'yes';
+  const regular = subscribing(given);
   const { min, max } = dateBounds(opensOn);
 
   // The first window opens and the last window closes. One source of truth for
@@ -2242,19 +2345,11 @@ function whenForm(customer, given, opensOn) {
           <p class="field-hint" style="margin-top:12px;">Pick as many as you like.</p>
         </fieldset>
 
-        <!-- EVERY OTHER WEEK SITS WITH THE DAYS IT CHANGES. It was a third
-             radio on the previous screen, which mixed "do you want this at all"
-             with "how often" - two questions in one list. -->
-        <label class="check" style="margin-top:4px;">
-          <input type="checkbox" name="fortnightly" value="yes"${
-            given.cadence === 'FORTNIGHTLY' ? ' checked' : ''
-          }>
-          <span class="check-box">{{ICON_CHECK}}</span>
-          <span>
-            <span style="font-size:16px;font-weight:600;color:var(--ink-900);">Every other week</span><br>
-            <span style="font-size:14px;color:var(--ink-500);">Instead of every week: one week on, one week off.</span>
-          </span>
-        </label>
+        <!-- HOW OFTEN IS NOT ASKED HERE ANY MORE. It was an "every other week"
+             tick box beside the days, which could only ever offer two of the
+             three frequencies - there is no way to tick "every month" - and it
+             split one decision across two screens. It is chosen with the plan
+             now, on the screen where the price is. -->
 `;
 
   const oneDay = `
@@ -2267,7 +2362,7 @@ function whenForm(customer, given, opensOn) {
   return `
     <form method="post" action="/account/book" id="wizard">
       <input type="hidden" name="step" value="when">
-      <input type="hidden" name="regular" value="${escapeHtml(String(given.regular || ''))}">
+      <input type="hidden" name="plan" value="${escapeHtml(String(given.plan || ''))}">
       ${carried(given, 'when')}
       <div class="stack">
         ${regular ? days : oneDay}
@@ -2365,6 +2460,15 @@ function whenForm(customer, given, opensOn) {
         return hour + ':' + m + ' ' + suffix;
       }
 
+      // The three frequencies, in the words the chooser used. Written from
+      // subscription.FREQUENCIES so the summary cannot describe a cadence the
+      // previous screen does not offer.
+      var CADENCE_WORDS = ${JSON.stringify(
+        Object.fromEntries(
+          subscription.FREQUENCIES.map((f) => [f.cadence, f.label.charAt(0).toUpperCase() + f.label.slice(1)])
+        )
+      )};
+
       // "Sunday", "Sunday and Monday", "Sunday, Monday and Thursday".
       function list(names) {
         if (names.length === 1) return names[0];
@@ -2378,7 +2482,10 @@ function whenForm(customer, given, opensOn) {
           if (boxes[i].checked) days.push(DAYS[Number(boxes[i].value)]);
         }
 
-        var every = form.querySelector('input[name=fortnightly]');
+        // The cadence was chosen on the previous screen and rides here as a
+        // hidden field, so this reads it rather than a tick box that no longer
+        // exists on this page.
+        var plan = form.querySelector('input[name=cadence]');
         var when = form.querySelector('#pickup_time');
         var time = clock(when && when.value);
 
@@ -2388,7 +2495,7 @@ function whenForm(customer, given, opensOn) {
           return;
         }
 
-        var cadence = every && every.checked ? 'Every other week' : 'Every week';
+        var cadence = CADENCE_WORDS[plan && plan.value] || 'Every week';
 
         p.textContent =
           cadence +
@@ -2564,20 +2671,18 @@ router.post('/account/book', async (req, res, next) => {
       customer = saved.customer;
     }
 
-    // TWO SCREENS, ONE ANSWER. "Is this regular" is its own step; "every other
-    // week" is a tick box on the next one, beside the days it changes. Every
-    // thing downstream wants a single cadence, so they are folded together here
-    // and nowhere else.
-    if (form.step === 'when' && form.regular === 'yes') {
-      form.cadence = form.fortnightly === 'yes' ? 'FORTNIGHTLY' : 'WEEKLY';
-    }
-
-    const cadence = form.regular === 'yes' ? String(form.cadence || 'WEEKLY') : '';
+    // ONE SCREEN, ONE ANSWER. The plan and the frequency are chosen together
+    // now, so there is nothing to fold - and no default either. A subscription
+    // whose cadence is not one of the three is not a subscription: unanswered()
+    // refuses to leave that screen without one, and this is the second gate,
+    // because a hand-posted form reaches here without passing that screen.
+    const cadence =
+      subscribing(form) && subscription.isFrequency(form.cadence) ? String(form.cadence) : '';
 
     // A checkbox group is not a string. The 'when' step posts one `weekday` per
     // ticked day, and the rest of the flow carries them as a comma-separated
     // hidden field - so they are normalised here, once, on the way through.
-    if (form.step === 'when' && form.regular === 'yes') {
+    if (form.step === 'when' && subscribing(form)) {
       form.weekdays = weekdaysFrom(form).join(',');
     }
 

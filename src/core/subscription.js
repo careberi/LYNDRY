@@ -161,6 +161,27 @@ function choiceLines() {
   ];
 }
 
+// HOW MUCH CHEAPER, AS A PERCENTAGE, DERIVED RATHER THAN TYPED.
+//
+// "Save 10%" is Neil's copy and it is true of $2.00 against $1.80 - but it is
+// true because of those two numbers, and writing it out would make it a third
+// copy of a price that silently goes wrong the day either rate moves. A page
+// promising 10% while charging 8% is worse than a page promising nothing.
+//
+// IT ANSWERS NULL RATHER THAN A FRACTION when the saving is not a whole
+// number. "Save 11.11%" is not a sentence anybody wants on a checkout screen,
+// so the caller drops the clause instead - which is the safe direction: the two
+// rates are still shown in full beside it, so nothing is hidden by its absence.
+function savingPercent() {
+  const full = oneTimeCents();
+  const ours = subscriptionCents();
+
+  if (!full || ours >= full) return null;
+
+  const pct = ((full - ours) / full) * 100;
+  return Number.isInteger(pct) ? pct : null;
+}
+
 // The one-line nudge for a returning one-time customer. Offered ONCE - the
 // caller decides that, because only it knows the thread.
 function nudgeLine() {
@@ -260,6 +281,7 @@ module.exports = {
   planLabel,
   CUSTOMER_WORD,
   choiceLines,
+  savingPercent,
   nudgeLine,
   orderRateLine,
   cancellationLines,

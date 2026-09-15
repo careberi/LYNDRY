@@ -13,6 +13,7 @@ const notify = require('../core/notify');
 const throttle = require('../core/throttle');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
+const subscription = require('../core/subscription');
 const billing = require('../core/billing');
 const format = require('../core/format');
 const pitchLink = require('../core/pitch-link');
@@ -259,6 +260,31 @@ function statusBadge(status, order = null) {
 // What came off is the Price column's business, and what somebody is expected
 // to qualify for belongs on the order or the customer page, where there is room
 // for the word "expected" to read as a forecast.
+// WHO IS ON A PLAN. Neil's ask, 15 September.
+//
+// One word per row, read off the order rather than the customer - which is the
+// rule the whole subscription change turns on. A customer who cancelled
+// yesterday still has pickups that were SOLD as subscription pickups, at the
+// rate they were sold at, and the board has to show them as what they are
+// rather than as what the customer's plan says today.
+//
+// It sits with the money columns because that is what it is: a pricing fact.
+// A driver does not see it, for the same reason they do not see the price.
+function planCell(order) {
+  if (!subscription.isSubscriptionOrder(order)) {
+    return `<span style="color:var(--ink-400);">One-time</span>`;
+  }
+
+  // The rate is named beside it, because "Subscription" and "$2.00" appearing
+  // in the same row would be the first sign something had gone wrong, and the
+  // board is where that should be visible rather than in a text message.
+  return (
+    `<span style="font-weight:600;">Subscription</span>` +
+    `<span style="display:block;font-family:var(--font-mono);font-size:12px;color:var(--ink-500);">` +
+    `${escapeHtml(subscription.rate(order.price_per_lb_cents || subscription.subscriptionCents()))}</span>`
+  );
+}
+
 function promoCell(order) {
   const applied = order.promotions;
   if (!applied) return '—';
@@ -2182,6 +2208,12 @@ const ORDER_FIELDS =
   // common case stopped being one tap.
   'intended_partner_id, ' +
   'delivery_photo_url, notes, created_at, from_schedule, ' +
+  // WHICH PLAN IT IS ON, and the rate it was sold at. Unselected, both read
+  // as undefined - which is indistinguishable from a one-time pickup, so the
+  // order page would quietly call every subscriber's pickup a one-off and
+  // show the wrong rate beside it. Same trap as every other field in this
+  // list, and the money is on this one.
+  'subscription_id, price_per_lb_cents, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
   // which is the half the driver actually needs.
@@ -2413,7 +2445,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         // APPLIED ONLY. A promotion that is merely expected has not come off
         // anything yet, and showing it in a column headed Promotion says it
         // has. Neil's rule: do not show it as if it is applied.
-        ...(showMoney ? [promoCell(o), money(o.price_cents), paymentBadge(o)] : []),
+        ...(showMoney ? [planCell(o), promoCell(o), money(o.price_cents), paymentBadge(o)] : []),
       ];
     };
 
@@ -2426,7 +2458,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       'Clock',
       'Weight',
     ];
-    if (showMoney) headings.push('Promotion', 'Price', 'Payment');
+    if (showMoney) headings.push('Plan', 'Promotion', 'Price', 'Payment');
 
     // A section is only drawn when it has something in it, so the board is a
     // list of work rather than a wall of "Nothing here".
@@ -3642,7 +3674,8 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           }
           ${
             showMoney
-              ? detail('Rate', money(order.price_per_lb_cents) + ' / lb') +
+              ? detail('Plan', subscription.planLabel(order)) +
+                detail('Rate', money(order.price_per_lb_cents) + ' / lb') +
                 detail('Price', `<strong>${money(order.price_cents)}</strong>`) +
                 detail(
                   'Payment',
