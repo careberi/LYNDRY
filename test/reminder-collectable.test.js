@@ -181,6 +181,74 @@ test('the fields are one constant, not typed out three times', () => {
   assert.match(reminders.CUSTOMER_CARD_FIELDS, /default_payment_method_id/);
 });
 
+// --- the reminder explains the pending charge -------------------------------
+
+test('THE REMINDER SAYS WHAT IS ON HOLD, because it is the only message that can', () => {
+  // The hold is placed by the night-before pass minutes before this goes out. A
+  // booking made a fortnight ago was confirmed before any hold existed, so its
+  // confirmation could not mention one - this text is the first and only chance
+  // to explain the pending charge they are about to see.
+  const body = reminders.reminderMessage({
+    pickup_date: '2026-09-16',
+    pickup_window_start: '17:00',
+    pickup_window_end: '21:00',
+    pickup_method: 'LEAVE_OUTSIDE',
+    authorization_intent_id: 'pi_1',
+    authorized_cents: 2500,
+  });
+
+  assert.match(body, /\$25\.00 is on hold/);
+  assert.match(body, /real total at the door/);
+});
+
+test('AND SAYS NOTHING WHEN THERE IS NO HOLD', () => {
+  // Read off the order, so a waived order, a free one and any pickup whose hold
+  // was deferred get no sentence without anybody having to remember them.
+  for (const order of [
+    { pickup_date: '2026-09-16', pickup_method: 'LEAVE_OUTSIDE' },
+    { pickup_date: '2026-09-16', pickup_method: 'LEAVE_OUTSIDE', payment_status: 'WAIVED' },
+    // Captured or released: the id is cleared, so there is nothing held.
+    { pickup_date: '2026-09-16', pickup_method: 'LEAVE_OUTSIDE', authorized_at: 'x', captured_cents: 2500 },
+  ]) {
+    assert.ok(!/hold/i.test(reminders.reminderMessage(order)), JSON.stringify(order));
+  }
+});
+
+test('the amount is read off the order, never assumed from config', () => {
+  // Two copies of one number disagree the day the amount moves, and this one is
+  // printed on a customer's statement beside ours.
+  const body = reminders.reminderMessage({
+    pickup_date: '2026-09-16',
+    pickup_method: 'LEAVE_OUTSIDE',
+    authorization_intent_id: 'pi_1',
+    authorized_cents: 1500,
+  });
+
+  assert.match(body, /\$15\.00 is on hold/);
+  assert.ok(!/\$25\.00/.test(body));
+});
+
+test('A STANDING ORDER STILL FITS IN TWO SEGMENTS WITH IT', () => {
+  // That reminder already carries the SKIP line. This sentence plus that one
+  // plus a long dropoff spot lands a couple of characters inside the ceiling,
+  // which is why the wording was measured rather than chosen - a third segment
+  // on every standing-order reminder is real money, every week, for ever.
+  const worst = reminders.reminderMessage({
+    pickup_date: '2026-09-16',
+    pickup_window_start: '17:00',
+    pickup_window_end: '21:00',
+    pickup_method: 'LEAVE_OUTSIDE',
+    from_schedule: true,
+    preferences: { special_instructions: 'side door by the garage' },
+    authorization_intent_id: 'pi_1',
+    authorized_cents: 2500,
+  });
+
+  assert.match(worst, /SKIP/);
+  assert.match(worst, /is on hold/);
+  assert.ok(worst.length <= 306, `${worst.length} characters is three segments`);
+});
+
 test('AND THE CONSTANT CARRIES EVERYTHING collectable() READS', () => {
   // It pinned the exact string 'payment_status', which passed happily on the
   // day collectable() learned about the $25 hold and stopped being true a line
@@ -190,7 +258,7 @@ test('AND THE CONSTANT CARRIES EVERYTHING collectable() READS', () => {
   //
   // Asserting what the constant MUST CONTAIN rather than what it equals is the
   // version that survives the next column.
-  for (const column of ['payment_status', 'authorization_refused_at']) {
+  for (const column of ['payment_status', 'authorization_refused_at', 'authorized_cents']) {
     assert.match(reminders.CARD_FIELDS, new RegExp(column), column);
   }
 });
