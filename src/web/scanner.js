@@ -114,7 +114,7 @@ function scanReturn(crumb, code) {
   return `${bare}?${kept ? `${kept}&` : ''}code=${encodeURIComponent(clean)}`;
 }
 
-// A scan field: the input, the camera button, and the viewfinder.
+// A scan field: the input, the camera button, and the note.
 //
 // `name` is the form field; `action` is where the form posts. `autofocus`
 // belongs on whichever field is the actual task on that screen.
@@ -125,11 +125,11 @@ function scanReturn(crumb, code) {
 // rule is that the camera is an accelerator and never the mechanism, and this is
 // the one deliberate exception to it.
 //
-// THE BOX IS NOT DELETED, IT IS HIDDEN - and the script reveals it if the camera
-// cannot start: permission refused, no camera, a browser that cannot decode. A
-// driver at a counter with a dead camera has to have a way through, and that is
-// the whole reason the rule exists. He cannot type INSTEAD of scanning; he can
-// type when there is nothing to scan with.
+// THE BOX IS NOT DELETED, IT IS HIDDEN - and the script reveals it if there is
+// no way to scan at all: a browser with no file capture, no camera. A driver at
+// a counter with a dead camera has to have a way through, and that is the whole
+// reason the rule exists. He cannot type INSTEAD of scanning; he can type when
+// there is nothing to scan with.
 function scanField({
   action,
   name = 'code',
@@ -145,7 +145,26 @@ function scanField({
     cameraOnly ? ' scan-camera-only' : ''
   }" style="margin:0;">
     ${hidden}
-    <label class="eyebrow" for="scan-${name}" style="display:block;margin-bottom:8px;${
+
+    <!-- THE CAMERA IS THE PRIMARY CONTROL NOW, so it is the filled button and
+         it comes first. Neil, 14 September: the photo is the main path.
+
+         A file input with capture="environment" is the whole mechanism. It
+         opens the phone's own camera - the real one, with the autofocus, the
+         exposure and the torch - takes one still, and hands back an image.
+         There is no permission prompt of ours to refuse and no live stream to
+         keep alive, which is most of what used to go wrong.
+
+         It is hidden and driven by the button so the label is ours and the
+         control matches every other button on the screen. A bare file input
+         says "Choose File" and looks like an upload. -->
+    <input type="file" class="scan-shot" accept="image/*" capture="environment"
+           style="display:none;" tabindex="-1" aria-hidden="true">
+
+    <button type="button" class="btn btn-ink btn-lg btn-full scan-open"
+            style="display:none;">Scan with camera</button>
+
+    <label class="eyebrow" for="scan-${name}" style="display:block;margin:14px 0 8px;${
       cameraOnly ? 'display:none;' : ''
     }">${label}</label>
 
@@ -157,17 +176,6 @@ function scanField({
       <button type="submit" class="btn btn-ink btn-lg">${buttonLabel}</button>
     </div>
 
-    <!-- Hidden until the script confirms this browser can actually scan. A
-         camera button that does nothing is worse than no camera button. It now
-         shows on an iPhone too, because jsQR covers what Safari lacks.
-
-         Inline display:none rather than the HTML hidden attribute. That
-         attribute is only a display:none from the browser's own stylesheet,
-         and .btn sets display itself, which beats it - so the button rendered
-         anyway and did nothing when tapped. -->
-    <button type="button" class="btn btn-outline btn-lg btn-full scan-open"
-            style="margin-top:${cameraOnly ? '0' : '12'}px;display:none;">Scan with the camera</button>
-
     <!-- ALWAYS OFFERED, and not hidden behind anything. The camera app on the
          driver's phone is a better QR reader than ours will ever be, and it is
          the path that works when ours does not. Scanning there opens
@@ -175,12 +183,6 @@ function scanField({
     <p class="field-hint" style="margin-top:8px;">
       Or point your phone's camera at the QR and open the link.
     </p>
-
-    <div class="scan-stage" style="margin-top:12px;display:none;">
-      <video class="scan-video" playsinline muted
-             style="width:100%;border:2px solid var(--ink-900);border-radius:12px;background:var(--ink-900);"></video>
-      <button type="button" class="btn btn-outline btn-full scan-close" style="margin-top:10px;">Stop the camera</button>
-    </div>
 
     <!-- The note is always in the markup even when there is nothing to say,
          because the script writes camera failures into it. Hidden rather than
@@ -200,9 +202,9 @@ function scannerScript() {
 
   // --- THE PHONE'S OWN CAMERA, WHICH IS THE ONE THAT ALWAYS WORKS ---------
   //
-  // This runs before the early return below on purpose. A phone with no
-  // getUserMedia at all still wants this path, and it is the path that does not
-  // depend on us decoding anything.
+  // This runs first on purpose. A phone that cannot do anything else still
+  // wants this path, and it is the path that does not depend on us decoding
+  // anything at all.
   var forms = document.querySelectorAll('.scan-form');
 
   if (forms.length) {
@@ -245,10 +247,6 @@ function scannerScript() {
     }
   }
 
-  // No camera API means no in-page camera button. Everything above still works,
-  // and so does typing.
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-
   var native = null;
   try {
     if ('BarcodeDetector' in window) native = new BarcodeDetector({ formats: ['qr_code'] });
@@ -257,8 +255,14 @@ function scannerScript() {
   }
 
   // jsQR, fetched once and shared by every scan field on the page. Only ever
-  // requested on a browser with no BarcodeDetector, and only when somebody
-  // actually opens the camera.
+  // requested on a browser with no BarcodeDetector - which is every iPhone -
+  // and only when a photo has actually been taken.
+  //
+  // IT DECODES A STILL NOW, NOT A VIDEO FRAME, and that is the whole point of
+  // this change. The old loop fed it 640px frames off a live preview thirty
+  // times a run, each one whatever the lens happened to be focused on. One
+  // photo from the phone's own camera app is sharp, exposed, and as big as we
+  // want it.
   var jsqrLoading = null;
 
   function loadJsqr() {
@@ -276,38 +280,76 @@ function scannerScript() {
     return jsqrLoading;
   }
 
-  // ONE ANSWER TO "WHAT IS IN FRONT OF THE CAMERA", whichever decoder is doing
-  // the work. Native gets the video element straight; jsQR needs pixels, so a
-  // frame is drawn to a canvas first.
+  // A photo, as something both decoders can read.
+  function imageFrom(file) {
+    if (window.createImageBitmap) {
+      return createImageBitmap(file).catch(function () { return viaElement(file); });
+    }
+    return viaElement(file);
+  }
+
+  function viaElement(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('image')); };
+      img.src = url;
+    });
+  }
+
+  // jsQR over one still, at a given scale and crop.
   //
-  // The canvas is capped at 640px on its long side. A modern phone camera hands
-  // back 1080p or better, and decoding four times the pixels is four times the
-  // work for no more accuracy at the distance somebody holds a bag tag.
-  function decode(video, canvas) {
-    if (native) {
-      return native.detect(video).then(function (found) {
-        return found && found.length ? found[0].rawValue : null;
-      });
+  // TWO PASSES, AND THE SECOND IS THE ONE THAT SAVES A BAD PHOTO. A driver
+  // photographs a bag at arm's length and the tag is a small square in the
+  // middle of a big picture; downscaling the whole frame to something jsQR can
+  // chew through can leave the QR too few pixels to resolve. So the first pass
+  // is the whole image, and the second is the middle of it at full detail.
+  function readWith(jsQR, image, crop) {
+    var w = image.width;
+    var h = image.height;
+    if (!w || !h) return null;
+
+    var sx = 0, sy = 0, sw = w, sh = h;
+    if (crop) {
+      sw = Math.round(w / 2); sh = Math.round(h / 2);
+      sx = Math.round((w - sw) / 2); sy = Math.round((h - sh) / 2);
     }
 
-    return loadJsqr().then(function (jsQR) {
-      var w = video.videoWidth;
-      var h = video.videoHeight;
-      if (!w || !h) return null;
+    // 1400px on the long side. Big enough for a tag that fills a fifth of the
+    // frame, small enough that an older phone is not locked up for a second.
+    var scale = Math.min(1, 1400 / Math.max(sw, sh));
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(sw * scale));
+    canvas.height = Math.max(1, Math.round(sh * scale));
 
-      var scale = Math.min(1, 640 / Math.max(w, h));
-      canvas.width = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
+    var ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-      var ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    var pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var found = jsQR(pixels.data, pixels.width, pixels.height, {
+      inversionAttempts: 'attemptBoth',
+    });
 
-      var pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var found = jsQR(pixels.data, pixels.width, pixels.height, {
-        inversionAttempts: 'dontInvert',
+    return found ? [found.data] : null;
+  }
+
+  // EVERY CODE IN THE PHOTO, NOT THE FIRST ONE. Two tags in one frame is a
+  // thing that has to be refused rather than guessed at, so the count matters
+  // and the decoder has to be asked for all of them.
+  function decode(file) {
+    return imageFrom(file).then(function (image) {
+      if (native) {
+        return native.detect(image).then(function (found) {
+          return (found || []).map(function (f) { return f.rawValue; });
+        });
+      }
+
+      return loadJsqr().then(function (jsQR) {
+        // jsQR finds one code per pass. The crop pass is a second look at the
+        // middle, not a second code - a duplicate is collapsed below.
+        return readWith(jsQR, image, false) || readWith(jsQR, image, true) || [];
       });
-
-      return found ? found.data : null;
     });
   }
 
@@ -340,25 +382,34 @@ function scannerScript() {
     return seq && code.indexOf('-') === -1 ? code + '-' + seq[1] : code;
   }
 
-  // NO CAMERA API IN THIS BROWSER AT ALL. Nothing below will run, so a
-  // camera-only form would show a driver an empty card. Give the box back
-  // before anything else happens.
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    document.querySelectorAll('.scan-form.scan-camera-only').forEach(function (form) {
-      var typed = form.querySelector('.scan-typed');
-      var label = form.querySelector('label.eyebrow');
-      if (typed) typed.style.display = 'flex';
-      if (label) label.style.display = '';
-    });
+  // IS THIS EVEN ONE OF OURS?
+  //
+  // A narrower question than "is this code valid", and the difference is the
+  // whole reason this is allowed to live in a browser. Validity is the server's
+  // - bags.parseCode() decides it and a second copy here would be a second
+  // rule. This only asks whether the thing in the photo belongs to LYNDRY at
+  // all, because a driver photographing a wall of stickers in a laundromat can
+  // easily catch somebody else's QR, and pasting a competitor's web address
+  // into the box is not a decision to defer to the server.
+  //
+  // So: a URL of ours yields its code, any OTHER URL is refused outright, and
+  // a bare token is passed through for the server to judge.
+  function lyndryCode(text) {
+    var value = String(text || '').trim();
+    if (!value) return null;
+
+    if (value.indexOf('/o/') !== -1) return codeFrom(value);
+    if (value.indexOf('://') !== -1) return null;
+
+    return value;
   }
 
   document.querySelectorAll('.scan-form').forEach(function (form) {
     var open = form.querySelector('.scan-open');
-    var close = form.querySelector('.scan-close');
-    var stage = form.querySelector('.scan-stage');
-    var video = form.querySelector('.scan-video');
+    var shot = form.querySelector('.scan-shot');
     var input = form.querySelector('.scan-input');
     var note = form.querySelector('.scan-note');
+
     function say(words) {
       if (!note) return;
       note.textContent = words;
@@ -367,8 +418,13 @@ function scannerScript() {
 
     // THE WAY THROUGH WHEN THERE IS NOTHING TO SCAN WITH. A camera-only form
     // hides the box so a code cannot simply be typed instead of scanned - but a
-    // refused permission or a dead camera must not strand a driver at a counter,
-    // so the box comes back the moment scanning turns out to be impossible.
+    // browser that cannot take a photo at all must not strand a driver at a
+    // counter, so the box comes back then and only then.
+    //
+    // NOT ON A FAILED READ. A blurry photo is a reason to take another one, not
+    // a reason to let somebody type their way past a step that exists to prove
+    // the bag is in their hand. Neil's rule stands: typing must not become
+    // available here merely because the photo scanner exists.
     function letHimType() {
       if (!form.classList.contains('scan-camera-only')) return;
       var typed = form.querySelector('.scan-typed');
@@ -376,75 +432,108 @@ function scannerScript() {
       if (typed) typed.style.display = 'flex';
       if (label) label.style.display = '';
     }
-    if (!open || !video || !input) return;
 
-    var stream = null;
-    var timer = null;
-
-    function stop() {
-      clearTimeout(timer);
-      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
-      stream = null;
-      stage.style.display = 'none';
-      open.style.display = '';
+    // A camera-only form shows its box once a real scan has filled it, so the
+    // driver can see what he is about to confirm. That is not typing his way
+    // past the rule - the code came off a photo.
+    function reveal() {
+      var typed = form.querySelector('.scan-typed');
+      var label = form.querySelector('label.eyebrow');
+      if (typed) typed.style.display = 'flex';
+      if (label) label.style.display = '';
     }
 
-    var canvas = document.createElement('canvas');
+    if (!open || !shot || !input) return;
 
-    function tick() {
-      if (!stream) return;
-      decode(video, canvas)
-        .then(function (raw) {
-          if (raw) {
-            input.value = codeFrom(raw);
-            // A short buzz, so a driver holding the phone at arm's length in a
-            // noisy van knows it read something without looking.
-            if (navigator.vibrate) navigator.vibrate(40);
-            stop();
-            form.submit();
-            return;
-          }
-          // Slower without the native decoder: jsQR is doing real work on the
-          // main thread, and hammering it makes the video stutter, which makes
-          // it HARDER to hold the tag steady in frame.
-          timer = setTimeout(tick, native ? 220 : 320);
-        })
-        .catch(function () {
-          say('The scanner could not start, so type the code instead.');
-          letHimType();
-          stop();
-        });
+    // NO FILE CAPTURE AT ALL. Nothing below can run, so a camera-only form
+    // would be an empty card. Give the box back before anything else happens.
+    var canCapture = 'capture' in document.createElement('input');
+    if (!canCapture && !native) {
+      letHimType();
+      return;
     }
+
+    open.style.display = '';
 
     open.addEventListener('click', function () {
-      // environment = the back camera. Without it phones open the selfie one.
-      navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
-        .then(function (s) {
-          stream = s;
-          video.srcObject = s;
-          stage.style.display = '';
-          open.style.display = 'none';
-          return video.play();
-        })
-        .then(function () { tick(); })
-        .catch(function () {
-          // Permission refused, or no camera. Say so once and get out of the
-          // way - the field above still works.
-          say('No camera available, so type the code instead.');
-          letHimType();
-          open.style.display = 'none';
-        });
+      // Straight through to the phone's camera. The click is inside a real user
+      // gesture, which is what iOS requires.
+      say('');
+      note.style.display = 'none';
+      shot.click();
     });
 
-    if (close) close.addEventListener('click', stop);
+    shot.addEventListener('change', function () {
+      var file = shot.files && shot.files[0];
 
-    // Never leave the camera running behind a page the driver has left.
-    window.addEventListener('pagehide', stop);
+      // CANCELLED. He backed out of the camera, so the form is exactly as he
+      // left it and nothing is said. Neil's rule: return unchanged, nothing
+      // confirmed.
+      if (!file) return;
+
+      open.disabled = true;
+      say('Reading the photo...');
+
+      decode(file)
+        .then(function (raw) {
+          // Every LYNDRY code in the photo, the same one twice collapsed.
+          var codes = [];
+          (raw || []).forEach(function (text) {
+            var code = lyndryCode(text);
+            if (!code) return;
+            code = code.toUpperCase();
+            if (codes.indexOf(code) === -1) codes.push(code);
+          });
+
+          if (codes.length > 1) {
+            // NEVER GUESS BETWEEN TWO TAGS. Which bag he is holding is the
+            // entire question the step is asking.
+            say('More than one tag in that photo. Take another with just the one bag in frame.');
+            return;
+          }
+
+          if (!codes.length) {
+            // ONE MESSAGE FOR TWO CAUSES, BECAUSE THE DECODER CANNOT TELL THEM
+            // APART. jsQR - the decoder every iPhone gets, because Safari has
+            // no BarcodeDetector - finds one QR per pass, and two tags in one
+            // frame confuses it into finding neither. Tested: a photo with two
+            // tags in it comes back empty rather than coming back twice.
+            //
+            // So it refuses, which is right, but it cannot honestly say WHY.
+            // Claiming "no code" when there were two would send a driver
+            // closer to a bag he has already filled the frame with. The
+            // wording covers both, and the fix for both is the same photo.
+            //
+            // BarcodeDetector DOES return every code it sees, so an Android
+            // driver gets the precise message above. The behaviour is identical
+            // on both - nothing filled, nothing confirmed, take another photo -
+            // which is what Neil's rule about the two platforms asks for.
+            say('Could not read a tag. Take another with just the one bag in frame, closer and in better light - or open the QR with your phone camera.');
+            return;
+          }
+
+          // FILLED, NOT SENT. The tap that follows is the driver saying this is
+          // the bag in his hand, and it is the whole reason the step exists.
+          // Nothing here submits the form, and nothing here binds a bag.
+          input.value = codes[0];
+          reveal();
+          say('Read ' + codes[0] + '. Check it against the tag, then confirm.');
+
+          // A short buzz, so a driver holding the phone at arm's length in a
+          // noisy van knows it read something without looking.
+          if (navigator.vibrate) navigator.vibrate(40);
+        })
+        .catch(function () {
+          say('That photo could not be read. Try again, or open the QR with your phone camera.');
+        })
+        .then(function () {
+          open.disabled = false;
+          // Clear it so photographing the SAME bag twice still fires a change
+          // event. Without this the second tap looks like nothing happened.
+          try { shot.value = ''; } catch (e) {}
+        });
+    });
   });
-
-  // A camera and a decoder, one way or the other. Offer the button.
-  document.querySelectorAll('.scan-open').forEach(function (b) { b.style.display = ''; });
 })();
 </script>`;
 }
