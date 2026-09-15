@@ -350,6 +350,19 @@ async function transition(order, to) {
     require('./promotions')
       .releaseSlot(order.id)
       .catch((err) => console.error(`Could not release a promotion slot: ${err.message}`));
+
+    // AND THE $25 GOES BACK, for the same reason and in the same place. Nobody
+    // drove anywhere, so there is no trip to charge for - which is exactly what
+    // separates this from a refusal at the door, where the van had already been
+    // and Neil's rule is that we keep it.
+    //
+    // A hold left on a cancelled pickup is real money sitting on somebody's
+    // card for a week over a pickup that is not happening, and "where is my
+    // $25" is the support call that writes itself. Best effort, like the slot
+    // above: a cancellation must never fail because Stripe did.
+    require('./billing')
+      .releaseShowUp(order)
+      .catch((err) => console.error(`Could not release a show-up hold: ${err.message}`));
   }
 
   return data;

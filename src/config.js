@@ -305,6 +305,58 @@ const config = Object.freeze({
     // minimum has to be stated before a card is charged, not after.
     minimumCents: 2500,
 
+    // THE SHOW-UP CHARGE, HELD ON THE CARD BEFORE A PICKUP IS CONFIRMED.
+    //
+    // Neil, 14 September: $25, down from the $50 and $80 that were discussed
+    // and never built. It is an AUTHORIZATION - the money is held, not taken -
+    // and what it buys is the trip: a van leaving with a driver in it costs the
+    // same whether or not there is a bag on the step.
+    //
+    // At the door the real total is worked out and this is what happens:
+    //
+    //   total is $25 or less   capture that much of the hold, and no more
+    //   total is more          capture the $25 and charge the rest on the
+    //                          same card
+    //   the rest is refused    KEEP the $25, leave the bags, wash nothing
+    //
+    // THE LAST LINE IS THE POINT. The customer paid for the trip, not for
+    // laundry we never took, so the $25 is not a credit against a future wash
+    // and must never be treated as one.
+    //
+    // It happens to equal minimumCents today and that is a coincidence of
+    // arithmetic, not a relationship. The minimum is the floor on what a wash
+    // COSTS; this is what a doorstep visit is worth if no wash happens. Do not
+    // collapse them into one constant.
+    authorizationCents: Number(process.env.AUTHORIZATION_CENTS || 2500),
+
+    // HOW LONG A HOLD IS TRUSTED FOR, in days.
+    //
+    // Stripe lets an uncaptured card authorization expire on its own, usually
+    // at seven days and sometimes sooner depending on the issuer. A pickup
+    // booked a fortnight out would therefore reach the doorstep with a hold
+    // that had quietly lapsed - the driver weighs the bags, the capture fails,
+    // and the card has to be charged the whole amount cold, which is the one
+    // thing holding the $25 was meant to have already tested.
+    //
+    // Five rather than seven: the night-before pass is the only chance to
+    // replace one, so the margin has to cover a hold placed the morning before
+    // that pass and used the evening after it.
+    authorizationFreshDays: Number(process.env.AUTHORIZATION_FRESH_DAYS || 5),
+
+    // HOW CLOSE A PICKUP HAS TO BE BEFORE WE HOLD ANYTHING. Neil, 14 September:
+    // only place the $25 on a booking a day in advance.
+    //
+    // He is right, and the reason is whose money it is. A hold is a pending
+    // line on somebody's card - real money they cannot spend - and a pickup
+    // booked a fortnight out would carry one for a fortnight, for a trip nobody
+    // is making yet. It would also have expired by the time it mattered, so it
+    // would be a fortnight of held money buying nothing at all.
+    //
+    // Anything further out is held by the night-before pass instead, which is
+    // the last honest moment to find out a card will fund the trip and the
+    // first moment the money is about to be worth holding.
+    authorizationLeadDays: Number(process.env.AUTHORIZATION_LEAD_DAYS || 1),
+
     // The range quoted to someone asking "roughly what will this cost?".
     // Derived from the rate above and a typical 15–18 lb bag, so if the rate
     // changes these have to change with it or the site quotes a range the

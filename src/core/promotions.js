@@ -402,6 +402,30 @@ async function claimedFreeOrder(orderId) {
   return { freeOrder: true, freeUpToLb: freeAllowanceLb(promo) };
 }
 
+// THE SAME QUESTION FOR A WHOLE LIST, IN ONE TRIP.
+//
+// Same shape as expectedForMany() and for the same reason: a night-before pass
+// over thirty pickups must not be thirty round trips to answer "is this one
+// free". Returns a Set of the order ids that are.
+async function freeOrderIds(orderIds = []) {
+  const ids = [...new Set((orderIds || []).filter(Boolean))];
+  if (!ids.length) return new Set();
+
+  const { data, error } = await db
+    .from('customer_promotions')
+    .select('claimed_order_id, promotions (kind, value, status, max_discount_cents)')
+    .in('claimed_order_id', ids);
+
+  if (error) throw error;
+
+  const free = new Set();
+  for (const row of data || []) {
+    if (row.promotions && takesEverythingOff(row.promotions)) free.add(row.claimed_order_id);
+  }
+
+  return free;
+}
+
 // Give somebody a promotion. Safe to call repeatedly - the unique index means
 // a second grant is a no-op rather than a duplicate, which matters because the
 // obvious place to call this is "every time an unknown number texts".
@@ -923,6 +947,7 @@ module.exports = {
   claimSlot,
   releaseSlot,
   claimedFreeOrder,
+  freeOrderIds,
   takesEverythingOff,
   freeAllowanceLb,
   freeOfferLine,

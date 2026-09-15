@@ -92,7 +92,15 @@ const routableCheck = dispatch.routableCheck;
 // the order page's payment_attempts, and its ready_at / delivered_at), which is
 // why the fields are one string used by all three queries rather than typed out
 // three times. A test pins that each query carries them.
-const CARD_FIELDS = 'payment_status';
+const CARD_FIELDS =
+  'payment_status, ' +
+  // THE SHOW-UP HOLD, because collectable() reads it and an unselected
+  // column is undefined - which here is indistinguishable from a card that
+  // never refused. So a pickup the round has already dropped would still be
+  // told to put the bag out at eight in the morning. That is the exact
+  // failure the reminder gate was built for, one rule along, and the
+  // eleventh time an absent column has quietly decided what a screen knows.
+  'authorization_intent_id, authorized_at, authorization_refused_at';
 const CUSTOMER_CARD_FIELDS = 'stripe_customer_id, default_payment_method_id';
 
 // A pickup booked in the last few hours does not need reminding that it is

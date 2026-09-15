@@ -1087,6 +1087,65 @@ async function bookPickup(
     });
 
   // ---------------------------------------------------------------------
+  // THE $25 HOLD, AND IT IS WHAT CONFIRMS THE PICKUP.
+  //
+  // Neil, 14 September: the card must accept a $25 hold before a pickup is
+  // confirmed. Money held, not taken - what it buys is the trip, because a van
+  // leaving with a driver in it costs the same whether or not there is a bag on
+  // the step.
+  //
+  // AFTER THE ORDER EXISTS, like everything else about money here. CLAUDE.md is
+  // emphatic: the order is written first and the card asked about second,
+  // because a customer sent away to sort a card out before their booking exists
+  // comes back to nothing. That happened to a real one.
+  //
+  // AFTER THE PROMOTION SLOT, TOO, and that ordering is the substantive one. A
+  // free order is told "nothing to pay" in the very next message; holding $25
+  // on that card is the contradiction the waived rule exists to prevent, and
+  // claimSlot() above is the only thing that knows whether this is one.
+  //
+  // A REFUSAL IS NOT A FAILED BOOKING. The order is real and stays on the
+  // board; what it does not get is a confirmation, because collectable() will
+  // keep it off the round until a card accepts the hold. Saving one places a
+  // fresh hold and confirms it, which is the same shape as AWAITING CARD.
+  const free = promotions.takesEverythingOff(claimed);
+
+  // AND ONLY IF THE PICKUP IS A DAY AWAY. Neil, 14 September: only place the
+  // $25 on a booking a day in advance.
+  //
+  // A hold is a pending line on somebody's card, so a pickup booked a fortnight
+  // out would tie up real money for a fortnight - and Stripe would have expired
+  // it before the driver arrived, so it would buy nothing in return. Anything
+  // further out is held by the night-before pass instead, which is the last
+  // honest moment to find out and the first moment it is worth holding.
+  //
+  // A deferred hold is UNASKED, not refused, so the pickup is confirmed and
+  // collectable exactly as it was before any of this existed - and the
+  // confirmation says nothing about a hold, because it reads the order and
+  // there is not one.
+  const hold = free || !billing.holdDueNow(order)
+    ? { ok: true, skipped: free ? 'free_order' : 'too_far_out' }
+    : await billing.authorizeShowUp(order, customer).catch((err) => {
+        // FAILS OPEN, like every other lookup that stands between a customer
+        // and a booking. Stripe being unreachable must not turn a good card
+        // into a refusal - that would park the pickup with nothing anybody here
+        // could do about it. The order books unheld, exactly as it did before
+        // this existed, and showUpState() reads UNASKED.
+        console.error(`Could not hold the show-up charge for ${order.id}: ${err.message}`);
+        return { ok: true, skipped: 'hold_errored' };
+      });
+
+  // Merged onto the order we already hold so the confirmation can name the
+  // hold without a second query - and so it is READ off the order rather than
+  // passed along beside it, which is what keeps the webhook's confirmation and
+  // this one saying the same thing.
+  if (hold.held) {
+    order.authorization_intent_id = hold.paymentIntentId;
+    order.authorized_cents = hold.amountCents;
+    order.authorized_at = new Date().toISOString();
+  }
+
+  // ---------------------------------------------------------------------
   // TELL THE OFFICE. Neil's ask: an admin should get a text when somebody
   // places an order, rather than finding out by opening the board.
   //
@@ -1129,6 +1188,14 @@ async function bookPickup(
     // Saying the allowance at booking is what stops that being an argument.
     freeUpToLb: promotions.freeAllowanceLb(claimed),
     needsCard: billing.needsCardOnFile(customer),
+
+    // WHETHER THE CARD CONFIRMED IT. `holdRefused` is the one a caller must
+    // act on: it means a card is on file, it was asked for the hold, and it
+    // said no - so there is an order and no confirmation to send.
+    heldCents: hold.held ? hold.amountCents : null,
+    holdRefused: Boolean(hold.refused),
+    holdReason: hold.reason || null,
+
     // Empty unless somebody has deliberately set ALWAYS_BOOK_NUMBERS. It is
     // kept because the day that list comes back, the silence comes back with
     // it - and that is what made a working exemption look like a broken rule.
@@ -1145,6 +1212,33 @@ async function bookPickup(
 // told. When the AI and the web form each had their own copy, booking by text
 // and booking on the site produced two subtly different confirmations for the
 // same thing — and only one of them ever got updated.
+
+// THE CARD WOULD NOT ACCEPT THE HOLD, SO THERE IS NO CONFIRMATION TO SEND.
+//
+// It lives here beside confirmationMessage() for the same reason that one does:
+// both front doors reach it, and the day they each wrote their own copy is the
+// day booking by text and booking on the site started saying different things
+// about the same event.
+//
+// WHAT IT MUST NOT DO is read as "we don't have a card". They gave us one - it
+// is on file and it is named in this message - and being told otherwise sends
+// somebody looking for a problem that is not there. It also says nothing has
+// been taken, because a refused hold on a statement is a pending line that
+// disappears, and a customer who has just seen one is owed that sentence.
+function holdRefusedMessage(customer, order, { setupUrl = null, heldCents = null } = {}) {
+  const card = billing.describeCard(customer) || 'card';
+  const amount = billing.money(heldCents == null ? billing.showUpCents() : heldCents);
+
+  // IT ENDS ON THE DESTINATION, because cardDestination() returns the tail of a
+  // sentence and one of its two answers already ends in a full stop. Anything
+  // appended after it reads as a sentence running into the next one.
+  return (
+    `We couldn't confirm order #${order.order_number} for ${whenLine(order)}: your ${card} ` +
+    `wouldn't accept the ${amount} hold we place before a pickup. Nothing has been taken, ` +
+    `and we'll book you straight in once it goes through. ` +
+    `Update it ${billing.cardDestination(order, setupUrl)}`
+  );
+}
 
 // "Wednesday 12 Aug between 5:30 and 7pm", or just the day when no time was
 // asked for.
@@ -1248,6 +1342,13 @@ function confirmationMessage(
   const card = billing.describeCard(customer);
   const minimum = billing.money(config.pricing.minimumCents);
 
+  // READ OFF THE ORDER, never passed in. Both doors send this message and so
+  // does the card-saved webhook, and a flag three callers have to remember is
+  // a flag one of them will forget - which is how the same booking would be
+  // described two different ways depending on which door it came through.
+  const held = billing.showUpHold(order);
+  const heldCents = held ? held.cents : 0;
+
   // A FREE ORDER REPLACES THE PRICE SENTENCE, it does not add to it. Telling
   // somebody their order is free and then, in the same breath, that we will
   // take $2.00 a pound off their Visa is worse than saying nothing - and this
@@ -1269,6 +1370,12 @@ function confirmationMessage(
     ? freeUpToLb
       ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${site.pricePerLb} a pound, and we'll text you the total after we weigh it.`
       : ` This one is on us - you got one of the free ones, so there is nothing to pay.`
+    : card && heldCents
+      ? // THE HOLD IS SAID, and it is not optional politeness: a $25 pending
+        // charge appearing on somebody's statement with nothing explaining it
+        // is a phone call at best and a chargeback at worst. Kept to one clause
+        // because this message is already at its segment ceiling.
+        ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We hold ${billing.money(heldCents)} on your ${card} to confirm, and take the real total off it at your door.`
     : card
     ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} then.`
     : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
@@ -1340,6 +1447,7 @@ module.exports = {
   bookPickup,
   whenLine,
   confirmationMessage,
+  holdRefusedMessage,
   rescheduledMessage,
   dateProblem,
   weekdayMismatch,

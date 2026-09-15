@@ -2765,6 +2765,33 @@ router.post('/account/book', async (req, res, next) => {
       );
     }
 
+    // THE CARD REFUSED THE HOLD, SO THERE IS NOTHING TO THANK THEM FOR.
+    //
+    // /account/thanks is for a booked order, and this one is not: collectable()
+    // keeps it off the round until a card accepts the hold. Thanking somebody
+    // for a pickup no van is coming to is the same mistake as the old
+    // "You're booked" page that sat above "Nothing booked yet".
+    //
+    // Their account is where they belong - it lists the pickup, names the card
+    // and has the button to change it - with the reason in the red banner, and
+    // the text goes out for the same reason every other one does: the messages
+    // table is the record of what a customer was told.
+    if (result.holdRefused) {
+      await sendAndLog(
+        customer.phone,
+        booking.holdRefusedMessage(customer, result.order),
+        customer.id
+      );
+
+      return res.redirect(
+        303,
+        `/account?error=${encodeURIComponent(
+          `Order #${result.order.order_number} is not confirmed: your card would not accept the ` +
+            `${billing.money(billing.showUpCents())} hold we place before a pickup. Nothing has been taken.`
+        )}`
+      );
+    }
+
     // Confirm by text, exactly as a booking made over SMS would be — same
     // wording, from the same function, so the messages table reads the same
     // whichever door they came through.

@@ -36,6 +36,7 @@
 
 const { escapeHtml, CSS_BASE } = require('./layout');
 const booking = require('../core/booking');
+const payments = require('../core/payments');
 const orders = require('../core/orders');
 const partnersCore = require('../core/partners');
 const tags = require('../core/tags');
@@ -667,6 +668,126 @@ function bagsTable(bags, order) {
     <td colspan="2">${escapeHtml(f.match)}</td></tr></tfoot></table></div>`;
 }
 
+// HOW IT WAS ACTUALLY PAID. Total, card, cash, balance.
+//
+// Neil, 14 September: the order must not say "Paid - Cash". It says
+// Total $95 / Card $80 / Cash $15 / Balance $0 - Paid. A single word cannot
+// describe an order settled two ways, and calling the whole thing cash when
+// only the leftover was would be false on the one screen that has to be right.
+//
+// IT APPEARS ONLY WHEN THERE IS A LEDGER TO SHOW. Every order taken before the
+// payments table existed has no rows, and drawing Card $0 / Cash $0 over an
+// order that was plainly paid by card would invent a fact. Those keep the
+// status chip they always had.
+// THE $25 SITTING ON THEIR CARD, SAID OUT LOUD.
+//
+// Held, taken, or refused - three different facts and a person on the phone to
+// a customer needs to know which. A hold is invisible everywhere else in ops:
+// it is not a payment, so the ledger has nothing to say about it, and it is not
+// a status, so the badge cannot carry the amount.
+function holdLine(order, { money }) {
+  const held = Number(order.authorization_intent_id ? order.authorized_cents || 0 : 0);
+  const taken = Number(order.captured_cents || 0);
+
+  if (held > 0) {
+    return `<p class="muted">${escapeHtml(money(held))} is held on the card for this pickup.
+      Held, not taken - it comes off at the door.</p>`;
+  }
+
+  if (order.authorization_refused_at) {
+    return `<p class="muted"><b>The card would not accept the hold.</b>
+      ${escapeHtml(order.authorization_refused_reason || 'No reason given.')}
+      This pickup stays off the round until a card accepts one.</p>`;
+  }
+
+  if (taken > 0) {
+    return `<p class="muted">${escapeHtml(money(taken))} was taken off the hold.</p>`;
+  }
+
+  return '';
+}
+
+function paidTable(split, { money }) {
+  if (!split || !split.ledger) return '';
+
+  const row = (label, cents, strong) =>
+    `<tr><th>${escapeHtml(label)}</th><td class="num">${
+      strong ? `<b>${escapeHtml(money(cents))}</b>` : escapeHtml(money(cents))
+    }</td></tr>`;
+
+  // AN UNPRICED ORDER WITH A LEDGER ROW IS A REAL THING NOW, and it is the
+  // doorstep refusal: $25 kept for the trip, the bags left behind, the pickup
+  // put back to tomorrow and no price ever written. Drawing Total $0.00 /
+  // Balance $0.00 / Paid over that would call an order paid that was never
+  // charged for - so when there is no price there is nothing to balance, and
+  // the table says the one thing that is true.
+  if (!split.total) {
+    return split.trip
+      ? `<h2>Paid</h2><div class="tablewrap"><table class="kv">
+          ${row('Trip (not the wash)', split.trip, true)}
+        </table></div>
+        <p class="muted">The driver came out and the bags were left. Nothing has been
+           charged for a wash, and this does not come off the rebooked pickup.</p>`
+      : '';
+  }
+
+  return `<h2>Paid</h2><div class="tablewrap"><table class="kv">
+    ${row('Total', split.total)}
+    ${split.card ? row('Card', split.card) : ''}
+    ${split.cash ? row('Cash', split.cash) : ''}
+    ${
+      // THE TRIP, ON ITS OWN LINE AND OUTSIDE THE BALANCE. Money that was taken
+      // and does not pay for this wash: the driver came out, the bags were
+      // weighed, the extra charge was refused and the laundry stayed on the
+      // step. Folding it into Card would read as money off a wash that never
+      // happened, which is the one thing Neil said it must never be.
+      split.trip ? row('Trip (not the wash)', split.trip) : ''
+    }
+    ${row('Balance', split.balance, true)}
+    <tr><th></th><td>${
+      split.balance === 0
+        ? '<span class="chip ok">Paid</span>'
+        : '<span class="chip bad">Still owed</span>'
+    }</td></tr>
+  </table></div>`;
+}
+
+// TAKING CASH, WHICH IS ONLY EVER A RECOVERY.
+//
+// Drawn only when the order is on payment hold: the card was refused, we are
+// holding the laundry, and money is still owed. That is the single situation
+// Neil allows cash in, and the route refuses every other one as well - a form
+// that is merely absent is not a guard.
+//
+// It offers the OUTSTANDING amount, not the total, because that is the only
+// thing anybody may record. Anything more is change, which this system cannot
+// give back.
+function cashForm(order, split, { money, can }) {
+  if (!can.override) return '';
+  if (order.payment_status !== 'FAILED') return '';
+
+  const outstanding = split && split.ledger ? split.balance : Number(order.price_cents || 0) - Number(order.amount_paid_cents || 0);
+  if (!(outstanding > 0)) return '';
+
+  return `<h2>Cash</h2>
+  <p class="muted">The card was refused and we are holding the laundry.
+     ${escapeHtml(money(outstanding))} is outstanding. Recording cash does not text
+     anybody, and it does not put the order on today's round - it only makes it
+     eligible again once nothing is owed.</p>
+  <form method="post" action="/ops/orders/${order.order_number}/cash" class="toolbar">
+    <span class="field">
+      <label for="cash-amount">Cash taken</label>
+      <input id="cash-amount" name="amount" inputmode="decimal" autocomplete="off"
+             placeholder="${escapeHtml((outstanding / 100).toFixed(2))}" required>
+    </span>
+    <span class="field">
+      <label for="cash-note">Note</label>
+      <input id="cash-note" name="note" autocomplete="off" placeholder="optional">
+    </span>
+    <button type="submit" class="cbtn">Record cash</button>
+  </form>`;
+}
+
 function chargeTable(rows, { money }) {
   if (!rows.length) return '';
   const rate = (r) => (r.rate == null ? '—' : (r.rate / 100).toFixed(2));
@@ -717,12 +838,17 @@ function threadHtml(order, thread, can) {
 function orderConsoleBody({
   order, customer, events, labels, messages, tasks, team, laundromats, limits,
   can, view, banner, money, shortDate, labelState, sideExtras = '',
+  // The rows from the payments ledger. Absent on an order taken before that
+  // table existed, which is why paidTable() draws nothing without them rather
+  // than inventing Card $0.
+  paymentRows = [],
 }) {
   const n = order.order_number;
   const c = customer || {};
   const exception = exceptionFor(order, events, limits);
   const log = humanEvents(events, view);
   const charge = can.money ? chargeRows(events, order, { money }) : [];
+  const split = payments.splitFor(order, paymentRows);
   const bags = bagRows(labels, order, { labelState });
   const thread = can.messages ? messagesForOrder(messages, order) : { rows: [], later: 0 };
   const actions = actionsFor(order, { tasks, can, exception, labels });
@@ -777,6 +903,9 @@ function orderConsoleBody({
     <div>
       ${bagsTable(bags, order)}
       ${can.money ? chargeTable(charge, { money }) : ''}
+      ${can.money ? holdLine(order, { money }) : ''}
+      ${can.money ? paidTable(split, { money }) : ''}
+      ${can.money ? cashForm(order, split, { money, can }) : ''}
       ${can.audit ? logTable(order, log, view) : ''}
     </div>
     <div class="side">
@@ -791,6 +920,9 @@ function orderConsoleBody({
 
 module.exports = {
   orderConsoleBody,
+  holdLine,
+  paidTable,
+  cashForm,
   humanEvents,
   chargeRows,
   bagRows,

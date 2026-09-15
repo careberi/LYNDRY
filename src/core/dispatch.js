@@ -64,7 +64,12 @@ const RUN_FIELDS =
   // pickup off this run rather than the one that deserved it. Same trap as the
   // order page reading payment_attempts it had never selected. price_cents is
   // balance()'s, and leaving it out makes every hold evaluate to nothing.
-  'payment_status, price_cents, ' +
+  'payment_status, price_cents, amount_paid_cents, ' +
+  // AND THE HOLD, for the same reason one line up. showUpState() reads all
+  // three, and an unselected column reads as undefined - which here would be
+  // indistinguishable from a card that never refused, so a refused pickup
+  // would go back on the round. Tenth time this trap has been worth a note.
+  'authorization_intent_id, authorized_at, authorization_refused_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
@@ -86,8 +91,24 @@ const RUN_FIELDS =
 // was tried and refused creates a balance.
 function balance(order) {
   if (!order) return 0;
+
+  // PAID and WAIVED owe nothing, and UNPAID is the mid-doorstep state above.
+  // Only a charge that was tried and refused leaves a balance.
   if (order.payment_status !== 'FAILED') return 0;
-  return Number(order.price_cents || 0);
+
+  // WHAT HAS ALREADY BEEN PAID COMES OFF, WHICH IS THE CASH LEDGER ARRIVING.
+  //
+  // This function was written as money rather than as `payment_status ===
+  // FAILED` precisely so part-cash could land without re-opening the hold
+  // rule, and it has: $84 owed, $70 handed over in cash, $14 still held.
+  //
+  // amount_paid_cents is a sum of the payments table, recomputed on every
+  // write - see src/core/payments.js. Unselected it reads as undefined and
+  // Number(undefined || 0) is 0, so a forgetful query makes an order look
+  // WHOLLY unpaid rather than crashing. Both field lists carry it and a test
+  // pins that.
+  const paid = Number(order.amount_paid_cents || 0);
+  return Math.max(0, Number(order.price_cents || 0) - paid);
 }
 
 // WE ARE HOLDING THEIR LAUNDRY AND THEIR MONEY HAS NOT ARRIVED.
@@ -153,6 +174,19 @@ async function heldCustomerIds(customerIds = []) {
 function collectable(order) {
   if (!order) return false;
   if (order.payment_status === 'WAIVED') return true;
+
+  // AND THE $25 HOLD, which is the same rule one step further on. Neil, 14
+  // September: the card must accept the hold before a pickup is confirmed. A
+  // card that is on file and will not accept $25 is a van driving to a door
+  // for nothing, which is the exact trip the hold exists to pay for.
+  //
+  // ONLY A REFUSAL BLOCKS. showUpState() answers UNASKED for every order taken
+  // before this existed, for a waived one, and wherever Stripe is switched off
+  // - and UNASKED is collectable, because it always was. Reading a missing
+  // hold as a failed one would empty the round the morning this deploys, the
+  // same failure the card gate avoids by answering false with no Stripe key.
+  if (billing.showUpState(order) === 'REFUSED') return false;
+
   return !billing.needsCardOnFile(order.customers || {});
 }
 
@@ -376,7 +410,12 @@ const BOARD_FIELDS =
   // stays a delivery stop. Caught by running the board against real rows rather
   // than by a test. SIXTH time an unselected column has quietly decided what a
   // screen can know.
-  'payment_status, price_cents, ' +
+  'payment_status, price_cents, amount_paid_cents, ' +
+  // AND THE HOLD, for the same reason one line up. showUpState() reads all
+  // three, and an unselected column reads as undefined - which here would be
+  // indistinguishable from a card that never refused, so a refused pickup
+  // would go back on the round. Tenth time this trap has been worth a note.
+  'authorization_intent_id, authorized_at, authorization_refused_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, preferences, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 

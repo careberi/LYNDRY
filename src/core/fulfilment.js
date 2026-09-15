@@ -1505,10 +1505,17 @@ async function loadVan(order, { by = {} } = {}) {
   const priceCents = Math.max(0, beforeDiscount - discountCents);
 
   // --- The card, before anything is written --------------------------------
+  //
+  // THROUGH THE HOLD, WHICH IS WHERE THE $25 IS SPENT. chargeAtTheDoor() takes
+  // what fits out of the authorization placed when the pickup was booked and
+  // charges only the difference, so a customer sees one $25 hold turn into one
+  // charge rather than a hold plus a full-price charge beside it. An order with
+  // no live hold - every order taken before this existed - falls straight
+  // through to the ordinary charge it has always had.
   const charge =
     order.payment_status === 'WAIVED'
       ? { ok: true, waived: true }
-      : await billing.chargeOrder({ ...order, price_cents: priceCents }, customer).catch((err) => {
+      : await billing.chargeAtTheDoor(order, customer, { totalCents: priceCents }).catch((err) => {
           console.error(`Could not charge ${order.id} at the door: ${err.message}`);
           return { ok: false, failed: true, reason: err.message };
         });
@@ -1566,26 +1573,43 @@ async function loadVan(order, { by = {} } = {}) {
     kind: 'PAYMENT',
     summary: charge.waived
       ? 'Waived, nothing charged'
+      : charge.nothingToCharge
+        ? 'Nothing to charge - the promotion covered it'
       : charge.alreadyPaid
         ? 'Already paid'
-        : `Charged ${money(priceCents)} at the door`,
-    became: charge.waived ? 'WAIVED' : 'PAID',
+        : charge.fromHold && charge.capturedCents < priceCents
+          ? `Charged ${money(priceCents)} at the door - ${money(charge.capturedCents)} off the hold, ` +
+            `${money(priceCents - charge.capturedCents)} on the card`
+          : charge.fromHold
+            ? `Charged ${money(priceCents)} at the door, taken off the hold`
+            : `Charged ${money(priceCents)} at the door`,
+    became: charge.waived ? 'WAIVED' : charge.nothingToCharge ? 'FREE' : 'PAID',
     by,
   });
 
   if (customer) {
     // A WAIVED ORDER IS TOLD THE WEIGHT AND NOTHING ELSE, which is the promise
     // the pickup text made it.
-    const text = charge.waived
-      ? waivedWeighInText(weight)
-      : doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer });
+    // AN ORDER THAT COMES TO NOTHING IS TOLD THE WEIGHT AND NOTHING ELSE, the
+    // same as a waived one and for the same reason: they were promised
+    // "nothing to pay", and a text reading "the total is $0.00. Charged to your
+    // Visa." reads as a mistake against that promise.
+    const text =
+      charge.waived || charge.nothingToCharge
+        ? waivedWeighInText(weight)
+        : doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer });
 
     await sendAndLog(customer.phone, text, customer.id).catch((err) =>
       console.error(`Could not text the door total for ${order.id}: ${err.message}`)
     );
   }
 
-  return { ok: true, priceCents, weight, charged: !charge.waived && !charge.alreadyPaid };
+  return {
+    ok: true,
+    priceCents,
+    weight,
+    charged: !charge.waived && !charge.alreadyPaid && !charge.nothingToCharge,
+  };
 }
 
 // WHAT THEY READ WHEN IT CLEARED AT THE DOOR. The weight, what it comes to, and
@@ -1633,10 +1657,19 @@ function doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplie
 // Every fact in it is one they can check on their own step: the weight the
 // driver just read out, the total that follows from it, and the bags still
 // sitting there. Nothing is asked of them that they cannot do from the message.
-function leftAtDoorText({ weight, priceCents, needsCard, destination }) {
+function leftAtDoorText({ weight, priceCents, needsCard, destination, keptCents = 0 }) {
   const problem = needsCard
     ? `We don't have a card on file, so we've left the bags where we found them. Add one ${destination}`
-    : `Your card was declined, so nothing has been taken and we've left the bags where we found them. Update it ${destination}`;
+    : keptCents > 0
+      ? // THE $25 IS SAID OUT LOUD, because it is the one thing in this message
+        // they did not expect and the one thing their statement will show. Neil:
+        // the customer paid for the trip, not for laundry we never took - so the
+        // sentence says which of the two happened, and never calls it credit
+        // towards the wash, because it is not.
+        `Your card was declined for the balance, so we've left the bags where we found them. ` +
+        `The ${money(keptCents)} held for the trip has been charged; the wash has not. ` +
+        `Update your card ${destination}`
+      : `Your card was declined, so nothing has been taken and we've left the bags where we found them. Update it ${destination}`;
 
   return (
     `We came for your laundry and it weighed ${weight} lb, which comes to ${money(priceCents)}. ` +
@@ -1646,6 +1679,7 @@ function leftAtDoorText({ weight, priceCents, needsCard, destination }) {
 
 async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCents, charge }) {
   const clips = bags.clipsFor(labels);
+  const kept = Math.max(0, Number(charge.keptCents || 0));
 
   await events.record(order.id, {
     kind: 'PAYMENT',
@@ -1656,6 +1690,46 @@ async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCen
     by,
     reason: 'Bags left at the door and the pickup put back to tomorrow',
   });
+
+  // WHAT WE KEPT, ON ITS OWN LINE, because it is a different kind of fact from
+  // the refusal above it. Money did move, and the change log has to say so or
+  // the first person to read this order alongside a bank statement finds $25
+  // nothing here accounts for.
+  if (kept > 0) {
+    await events.record(order.id, {
+      kind: 'PAYMENT',
+      summary: `Kept ${money(kept)} for the trip`,
+      became: money(kept),
+      by,
+      reason: 'The driver came out and weighed the bags; the wash did not happen',
+    });
+  }
+
+  // THE CARD CANNOT FUND THIS PICKUP, so tomorrow's is not confirmed either.
+  //
+  // This is what makes the message honest. It says "update the payment method
+  // and we can pick up same time tomorrow", and collectable() now holds us to
+  // it: the rebooked stop stays off the round until a card accepts the hold,
+  // rather than sending the same van to the same door for the same refusal.
+  // Saving a card places a fresh hold and clears this, so the customer's own
+  // action is what puts them back on.
+  //
+  // It is not hidden. board() returns these as `uncollectable` and the routing
+  // screen names every one of them in red, which is the standing rule: a stop
+  // that silently vanishes reads as the board losing one.
+  await db
+    .from('orders')
+    .update({
+      authorization_intent_id: null,
+      authorization_refused_at: new Date().toISOString(),
+      authorization_refused_reason: charge.needsCard
+        ? 'No card on file at the door.'
+        : 'The card was refused at the door.',
+    })
+    .eq('id', order.id)
+    .then(({ error }) => {
+      if (error) console.error(`Could not park ${order.id} after the door: ${error.message}`);
+    });
 
   // The bags are staying, so nothing may still be attached to them. A clip left
   // out of the pool is one the next driver cannot use, and a live sticker on a
@@ -1680,6 +1754,7 @@ async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCen
       priceCents,
       needsCard: Boolean(charge.needsCard),
       destination: billing.cardDestination(order, charge.setupUrl),
+      keptCents: kept,
     });
 
     await sendAndLog(customer.phone, text, customer.id).catch((err) =>
@@ -1696,7 +1771,8 @@ async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCen
       order,
       reason:
         `Card refused ${money(priceCents)} at the door on #${order.order_number}. ` +
-        `${weight} lb left with the customer; pickup put back to tomorrow.`,
+        `${weight} lb left with the customer; pickup put back to tomorrow.` +
+        (kept > 0 ? ` ${money(kept)} kept for the trip.` : ''),
     })
     .catch((err) => console.error(`Could not raise an issue for ${order.id}: ${err.message}`));
 
@@ -1707,6 +1783,7 @@ async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCen
     priceCents,
     weight,
     clips,
+    keptCents: kept,
     detail:
       `${money(priceCents)} was refused. Leave the bags where you found them` +
       (clips.length

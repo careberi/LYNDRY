@@ -176,9 +176,23 @@ test('with nobody held, routable IS collectable - so a waived order still gets o
 test('the fields are one constant, not typed out three times', () => {
   // Three copies would drift, and the drift is invisible until every reminder
   // in the system stops.
-  assert.equal(reminders.CARD_FIELDS, 'payment_status');
+  assert.match(reminders.CARD_FIELDS, /payment_status/);
   assert.match(reminders.CUSTOMER_CARD_FIELDS, /stripe_customer_id/);
   assert.match(reminders.CUSTOMER_CARD_FIELDS, /default_payment_method_id/);
+});
+
+test('AND THE CONSTANT CARRIES EVERYTHING collectable() READS', () => {
+  // It pinned the exact string 'payment_status', which passed happily on the
+  // day collectable() learned about the $25 hold and stopped being true a line
+  // later: an unselected column reads as undefined, indistinguishable from a
+  // card that never refused, so a pickup already dropped from the round would
+  // still be told to put the bag out at eight in the morning.
+  //
+  // Asserting what the constant MUST CONTAIN rather than what it equals is the
+  // version that survives the next column.
+  for (const column of ['payment_status', 'authorization_refused_at']) {
+    assert.match(reminders.CARD_FIELDS, new RegExp(column), column);
+  }
 });
 
 // --- what this change deliberately does NOT do ------------------------------
