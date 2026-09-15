@@ -514,7 +514,14 @@ async function chargeOrder(order, customer) {
   // On any order booked today this is the whole price: nothing was taken at
   // booking. The subtraction is here for the handful of orders taken while a
   // minimum was collected up front, which would otherwise be billed twice.
-  const alreadyPaid = order.deposit_refunded_at ? 0 : order.deposit_cents || 0;
+  //
+  // AND WHATEVER THE LEDGER SAYS HAS BEEN PAID, which is how a retry after
+  // part-cash charges only the remainder. Without it, somebody who handed over
+  // $70 in cash and then fixed their card would be charged the whole $84
+  // again.
+  const alreadyPaid =
+    (order.deposit_refunded_at ? 0 : order.deposit_cents || 0) +
+    Number(order.amount_paid_cents || 0);
   const owed = Math.max(0, order.price_cents - alreadyPaid);
 
   if (owed === 0) {
@@ -597,6 +604,18 @@ async function chargeOrder(order, customer) {
         payment_attempts: (order.payment_attempts || 0) + 1,
       })
       .eq('id', order.id);
+
+    // THE LEDGER GETS THE CARD SIDE TOO, or the split on the order page would
+    // read Card $0 / Cash $15 on an order that was mostly paid by card. This
+    // is the one line in the system where a card charge succeeds, so it is the
+    // only honest place to write it.
+    //
+    // AFTER the order is marked paid, and best effort: the money has already
+    // moved, so failing to write this row is a reporting problem and undoing
+    // the charge over it would be a real one.
+    await payments
+      .recordCard(order, { amountCents: owed, paymentIntentId: result.paymentIntentId })
+      .catch((err) => console.error(`Could not record the card payment: ${err.message}`));
 
     return {
       ok: true,
@@ -687,6 +706,7 @@ async function markFailed(order, reason, paymentIntentId, declineCode = null) {
   // BEST EFFORT AND LAST. Recording the failure is the thing that must not fail;
   // paging about it is not allowed to throw away the record.
   const orders = require('./orders');
+const payments = require('./payments');
   if (orders.IN_OUR_HANDS.includes(order.status)) {
     const issues = require('./issues');
     const customer = order.customers || (order.customer_id ? { id: order.customer_id } : null);

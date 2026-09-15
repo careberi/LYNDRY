@@ -70,6 +70,7 @@ const leadOutreach = require('../core/lead-outreach');
 const bookingIntents = require('../core/booking-intents');
 const { checkoutsBody } = require('../web/checkouts-page');
 const messageView = require('../core/message-view');
+const payments = require('../core/payments');
 const settings = require('../core/settings');
 const sitePopup = require('../core/site-popup');
 const promotions = require('../core/promotions');
@@ -3374,6 +3375,13 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       shortDate,
       labelState,
       sideExtras,
+      // HOW IT WAS ACTUALLY PAID. Caught rather than awaited into a failure:
+      // an order page that will not load because the ledger is unreachable is
+      // worse than one without the split on it.
+      paymentRows: await payments.forOrder(order.id).catch((err) => {
+        console.error(`Could not read the payments on ${order.id}: ${err.message}`);
+        return [];
+      }),
     });
 
     // eslint-disable-next-line no-unused-vars
@@ -5053,6 +5061,85 @@ router.post('/ops/orders/:id/card-link', guard, may('messages.send'), async (req
     // has read is not one anybody should press, and the same goes for one that
     // will not say afterwards what it said. Same rule as the nudge panel.
     return said('done', `Sent: ${text}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/orders/:id/cash - somebody handed over cash for what is still owed
+//
+// Neil, 14 September. Cash is not a payment method: a customer cannot choose
+// it, it is not on the checkout, and it is not on the driver's route. It is an
+// admin option in exactly one situation - the card was refused, we are holding
+// the laundry, and money is still owed.
+//
+// BEHIND orders.override, Admin only. It is the same line the manual retry and
+// a cancellation already draw: money and somebody's order are decisions about
+// the customer rather than steps in the round, and a driver is neither.
+//
+// EVERY REFUSAL IS CHECKED IN payments.recordCash() AS WELL AS HERE. This route
+// can be posted to directly, and a form that hides a control while the route
+// behind it still fires is not a guard.
+//
+// IT SENDS NOTHING. They were standing in front of us when they handed it over.
+// ---------------------------------------------------------------------------
+router.post('/ops/orders/:id/cash', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const said = (kind, message) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(message)}`);
+
+    // Pounds and pence as typed. A blank, a word or a negative is refused
+    // rather than rounded into something.
+    const typed = String((req.body || {}).amount || '').trim().replace(/[$,\s]/g, '');
+    const amountCents = Math.round(Number(typed) * 100);
+
+    if (!typed || !Number.isFinite(amountCents) || amountCents <= 0) {
+      return said('problem', 'Type how much cash was handed over, in dollars.');
+    }
+
+    const result = await payments.recordCash(order, {
+      amountCents,
+      by: { opsUser: req.opsUser },
+      note: String((req.body || {}).note || '').trim().slice(0, 300) || null,
+    });
+
+    if (!result.ok) {
+      const why = {
+        not_failed:
+          'Cash is only for an order whose card was refused. Nothing has been charged on this one yet.',
+        not_in_our_hands:
+          'Cash is only recorded while we are holding the laundry. This order is not.',
+        nothing_owed: 'Nothing is outstanding on this order.',
+        bad_amount: 'Type how much cash was handed over, in dollars.',
+        more_than_owed: result.outstanding
+          ? `That is more than the ${payments.money(result.outstanding)} still owed. Record the balance, not the change.`
+          : 'That is more than is owed.',
+      }[result.reason];
+
+      return said('problem', why || 'That did not work.');
+    }
+
+    await orderEvents.record(order.id, {
+      kind: 'PAYMENT',
+      summary: `Cash taken - ${payments.money(result.amount)}`,
+      was: payments.money(Number(order.price_cents || 0) - Number(order.amount_paid_cents || 0)),
+      became: payments.money(result.outstanding),
+      by: { opsUser: req.opsUser },
+      reason: result.settled
+        ? 'Settles the order. The payment hold clears, so it can go on a round again - routing decides when, nothing puts it on today.'
+        : 'Part payment. The balance is still owed, so the payment hold stands and the laundry does not go out.',
+    });
+
+    return said(
+      'done',
+      result.settled
+        ? `${payments.money(result.amount)} in cash recorded. Nothing outstanding - it can go back on a round.`
+        : `${payments.money(result.amount)} in cash recorded. ${payments.money(result.outstanding)} still owed, so it stays on hold.`
+    );
   } catch (err) {
     return next(err);
   }
