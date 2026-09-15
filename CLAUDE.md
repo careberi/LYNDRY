@@ -1664,6 +1664,28 @@ that the page would read "LYNDRY garantiza entrega next day". An unmapped
 turnaround falls through to the English rather than to `undefined`, because a
 visible oddity is better than a hole.
 
+**AND THE GUIDE HAS ITS OWN LANGUAGE BUTTONS, WHICH IT SHIPPED WITHOUT.** Neil
+found it on the live site, 15 September: `/processing` had no English / Espanol
+buttons at all. The Spanish guide existed and rendered perfectly at
+`?lang=es`, and nothing on the page could reach it - so the guide was bilingual
+and the page was not, and an attendant who needed the Spanish had to be told a
+URL by somebody.
+
+**It is the SAME `langToggleHere()` the bag pages use**, not a second pair of
+links beside it. That function builds both hrefs off `req.originalUrl`, so
+`?lang=` stays in the URL and anything else on the query string survives - and
+one toggle behaving identically on every page a laundromat sees is the whole
+point of reusing it.
+
+**The browser tab is translated with the page.** It rendered a Spanish heading
+under an English `<title>`, which is the sort of thing nobody reports and
+everybody notices.
+
+**AND THE LINK CARRIES THE LANGUAGE ALREADY ON SCREEN.** It was a bare
+`/processing`, so a laundromat reading a bag page in Spanish tapped through to
+an English guide - at the one moment the translation is actually needed. The
+shell already knew the language; it simply was not passing it on.
+
 **The Spanish is plain ASCII, like the sixty `ES` entries in `bag.js`.** Two
 conventions on one screen reads as a mistake, and the link sits directly under
 those entries.

@@ -457,6 +457,7 @@ const ES = Object.freeze({
   // for now - one entry here is not a translated document, and promising
   // one in the label would be worse than the label being plain.
   'Processing Instructions': 'Instrucciones de procesamiento',
+  'Processing guide': 'Guia de procesamiento',
   'Order': 'Pedido',
   'Questions about this bag': 'Preguntas sobre esta bolsa',
 
@@ -1031,7 +1032,7 @@ function page({ title, body, lang = 'en', guideLink = true }) {
     ${
       guideLink
         ? `<p style="margin:22px 0 0;text-align:center;font-size:15px;">
-      <a href="${GUIDE_PATH}">${escapeHtml(say('Processing Instructions'))}</a>
+      <a href="${GUIDE_PATH}?lang=${lang}">${escapeHtml(say('Processing Instructions'))}</a>
     </p>`
         : ''
     }
@@ -1097,13 +1098,28 @@ function nothingHere(req = null) {
 // ---------------------------------------------------------------------------
 router.get('/processing', (req, res) => {
   const lang = langOf(req);
+  const say = translator(lang);
 
   res.type('html').send(
     page({
       lang,
       guideLink: false,
-      title: 'Processing guide',
-      body: processingGuide.processingGuideBody(lang),
+      // THE TITLE IS TRANSLATED TOO. The Spanish page rendered a Spanish
+      // heading under an English browser tab, which is the sort of thing
+      // nobody reports and everybody notices.
+      title: say('Processing guide'),
+      // THE SAME TWO BUTTONS /o/ HAS, AND THEY WERE MISSING ENTIRELY.
+      //
+      // Neil, 15 September: the Spanish guide existed and loaded at
+      // ?lang=es, and there was no way to reach it from the page - so a
+      // laundromat attendant who needed it had to be told the URL. The guide
+      // was bilingual and the page was not.
+      //
+      // langToggleHere() builds both links off req.originalUrl, so it keeps
+      // whatever else is on the query string and just sets lang. It is the
+      // same function the bag pages use, which is the point: one toggle,
+      // behaving identically on every page a laundromat sees.
+      body: `${langToggleHere(req, lang)}${processingGuide.processingGuideBody(lang)}`,
     })
   );
 });

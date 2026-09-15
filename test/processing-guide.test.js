@@ -46,8 +46,17 @@ function shell() {
 
 test('THE LINK IS A PLAIN HYPERLINK, NOT A BUTTON', () => {
   const body = shell();
-  assert.match(body, /<a href="\$\{GUIDE_PATH\}">/);
+  assert.match(body, /<a href="\$\{GUIDE_PATH\}\?lang=\$\{lang\}">/);
   assert.ok(!/<button|type="submit"|class="btn/.test(body), 'the link became a control');
+});
+
+test('AND IT OPENS THE GUIDE IN THE LANGUAGE ALREADY ON SCREEN', () => {
+  // Neil, 15 September. The link was a bare /processing, so a laundromat
+  // reading the bag page in Spanish tapped through to an English guide - which
+  // is the one moment the translation is actually needed.
+  //
+  // The shell already knows the language; it just was not passing it on.
+  assert.match(shell(), /GUIDE_PATH\}\?lang=\$\{lang\}/);
 });
 
 test('and it is labelled Processing Instructions', () => {
@@ -240,4 +249,33 @@ test('and the four rules survive', () => {
   ]) {
     assert.match(guide, rule);
   }
+});
+
+// --- the guide has its own language buttons ---------------------------------
+
+test('THE GUIDE CARRIES THE SAME TWO BUTTONS /o/ HAS', () => {
+  // Neil, 15 September, from the live site: /processing had no English /
+  // Espanol buttons at all. The Spanish guide existed and rendered at
+  // ?lang=es, and nothing on the page could reach it - so the guide was
+  // bilingual and the page was not, and an attendant who needed the Spanish
+  // had to be told a URL.
+  const at = bagRoute.indexOf("router.get('/processing'");
+  assert.notEqual(at, -1, 'the guide route has moved');
+  const body = bagRoute.slice(at, bagRoute.indexOf('\n});\n', at));
+
+  assert.match(body, /langToggleHere\(req, lang\)/, 'the guide has no language buttons');
+
+  // The SAME function the bag pages use, not a second pair of links that could
+  // drift. It builds both hrefs off req.originalUrl, so ?lang= stays in the URL
+  // and anything else on the query string survives.
+  assert.match(bagRoute, /function langToggleHere/);
+});
+
+test('and the browser tab is translated with the page', () => {
+  // The Spanish page rendered a Spanish heading under an English tab.
+  const at = bagRoute.indexOf("router.get('/processing'");
+  const body = bagRoute.slice(at, bagRoute.indexOf('\n});\n', at));
+
+  assert.match(body, /title: say\('Processing guide'\)/);
+  assert.match(bagRoute, /'Processing guide': 'Guia de procesamiento'/);
 });
