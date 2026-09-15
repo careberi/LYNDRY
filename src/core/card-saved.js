@@ -211,6 +211,14 @@ async function cardWasSaved(link) {
   // happened.
   const holds = new Map();
   for (const o of allPending) {
+    // ONLY THE ONES A DAY AWAY, the same rule bookPickup() follows. Somebody
+    // adding a card today for a pickup a fortnight out should not carry a
+    // pending $25 for a fortnight; the night-before pass holds that one.
+    if (!billing.holdDueNow(o)) {
+      holds.set(o.id, { ok: true, skipped: 'too_far_out' });
+      continue;
+    }
+
     const placed = await billing.authorizeShowUp(o, customer).catch((err) => {
       console.error(`Could not hold the show-up charge for ${o.id}: ${err.message}`);
       return { ok: true, skipped: 'hold_errored' };

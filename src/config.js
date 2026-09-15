@@ -343,6 +343,20 @@ const config = Object.freeze({
     // that pass and used the evening after it.
     authorizationFreshDays: Number(process.env.AUTHORIZATION_FRESH_DAYS || 5),
 
+    // HOW CLOSE A PICKUP HAS TO BE BEFORE WE HOLD ANYTHING. Neil, 14 September:
+    // only place the $25 on a booking a day in advance.
+    //
+    // He is right, and the reason is whose money it is. A hold is a pending
+    // line on somebody's card - real money they cannot spend - and a pickup
+    // booked a fortnight out would carry one for a fortnight, for a trip nobody
+    // is making yet. It would also have expired by the time it mattered, so it
+    // would be a fortnight of held money buying nothing at all.
+    //
+    // Anything further out is held by the night-before pass instead, which is
+    // the last honest moment to find out a card will fund the trip and the
+    // first moment the money is about to be worth holding.
+    authorizationLeadDays: Number(process.env.AUTHORIZATION_LEAD_DAYS || 1),
+
     // The range quoted to someone asking "roughly what will this cost?".
     // Derived from the rate above and a typical 15–18 lb bag, so if the rate
     // changes these have to change with it or the site quotes a range the

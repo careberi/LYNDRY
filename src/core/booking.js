@@ -1110,8 +1110,21 @@ async function bookPickup(
   // fresh hold and confirms it, which is the same shape as AWAITING CARD.
   const free = promotions.takesEverythingOff(claimed);
 
-  const hold = free
-    ? { ok: true, skipped: 'free_order' }
+  // AND ONLY IF THE PICKUP IS A DAY AWAY. Neil, 14 September: only place the
+  // $25 on a booking a day in advance.
+  //
+  // A hold is a pending line on somebody's card, so a pickup booked a fortnight
+  // out would tie up real money for a fortnight - and Stripe would have expired
+  // it before the driver arrived, so it would buy nothing in return. Anything
+  // further out is held by the night-before pass instead, which is the last
+  // honest moment to find out and the first moment it is worth holding.
+  //
+  // A deferred hold is UNASKED, not refused, so the pickup is confirmed and
+  // collectable exactly as it was before any of this existed - and the
+  // confirmation says nothing about a hold, because it reads the order and
+  // there is not one.
+  const hold = free || !billing.holdDueNow(order)
+    ? { ok: true, skipped: free ? 'free_order' : 'too_far_out' }
     : await billing.authorizeShowUp(order, customer).catch((err) => {
         // FAILS OPEN, like every other lookup that stands between a customer
         // and a booking. Stripe being unreachable must not turn a good card

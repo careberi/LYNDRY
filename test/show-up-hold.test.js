@@ -445,6 +445,52 @@ test('and neither does the cash button', async () => {
   assert.equal(refusal.reason, 'not_in_our_hands');
 });
 
+// --- only a day in advance --------------------------------------------------
+
+test('A BOOKING A DAY AWAY IS HELD NOW', () => {
+  // Neil, 14 September: only place the $25 on a booking a day in advance.
+  const today = booking.today();
+
+  assert.equal(billing.holdDueNow({ pickup_date: today }), true, 'today');
+  assert.equal(billing.holdDueNow({ pickup_date: booking.addDays(today, 1) }), true, 'tomorrow');
+});
+
+test('AND ANYTHING FURTHER OUT IS NOT, because a hold is somebody money', () => {
+  // A pending line on a card for a fortnight, over a trip nobody is making yet
+  // - and Stripe would have expired it long before the driver arrived, so it
+  // would tie up real money and buy nothing in return.
+  const today = booking.today();
+
+  assert.equal(billing.holdDueNow({ pickup_date: booking.addDays(today, 2) }), false);
+  assert.equal(billing.holdDueNow({ pickup_date: booking.addDays(today, 14) }), false);
+  assert.equal(config.pricing.authorizationLeadDays, 1);
+});
+
+test('a pickup with no date at all is held now', () => {
+  // There is no later moment to defer it to.
+  assert.equal(billing.holdDueNow({}), true);
+});
+
+test('BOTH DOORS DEFER, so one cannot hold what the other would not', () => {
+  for (const [file, fn] of [
+    ['booking.js', 'async function bookPickup('],
+    ['card-saved.js', 'async function cardWasSaved('],
+  ]) {
+    const body = bodyOf(SRC('core', file), fn);
+    assert.match(body, /holdDueNow/, `${file} holds whatever the date`);
+  }
+});
+
+test('A DEFERRED HOLD IS UNASKED, NOT REFUSED', () => {
+  // The whole safety of it. A pickup booked a fortnight out is confirmed,
+  // collectable and reminded exactly as it was before any of this existed -
+  // and the night-before pass is what asks the card.
+  const farOut = { payment_status: 'UNPAID', customers: card };
+
+  assert.equal(billing.showUpState(farOut), 'UNASKED');
+  assert.equal(dispatch.collectable(farOut), true);
+});
+
 // --- the night before, so a far-out booking still has one -------------------
 
 const showUpHolds = require('../src/core/show-up-holds');

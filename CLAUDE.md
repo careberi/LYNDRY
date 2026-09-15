@@ -1383,8 +1383,10 @@ production.
 not need to be.** `src/core/scheduler.js` owns one ten-minute tick inside the
 running server and runs two things on it: the nightly pass in
 `src/core/nightly.js` - book tomorrow's standing orders (texting those
-customers as it goes), then remind everybody else whose pickup is tomorrow -
-and the follow-up sweep, all day.
+customers as it goes), **then place the $25 hold on every pickup happening
+tomorrow that does not have a live one**, then remind everybody else whose
+pickup is tomorrow - and the follow-up sweep, all day. The holds go before the
+reminders on purpose; see the show-up hold section under Payments.
 
 **QUIET HOURS ARE A HARD FLOOR ON BOTH, 8am to 9pm New Jersey time**, and are
 not configurable because they are the law rather than a preference. Everything
@@ -3401,16 +3403,78 @@ a problem that is not there. Three badges, not two.
 
 ### Who places one, and who lets it go
 
+**ONLY ON A BOOKING A DAY IN ADVANCE.** Neil's rule, and it is about whose money
+it is: a hold is a pending line on somebody's card, so a pickup booked a
+fortnight out would tie up real money for a fortnight over a trip nobody is
+making yet - and Stripe would have expired it long before the driver arrived, so
+it would buy nothing in return. `billing.holdDueNow()` is the test and
+`config.pricing.authorizationLeadDays` is the knob.
+
+**A DEFERRED HOLD IS UNASKED, NOT REFUSED**, which is the whole safety of it. A
+pickup booked a fortnight out is confirmed, collectable and reminded exactly as
+it was before any of this existed, and its confirmation says nothing about a
+hold because it reads the order and there is not one. The night-before pass is
+what asks the card.
+
 **`bookPickup()` places it**, after the order is written and after the promotion
 slot is claimed. A refusal is not a failed booking: the order is real and stays
 on the board, it simply gets `holdRefusedMessage()` instead of a confirmation.
 **It fails open** - Stripe being unreachable books the pickup unheld rather than
 turning a good card into a refusal nobody here could clear.
 
-**`card-saved.js` places one on every waiting pickup**, because a pickup is a
-trip and three waiting pickups are three trips. The soonest one decides what the
-customer reads; any others whose hold was refused sit on the routing board in
-red like every other uncollectable stop.
+**`card-saved.js` places one on every waiting pickup a day away**, because a
+pickup is a trip and three waiting pickups are three trips. Same lead-time rule,
+because one door holding what the other would not is how they drift. The soonest
+one decides what the customer reads; any others whose hold was refused sit on
+the routing board in red like every other uncollectable stop.
+
+### The night before, so a far-out booking still has one
+
+**STRIPE EXPIRES AN UNCAPTURED AUTHORIZATION ON ITS OWN**, usually at seven days
+and sometimes sooner. Between that and the lead-time rule above, most pickups
+reach the evening before with no hold on them at all - so
+`src/core/show-up-holds.js` runs on the nightly pass and places one on every
+pickup happening tomorrow whose hold has gone stale or never existed.
+`billing.holdIsFresh()` is the test, `authorizationFreshDays` is five, and the
+margin has to cover a hold placed the morning before the pass and used the
+evening after it.
+
+**IT RUNS BEFORE THE REMINDERS AND THAT ORDERING IS LOAD-BEARING.** A card that
+refuses tonight takes the stop off tomorrow's round, and a reminder telling
+somebody to put the bag out at eight for a van that is not coming is the precise
+failure the reminder gate exists to prevent. Running after would send that text
+and then quietly remove the stop behind it.
+
+**It is the last honest moment.** Everything before it is a guess about a card
+days ahead of when it matters; everything after it is a driver at a door. The
+customer still has an evening to fix it, which is the same reason the reminder
+goes out the night before rather than at six in the morning.
+
+**A refusal is texted only when it is news.** An order already refused at
+booking has had that message, and repeating it the night before every pickup is
+the system talking at somebody who already knows and has chosen not to act.
+
+**The stale hold is released before the new one is placed**, so a customer never
+carries two of ours pending at once. `releaseShowUp()` clears the id whether or
+not Stripe accepted the cancel: a hold Stripe has already expired must not sit
+on the order looking capturable, because the door would then try to take money
+that is not held.
+
+**`skipReason()` is pure and the free-order lookup is one query for the whole
+board**, the same shape as `promotions.expectedForMany()`. Thirty pickups must
+not be thirty round trips, and keeping the rules out of the database is what
+lets every one of them be tested. It **fails closed** on that one lookup, unlike
+everything else here: an unreadable promotion ledger means we cannot tell which
+pickups are free, and holding $25 on somebody told "nothing to pay" is worse
+than replacing no holds tonight.
+
+**The reminder sweep had to learn the columns.** `CARD_FIELDS` was
+`'payment_status'` and nothing else, so `collectable()` read the hold as
+undefined and a pickup already dropped from the round would still have been
+reminded - eleventh time an unselected column quietly decided what a screen
+knows. The test that should have caught it asserted the constant **equalled**
+`'payment_status'`, which passed on the day the rule changed; it asserts what
+the constant must **contain** now.
 
 **Cancelling releases it**, in `orders.transition()` beside `releaseSlot()` and
 for the same reason - one door forgetting is money sitting on somebody's card

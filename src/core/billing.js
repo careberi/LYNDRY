@@ -843,6 +843,28 @@ function holdIsFresh(order, { days = null, now = null } = {}) {
   return age <= limit;
 }
 
+// IS THIS PICKUP CLOSE ENOUGH TO HOLD MONEY AGAINST YET?
+//
+// Neil, 14 September: only place the $25 on a booking a day in advance. A hold
+// is a pending line on somebody's card, so a pickup booked a fortnight out
+// would tie up real money for a fortnight - and Stripe would have expired it
+// long before the driver arrived, so it would buy nothing in return.
+//
+// Anything further out is held by the night-before pass in
+// src/core/show-up-holds.js instead. A pickup with no date at all is held now,
+// because there is no later moment to defer it to.
+//
+// require() inside the function: booking.js requires this file, so a top-level
+// import would be a cycle. Node caches it, so the cost is one lookup.
+function holdDueNow(order, { today = null, leadDays = null } = {}) {
+  if (!order || !order.pickup_date) return true;
+
+  const booking = require('./booking');
+  const days = leadDays == null ? config.pricing.authorizationLeadDays : leadDays;
+
+  return order.pickup_date <= booking.addDays(today || booking.today(), days);
+}
+
 // PLACE THE HOLD. Money held, not taken.
 //
 // Called at booking, and again from the card-saved path for a pickup that was
@@ -1192,6 +1214,7 @@ module.exports = {
   showUpCents,
   showUpHold,
   holdIsFresh,
+  holdDueNow,
   doorSplit,
   showUpState,
   authorizeShowUp,
