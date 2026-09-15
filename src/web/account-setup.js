@@ -1,7 +1,9 @@
 'use strict';
 
 const booking = require('../core/booking');
-const { describeAll } = require('../core/recurring');
+const recurring = require('../core/recurring');
+const format = require('../core/format');
+const subscription = require('../core/subscription');
 const wash = require('../core/wash');
 const { site } = require('./site');
 const { escapeHtml } = require('./layout');
@@ -319,27 +321,54 @@ function cardForm(customer) {
 function placeOrderButton(schedules = []) {
   const active = (schedules || []).filter((s) => s.status === 'ACTIVE');
 
-  // A STANDING ORDER HAS TO BE VISIBLE AND STOPPABLE. It books itself every
-  // week without anybody touching the site, so a portal that could start one
-  // and not show it would be the worst version of this feature.
+  // THE PLAN, IN THE WORDS THE CUSTOMER CHOSE IT BY.
+  //
+  // It read "Repeating: every other week on Tuesday" with a "Stop repeating"
+  // button - three problems in one card. "Repeating" is the word Neil banned
+  // for customers, "every other week" is not one of the three frequencies the
+  // checkout offers, and the rate they are actually paying was nowhere on it.
+  //
+  // A subscription books itself without anybody touching the site, so a portal
+  // that could start one and not show it would be the worst version of this
+  // feature. Showing it without its price is the second worst.
+  const plan = active[0];
+  const every = plan ? subscription.frequencyLabel(plan.cadence) : null;
+  const nextOne = plan ? recurring.nextDate(plan) : null;
+
+  // WHAT CANCELLING ACTUALLY DOES, said before the button rather than after.
+  //
+  // Neil's rule: it must show the last active pickup and that no further
+  // automatic pickups will be created - and it must NOT read as though that
+  // pickup is being cancelled or repriced, because neither happens.
+  const afterwards = subscription
+    .cancellationLines({
+      lastPickup: nextOne ? format.displayDate(nextOne) : null,
+      rateCents: subscription.subscriptionCents(),
+    })
+    .map((line) => `<span style="display:block;">${escapeHtml(line)}</span>`)
+    .join('');
+
   const repeating = active.length
     ? `
     <div class="card card-xl" style="display:flex;flex-wrap:wrap;align-items:center;
                 justify-content:space-between;gap:16px;padding:18px 26px;margin-bottom:26px;
                 background:var(--paper-050);">
       <p style="margin:0;font-size:16px;line-height:1.5;color:var(--ink-800);">
-        <strong>Repeating:</strong> ${escapeHtml(String(describeAll(active)))}.
-        We text you the evening before each one.
+        <strong>${escapeHtml(subscription.CUSTOMER_WORD)}:</strong>
+        ${escapeHtml(
+          every
+            ? `${every} on ${recurring.DAY_NAMES[plan.weekday]}`
+            : String(recurring.describeAll(active))
+        )},
+        at <strong>${escapeHtml(subscription.subscriptionRate())}</strong>. We text you the evening before each one.
       </p>
       <details style="margin:0;">
-        <summary class="btn btn-outline" style="cursor:pointer;list-style:none;">Stop repeating</summary>
+        <summary class="btn btn-outline" style="cursor:pointer;list-style:none;">Cancel subscription</summary>
         <form method="post" action="/account/repeat/stop" style="margin:16px 0 0;">
           <p style="margin:0 0 12px;font-size:15px;line-height:1.5;color:var(--ink-700);">
-            This stops the repeat and cancels any pickup it had already booked that
-            we have not picked up yet. Nothing we are already holding is affected,
-            and you can start a new repeat whenever you like.
+            ${afterwards}
           </p>
-          <button class="btn btn-outline">Yes, stop repeating</button>
+          <button class="btn btn-outline">Yes, cancel my subscription</button>
         </form>
       </details>
     </div>`

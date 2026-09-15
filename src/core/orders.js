@@ -2,6 +2,9 @@
 
 const db = require('../db');
 const { config } = require('../config');
+// The one owner of which rate a pickup is booked at. Pure and standalone - it
+// reads config and nothing else - so this is a safe top-level require.
+const subscription = require('./subscription');
 // Required lazily inside the function that uses it: order-events reads db
 // only, but orders is required by half of core/ and a top-level require
 // here is one more edge in that graph for one call site.
@@ -215,6 +218,12 @@ async function create({
   bagCount,
   notes,
   fromSchedule,
+  // WHICH SUBSCRIPTION THIS PICKUP BELONGS TO, or null for a one-time pickup.
+  //
+  // Not the same question as fromSchedule, which says only that the nightly
+  // pass created it. This is what the pickup was SOLD as, and it is what
+  // decides the rate below.
+  subscriptionId,
   preferences,
   surchargeCents,
   // Which door the order came through, and who typed it if a person did.
@@ -266,9 +275,25 @@ async function create({
       placed_via: placedVia || null,
       placed_by: placedBy || null,
 
+      // WHICH PLAN THIS PICKUP IS, written before the rate that depends on it.
+      subscription_id: subscriptionId || null,
+
       // Both halves of the price are recorded on the order itself, so that
       // changing either later never silently re-prices work already done.
-      price_per_lb_cents: config.pricing.perPoundCents,
+      //
+      // AND THAT IS WHAT MAKES CANCELLING A SUBSCRIPTION SAFE. $1.80 for a
+      // subscriber and $2.00 for everybody else is decided once, here, and
+      // then belongs to this order for ever. A customer who subscribes, takes
+      // one pickup and cancels the same afternoon keeps $1.80 on it - not
+      // because anything checks for that case, but because there is nothing
+      // left anywhere that could re-price it. Neil's rule about never
+      // retroactively charging $2.00 needed no code at all.
+      //
+      // subscription.rateForCents() is the only thing allowed to choose, and it
+      // reads the ORDER's plan rather than the customer's, which is the whole
+      // of "an extra pickup does not get the subscription rate just because
+      // they also subscribe".
+      price_per_lb_cents: subscription.rateForCents(subscriptionId),
       minimum_cents: config.pricing.minimumCents,
     })
     .select('*, customers(*)')

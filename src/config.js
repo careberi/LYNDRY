@@ -308,6 +308,26 @@ const config = Object.freeze({
   pricing: Object.freeze({
     perPoundCents: 200,
 
+    // WHAT A SUBSCRIBER PAYS INSTEAD. Neil's decision lock, 15 September:
+    // $1.80 a pound on a subscription, $2.00 for a one-time pickup.
+    //
+    // A SEPARATE NUMBER, NEVER A DISCOUNT OFF THE OTHER ONE. It is a rate, and
+    // the two rates are set independently - deriving it as "10% off" would make
+    // every future move of either price silently move the other, and would put
+    // a second copy of the subscription price in whatever did the arithmetic.
+    //
+    // IT IS ALSO NOT A PROMOTION. Promotions come off a price that has already
+    // been worked out, they are granted per customer, they expire, and they are
+    // counted. This decides which price is worked out in the first place, so
+    // the two stack exactly as Neil asked: a subscriber holding a 50% offer
+    // pays half of $1.80, not half of $2.00.
+    //
+    // WHAT MAKES CANCELLING SAFE is not here at all - it is that
+    // orders.price_per_lb_cents snapshots whichever of these two applied at the
+    // moment the pickup was booked. Cancelling a subscription cannot re-price a
+    // pickup already taken, because there is nothing left to re-price.
+    subscriptionPerPoundCents: Number(process.env.SUBSCRIPTION_PER_POUND_CENTS || 180),
+
     // The minimum order, charged when a pickup is booked.
     //
     // 12.5 lb at the rate above. A genuine MINIMUM, not a deposit: an

@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const orders = require('./orders');
+const subscription = require('./subscription');
 const billing = require('./billing');
 const events = require('./order-events');
 const payments = require('../providers/payments');
@@ -951,6 +952,18 @@ async function bookPickup(
     bagCount,
     notes,
     fromSchedule,
+    // WHICH SUBSCRIPTION THIS PICKUP BELONGS TO, and therefore what it costs.
+    //
+    // Null is the ordinary answer and means a one-time pickup at the standard
+    // rate. The nightly pass passes the schedule that booked it; the website
+    // and the AI pass one only when the customer deliberately chose to put this
+    // pickup on their plan.
+    //
+    // DELIBERATELY NOT DERIVED FROM THE CUSTOMER. Looking up "do they have an
+    // active subscription" here and pricing off that would be exactly the rule
+    // Neil ruled out: an extra pickup booked by a subscriber is a one-time
+    // pickup at $2.00 unless they said otherwise.
+    subscriptionId = null,
     // WHICH DOOR THIS CAME THROUGH, recorded on the order rather than only
     // used to pick a greeting. `source` already decides the voice of the
     // confirmation at send time and nothing kept it; "how did this order get
@@ -996,6 +1009,9 @@ async function bookPickup(
     // Marks an auto-booked pickup so it can be told apart on the ops board
     // from one somebody actually asked for.
     fromSchedule: Boolean(fromSchedule),
+    // And which plan it is priced under, which is a different question - see
+    // the note on the parameter.
+    subscriptionId: subscriptionId || null,
     // Their saved default, unless they asked for something else this time.
     pickupMethod: PICKUP_METHODS.includes(pickupMethod)
       ? pickupMethod
@@ -1366,19 +1382,34 @@ function confirmationMessage(
   //
   // The allowance comes from the promotion rather than the sentence, so the day
   // the cap moves this moves with it.
+  // WHAT THIS PICKUP ACTUALLY COSTS, READ OFF THE ORDER.
+  //
+  // It quoted site.pricePerLb, which is the ONE-TIME rate - so a subscriber
+  // would have been told $2.00 in the confirmation and charged $1.80 at the
+  // door. Telling somebody a higher price than you take is a better direction
+  // to be wrong in than the reverse, and it is still wrong.
+  //
+  // Off the order rather than off the plan, because the order is what was sold:
+  // a pickup booked under a subscription that is cancelled tomorrow keeps this
+  // figure, which is the whole of Neil's rule about never repricing.
+  //
+  // COSTS NOTHING IN LENGTH. "$1.80" and "$2.00" are the same five characters,
+  // and this message sits at 454 against the 459 that three segments hold.
+  const perPound = subscription.perPound(order.price_per_lb_cents || config.pricing.perPoundCents);
+
   const money = freeOrder
     ? freeUpToLb
-      ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${site.pricePerLb} a pound, and we'll text you the total after we weigh it.`
+      ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${perPound}, and we'll text you the total after we weigh it.`
       : ` This one is on us - you got one of the free ones, so there is nothing to pay.`
     : card && heldCents
       ? // THE HOLD IS SAID, and it is not optional politeness: a $25 pending
         // charge appearing on somebody's statement with nothing explaining it
         // is a phone call at best and a chargeback at worst. Kept to one clause
         // because this message is already at its segment ceiling.
-        ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We hold ${billing.money(heldCents)} on your ${card} to confirm, and take the real total off it at your door.`
+        ` It's ${perPound} with a ${minimum} minimum. We hold ${billing.money(heldCents)} on your ${card} to confirm, and take the real total off it at your door.`
     : card
-    ? ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} then.`
-    : ` It's ${site.pricePerLb} a pound with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
+    ? ` It's ${perPound} with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} then.`
+    : ` It's ${perPound} with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
 
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 

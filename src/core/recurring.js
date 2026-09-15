@@ -3,6 +3,7 @@
 const db = require('../db');
 const booking = require('./booking');
 const orders = require('./orders');
+const subscription = require('./subscription');
 const { sendAndLog } = require('./notify');
 
 // ---------------------------------------------------------------------------
@@ -22,9 +23,20 @@ const { sendAndLog } = require('./notify');
 // pickup is arranged and never be collected from.
 // ---------------------------------------------------------------------------
 
+// THE LABELS HERE ARE INTERNAL. What a customer reads comes from
+// subscription.frequencyLabel() - "every 2 weeks", not "every other week" -
+// because Neil fixed the customer-facing wording when subscriptions landed and
+// two sets of words for one cadence is how they drift.
+//
+// MONTHLY IS EVERY FOUR WEEKS ON THE SAME WEEKDAY, not the same date each
+// month. The whole model is weekday-based: `weekday` is a column, the van runs
+// a weekday route, and the anchor arithmetic below counts in whole weeks. A
+// date-based month would walk a customer's pickup through all seven weekdays
+// over a year, which is not a round anybody drives. 13 pickups a year, not 12.
 const CADENCES = Object.freeze({
   WEEKLY: { label: 'every week', days: 7 },
   FORTNIGHTLY: { label: 'every other week', days: 14 },
+  MONTHLY: { label: 'every month', days: 28 },
 });
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -113,17 +125,30 @@ function nextDate(schedule, fromDate = booking.today()) {
 
   let candidate = nextWeekday(fromDate, schedule.weekday);
 
-  if (schedule.cadence === 'FORTNIGHTLY') {
+  // ANY CADENCE WIDER THAN A WEEK COUNTS FROM THE ANCHOR, and this used to be
+  // written out for FORTNIGHTLY alone. Generalised when MONTHLY arrived rather
+  // than copied, because two cadences doing the same arithmetic in two places
+  // is two chances to get the off-week wrong.
+  //
+  // Reads identically for FORTNIGHTLY: weeks is 2, an odd gap is the off week,
+  // and it is pushed on by one week.
+  const weeks = (CADENCES[schedule.cadence] || CADENCES.WEEKLY).days / 7;
+
+  if (weeks > 1) {
     const anchor = String(schedule.started_on || candidate).slice(0, 10);
     const anchorDay = nextWeekday(anchor, schedule.weekday);
 
-    // Whole weeks between the anchor and the candidate. Odd means this is the
-    // off week, so push a week later.
+    // Whole weeks between the anchor and the candidate.
     const weeksApart = Math.round(
       (Date.parse(`${candidate}T00:00:00Z`) - Date.parse(`${anchorDay}T00:00:00Z`)) / (7 * 86400000)
     );
 
-    if (Math.abs(weeksApart % 2) === 1) candidate = addDays(candidate, 7);
+    // Positive remainder, so a candidate BEFORE the anchor cannot come back
+    // negative and push the pickup the wrong way. `%` keeps the sign of the
+    // left operand in JavaScript, which is the bug this avoids.
+    const off = ((weeksApart % weeks) + weeks) % weeks;
+
+    if (off) candidate = addDays(candidate, (weeks - off) * 7);
   }
 
   // Paused, or skipping this one. Roll forward a cadence at a time until past
@@ -198,6 +223,14 @@ async function bookDue({ date } = {}) {
         pickupTime:
           schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
         fromSchedule: true,
+        // THE PLAN IT IS BOOKED UNDER, which is what makes it $1.80 a pound.
+        //
+        // Passed as the schedule's own id rather than looked up from the
+        // customer, so a pickup is priced by the arrangement that actually
+        // created it. A customer with two subscriptions gets each pickup priced
+        // against its own, and an extra pickup they book by hand belongs to
+        // neither and stays at the one-time rate.
+        subscriptionId: schedule.id,
         // The door the arrangement was made at, carried onto the pickup. See
         // addSchedule() above.
         placedVia: schedule.placed_via || null,
@@ -475,7 +508,53 @@ async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadenc
     console.error(
       `Booked #${result.order.order_number} but could not set up the standing order: ${err.message}`
     );
+    // AND IT STAYS A ONE-TIME PICKUP, which is the honest outcome rather than a
+    // consolation. The subscription does not exist, so there is no plan for
+    // this pickup to belong to and no reason it should be $1.80. The caller is
+    // told `scheduleFailed` and says so on the screen.
     return { ...result, scheduleFailed: true, schedules };
+  }
+
+  // THE FIRST PICKUP JOINS THE SUBSCRIPTION IT JUST CREATED.
+  //
+  // Neil: the subscription starts with the first scheduled order and the
+  // customer gets $1.80 immediately. That pickup was written a few lines above,
+  // before any schedule existed - the order has to come first, because nothing
+  // created beforehand is safe to undo when a booking is refused, which is what
+  // the long note above this function is about.
+  //
+  // So it is stamped afterwards rather than passed in, and the rate is
+  // rewritten with it. This is the ONE place a rate is corrected after the
+  // fact, and it is safe for the reason the rest of the file relies on: nothing
+  // has been charged, and nobody has been told anything. bookPickup() does not
+  // text - every caller builds the confirmation itself - so the message the
+  // customer receives is written from the order AFTER this line.
+  //
+  // The in-memory copy is updated too. Without it the confirmation would read
+  // the $2.00 the row no longer holds, which is exactly the class of bug this
+  // codebase keeps finding: two copies of one fact, and the one that reaches a
+  // phone is the stale one.
+  const plan = schedules[0];
+
+  if (plan && plan.id) {
+    const rate = subscription.subscriptionCents();
+
+    const { error } = await db
+      .from('orders')
+      .update({ subscription_id: plan.id, price_per_lb_cents: rate })
+      .eq('id', result.order.id);
+
+    if (error) {
+      // The pickup and the plan both exist and only the link failed, so the
+      // customer has a subscription whose first pickup is priced as a one-time.
+      // Loud, and left alone rather than half-fixed.
+      console.error(
+        `Booked #${result.order.order_number} on a new subscription but could not price it as one: ${error.message}`
+      );
+    } else {
+      result.order.subscription_id = plan.id;
+      result.order.price_per_lb_cents = rate;
+    }
   }
 
   return { ...result, schedules };
