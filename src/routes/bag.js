@@ -35,6 +35,7 @@ function readCookie(req, name) {
 }
 
 const { site } = require('../web/site');
+const processingGuide = require('../web/processing-guide');
 const { escapeHtml, CSS_BASE, logo } = require('../web/layout');
 
 const router = express.Router();
@@ -452,6 +453,10 @@ function orderTagPage(order, code, token, query = {}) {
 
 const ES = Object.freeze({
   'Bag tag': 'Etiqueta de bolsa',
+  // The link under every bag screen. The guide behind it is English only
+  // for now - one entry here is not a translated document, and promising
+  // one in the label would be worse than the label being plain.
+  'Processing Instructions': 'Instrucciones de procesamiento',
   'Order': 'Pedido',
   'Questions about this bag': 'Preguntas sobre esta bolsa',
 
@@ -731,6 +736,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
   // --- just arrived at the laundromat: their weight unlocks the wash -------
   if (stage === tags.STAGES.TO_WEIGH_AT_PARTNER) {
     return page({
+      lang,
       title: `Bag ${code}`,
       body: header + weightBox({
         code, token, error: bad, t: say,
@@ -751,6 +757,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
     const clock = fulfilment.turnaround(order);
 
     return page({
+      lang,
       title: `Bag ${code}`,
       body: header + `
     <!-- FIRST, BEFORE ANYTHING ABOUT WASHING. Neil moved it here and it belongs
@@ -908,6 +915,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
   // --- ready: a holding screen until the driver takes it -------------------
   if (stage === tags.STAGES.READY) {
     return page({
+      lang,
       title: `Bag ${code}`,
       body: header + `
     <div class="card" style="padding:32px;text-align:center;">
@@ -963,6 +971,7 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
   }[stage] || 'Nothing to do with this one right now.';
 
   return page({
+    lang,
     title: `Bag ${code}`,
     body: header + `
     <div class="card" style="padding:28px;">
@@ -971,7 +980,23 @@ function bagTagPage(label, order, code, token, query, lang = 'en', stickers = []
   });
 }
 
-function page({ title, body }) {
+// WHERE THE PROCESSING GUIDE IS LINKED FROM, AND IT IS ONE LINE IN THE SHELL.
+//
+// Neil's decision lock, 15 September: a plain hyperlink from the bag-tag page
+// to one generic page. Putting it here rather than in each of the six screens
+// is what makes every one of his edge cases true without a branch for any of
+// them - a live tag, a tag waiting to be released, a finished one, an expired
+// one and "this label isn't in use" all carry the same link, because they all
+// render through here.
+//
+// A LINK, NOT A BUTTON. It is not a workflow step, it opens nothing modal, it
+// submits nothing and it changes no order state. The browser's Back button is
+// the way back, which is what a link gives you for free and a modal does not.
+const GUIDE_PATH = '/processing';
+
+function page({ title, body, lang = 'en', guideLink = true }) {
+  const say = translator(lang);
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -996,6 +1021,20 @@ function page({ title, body }) {
          letterhead of the card below it. -->
     <div style="margin-bottom:26px;text-align:center;">${logo('compact')}</div>
     ${body}
+
+    <!-- Underneath the card, quiet, and on every one of these screens. A
+         laundromat attendant needs it on their first few orders and never
+         again, so it is findable rather than prominent.
+
+         Not on the guide itself: a link to the page you are already reading is
+         noise, and the way back from it is the Back button. -->
+    ${
+      guideLink
+        ? `<p style="margin:22px 0 0;text-align:center;font-size:15px;">
+      <a href="${GUIDE_PATH}">${escapeHtml(say('Processing Instructions'))}</a>
+    </p>`
+        : ''
+    }
   </main>
 </body>
 </html>`;
@@ -1014,6 +1053,7 @@ function nothingHere(req = null) {
   const say = translator(lang);
 
   return page({
+    lang,
     title: say('Nothing here'),
     body: `
     ${req ? langToggleHere(req, lang) : ''}
@@ -1030,6 +1070,43 @@ function nothingHere(req = null) {
     </div>`,
   });
 }
+
+// ---------------------------------------------------------------------------
+// GET /processing - the laundromat's guide, and the same one for every order.
+//
+// Neil's decision lock, 15 September. A plain page behind a plain link.
+//
+// NO SIGN-IN AND NO SCAN, deliberately. It is reached from the bag tag, which
+// is itself the one page in this system with no login at all, and asking
+// somebody to authenticate to read instructions they are holding a bag for is
+// the friction this whole path exists to avoid.
+//
+// IT TAKES NO PARAMETERS. Not a code, not an order, not a token. That is what
+// makes "nothing private is on it" true by construction: there is nothing for
+// it to look up and nothing to leak. A customer opening their own tag sees the
+// same link and the same page, which is fine, because it is a page about how a
+// laundromat processes laundry.
+//
+// A GET THAT CHANGES NOTHING. No state, no stamp, no row. Refreshing it,
+// returning to it with Back, or opening it twice all do exactly nothing, which
+// is the rule ?done= and ?problem= keep everywhere else in this system.
+//
+// ABOVE /o/:code ON PURPOSE. Express takes the first route that matches, and
+// /processing is not under /o/ - but the ordering is written down rather than
+// relied on, the same note /ops/partners/:id carries.
+// ---------------------------------------------------------------------------
+router.get('/processing', (req, res) => {
+  const lang = langOf(req);
+
+  res.type('html').send(
+    page({
+      lang,
+      guideLink: false,
+      title: 'Processing guide',
+      body: processingGuide.processingGuideBody(lang),
+    })
+  );
+});
 
 router.get('/o/:code', async (req, res, next) => {
   const raw = req.params.code;
