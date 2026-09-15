@@ -175,7 +175,10 @@ test('and duplicates of the SAME tag are one tag, not two', () => {
 
 test('A BAD PHOTO FILLS NOTHING AND OFFERS A RETAKE', () => {
   assert.match(script, /Could not read a tag/);
-  assert.match(script, /open the QR with your phone camera/);
+  // It used to point at the phone's camera app here. That is still offered on
+  // every field, but the thing a stuck driver needs is on the screen he is
+  // already looking at - see the reversal below.
+  assert.match(script, /type the code printed under the QR/);
 });
 
 // --- the backups that stay ---------------------------------------------------
@@ -193,19 +196,54 @@ test('TYPING STAYS HIDDEN ON A CAMERA-ONLY STEP', () => {
   assert.match(field, /class="scan-typed" style="display:flex/);
 });
 
-test('AND A BAD PHOTO DOES NOT HAND IT BACK', () => {
-  // A blurry photo is a reason to take another one, not a reason to let
-  // somebody type past a step that exists to prove the bag is in their hand.
+test('BUT A BAD READ NOW HANDS IT BACK, AND THAT REVERSES THE OLD RULE', () => {
+  // This test used to assert the opposite: that letHimType() had exactly one
+  // caller, the browser with no camera at all, because "a blurry photo is a
+  // reason to take another one, not a reason to let somebody type past a step
+  // that exists to prove the bag is in their hand."
+  //
+  // Neil, 15 September, after order #2064: a bad QR read must not freeze the
+  // route. That rule assumed a driver who can take a better photo. Sahrish
+  // Khan's delivery is what it looks like when he cannot - the scan is the
+  // first of four steps, it was the only control on the card, so no bag was
+  // ever marked aboard, the order sat on READY, and the laundry reached the
+  // door with nothing recording it.
+  //
+  // Every branch that ends without a code in the box must offer the box.
   const at = script.indexOf('function letHimType');
-  assert.notEqual(at, -1);
+  assert.notEqual(at, -1, 'letHimType has gone');
 
-  // The only CALLER is the browser that cannot capture at all. The definition
-  // reads the same as a call, so it is excluded rather than counted.
+  // One definition plus four callers: no camera at all, two tags, no tag, and
+  // the decoder itself failing.
   const calls = script.split('letHimType();').length - 1;
-  assert.equal(calls, 1, 'letHimType is called from more than the no-capture path');
+  assert.equal(calls, 4, `letHimType has ${calls} callers, expected 4`);
+});
 
-  const before = script.slice(Math.max(0, script.indexOf('letHimType();') - 300), script.indexOf('letHimType();'));
-  assert.match(before, /canCapture/, 'typing comes back for something other than no camera at all');
+test('and every failing branch is one of them', () => {
+  // Named individually, because "four callers" would still pass if one branch
+  // gained a second call and another lost its only one.
+  const branchesThatFail = [
+    /More than one tag in that photo[\s\S]{0,200}?type the code/,
+    /Could not read a tag[\s\S]{0,200}?type the code/,
+    /That photo could not be read[\s\S]{0,200}?type the code/,
+  ];
+
+  for (const branch of branchesThatFail) {
+    assert.match(script, branch);
+  }
+
+  // And each of those three says so having first offered the box, rather than
+  // only mentioning typing in a sentence.
+  for (const message of [
+    'More than one tag in that photo',
+    'Could not read a tag',
+    'That photo could not be read',
+  ]) {
+    const at = script.indexOf(message);
+    assert.notEqual(at, -1, `${message} has moved`);
+    const before = script.slice(Math.max(0, at - 400), at);
+    assert.match(before, /letHimType\(\);/, `${message} does not offer the box`);
+  }
 });
 
 test('and a browser that cannot take a photo at all still gets the box', () => {

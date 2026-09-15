@@ -207,19 +207,36 @@ function scannerScript() {
   // anything at all.
   var forms = document.querySelectorAll('.scan-form');
 
-  if (forms.length) {
-    // Leave a crumb so a code scanned in the camera app knows where to come
-    // back to. A path and nothing else; /o/<code> refuses anything not under
-    // /ops, and the page it lands on asks for a sign-in on its own.
-    try {
-      document.cookie =
-        'ly_scan=' + encodeURIComponent(location.pathname + location.search) +
-        '; Max-Age=900; Path=/; SameSite=Lax' +
-        (location.protocol === 'https:' ? '; Secure' : '');
-    } catch (e) {
-      // A browser refusing cookies costs the shortcut and nothing else.
-    }
+  // THE CRUMB IS DROPPED ON EVERY DRIVER SCREEN, NOT ONLY ONES WITH A BOX.
+  //
+  // It used to sit inside the "are there any scan fields" test, so only a screen with a scan
+  // field on it left one - and the walk through a bag is four screens, of which
+  // exactly one has a field. A driver who reached for his phone's camera while
+  // standing on the weigh step, the clip step or the stop card left no crumb,
+  // so /o/<code> had nowhere to send him and he was stranded on the
+  // laundromat's page with no way back to his route. That is the second half
+  // of what Neil reported on #2064.
+  //
+  // Dropping it here also REFRESHES it on every page load, which matters more
+  // than the fifteen minutes does: a stop at a laundromat can easily run longer
+  // than the crumb's life, and now every tap renews it.
+  //
+  // Coming back to a screen with no box is harmless - nothing below matches, so
+  // the code is ignored and he is simply back where he was, which is the whole
+  // point.
+  //
+  // A path and nothing else; /o/<code> refuses anything not under /ops, and the
+  // page it lands on asks for a sign-in on its own.
+  try {
+    document.cookie =
+      'ly_scan=' + encodeURIComponent(location.pathname + location.search) +
+      '; Max-Age=900; Path=/; SameSite=Lax' +
+      (location.protocol === 'https:' ? '; Secure' : '');
+  } catch (e) {
+    // A browser refusing cookies costs the shortcut and nothing else.
+  }
 
+  if (forms.length) {
     // And if we have just come back from one, put it in the box. FILLED, NOT
     // SENT: the tap that follows is the driver saying this is the bag in his
     // hand, which is the whole reason the step exists.
@@ -416,15 +433,30 @@ function scannerScript() {
       note.style.display = '';
     }
 
-    // THE WAY THROUGH WHEN THERE IS NOTHING TO SCAN WITH. A camera-only form
-    // hides the box so a code cannot simply be typed instead of scanned - but a
-    // browser that cannot take a photo at all must not strand a driver at a
-    // counter, so the box comes back then and only then.
+    // THE WAY THROUGH WHEN THE CAMERA WILL NOT DO IT - INCLUDING A FAILED READ.
     //
-    // NOT ON A FAILED READ. A blurry photo is a reason to take another one, not
-    // a reason to let somebody type their way past a step that exists to prove
-    // the bag is in their hand. Neil's rule stands: typing must not become
-    // available here merely because the photo scanner exists.
+    // THIS REVERSES THE RULE THAT USED TO BE HERE. It read "not on a failed
+    // read: a blurry photo is a reason to take another one, not a reason to let
+    // somebody type their way past a step that exists to prove the bag is in
+    // their hand."
+    //
+    // Neil, 15 September, after order #2064: a bad QR read must not freeze the
+    // route. That rule was written about a driver who could simply take a better
+    // photo, and Sahrish Khan's delivery is what it looks like when he cannot.
+    // The camera would not read the tag, this step is the first of four, and
+    // there was no other control on the screen - so the walk could not start,
+    // no bag was ever marked aboard, the order sat on READY, and the bags went
+    // to the door with nothing recording it.
+    //
+    // A STRANDED STOP IS THE WORSE FAILURE, and it is worse in the direction
+    // that matters: the laundry moves either way, and the only question is
+    // whether the system knows. What typing costs is a weaker proof; what it
+    // buys is a route that always has a next step.
+    //
+    // AND IT IS NOT MUCH WEAKER. The code is printed under the QR precisely so
+    // it can be read off the bag he is holding, so typing it is still a claim
+    // about a sticker in his hand rather than a way of skipping the bag - which
+    // is the thing the step actually exists to stop.
     function letHimType() {
       if (!form.classList.contains('scan-camera-only')) return;
       var typed = form.querySelector('.scan-typed');
@@ -487,8 +519,11 @@ function scannerScript() {
 
           if (codes.length > 1) {
             // NEVER GUESS BETWEEN TWO TAGS. Which bag he is holding is the
-            // entire question the step is asking.
-            say('More than one tag in that photo. Take another with just the one bag in frame.');
+            // entire question the step is asking - so nothing is filled in.
+            // The box is offered, because he can still read one sticker and
+            // say which bag it is, which is the same answer by another route.
+            letHimType();
+            say('More than one tag in that photo. Take another with just the one bag in frame, or type the code printed under the QR.');
             return;
           }
 
@@ -508,7 +543,13 @@ function scannerScript() {
             // driver gets the precise message above. The behaviour is identical
             // on both - nothing filled, nothing confirmed, take another photo -
             // which is what Neil's rule about the two platforms asks for.
-            say('Could not read a tag. Take another with just the one bag in frame, closer and in better light - or open the QR with your phone camera.');
+            //
+            // AND THE BOX COMES BACK, which is the change made after #2064.
+            // This is the branch a driver actually gets stuck in: the photo is
+            // fine, the tag is creased or wet or badly lit, and no amount of
+            // retaking fixes it.
+            letHimType();
+            say('Could not read a tag. Take another with just the one bag in frame, closer and in better light - or type the code printed under the QR.');
             return;
           }
 
@@ -524,7 +565,11 @@ function scannerScript() {
           if (navigator.vibrate) navigator.vibrate(40);
         })
         .catch(function () {
-          say('That photo could not be read. Try again, or open the QR with your phone camera.');
+          // The decoder itself fell over - jsQR failed to load on a bad signal
+          // in a basement, the image would not decode. Nothing the driver can
+          // do differently, so he is never left without a control.
+          letHimType();
+          say('That photo could not be read. Try again, or type the code printed under the QR.');
         })
         .then(function () {
           open.disabled = false;
