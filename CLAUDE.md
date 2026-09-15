@@ -3454,6 +3454,24 @@ goes out the night before rather than at six in the morning.
 booking has had that message, and repeating it the night before every pickup is
 the system talking at somebody who already knows and has chosen not to act.
 
+**AND THE REMINDER THAT FOLLOWS NAMES THE HOLD.** Neil's ask, 14 September. The
+hold is placed minutes before that text goes out, and a booking made a fortnight
+ago was confirmed before any hold existed - so its confirmation could not mention
+one and this reminder is the first and only message that can explain the pending
+charge the customer is about to see. Unexplained, it is a phone call at best and
+a chargeback at worst.
+
+**It is read off the order**, like the confirmation's clause, so a waived order,
+a free one and any pickup whose hold was deferred or already captured get no
+sentence without anybody having to remember them - and the figure named is the
+one actually held rather than a second copy of the number.
+
+**The wording was measured, not chosen.** A standing order's reminder already
+carries the SKIP line, and that plus this sentence plus a long dropoff spot
+lands a couple of characters inside the two-segment ceiling. Anything longer
+costs a third segment on every standing-order reminder, every week, for ever - a
+test pins the worst case.
+
 **The stale hold is released before the new one is placed**, so a customer never
 carries two of ours pending at once. `releaseShowUp()` clears the id whether or
 not Stripe accepted the cancel: a hold Stripe has already expired must not sit

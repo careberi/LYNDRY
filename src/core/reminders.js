@@ -5,6 +5,7 @@ const orders = require('./orders');
 const booking = require('./booking');
 const notify = require('./notify');
 const dispatch = require('./dispatch');
+const billing = require('./billing');
 
 // ---------------------------------------------------------------------------
 // "YOUR PICKUP IS TOMORROW - HAVE THE BAG OUT."
@@ -100,7 +101,10 @@ const CARD_FIELDS =
   // told to put the bag out at eight in the morning. That is the exact
   // failure the reminder gate was built for, one rule along, and the
   // eleventh time an absent column has quietly decided what a screen knows.
-  'authorization_intent_id, authorized_at, authorization_refused_at';
+  // authorized_cents as well, because the reminder says the amount out loud
+  // and reading it off the order is what stops the sentence and the hold
+  // ever naming two different numbers.
+  'authorization_intent_id, authorized_cents, authorized_at, authorization_refused_at';
 const CUSTOMER_CARD_FIELDS = 'stripe_customer_id, default_payment_method_id';
 
 // A pickup booked in the last few hours does not need reminding that it is
@@ -162,7 +166,31 @@ function reminderMessage(order) {
     ? ` Reply SKIP if you don't need it this week and we'll cancel it, no charge.`
     : '';
 
-  return `${head} ${where} Text us if anything changes.${out}`;
+  // WHAT IS SITTING ON THEIR CARD RIGHT NOW.
+  //
+  // Neil's ask, 14 September. The hold is placed by the night-before pass a few
+  // minutes before this text goes out, so this is the first and only message
+  // that can explain the pending charge they are about to see - a booking made
+  // a fortnight ago was confirmed before any hold existed, so its confirmation
+  // could not mention one. Unexplained, $25 pending is a phone call at best and
+  // a chargeback at worst.
+  //
+  // READ OFF THE ORDER, never assumed from config. A waived order and a free
+  // one carry no hold, so they get no sentence without anybody having to
+  // remember them here; and the figure named is the one actually held, which is
+  // what stops this and the hold disagreeing the day the amount moves.
+  const hold = billing.showUpHold(order);
+  //
+  // WORDED TO FIT. A standing order's reminder already carries the SKIP line,
+  // and that one plus this sentence plus a long dropoff spot lands within a
+  // couple of characters of the two-segment ceiling - so the phrasing was
+  // measured against that worst case rather than chosen and hoped for. Anything
+  // longer here costs a third segment on every standing-order reminder.
+  const held = hold
+    ? ` ${billing.money(hold.cents)} is on hold to confirm the pickup - we take the real total at the door.`
+    : '';
+
+  return `${head} ${where}${held} Text us if anything changes.${out}`;
 }
 
 // Everything due a reminder for `date`, sent, and stamped as it goes.
