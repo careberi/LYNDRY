@@ -17,6 +17,7 @@ const { renderPage } = require('../web/layout');
 const towns = require('../web/towns');
 const structured = require('../web/schema');
 const sitePopup = require('../core/site-popup');
+const pitchLink = require('../core/pitch-link');
 const popup = require('../web/popup');
 
 // The hub path only, so the sitemap and the router cannot disagree about where
@@ -155,44 +156,6 @@ const PAGES = [
     title: 'Contact',
     fullTitle: 'Contact LYNDRY, Text (201) 554-1877 | Bergen County Laundry',
     description: `Book by text at ${site.publicPhoneDisplay}. Support call ${site.callPhoneDisplay}. Email ${site.email}.`,
-  },
-  {
-    // The page Neil SENDS to a laundromat he has already met, as opposed to
-    // /partners, which is the form a stranger fills in. It carries no
-    // commercial terms either - see the note at the top of the file.
-    path: '/for-laundromats',
-    file: 'for-laundromats.html',
-    // NO POPUP. A laundromat owner reading our pitch is not somebody to offer
-    // a consumer discount to, and a popup over a sales page is noise on top of
-    // the argument it is making.
-    popup: false,
-
-    // AND IT IS NOT A PAGE TO BE FOUND. Neil, 14 September: this should not be
-    // public. It is the page we SEND to a laundromat owner somebody has already
-    // met - /ops/partners texts the link - so the URL has to keep working while
-    // the page stops being part of the website. Out of the sitemap, and it
-    // carries a noindex.
-    //
-    // NOT DISALLOWED IN robots.txt, AND THAT IS THE POINT RATHER THAN AN
-    // OVERSIGHT. Disallow stops the crawl, and a crawl is how Google reads the
-    // noindex - so a page already in the index would be blocked from ever being
-    // told to leave it, and would sit there indefinitely. Disallow is for pages
-    // nobody must fetch; noindex is for pages nobody must find. This is the
-    // second.
-    noindex: true,
-
-    // AND IT STOPS TELLING AN ADVERTISING ACCOUNT WHO READ IT. Being in PAGES
-    // is the opt-in for the Google tag, on the reasoning that every entry is a
-    // public page an ad click lands on. This one is neither of those now: no
-    // advert points at it, and the people who open it are named businesses we
-    // sent the link to.
-    tracking: false,
-
-    title: 'For laundromats',
-    fullTitle: 'Laundromat Partners, Wash and Fold Work from LYNDRY',
-    description:
-      'How working with LYNDRY works if you run a laundromat: we pick up, ' +
-      'you wash, we deliver and bill. No app, no drivers and no customer calls.',
   },
   {
     path: '/partners',
@@ -482,6 +445,90 @@ const BERGEN_DESCRIPTION =
   'Laundry picked up tomorrow in Bergen County. 20% off your first order. ' +
   'Leave the bag at your door and it comes back the next day washed, dried ' +
   'and folded.';
+
+// ---------------------------------------------------------------------------
+// /for-laundromats/<token> - the pitch we SEND a laundromat owner.
+//
+// KEPT OUT OF `PAGES` DELIBERATELY, exactly as /bergen is. Everything in that
+// list is part of the website: it goes in the sitemap, it is linked from the
+// navigation, and it is meant to be found. This is none of those.
+//
+// Neil, 14 September: it should not be public, a guessed URL should not show
+// the pitch, and the link should only work for about five minutes after it is
+// texted to a person. So there is no bare path that renders it and nothing
+// anywhere links to it - the only way a working URL exists is /ops/partners
+// texting one. See src/core/pitch-link.js.
+//
+// THREE OUTCOMES, AND THE DIFFERENCE BETWEEN THE LAST TWO IS THE POINT:
+//
+//   a live token      the pitch
+//   a real token,     a page saying the link has expired and to ask for
+//   minted too long   another. With a five-minute window this is the common
+//   ago               failure, and a silent redirect would read as broken
+//   anything else     /partners, saying nothing. Somebody who guessed cannot
+//                     tell an expired link from a path that does not exist
+//
+// It renders noindex and with no advertising tag, the same as it did as a
+// page, and it is not in the sitemap because it is not in PAGES any more.
+// ---------------------------------------------------------------------------
+router.get('/for-laundromats/:token', (req, res) => {
+  const check = pitchLink.verify(req.params.token);
+
+  if (check.ok) {
+    return res.type('html').send(
+      renderPage({
+        title: 'For laundromats',
+        fullTitle: 'Laundromat Partners, Wash and Fold Work from LYNDRY',
+        description:
+          'How working with LYNDRY works if you run a laundromat: we pick up, ' +
+          'you wash, we deliver and bill. No app, no drivers and no customer calls.',
+        path: '/for-laundromats',
+        body: readPageBody('for-laundromats.html'),
+        noindex: true,
+      })
+    );
+  }
+
+  // A REAL LINK THAT HAS GONE COLD. Only reachable by somebody who actually
+  // held one, because the signature is checked before the clock is.
+  if (check.expired) {
+    return res
+      .status(410)
+      .type('html')
+      .send(
+        renderPage({
+          title: 'That link has expired',
+          description: 'Links to our laundromat overview are good for a few minutes.',
+          path: '/for-laundromats',
+          noindex: true,
+          body: `
+  <section class="container section" style="max-width:640px;">
+    <div class="card card-xl" style="padding:34px;">
+      <p class="eyebrow" style="margin:0 0 10px;">Laundromat overview</p>
+      <h1 style="font-family:var(--font-display);font-weight:900;font-size:clamp(28px,4vw,40px);line-height:1.05;margin:0 0 14px;">
+        That link has expired.
+      </h1>
+      <p style="font-size:17px;line-height:1.6;color:var(--ink-700);margin:0 0 22px;">
+        These links are only good for a few minutes after we send them. Text us
+        and we will send you a fresh one.
+      </p>
+      <a href="sms:${escapeHtml(site.publicPhoneLink)}" class="btn btn-ink btn-lg">Text ${escapeHtml(
+        site.publicPhoneDisplay
+      )}</a>
+    </div>
+  </section>`,
+        })
+      );
+  }
+
+  // NOTHING WE EVER SENT. No page, no hint that one exists, no 404 to probe.
+  return res.redirect(302, '/partners');
+});
+
+// The bare path is not a page. Anybody arriving at it typed it or followed
+// something old, and /partners is the honest place for them: it is the form
+// this page's readers would otherwise be sent to fill in anyway.
+router.get('/for-laundromats', (req, res) => res.redirect(302, '/partners'));
 
 // GET /lyndry.vcf - our contact card.
 //

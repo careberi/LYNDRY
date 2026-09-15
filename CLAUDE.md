@@ -489,16 +489,59 @@ ten FAQs. `/ops/partners` has a box to text somebody the link, behind
 `partners.manage` rather than `partners.view` because sending something to a
 real phone is a different act from reading a list.
 
-**AND IT IS NOT PUBLIC.** Neil, 14 September. It was in the sitemap, indexable,
-carrying the Google tag, and linked from a button on `/partners` - which is the
-page strangers land on, so the pitch we send to one named owner was one click
-from the open web.
+**IT OPENS ONLY WITH A LINK WE TEXTED, AND ONLY FOR FIVE MINUTES.** Neil, 14
+September, in three steps: it should not be public, a guessed URL should not
+show the pitch, and the link can only be texted and should die a few minutes
+later.
 
-It is `noindex: true` and `tracking: false` in `PAGES`, and the button is gone.
-**The URL still works, deliberately**: the whole purpose of the page is to be
-sent, and `/ops/partners` texts that link. Not public here means not findable,
-not indexed and not linked - the same treatment `/bergen` gets, and for the same
-reason.
+It was in the sitemap, indexable, carrying the Google tag, and linked from a
+button on `/partners` - the page strangers land on - so the pitch we send to one
+named owner was one click from the open web.
+
+**It is out of `PAGES` entirely now, exactly like `/bergen`.** Being in that list
+means being part of the website: in the sitemap, in the navigation, meant to be
+found. There is no bare path that renders it - `/for-laundromats` redirects to
+`/partners` - and the only thing in the system that makes a working URL is
+`/ops/partners` texting one.
+
+`src/core/pitch-link.js` owns the token: `<minted>.<random>.<signature>`, keyed
+off `ADMIN_API_KEY` under its own label so it can never be replayed as a
+customer session or a bag sticker.
+
+| What arrives | What happens |
+|---|---|
+| a live token | the pitch, `noindex`, no advertising tag |
+| a real token, minted too long ago | **410** and a page saying the link expired and to text us |
+| anything else | a redirect to `/partners`, saying nothing |
+
+**THE SIGNATURE IS CHECKED BEFORE THE CLOCK, and that ordering is the privacy
+half of it.** Only somebody who genuinely held a link is ever told "expired"; a
+stranger cannot tell an expired link from a path that was never a page.
+
+**THE MINTING TIME IS IN THE TOKEN AND COVERED BY THE SIGNATURE.** It has to be
+readable to be checked and must not be editable, or a link would extend its own
+life. **Every send mints its own**, so one forwarded link is one link rather
+than the key to the page.
+
+**NO TABLE, DELIBERATELY.** Nothing is looked up afterwards - the link is
+minted, texted, opened within minutes and dead - and the message is already in
+`messages`, which is the record of what was sent and to whom. A row per send
+would be a second copy of that, growing for ever, answering nothing.
+
+**FIVE MINUTES IS SHORT FOR A SALES PAGE AND THAT IS THE POINT**: it goes to
+somebody you are standing in front of or already on the phone to.
+`config.partners.pitchLinkMinutes` is the knob. **The cost is real**: an owner
+who puts the phone down and comes back an hour later gets an expired link and
+needs another. That is why the expired page says so plainly instead of quietly
+redirecting - with a window this short, expiry is the common failure, and
+silence would read as broken.
+
+**NOTHING RENDERS A LINK TO IT, INCLUDING THE OPS SCREENS.** The "What we send a
+laundromat" entry came out of the Resources menu: a permanent menu item pointing
+at a five-minute URL is the one thing it must not be, and one that redirects to
+`/partners` reads as the page having moved. **To read it yourself, text it to
+your own number** - which is the honest answer rather than a workaround, because
+the person sending it then sees exactly what the owner sees.
 
 **IT IS NOT DISALLOWED IN `robots.txt`, AND THAT IS THE POINT.** The instinct is
 to add a line there and it would make things worse: `Disallow` stops the crawl,
@@ -1889,7 +1932,7 @@ two what-if calculators.
 | **Dashboard** | What is happening right now: Your round, Orders, Routing, Load the van, Issues |
 | **People** | Everyone you deal with: Customers, Conversations, Team, Partners |
 | **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag tags, Unit economics, Route planner |
-| **Resources** | How it all works, What happens to a bag, What we send a laundromat |
+| **Resources** | How it all works, What happens to a bag |
 
 **THE ADMIN DASHBOARD IS A GRID OF EQUAL CARDS, and nothing else.** Neil's
 call. The weight thresholds were a full-width form dropped into the middle of

@@ -287,6 +287,21 @@ const config = Object.freeze({
     pollMinutes: Number(process.env.LEADS_POLL_MINUTES || 3),
   }),
 
+  // THE LAUNDROMAT PITCH PAGE, WHICH IS NOT A PUBLIC PAGE.
+  //
+  // Neil, 14 September: it opens only with the token we text, and only for
+  // about five minutes after it goes out.
+  //
+  // Five minutes is short for a sales page and that is the point - it is sent
+  // to somebody he is standing in front of or already on the phone to, and it
+  // is meant to be opened there and then. The cost is real and worth knowing:
+  // an owner who puts the phone down and comes back an hour later gets an
+  // expired link and has to be sent another. That is why the expired page says
+  // so in as many words rather than quietly showing nothing.
+  partners: Object.freeze({
+    pitchLinkMinutes: Number(process.env.PITCH_LINK_MINUTES || 5),
+  }),
+
   // Wash & fold is priced by weight, so the real price of an order is not
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.

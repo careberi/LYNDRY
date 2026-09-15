@@ -14,6 +14,7 @@ const throttle = require('../core/throttle');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
 const billing = require('../core/billing');
+const pitchLink = require('../core/pitch-link');
 const recurring = require('../core/recurring');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
@@ -452,16 +453,17 @@ const OPS_MENUS = Object.freeze([
       // page above: it holds no customer detail and no wholesale figure, and it
       // is the other thing you hand somebody before their first route.
       { href: '/ops/journey', label: 'What happens to a bag', permission: null },
-      // THE ACTUAL PAGE WE SEND A LAUNDROMAT OWNER, not a copy of it. It is
-      // public, so this is only a shortcut - but a shortcut worth having,
-      // because the thing most likely to go stale is the page nobody who works
-      // here ever opens. Behind partners.view: it is a sales document, and it
-      // is the same permission that guards everything else about partners.
-      {
-        href: '/for-laundromats',
-        label: 'What we send a laundromat',
-        permission: 'partners.view',
-      },
+      // "What we send a laundromat" USED TO LINK STRAIGHT TO /for-laundromats,
+      // and it cannot any more. Neil, 14 September: that link can only be
+      // texted, and it dies a few minutes later - so a permanent entry in a
+      // menu is the one thing it must not be. A menu item that redirects to
+      // /partners is worse than no menu item, because it reads as the page
+      // having moved.
+      //
+      // The way to read it is to text it to yourself from the box on
+      // /ops/partners, which is a real answer rather than a workaround: the
+      // person who sends it sees exactly what the owner will see, which is the
+      // point of ever opening it.
     ],
   },
 ]);
@@ -9649,9 +9651,18 @@ router.post('/ops/partners/send-overview', guard, may('partners.manage'), async 
     // rewrites " - " to ", " on the way out - no dashes in a LYNDRY text,
     // deliberately - and writing the dash anyway left a capital "It's" sitting
     // mid-sentence after the comma it became.
+    // A FRESH LINK EVERY TIME, GOOD FOR A FEW MINUTES. The page is not public
+    // and has no bare URL that renders it - this send is the only thing in the
+    // system that makes a working one. See src/core/pitch-link.js.
+    //
+    // Minted here rather than anywhere it could be rendered onto a screen,
+    // because a link sitting on an ops page is a link that outlives the tab it
+    // was drawn in, and Neil's rule is that it only exists after it is texted.
+    const link = pitchLink.urlFor();
+
     const message = who
-      ? `Hi ${who}, it's ${site.name}. Check out how the process works: ${config.baseUrl}/for-laundromats`
-      : `It's ${site.name}. Check out how the process works: ${config.baseUrl}/for-laundromats`;
+      ? `Hi ${who}, it's ${site.name}. Check out how the process works: ${link}`
+      : `It's ${site.name}. Check out how the process works: ${link}`;
 
     await notify.sendAndLog(phone, message, null);
 
