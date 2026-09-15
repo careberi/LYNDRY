@@ -1594,6 +1594,56 @@ regex catches "the Bergen Pediatrics name tags", so the fix is an allowlist
 rather than redaction. Add a field to that page only by adding it to
 `washLines()` deliberately.
 
+**EVERY BAG SCREEN LINKS TO ONE GENERIC PROCESSING GUIDE.** Neil's decision
+lock, 15 September: a plain hyperlink labelled **Processing Instructions**, from
+the bag-tag page to `/processing`. Not a button, not a modal, not a workflow
+step, not a confirmation.
+
+**THE LINK LIVES IN `page()`, THE SHARED SHELL**, and that is what makes every
+one of his edge cases true without a branch for any of them. A live tag, a tag
+not yet released, a finished one, an expired one and "this label isn't in use"
+all render through that shell, so all five carry the same link to the same
+guide. The label is written once; a second copy is what a test refuses.
+
+**THE GUIDE TAKES NO PARAMETERS - not a code, not a token, not an order** - and
+that is what makes "nothing private is on it" true by construction rather than
+by care: there is nothing for it to look up. A customer can open their own bag
+tag and will see the same link, which is fine, because it is a page about how a
+laundromat processes laundry. No price, no address, no wholesale rate. The one
+mention of a customer is the sentence saying the tag identifies the order and
+**not** the customer.
+
+**NO SIGN-IN AND NO SECOND SCAN.** It is reached from the one page in this
+system with no login at all, and asking somebody holding a bag to authenticate
+before reading instructions is the friction this path exists to remove.
+
+**A GET THAT WRITES NOTHING.** No form, no button, no input, no script on the
+page at all - so refreshing it, or coming back with Back, cannot submit
+anything. Back is the way back, which is what a link gives you for free and a
+modal does not.
+
+**ONE PAGE, NOT ONE PER ORDER.** The instructions are identical for every bag on
+the shelf. A per-order copy would be the same words rendered eighty times, and
+the eighty-first is the one somebody edits.
+
+**EVERY FIGURE IS READ FROM THE RUNNING SYSTEM**, the rule `/ops/process` and
+`/ops/journey` already follow. The sticker count is `bags.STICKERS_PER_TAG` -
+which CLAUDE.md is emphatic about, because it went from four to three - and the
+turnaround and both phone numbers come from `site` and `config`. A test refuses
+a typed sticker count and a typed phone number.
+
+**THE ESCALATION NUMBER IS NEIL'S OWN MOBILE, AND IT IS OPTIONAL.** He put it in
+the guide deliberately, for a laundromat that cannot get through on the business
+line. It renders **only if `SUPPORT_PHONE` is set**, so blanking that takes it
+off the page with no code change. It is worth knowing that this is the one place
+that number reaches a page with no login on it - the rule everywhere else is
+that it is never published, and this is a deliberate exception rather than a
+lapse.
+
+**The label translates; the guide does not.** One entry in the `ES` table gives
+the link its Spanish label, because that sits on a bilingual screen. The guide
+behind it is English only for now.
+
 **Partners are added by hand and are not the same thing as enquiries.**
 `partners` is the short list of businesses we work with, typed in by Neil;
 `partner_enquiries` is the website form and is a pile of strangers. Two types:
