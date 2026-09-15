@@ -1045,7 +1045,18 @@ router.get('/o/:code', async (req, res, next) => {
       return res.status(429).type('html').send(nothingHere(req));
     }
 
-    const code = bags.normaliseCode(raw);
+    // THE CODE AND, IF THE STICKER SAID ONE, WHICH STICKER.
+    //
+    // A QR carries the number in the query string as &s=. A person reading the
+    // line printed beside it types L4XK92-2. Both should land on the same
+    // sticker, so the one off the path stands in when there is no s= - it is
+    // the same fact arriving by the other door.
+    //
+    // query.s WINS where both exist. The QR is what we printed and the path is
+    // what somebody typed.
+    const parsed = bags.parseCode(raw);
+    const code = parsed ? parsed.code : null;
+    const askedSeq = req.query.s == null && parsed && parsed.seq ? String(parsed.seq) : req.query.s;
 
     // Refused before the database is touched. A guessed URL costs us a hash
     // and nothing else.
@@ -1094,7 +1105,7 @@ router.get('/o/:code', async (req, res, next) => {
 
     if (tagged) {
       await bags.recordScan({ code, orderId: tagged.id, outcome: 'SHOWN', ip, userAgent });
-      return res.type('html').send(orderTagPage(tagged, code, req.query.t, req.query));
+      return res.type('html').send(orderTagPage(tagged, code, req.query.t, { ...req.query, s: askedSeq }));
     }
 
     const label = await bags.findByCode(code);

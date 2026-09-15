@@ -52,9 +52,17 @@ function generateCode() {
   return out;
 }
 
-// What somebody typed or a camera read, turned into what we store. Handles the
-// lowercase every phone keyboard produces and the three confusable letters.
-function normaliseCode(raw) {
+// The highest sticker number a tag has ever carried.
+//
+// FOUR, NOT STICKERS_PER_TAG, WHICH IS THREE. The database has allowed 1-4
+// since migration 0044 and a tag printed under the old design has a -4 on it,
+// on an order that has been delivered. Refusing to READ one would make a real
+// sticker unscannable to protect a rule about how many we PRINT today. The
+// constant above still governs what goes on a new tag.
+const MAX_STICKER_SEQ = 4;
+
+// The six characters alone, with no sticker number on them.
+function normaliseBare(raw) {
   const folded = String(raw || '')
     .toUpperCase()
     .replace(/[^0-9A-Z]/g, '')
@@ -63,6 +71,61 @@ function normaliseCode(raw) {
 
   if (folded.length !== CODE_LENGTH) return null;
   return [...folded].every((ch) => ALPHABET.includes(ch)) ? folded : null;
+}
+
+// WHAT SOMEBODY TYPED OR A CAMERA READ, AS A TAG AND A STICKER NUMBER.
+//
+// Neil, 14 September: a sticker that reads L4XK92-2 is tag L4XK92, sticker 2,
+// and scanning or typing it must find the same bag as scanning L4XK92. It did
+// not. normaliseCode() stripped the hyphen and KEPT the digit, so L4XK92-2
+// became the seven characters L4XK922, failed the length test and came back
+// null - an unknown code, on a sticker we printed ourselves.
+//
+// THE PRINTED QR WAS NEVER BROKEN and is not touched. It encodes
+// /o/<code>?t=<signature>&s=<number>, so the sticker number rides in the query
+// string and the path is the bare code. What was broken is the human-readable
+// line beside it, which is the thing somebody reads out or types when the
+// camera will not focus - which is the entire reason that line is printed.
+//
+// THE SPLIT HAPPENS BEFORE THE FOLD, and that is the whole trick. Stripping
+// punctuation first is what merged the sticker number into the code; taking the
+// trailing -N off first leaves exactly the six characters the old rule expects,
+// so everything it already did - the lowercase every phone keyboard produces,
+// O for zero, I and L for one - is unchanged.
+function parseCode(raw) {
+  const text = String(raw || '').trim().toUpperCase();
+
+  // A trailing sticker number, and only a trailing one. Anything else after
+  // the hyphen is not a sticker and falls through to be judged as a code,
+  // where it fails on length - so L4XK92-2X is refused rather than guessed at.
+  const match = text.match(/^(.*?)-(\d{1,2})$/);
+
+  const code = normaliseBare(match ? match[1] : text);
+  if (!code) return null;
+
+  if (!match) return { code, seq: null };
+
+  const seq = Number(match[2]);
+  // A sticker number we have never printed is not a forgiving typo, it is a
+  // code that is not ours. Refused rather than quietly dropped, because
+  // dropping it would hand back the tag and say nothing.
+  if (!Number.isInteger(seq) || seq < 1 || seq > MAX_STICKER_SEQ) return null;
+
+  return { code, seq };
+}
+
+// What somebody typed or a camera read, turned into what we store. Handles the
+// lowercase every phone keyboard produces and the three confusable letters,
+// and now a sticker number on the end.
+//
+// IT STILL RETURNS JUST THE CODE, which is why this fix reaches every screen
+// at once. Five places normalise a typed or scanned code - findByCode, the tag
+// lookup, and the three routes behind /o/ - and all five keep working exactly
+// as they did while gaining the hyphenated form. A caller that needs to know
+// WHICH sticker asks parseCode().
+function normaliseCode(raw) {
+  const parsed = parseCode(raw);
+  return parsed ? parsed.code : null;
 }
 
 // --- Proving a scanned sticker is one of ours -------------------------------
@@ -738,6 +801,8 @@ module.exports = {
   CODE_LENGTH,
   generateCode,
   normaliseCode,
+  parseCode,
+  MAX_STICKER_SEQ,
   signCode,
   verifyCode,
   labelUrl,

@@ -1760,15 +1760,46 @@ session has lapsed he lands on the sign-in page, which is honest.
 
 **The in-page scanner stays**, and so does jsQR. It is one tap when it works.
 
-**AND ONE REASON IT DOES NOT IS NOW KNOWN, AND THIS PARAGRAPH USED TO DENY IT.**
-It said "the URL regex is right". It is not. `codeFrom()` in `scanner.js` matches
-`/o/([0-9A-Za-z]+)`, with no hyphen in the class, so a scan of a return sticker
-`0H7Y2S-1` yields `0H7Y2S` - the parent tag. The form then posts the wrong bag
-and the driver confirms a bag he is not holding. Found 14 September by reading
-the source against a written spec that claimed it; the spec was right and this
-file was wrong. **Nothing else in the old sentence has been re-checked since**,
-so treat "the decoder is served correctly" and "playsinline is there" as
-unverified rather than as findings.
+**AND ONE REASON IT DOES NOT WAS A HYPHEN. FIXED 14 SEPTEMBER.** This paragraph
+used to say "the URL regex is right". It was not, and the fault ran deeper than
+the regex.
+
+**A STICKER READS `L4XK92-2`, AND THAT IS TAG `L4XK92`, STICKER 2.**
+`bags.normaliseCode()` stripped the hyphen and KEPT the digit, so `L4XK92-2`
+became the seven characters `L4XK922`, failed the six-character test and came
+back null - an unknown code, on a sticker we printed ourselves, read by
+somebody standing at a counter with a bag in one hand. `codeFrom()` in
+`scanner.js` had the matching half of it: no hyphen in its character class, so
+a URL carrying one came back as the bare tag and the number was lost on the way
+to the box.
+
+**THE PRINTED QR WAS NEVER BROKEN AND IS NOT TOUCHED.** It encodes
+`/o/<code>?t=<signature>&s=<number>`, so the number rides in the query string
+and the path is the bare code. What was broken is the human-readable line
+printed beside it - which exists precisely for when the camera will not focus,
+so it failing is the failure of the fallback rather than of a nicety.
+
+**THE SPLIT HAPPENS BEFORE THE FOLD, and that is the whole fix.** Stripping
+punctuation first is what merged the number into the code; taking a trailing
+`-N` off first leaves exactly the six characters the old rule expects, so the
+lowercase every phone keyboard produces, O for zero and I and L for one are all
+unchanged. `bags.parseCode()` returns `{ code, seq }`; `normaliseCode()` still
+returns just the code, which is why one change reached every screen: five
+places normalise a typed or scanned code - `findByCode`, the tag lookup, and
+the three routes behind `/o/` - and all five kept working while gaining the
+hyphenated form.
+
+**`MAX_STICKER_SEQ` IS 4 AND `STICKERS_PER_TAG` IS 3, AND THAT IS NOT A
+CONTRADICTION.** One is what we can READ, the other what we PRINT. Migration
+0044 allows 1-4 and a tag from the old four-sticker design carries a `-4` on a
+delivered order; refusing to read one would make a real sticker unscannable to
+protect a rule about today's printing. A number outside 1-4 is refused outright
+rather than quietly dropped, because dropping it would hand back the parent tag
+and say nothing.
+
+**Nothing else in the old sentence has been re-checked**, so treat "the decoder
+is served correctly" and "playsinline is there" as unverified rather than as
+findings.
 
 The rest of the original note still stands and is the argument for the camera
 app rather than against it: jsQR was tested directly against a rendered tag at
