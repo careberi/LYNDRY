@@ -445,6 +445,173 @@ test('and neither does the cash button', async () => {
   assert.equal(refusal.reason, 'not_in_our_hands');
 });
 
+// --- the night before, so a far-out booking still has one -------------------
+
+const showUpHolds = require('../src/core/show-up-holds');
+const nightly = require('../src/core/nightly');
+
+const daysAgo = (n) => new Date(Date.now() - n * 86_400_000).toISOString();
+const live = (n) => ({
+  authorization_intent_id: 'pi_1',
+  authorized_cents: 2500,
+  authorized_at: daysAgo(n),
+});
+
+test('A HOLD IS FRESH UNTIL IT IS OLD ENOUGH TO HAVE EXPIRED AT STRIPE', () => {
+  // Stripe lets an uncaptured authorization go on its own, usually at seven
+  // days. Five is the margin, because the night-before pass is the only chance
+  // to replace one.
+  assert.equal(config.pricing.authorizationFreshDays, 5);
+
+  assert.equal(billing.holdIsFresh(live(0)), true);
+  assert.equal(billing.holdIsFresh(live(4)), true);
+  assert.equal(billing.holdIsFresh(live(6)), false, 'a week-old hold read as fresh');
+  assert.equal(billing.holdIsFresh(live(20)), false);
+});
+
+test('and no hold at all is not fresh, which is what makes it one question', () => {
+  assert.equal(billing.holdIsFresh({}), false);
+  // Captured: the id is cleared, so there is nothing left to take at the door.
+  assert.equal(billing.holdIsFresh({ authorized_at: daysAgo(1), captured_cents: 2500 }), false);
+});
+
+test('a hold with no date on it is never trusted', () => {
+  assert.equal(billing.holdIsFresh({ authorization_intent_id: 'pi_1', authorized_cents: 2500 }), false);
+  assert.equal(
+    billing.holdIsFresh({ authorization_intent_id: 'pi_1', authorized_at: 'not a date' }),
+    false
+  );
+});
+
+test('THE SWEEP LEAVES ALONE EVERYTHING IT SHOULD', () => {
+  const base = { id: 'o1', order_number: 2071, payment_status: 'UNPAID', ...live(0) };
+
+  const cases = [
+    [{ ...base, customers: null }, 'no customer'],
+    [{ ...base, customers: { phone: '+1', status: 'UNSUBSCRIBED' } }, 'opted out'],
+    [{ ...base, payment_status: 'WAIVED', customers: { phone: '+1', ...card } }, 'nothing to hold'],
+    [{ ...base, payment_status: 'PAID', customers: { phone: '+1', ...card } }, 'nothing to hold'],
+    [{ ...base, customers: { phone: '+1' } }, 'no card on file'],
+    [{ ...base, customers: { phone: '+1', ...card } }, 'hold is fresh'],
+  ];
+
+  for (const [order, expected] of cases) {
+    assert.equal(showUpHolds.skipReason(order), expected, JSON.stringify(expected));
+  }
+
+  // And the one that needs the promotion ledger, handed in rather than asked
+  // for - a free order is told "nothing to pay" and must never carry a hold.
+  const freeOne = { ...base, ...live(9), customers: { phone: '+1', ...card } };
+  assert.equal(showUpHolds.skipReason(freeOne, new Set(['o1'])), 'free order');
+});
+
+test('and a stale hold is the one thing it acts on', () => {
+  const stale = {
+    id: 'o1',
+    order_number: 2071,
+    payment_status: 'UNPAID',
+    ...live(9),
+    customers: { phone: '+1', ...card },
+  };
+
+  assert.equal(showUpHolds.skipReason(stale), null, 'a nine-day-old hold was left alone');
+});
+
+test('AND SO IS A PICKUP THAT NEVER HAD ONE', () => {
+  // Every order booked before this existed. The night before is the last
+  // honest moment to find out the card will fund the trip.
+  const never = {
+    id: 'o1',
+    order_number: 2071,
+    payment_status: 'UNPAID',
+    customers: { phone: '+1', ...card },
+  };
+
+  assert.equal(showUpHolds.skipReason(never), null);
+});
+
+test('THE STALE HOLD IS RELEASED BEFORE A NEW ONE IS PLACED', () => {
+  // Otherwise a customer carries two of ours pending at once, which is $50
+  // against a $25 rule and the support call that writes itself.
+  const body = bodyOf(SRC('core', 'show-up-holds.js'), 'async function refresh(');
+
+  const released = body.indexOf('releaseShowUp');
+  const placed = body.indexOf('authorizeShowUp');
+
+  assert.ok(released > -1 && placed > -1);
+  assert.ok(released < placed, 'a new hold is placed before the old one is let go');
+});
+
+test('A REFUSAL THE NIGHT BEFORE IS TOLD, AND ONLY IF IT IS NEWS', () => {
+  const body = bodyOf(SRC('core', 'show-up-holds.js'), 'async function refresh(');
+
+  assert.match(body, /wasRefused/, 'it texts every refusal every night');
+  assert.match(body, /!wasRefused/);
+  assert.match(body, /holdRefusedMessage/);
+});
+
+test('THE HOLDS ARE REFRESHED BEFORE THE REMINDERS GO OUT', () => {
+  // A card that refuses tonight takes the stop off tomorrow's round. Running
+  // after would text somebody to put the bag out at eight in the morning and
+  // then quietly remove the stop behind it - the exact failure the reminder
+  // gate exists to prevent.
+  const body = bodyOf(SRC('core', 'nightly.js'), 'async function runPass(');
+
+  const booked = body.indexOf('bookDue');
+  const holds = body.indexOf('refreshDue');
+  const reminded = body.indexOf('sendDue');
+
+  assert.ok(booked > -1 && holds > -1 && reminded > -1);
+  assert.ok(booked < holds, 'tomorrow is held before the standing orders exist');
+  assert.ok(holds < reminded, 'the reminders go out before the holds are checked');
+});
+
+test('and a failure there costs holds, never the whole evening', () => {
+  // The reminders run after this. A throw would take the night's texts with it.
+  const body = bodyOf(SRC('core', 'nightly.js'), 'async function runPass(');
+  assert.match(body, /refreshDue[\s\S]{0,200}catch/, 'the refresh can fail the nightly pass');
+
+  const sweep = bodyOf(SRC('core', 'show-up-holds.js'), 'async function refreshDue(');
+  assert.match(sweep, /try/, 'one bad order ends the sweep');
+});
+
+test('THE FREE-ORDER LOOKUP IS ONE QUERY FOR THE WHOLE BOARD', () => {
+  // Thirty pickups must not be thirty round trips, and skipReason() staying
+  // pure is what lets every rule above be checked without a database.
+  const sweep = bodyOf(SRC('core', 'show-up-holds.js'), 'async function refreshDue(');
+  assert.match(sweep, /freeOrderIds/);
+  assert.ok(!/claimedFreeOrder/.test(sweep), 'it asks per order');
+});
+
+test('THE SWEEP SELECTS EVERYTHING IT READS', () => {
+  // An unselected authorized_at makes every hold look stale, and the pass would
+  // then re-authorize the entire board every single night.
+  for (const column of [
+    'authorization_intent_id',
+    'authorized_cents',
+    'authorized_at',
+    'authorization_refused_at',
+    'authorization_attempts',
+    'payment_status',
+    'default_payment_method_id',
+  ]) {
+    assert.match(showUpHolds.FIELDS, new RegExp(column), column);
+  }
+});
+
+test('with Stripe switched off it does nothing at all', async () => {
+  // Fails open, like every other gate here: a sandbox with no key must never
+  // quietly empty a day's round.
+  const sweep = bodyOf(SRC('core', 'show-up-holds.js'), 'async function refreshDue(');
+  assert.match(sweep, /config\.stripe\.secretKey/);
+  assert.match(sweep, /payments not configured/);
+});
+
+test('nothing in the night-before pass takes money', () => {
+  const src = SRC('core', 'show-up-holds.js');
+  assert.ok(!/captureShowUp|chargeOffSession|chargeOrder/.test(src), 'the sweep charges a card');
+});
+
 // --- a free order is not a refused one --------------------------------------
 
 test('AN ORDER THAT COMES TO NOTHING IS NOT DECLINED AT THE DOOR', async () => {

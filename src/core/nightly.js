@@ -5,17 +5,24 @@ const booking = require('./booking');
 const settings = require('./settings');
 const recurring = require('./recurring');
 const reminders = require('./reminders');
+const showUpHolds = require('./show-up-holds');
 
 // ---------------------------------------------------------------------------
 // THE NIGHTLY PASS, RUN BY THE APP ITSELF.
 //
-// Two jobs, in this order, once an evening:
+// Three jobs, in this order, once an evening:
 //
 //   1. Book tomorrow's standing orders, texting those customers as it goes.
-//   2. Remind everybody else whose pickup is tomorrow.
+//   2. Make sure every pickup tomorrow has a $25 hold that will still be there
+//      when the driver gets to the door.
+//   3. Remind everybody else whose pickup is tomorrow.
 //
-// The order matters: a standing order booked in step 1 has already been texted
-// and recorded as reminded, so step 2 must not text it again.
+// THE ORDER MATTERS TWICE OVER. A standing order booked in step 1 has already
+// been texted and recorded as reminded, so step 3 must not text it again. And a
+// card that refuses the hold in step 2 takes the stop off tomorrow's round, so
+// step 3 must run after it - a reminder telling somebody to put the bag out at
+// eight for a van that is not coming is the exact failure the reminder gate was
+// built to prevent.
 //
 // WHY IT IS NOT A CRON JOB, which is what it was. Neil asked the obvious
 // question and he was right. A Railway cron is a second service, configured by
@@ -69,8 +76,21 @@ let timer = null;
 // that drift.
 async function runPass({ date = null } = {}) {
   const booked = await recurring.bookDue(date ? { date } : {});
+
+  // BEFORE THE REMINDERS, NEVER AFTER. See the note at the top of the file, and
+  // src/core/show-up-holds.js for why the night before is the last honest
+  // moment to find out a card will not fund tomorrow's trip.
+  //
+  // It swallows its own failure: a hold that could not be replaced leaves the
+  // order exactly as it was, and losing a night of reminders over it would be
+  // the worse of the two.
+  const holds = await showUpHolds.refreshDue(date ? { date } : {}).catch((err) => {
+    console.error(`Could not refresh tomorrow's holds: ${err.message}`);
+    return { held: [], refused: [], skipped: [] };
+  });
+
   const reminded = await reminders.sendDue(date ? { date } : {});
-  return { booked, reminded };
+  return { booked, holds, reminded };
 }
 
 // Should it run right now, and if so, run it.
@@ -125,6 +145,8 @@ async function runIfDue({ force = false, now = null } = {}) {
 
     console.log(
       `NIGHTLY done: ${result.booked.booked.length} standing order(s) booked, ` +
+        `${result.holds.held.length} hold(s) replaced, ` +
+        `${result.holds.refused.length} card(s) refused, ` +
         `${result.reminded.sent.length} reminder(s) sent.`
     );
 

@@ -818,6 +818,31 @@ function showUpState(order) {
   return 'UNASKED';
 }
 
+// IS THE HOLD STILL GOING TO BE THERE AT THE DOOR?
+//
+// Stripe expires an uncaptured authorization on its own - usually at seven
+// days, sometimes sooner - so a hold is not a thing that lasts until somebody
+// uses it. An order with no hold at all is not fresh either, which is what
+// makes this the single question the night-before pass asks.
+//
+// It is deliberately about the CLOCK and not about Stripe. Asking Stripe
+// whether each of tomorrow's holds is still alive is a network call per order
+// on a pass that has to finish inside an evening, and the answer would still be
+// stale by morning. A date we hold ourselves is checkable, testable and cannot
+// fail open.
+function holdIsFresh(order, { days = null, now = null } = {}) {
+  const hold = showUpHold(order);
+  if (!hold || !order.authorized_at) return false;
+
+  const placed = new Date(order.authorized_at).getTime();
+  if (!Number.isFinite(placed)) return false;
+
+  const limit = days == null ? config.pricing.authorizationFreshDays : days;
+  const age = ((now ? now.getTime() : Date.now()) - placed) / 86_400_000;
+
+  return age <= limit;
+}
+
 // PLACE THE HOLD. Money held, not taken.
 //
 // Called at booking, and again from the card-saved path for a pickup that was
@@ -1166,6 +1191,7 @@ module.exports = {
   refundDeposit,
   showUpCents,
   showUpHold,
+  holdIsFresh,
   doorSplit,
   showUpState,
   authorizeShowUp,
