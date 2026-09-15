@@ -9,10 +9,11 @@ const notify = require('../core/notify');
 const onboarding = require('../core/onboarding');
 const adAttribution = require('../core/ad-attribution');
 const wash = require('../core/wash');
+const booking = require('../core/booking');
 
 const throttle = require('../core/throttle');
 const { config } = require('../config');
-const { site, textUsQrSvg } = require('../web/site');
+const { site, tokens, textUsQrSvg } = require('../web/site');
 const { renderPage } = require('../web/layout');
 const towns = require('../web/towns');
 const structured = require('../web/schema');
@@ -103,6 +104,62 @@ const PAGES = [
     path: '/faq',
     file: 'faq.html',
     title: 'Questions',
+    fullTitle: 'Laundry Pickup Questions in Bergen County, NJ | LYNDRY',
+
+    // THE SAME WORDS THAT ARE ON THE PAGE, AND THE SAME TOKENS.
+    //
+    // Marking up an answer a visitor cannot see is against Google's own
+    // guidelines and is how this feature gets abused, so every string below is
+    // the copy out of public/pages/faq.html rather than a summary of it.
+    //
+    // THE TOKENS ARE LEFT UNRESOLVED ON PURPOSE. fillTokens() runs over the
+    // whole document including the head, so {{PRICE_PER_LB}} is substituted at
+    // render from the same value the paragraph below it gets. Resolving them
+    // here would be a second copy of the price, free to disagree with the
+    // visible answer the day somebody changes one - which is the precise thing
+    // structured data must never do.
+    head: () =>
+      structured.tags([
+        structured.faqPage([
+          [
+            'Do I need an app?',
+            'No. There is nothing to download and no account to remember. You book by text message, or from your account on this website if you would rather tap than type. Both do the same thing.',
+          ],
+          [
+            'Do I have to be home?',
+            'No. Leave the bag where you tell us to leave it: the front door, a side gate, with a doorman. That is where we pick it up and where we bring it back. We text you when it has been picked up, and again with a photo when it is back at your door.',
+          ],
+          [
+            'How does the price work?',
+            '{{PRICE_PER_LB}} a pound, weighed after we pick it up. There is no subscription and no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed at the laundromat, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we take up to {{MAX_ORDER}} in one pickup.',
+          ],
+          [
+            'What bags can I put it in?',
+            'Any bag at all. A laundry sack, a duffel, a tote, a trash bag, whatever you have. You do not need to buy anything. It comes back to you in a fresh plastic bag, and anything reusable you sent it in comes back with it.',
+          ],
+          [
+            'How long does it take?',
+            'Back to you the {{TURNAROUND}}. Picked up one day, returned the next.',
+          ],
+          [
+            'What if I need to cancel?',
+            'Free, right up until your bag is picked up. Cancel by text, or from your account. Once it is with us it is already being washed, so it cannot be cancelled after that.',
+          ],
+          [
+            'How is it washed?',
+            'You choose the water temperature and whether you want fabric softener. We ask once, when you set up, and then never again. Every order uses the same until you tell us otherwise. Detergent is the same for everybody, so there is nothing to choose there, and everything is tumble dried. We wash, dry and fold only. No dry cleaning, pressing or alterations.',
+          ],
+          [
+            'Do you serve my area?',
+            'We cover {{SERVICE_AREA}}. Sign up even if you are just outside it and we will tell you when we reach you.',
+          ],
+          [
+            'Can I have a regular pickup?',
+            'Yes. Pick the days that suit you and we come every week, or every other week, at the same time. We text you the evening before each one, and you can skip a week or stop it whenever you like.',
+          ],
+        ]),
+      ]),
+
     description:
       'Common questions about LYNDRY laundry pickup and delivery: no app, you do not need to be home, how the price works and what bags you can use.',
   },
@@ -798,17 +855,135 @@ for (const [route, type] of Object.entries(ICON_FILES)) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// GET /llms.txt - the whole business on one page, in plain text.
+//
+// For an answer engine that wants the facts without walking eighty-one pages
+// and parsing the markup out of them. It is the same information the site
+// already states, written once, in the order somebody would ask for it.
+//
+// EVERY FIGURE COMES FROM site AND config. Nothing here is typed: the price,
+// the minimum, the maximum, the turnaround, the service area and both phone
+// numbers are the same values the pages render, so this file cannot quietly
+// start disagreeing with the website it describes. That is the whole risk of a
+// page like this and the only thing that makes it safe to publish.
+//
+// IT MAKES NO CLAIM THE SITE DOES NOT. No reviews, no ratings, no opening
+// hours, no commercial terms for a laundromat - the same refusals the
+// structured data keeps, for the same reason: we would be inventing them.
+//
+// text/plain, so nothing has to be stripped to read it.
+// ---------------------------------------------------------------------------
+router.get('/llms.txt', (req, res) => {
+  const lines = [
+    `# ${site.name}`,
+    '',
+    `> ${site.tagline}`,
+    '',
+    `${site.name} is a wash and fold laundry pickup and delivery service in ${site.serviceArea}, New Jersey.`,
+    'We collect laundry from your door, wash, dry and fold it, and bring it back.',
+    '',
+    '## What it costs',
+    '',
+    `- ${site.pricePerLb} per pound, weighed after pickup`,
+    `- ${tokens.MINIMUM} minimum on a paid order`,
+    `- Up to ${site.maxOrder} in one pickup`,
+    `- A typical bag is ${site.typicalBagWeight}, which comes to about ${site.estimateRange}`,
+    '- No delivery fee',
+    '- No subscription and no membership',
+    '',
+    '## How it works',
+    '',
+    `- Back to you the ${site.turnaround}`,
+    '- There is no app to download',
+    '- You do not need to be home. Leave the bag where you tell us to leave it, and that is where it comes back',
+    '- Wash, dry and fold only. No dry cleaning, pressing or alterations',
+    '- Nothing is charged when you book. Your laundry is weighed and that is when the card is charged',
+    '',
+    '## How to book',
+    '',
+    site.hasPublicPhone ? `- Text ${site.publicPhoneDisplay}` : null,
+    `- Or book online at ${config.baseUrl}/account`,
+    site.callPhoneDisplay ? `- To speak to somebody, call ${site.callPhoneDisplay}` : null,
+    `- Email ${site.email}`,
+    '',
+    '## Pages',
+    '',
+    `- [How it works](${config.baseUrl}/how-it-works)`,
+    `- [Pricing](${config.baseUrl}/pricing)`,
+    `- [Questions](${config.baseUrl}/faq)`,
+    `- [Areas we cover](${config.baseUrl}${LOCATIONS_HUB})`,
+    `- [Contact](${config.baseUrl}/contact)`,
+    '',
+    '## Elsewhere',
+    '',
+    `- [Google Business Profile](${structured.GOOGLE_PROFILE})`,
+    `- [Facebook](${structured.FACEBOOK_PAGE})`,
+  ];
+
+  res.type('text/plain').send(`${lines.filter((line) => line !== null).join('\n')}\n`);
+});
+
+// ---------------------------------------------------------------------------
+// ONE STANZA PER CRAWLER, NOT ONE WILDCARD.
+//
+// Several of these ignore the `*` group entirely, so a site carrying only a
+// wildcard is not reliably being read by them at all - which matters now that
+// an answer engine is a way somebody finds a laundry service rather than a
+// curiosity.
+//
+// The rules are identical in every group and are generated from the two arrays
+// rather than written out eleven times. Eleven hand-written blocks is eleven
+// places for a Disallow to go missing, and the one that went missing would be
+// the one nobody checked.
+//
+// WHAT IS DISALLOWED IS UNCHANGED. /ops is the internal tool and /account is
+// somebody's signed-in order history - both behind a sign-in anyway, but there
+// is no reason for a crawler to be knocking. /bergen is a paid advert with a
+// pixel on it rather than a page to be found by searching, and /health is a
+// JSON health check.
+//
+// NOTE WHAT IS DELIBERATELY NOT HERE: /for-laundromats. It carries a noindex
+// instead, because Disallow stops the crawl and a crawl is how a noindex gets
+// read - see the note on its route above.
+// ---------------------------------------------------------------------------
+// WHEN THIS BUILD WENT UP, as a date with no time. Read once at startup rather
+// than per request, so every URL in a given sitemap carries the same date and
+// the file does not appear to change every time it is fetched.
+//
+// booking.today() rather than new Date().toISOString(), which is UTC and rolls
+// over at 8pm here - the same trap that made "pickup today" impossible every
+// evening.
+const DEPLOYED_ON = booking.today();
+
+const CRAWLERS = [
+  '*',
+  // Google's search crawler reads the wildcard; Google-Extended is the separate
+  // opt-in that governs their AI answers.
+  'Google-Extended',
+  'OAI-SearchBot',
+  'ChatGPT-User',
+  'GPTBot',
+  'ClaudeBot',
+  'Claude-SearchBot',
+  'PerplexityBot',
+  'Bingbot',
+  'Applebot',
+  'Applebot-Extended',
+];
+
+const CRAWLER_DISALLOW = ['/ops', '/account', '/bergen', '/health'];
+
 router.get('/robots.txt', (req, res) => {
-  // /ops is the internal tool. It is behind a sign-in anyway, but there is no
-  // reason for a crawler to be knocking on it.
-  // /ops is the internal tool; /account is somebody's signed-in order history.
-  // Both are behind a sign-in anyway, but there is no reason for a crawler to
-  // be knocking on either.
-  res
-    .type('text/plain')
-    .send(
-      `User-agent: *\nAllow: /\nDisallow: /ops\nDisallow: /account\nDisallow: /bergen\nDisallow: /health\nSitemap: ${config.baseUrl}/sitemap.xml\n`
-    );
+  const groups = CRAWLERS.map((agent) =>
+    [
+      `User-agent: ${agent}`,
+      'Allow: /',
+      ...CRAWLER_DISALLOW.map((path) => `Disallow: ${path}`),
+    ].join('\n')
+  ).join('\n\n');
+
+  res.type('text/plain').send(`${groups}\n\nSitemap: ${config.baseUrl}/sitemap.xml\n`);
 });
 
 // ---------------------------------------------------------------------------
@@ -828,8 +1003,20 @@ router.get('/sitemap.xml', (req, res) => {
     ...towns.TOWNS.map((t) => `/${t.slug}`),
   ];
 
+  // A DATE ON EVERY URL, SO THERE IS SOMETHING TO RECRAWL FOR. Without one
+  // there is nothing in the sitemap that ever changes, and nothing telling
+  // Google the site is not the same as it was last time it looked.
+  //
+  // DERIVED FROM WHEN THIS PROCESS STARTED, which is when the deploy happened -
+  // the content ships with the code, so a deploy IS the change. It is honest
+  // rather than precise: every page shares a date, and that date really is the
+  // last time any of them could have changed.
+  //
+  // The alternative is a per-page timestamp, which would mean storing one, and
+  // storing a fact about a file that git already records is the copy this
+  // codebase refuses everywhere else.
   const urls = paths
-    .map((path) => `  <url><loc>${config.baseUrl}${path}</loc></url>`)
+    .map((path) => `  <url><loc>${config.baseUrl}${path}</loc><lastmod>${DEPLOYED_ON}</lastmod></url>`)
     .join('\n');
 
   res

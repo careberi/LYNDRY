@@ -111,19 +111,27 @@
         <!-- Break at the full stop, not wherever the line happens to run out.
              text-wrap:balance on its own put "We" alone at the end of the
              first line, which reads as a stumble. -->
-        <h1 class="display-1">Text us.<br>We got your laundry.</h1>
+        <!-- THE BRAND LINE, AND IT IS NO LONGER THE H1.
+             It is still the biggest thing on the page and still the first thing
+             read: display-1 is the class doing that, and it has not moved. What
+             changed is only which element carries it, because an H1 is the one
+             heading a search engine weighs hardest and this one contains no
+             word anybody types into a search box. -->
+        <p class="display-1">Text us.<br>We got your laundry.</p>
 
         <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:40ch;margin:0 0 30px;">
           Leave it at your door. It comes back the {{TURNAROUND}} washed, folded and on time.
         </p>
 
         <!-- ONE LINE CARRYING THE WORDS SOMEBODY WOULD ACTUALLY TYPE, and a way
-             into the town pages. It is a paragraph rather than a second H1: a
-             page has one H1 and it is the one above. -->
-        <p style="font-size:16px;line-height:1.5;color:var(--ink-800);max-width:38ch;margin:0 0 26px;">
+             into the town pages. It is the H1 now, and it keeps the exact inline
+             styles it had as a paragraph, so nothing about the page moves - the
+             element changed and the rendering did not. A link inside an H1 is
+             fine and this one has always been there. -->
+        <h1 style="font-size:16px;line-height:1.5;color:var(--ink-800);max-width:38ch;margin:0 0 26px;">
           Laundry pickup and wash-and-fold delivery
           <a href="/locations">across {{SERVICE_AREA}}</a>.
-        </p>
+        </h1>
 
         <!-- POST, not GET. A GET would put the visitor's mobile number in the
              URL, which then sits in their browser history, in our server logs
