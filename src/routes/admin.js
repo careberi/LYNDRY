@@ -203,7 +203,20 @@ const STATUS_TONE = {
 // fourth status would be a second copy of it that could disagree.
 function statusBadge(status, order = null) {
   if (status === 'REQUESTED' && order) {
-    const confirmed = !billing.needsCardOnFile(order.customers || {});
+    // SETTLED MONEY IS NEVER WAITING FOR A CARD. Neil, 14 September, on a
+    // waived pickup badged AWAITING CARD: waived means we have decided not to
+    // charge, so there is nothing to wait for, and paid means it already
+    // happened. Saying otherwise sends somebody to chase a customer who owes
+    // nothing - which is the same mistake dispatch.collectable() was taught
+    // not to make when it learned that nothing to charge is not cannot charge.
+    const settled = order.payment_status === 'WAIVED' || order.payment_status === 'PAID';
+
+    // THE CARD HALF IS THE ROUTE'S OWN RULE, not a second copy. collectable()
+    // is what decides whether a van is actually coming; a badge that answered
+    // differently would be telling somebody the opposite of what the round is
+    // doing. It also carries the WAIVED case and the fails-open behaviour when
+    // Stripe is switched off.
+    const confirmed = settled || dispatch.collectable(order);
 
     return `<span class="badge" style="background:${
       confirmed ? 'var(--stage-scheduled)' : 'var(--sunbeam-500)'
@@ -4280,7 +4293,27 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
 
     const { data: history } = await db
       .from('orders')
-      .select('id, status, pickup_date, weight_lb, price_cents, payment_status')
+      // THE CUSTOMER RIDES ALONG SO THE BADGE CAN SEE A CARD.
+      //
+      // It selected order columns only, so statusBadge() was handed an order
+      // with no customer on it, read an empty object, found no payment method
+      // and said AWAITING CARD - on every customer page, for every waiting
+      // order, no matter what card the panel above it was showing. The board
+      // beside it said BOOKED for the same orders, because its query does
+      // embed the customer.
+      //
+      // Ninth time an unselected column has quietly decided what a screen can
+      // know, and the first where what was missing is a whole embedded record
+      // rather than a field. Undefined is indistinguishable from "no card",
+      // which is why it never threw.
+      //
+      // These are the two fields billing.needsCardOnFile() actually reads. Not
+      // card_brand and card_last4 - those are for display, and a wallet can
+      // have a usable payment method with neither.
+      .select(
+        'id, status, pickup_date, weight_lb, price_cents, payment_status, ' +
+          'customers(stripe_customer_id, default_payment_method_id)'
+      )
       .eq('customer_id', person.id)
       .order('pickup_date', { ascending: false });
 
@@ -11335,4 +11368,7 @@ function notFoundPage(res, message) {
   );
 }
 
-module.exports = { router };
+// statusBadge goes out so a test can ask it what it would draw, rather than
+// reading this file for the shape of a rule. It is the one piece of display
+// logic here that decides something a person acts on.
+module.exports = { router, statusBadge };
