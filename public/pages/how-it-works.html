@@ -114,11 +114,12 @@
       </div>
 
       <div class="card card-xl card-on-ink card-accent" style="padding:32px;" data-reveal>
-        <div style="font-family:var(--font-display);font-weight:900;font-size:56px;line-height:0.9;letter-spacing:-0.04em;">{{PRICE_PER_LB}}</div>
-        <p class="eyebrow" style="margin:16px 0 10px;color:var(--ink-900);">A pound</p>
+        <div style="font-family:var(--font-display);font-weight:900;font-size:56px;line-height:0.9;letter-spacing:-0.04em;">{{SUBSCRIPTION_PRICE_PER_LB}}</div>
+        <p class="eyebrow" style="margin:16px 0 10px;color:var(--ink-900);">A pound, on a subscription</p>
         <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
-          Weighed after pickup, with a {{MINIMUM}} minimum per order. Pickup
-          and delivery are in the price. There is no other fee.
+          One-time pickups are {{PRICE_PER_LB}} a pound. Weighed and charged
+          after pickup, with a {{MINIMUM}} minimum per order either way. Pickup
+          and delivery are in the rate. There is no other fee and no membership.
         </p>
       </div>
 
@@ -177,7 +178,7 @@
     </div>
     <div class="qa">
       <h3>How much fits in a bag?</h3>
-      <p>A typical bag holds {{BAG_WEIGHT}}, about one full washing machine, which comes to roughly {{ESTIMATE_RANGE}} at {{PRICE_PER_LB}} a pound. We take up to {{MAX_ORDER}} in one pickup. See <a href="/pricing">pricing</a>.</p>
+      <p>A typical bag holds {{BAG_WEIGHT}}, about one full washing machine, which comes to roughly {{ESTIMATE_RANGE}} at the {{PRICE_PER_LB}} one-time rate, or less on a subscription at {{SUBSCRIPTION_PRICE_PER_LB}} a pound. We take up to {{MAX_ORDER}} in one pickup. See <a href="/pricing">pricing</a>.</p>
     </div>
     <div class="qa">
       <h3>Can I set detergent or drying preferences?</h3>
@@ -189,7 +190,7 @@
     </div>
     <div class="qa">
       <h3>How do I pay?</h3>
-      <p>Before your first pickup we text you a secure link to save a card. It's handled by Stripe, our payment processor. The card number never touches this website. Saving it doesn't charge it: nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged. We text you the weight and the total at the same time.</p>
+      <p>Before your first pickup we text you a secure link to save a card. It's handled by Stripe, our payment processor. The card number never touches this website. Saving it doesn't charge it: nothing is taken when you book. Your laundry is weighed after we collect it, and that is the moment your card is charged. We text you the weight and the total at the same time.</p>
     </div>
     <div class="qa">
       <h3>Do you serve my area?</h3>

@@ -123,17 +123,18 @@ function priceBlock() {
   <section class="dotfield">
     <div class="container section" style="max-width:900px;">
       <p class="eyebrow eyebrow-brand">Pricing</p>
-      <h2 class="display-3">${escapeHtml(site.pricePerLb)} a pound.</h2>
+      <h2 class="display-3">${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription.</h2>
       <p style="font-size:18px;line-height:1.6;color:var(--ink-800);max-width:52ch;">
-        ${escapeHtml(MINIMUM)} minimum per pickup. Your laundry is weighed
-        after we pick it up, and your card is charged once, after we weigh it.
-        Nothing is charged when you book. No delivery fee and no membership.
+        Pickups ${escapeHtml(site.subscriptionFrequencies)}. One-time pickups
+        are ${escapeHtml(site.pricePerLb)} a pound. ${escapeHtml(MINIMUM)}
+        minimum per pickup either way. Your laundry is weighed after we pick it
+        up, and your card is charged once, after we weigh it. Nothing is charged
+        when you book.
       </p>
       <p style="margin-top:14px;font-size:18px;line-height:1.6;color:var(--ink-800);max-width:52ch;">
-        On a subscription it is ${escapeHtml(site.subscriptionPricePerLb)} a pound,
-        with pickups ${escapeHtml(site.subscriptionFrequencies)}. Same
-        ${escapeHtml(MINIMUM)} minimum, same charge after we weigh it. It is a
-        rate, not a membership: nothing to join and no minimum number of pickups.
+        No delivery fee and no membership. A subscription is a rate, not a club:
+        nothing to join, no joining fee and no minimum number of pickups, and
+        you can change how often we come or cancel at any time.
       </p>
       <p style="margin-top:22px;font-size:16px;">
         <a href="/pricing">See the full wash and fold pricing</a>.

@@ -62,7 +62,7 @@ const PAGES = [
           ],
           [
             'How do I pay?',
-            `Before your first pickup we text you a secure link to save a card. It is handled by Stripe, our payment processor. The card number never touches this website. Saving it does not charge it: nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged.`,
+            `Before your first pickup we text you a secure link to save a card. It is handled by Stripe, our payment processor. The card number never touches this website. Saving it does not charge it: nothing is taken when you book. Your laundry is weighed after we collect it, and that is the moment your card is charged.`,
           ],
           [
             'What if I need to cancel?',
@@ -76,17 +76,17 @@ const PAGES = [
     path: '/pricing',
     file: 'pricing.html',
     title: 'Pricing',
-    fullTitle: 'Wash & Fold Pricing, $2/lb Pickup in Bergen County | LYNDRY',
+    fullTitle: `Wash & Fold Pricing, ${site.subscriptionPricePerLb}/lb Pickup in ${site.serviceArea} | LYNDRY`,
     head: () =>
       structured.tags([
         structured.faqPage([
           [
             'When exactly am I charged?',
-            'Once, and you are told as it happens. Nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged: the text with the weight and the total comes at the same time.',
+            'Once per pickup, after we weigh it, and you are told as it happens. Nothing is taken when you book. The text with the weight and the total arrives at the moment your card is charged. A subscription is charged the same way, per pickup after weighing, never on a cycle.',
           ],
           [
             'Do you charge for pickup or delivery?',
-            'No. Pickup and delivery are in the price. There is no other fee.',
+            'No. Both are included in the per-pound rate, whichever one you are on. There is no other fee.',
           ],
           [
             'Is there a subscription?',
@@ -139,7 +139,7 @@ const PAGES = [
           ],
           [
             'How does the price work?',
-            '{{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with pickups {{SUBSCRIPTION_FREQUENCIES}}. A subscription is a rate, not a membership: nothing to join and no minimum number of pickups. There is no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed at the laundromat, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we take up to {{MAX_ORDER}} in one pickup.',
+            '{{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with pickups {{SUBSCRIPTION_FREQUENCIES}}. A subscription is a rate, not a membership: nothing to join and no minimum number of pickups. There is no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed after we collect it, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we take up to {{MAX_ORDER}} in one pickup.',
           ],
           [
             'What bags can I put it in?',
@@ -162,8 +162,11 @@ const PAGES = [
             'We cover {{SERVICE_AREA}}. Sign up even if you are just outside it and we will tell you when we reach you.',
           ],
           [
-            'Can I have a regular pickup?',
-            'Yes. Pick the days that suit you and we come every week, or every other week, at the same time. We text you the evening before each one, and you can skip a week or stop it whenever you like.',
+            'Can I have pickups booked automatically?',
+            `Yes, that is a subscription, and it is ${site.subscriptionPricePerLb} a pound instead of ` +
+              `${site.pricePerLb}. Pick the day that suits you and we come ${site.subscriptionFrequencies}, ` +
+              `at the same time. We text you the evening before each one, and you can skip one, change how ` +
+              `often we come, or cancel whenever you like.`,
           ],
         ]),
       ]),
