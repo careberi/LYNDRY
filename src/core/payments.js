@@ -31,7 +31,7 @@ const METHODS = Object.freeze({ CARD: 'CARD', CASH: 'CASH' });
 
 const FIELDS =
   'id, order_id, customer_id, method, amount_cents, stripe_payment_intent_id, ' +
-  'recorded_by, recorded_by_name, note, created_at';
+  'recorded_by, recorded_by_name, applies_to_wash, note, created_at';
 
 function money(cents) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
@@ -80,9 +80,22 @@ function splitFor(order, rows = []) {
 
   let card = 0;
   let cash = 0;
+  let trip = 0;
+
   for (const r of rows || []) {
-    if (r.method === METHODS.CASH) cash += Number(r.amount_cents || 0);
-    else card += Number(r.amount_cents || 0);
+    const amount = Number(r.amount_cents || 0);
+
+    // THE SHOW-UP CHARGE IS NOT A WASH PAYMENT. It is kept when we made the
+    // trip and left the bags, so it pays for the trip and nothing else -
+    // Neil's rule, and it is shown on its own line rather than folded into
+    // Card, where it would read as money off a wash that never happened.
+    if (r.applies_to_wash === false) {
+      trip += amount;
+      continue;
+    }
+
+    if (r.method === METHODS.CASH) cash += amount;
+    else card += amount;
   }
 
   const paid = card + cash;
@@ -92,6 +105,8 @@ function splitFor(order, rows = []) {
     total,
     card,
     cash,
+    // Kept for the trip, on an order whose bags we never took.
+    trip,
     paid,
     balance: Math.max(0, total - paid),
     settled: total > 0 && paid >= total,
@@ -105,7 +120,12 @@ function splitFor(order, rows = []) {
 // once would otherwise each write their own idea of the total.
 async function resettle(order) {
   const rows = await forOrder(order.id);
-  const paid = rows.reduce((sum, r) => sum + Number(r.amount_cents || 0), 0);
+  // ONLY WHAT PAYS FOR THE WASH. A kept show-up charge is in the ledger and
+  // must not come off the price of a wash that did not happen - including the
+  // rebooked one tomorrow.
+  const paid = rows
+    .filter((r) => r.applies_to_wash !== false)
+    .reduce((sum, r) => sum + Number(r.amount_cents || 0), 0);
   const total = Number(order.price_cents || 0);
 
   const patch = { amount_paid_cents: paid };
@@ -229,6 +249,39 @@ async function recordCash(order, { amountCents, by = {}, note = null } = {}) {
   };
 }
 
+
+// THE $25 WE KEEP WHEN THE BAGS STAY ON THE STEP.
+//
+// The driver drove there, weighed the bags, and the charge for the rest was
+// refused - so the laundry is not taken and no wash happens. Neil: keep the
+// $25, the customer paid for the trip, and do not treat it as a wash we owe
+// them.
+//
+// applies_to_wash false is what enforces that last clause. The row is a real
+// payment and belongs in the ledger; it simply never reduces the price of a
+// wash, so the pickup rebooked for tomorrow starts at its full price.
+async function recordShowUp(order, { amountCents, paymentIntentId, note = null } = {}) {
+  const amount = Math.round(Number(amountCents || 0));
+  if (!order || !order.id || !amount) return null;
+
+  const { error } = await db.from('payments').insert({
+    order_id: order.id,
+    customer_id: order.customer_id || null,
+    method: METHODS.CARD,
+    amount_cents: amount,
+    stripe_payment_intent_id: paymentIntentId || null,
+    applies_to_wash: false,
+    note: note || 'Show-up charge kept: the bags were left at the door.',
+  });
+
+  if (error) {
+    console.error(`Could not record the show-up charge on ${order.id}: ${error.message}`);
+    return null;
+  }
+
+  return resettle(order).catch(() => null);
+}
+
 module.exports = {
   METHODS,
   FIELDS,
@@ -238,5 +291,6 @@ module.exports = {
   splitFor,
   resettle,
   recordCard,
+  recordShowUp,
   recordCash,
 };

@@ -109,6 +109,21 @@ async function cardWasSaved(link) {
       return { ok: false, reason: 'threw' };
     });
 
+    // THE CARD SAVED AND THEN WOULD NOT TAKE THE HOLD. Both things are true and
+    // the order exists, so this is not the "we could not hold that pickup"
+    // branch below - that one is about the TIME having gone. Saying it there
+    // would send somebody to pick another day for a problem no day fixes.
+    if (booked.ok && booked.holdRefused) {
+      await sendAndLog(
+        customer.phone,
+        `Card saved: ${card}.${settledLine} ` +
+          booking.holdRefusedMessage(customer, booked.order),
+        customer.id
+      );
+
+      return { customer, order: booked.order };
+    }
+
     if (booked.ok) {
       const free = await promotions
         .claimedFreeOrder(booked.order.id)
@@ -184,6 +199,30 @@ async function cardWasSaved(link) {
   // and quietly leaving the rest unconfirmed would keep them off the
   // driver's run sheet with nothing to say why.
   const allPending = await orders.findAllAwaitingCollection(customer.id);
+
+  // EVERY WAITING PICKUP GETS ITS HOLD NOW, because the card being on file is
+  // no longer the whole of what confirms one. Neil, 14 September: the card must
+  // accept the $25 hold before a pickup is confirmed - and a pickup is a trip,
+  // so three waiting pickups are three trips and three holds.
+  //
+  // Best effort and in order, soonest first. A hold that cannot be placed
+  // leaves the order exactly where it was, which is off the round and named in
+  // red on the routing board, rather than failing a card save that has already
+  // happened.
+  const holds = new Map();
+  for (const o of allPending) {
+    const placed = await billing.authorizeShowUp(o, customer).catch((err) => {
+      console.error(`Could not hold the show-up charge for ${o.id}: ${err.message}`);
+      return { ok: true, skipped: 'hold_errored' };
+    });
+
+    holds.set(o.id, placed);
+    if (placed.held) {
+      o.authorization_intent_id = placed.paymentIntentId;
+      o.authorized_cents = placed.amountCents;
+    }
+  }
+
   const pending = allPending[0] || null;
 
   // Nothing is charged here. The card being on file is the whole of what
@@ -214,13 +253,23 @@ async function cardWasSaved(link) {
       .claimedFreeOrder(pending.id)
       .catch(() => ({ freeOrder: false, freeUpToLb: null }));
 
+    // THE SOONEST ONE DECIDES WHAT THEY READ, and it is the actionable one: it
+    // is the pickup happening next and the only one they could still fix in
+    // time. Any others whose hold was refused stay off the round and are named
+    // on the routing board like every other uncollectable stop - a second
+    // paragraph listing them would be a worse version of a screen we already
+    // have, in a message that is at its segment ceiling.
+    const refused = holds.get(pending.id) && holds.get(pending.id).refused;
+
     await sendAndLog(
       customer.phone,
-      booking.confirmationMessage(customer, pending, {
-        opener: 'Card saved',
-        freeOrder: free.freeOrder,
-        freeUpToLb: free.freeUpToLb,
-      }) + alsoLine,
+      refused
+        ? `Card saved: ${card}. ` + booking.holdRefusedMessage(customer, pending)
+        : booking.confirmationMessage(customer, pending, {
+            opener: 'Card saved',
+            freeOrder: free.freeOrder,
+            freeUpToLb: free.freeUpToLb,
+          }) + alsoLine,
       customer.id
     );
     return { customer, order: pending };

@@ -254,6 +254,110 @@ async function chargeOffSession({
   }
 }
 
+// ---------------------------------------------------------------------------
+// HOLD MONEY WITHOUT TAKING IT.
+//
+// The show-up charge. capture_method 'manual' is the whole difference from
+// chargeOffSession above: Stripe puts the amount on hold against the card and
+// waits to be told how much of it to actually take.
+//
+// A HOLD IS NOT A CHARGE AND MUST NOT BE DESCRIBED AS ONE. The customer sees a
+// pending amount on their statement; nothing has moved. What decides whether
+// it moves is the weight at the door.
+//
+// A declined hold arrives here as an exception, exactly as a declined charge
+// does, and is turned back into a plain result the caller can act on - because
+// a card that will not take a $25 hold is an ordinary outcome and not a broken
+// system. It is also the whole point of asking: better to find out before a van
+// is routed than at a doorstep.
+// ---------------------------------------------------------------------------
+async function authorize({
+  stripeCustomerId,
+  paymentMethodId,
+  amountCents,
+  description,
+  idempotencyKey,
+  metadata,
+}) {
+  try {
+    const intent = await stripe.paymentIntents.create(
+      {
+        amount: amountCents,
+        currency: 'usd',
+        customer: stripeCustomerId,
+        payment_method: paymentMethodId,
+        off_session: true,
+        confirm: true,
+
+        // HOLD, DO NOT TAKE. Everything else on this call is the same as an
+        // ordinary off-session charge.
+        capture_method: 'manual',
+
+        description,
+        metadata: metadata || {},
+      },
+      { idempotencyKey }
+    );
+
+    return {
+      ok: true,
+      paymentIntentId: intent.id,
+      status: intent.status,
+      // Stripe says requires_capture when the hold is in place. Anything else
+      // is not a hold we can rely on later.
+      held: intent.status === 'requires_capture',
+      amountCents: intent.amount,
+    };
+  } catch (err) {
+    const declineCode = err.decline_code || (err.raw && err.raw.decline_code) || null;
+
+    return {
+      ok: false,
+      paymentIntentId: (err.raw && err.raw.payment_intent && err.raw.payment_intent.id) || null,
+      reason: err.message || 'The card was declined.',
+      declineCode,
+      needsCustomerAction: err.code === 'authentication_required',
+    };
+  }
+}
+
+// TAKE SOME OR ALL OF A HOLD.
+//
+// amount_to_capture may be LESS than the hold and never more - which is the
+// $25-or-less case at the door: a 9 lb wash is $18, so $18 is taken and the
+// remaining $7 of the hold is released by Stripe automatically.
+async function capture({ paymentIntentId, amountCents, idempotencyKey }) {
+  try {
+    const intent = await stripe.paymentIntents.capture(
+      paymentIntentId,
+      amountCents ? { amount_to_capture: amountCents } : {},
+      { idempotencyKey }
+    );
+
+    return { ok: true, paymentIntentId: intent.id, capturedCents: intent.amount_received };
+  } catch (err) {
+    return {
+      ok: false,
+      paymentIntentId,
+      reason: err.message || 'That hold could not be taken.',
+    };
+  }
+}
+
+// LET A HOLD GO WITHOUT TAKING ANYTHING.
+//
+// For a pickup that is cancelled before anybody drives to it. NOT for a
+// refused doorstep: Neil's rule is that we keep the $25 when we have made the
+// trip, because the customer paid for the trip.
+async function releaseAuthorization({ paymentIntentId }) {
+  try {
+    await stripe.paymentIntents.cancel(paymentIntentId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: err.message || 'That hold could not be released.' };
+  }
+}
+
 // Confirms a webhook really came from Stripe rather than from someone who
 // found the URL. Same principle as the Telnyx signature check: an unsigned
 // "payment succeeded" would otherwise be anyone's to send.
@@ -296,6 +400,9 @@ module.exports = {
   getSavedPaymentMethod,
   getSavedPaymentMethodFromSetup,
   chargeOffSession,
+  authorize,
+  capture,
+  releaseAuthorization,
   refund,
   verifyWebhook,
 };

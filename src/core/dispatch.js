@@ -65,6 +65,11 @@ const RUN_FIELDS =
   // order page reading payment_attempts it had never selected. price_cents is
   // balance()'s, and leaving it out makes every hold evaluate to nothing.
   'payment_status, price_cents, amount_paid_cents, ' +
+  // AND THE HOLD, for the same reason one line up. showUpState() reads all
+  // three, and an unselected column reads as undefined - which here would be
+  // indistinguishable from a card that never refused, so a refused pickup
+  // would go back on the round. Tenth time this trap has been worth a note.
+  'authorization_intent_id, authorized_at, authorization_refused_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
@@ -169,6 +174,19 @@ async function heldCustomerIds(customerIds = []) {
 function collectable(order) {
   if (!order) return false;
   if (order.payment_status === 'WAIVED') return true;
+
+  // AND THE $25 HOLD, which is the same rule one step further on. Neil, 14
+  // September: the card must accept the hold before a pickup is confirmed. A
+  // card that is on file and will not accept $25 is a van driving to a door
+  // for nothing, which is the exact trip the hold exists to pay for.
+  //
+  // ONLY A REFUSAL BLOCKS. showUpState() answers UNASKED for every order taken
+  // before this existed, for a waived one, and wherever Stripe is switched off
+  // - and UNASKED is collectable, because it always was. Reading a missing
+  // hold as a failed one would empty the round the morning this deploys, the
+  // same failure the card gate avoids by answering false with no Stripe key.
+  if (billing.showUpState(order) === 'REFUSED') return false;
+
   return !billing.needsCardOnFile(order.customers || {});
 }
 
@@ -393,6 +411,11 @@ const BOARD_FIELDS =
   // than by a test. SIXTH time an unselected column has quietly decided what a
   // screen can know.
   'payment_status, price_cents, amount_paid_cents, ' +
+  // AND THE HOLD, for the same reason one line up. showUpState() reads all
+  // three, and an unselected column reads as undefined - which here would be
+  // indistinguishable from a card that never refused, so a refused pickup
+  // would go back on the round. Tenth time this trap has been worth a note.
+  'authorization_intent_id, authorized_at, authorization_refused_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, preferences, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 

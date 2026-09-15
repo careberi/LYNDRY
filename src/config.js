@@ -305,6 +305,30 @@ const config = Object.freeze({
     // minimum has to be stated before a card is charged, not after.
     minimumCents: 2500,
 
+    // THE SHOW-UP CHARGE, HELD ON THE CARD BEFORE A PICKUP IS CONFIRMED.
+    //
+    // Neil, 14 September: $25, down from the $50 and $80 that were discussed
+    // and never built. It is an AUTHORIZATION - the money is held, not taken -
+    // and what it buys is the trip: a van leaving with a driver in it costs the
+    // same whether or not there is a bag on the step.
+    //
+    // At the door the real total is worked out and this is what happens:
+    //
+    //   total is $25 or less   capture that much of the hold, and no more
+    //   total is more          capture the $25 and charge the rest on the
+    //                          same card
+    //   the rest is refused    KEEP the $25, leave the bags, wash nothing
+    //
+    // THE LAST LINE IS THE POINT. The customer paid for the trip, not for
+    // laundry we never took, so the $25 is not a credit against a future wash
+    // and must never be treated as one.
+    //
+    // It happens to equal minimumCents today and that is a coincidence of
+    // arithmetic, not a relationship. The minimum is the floor on what a wash
+    // COSTS; this is what a doorstep visit is worth if no wash happens. Do not
+    // collapse them into one constant.
+    authorizationCents: Number(process.env.AUTHORIZATION_CENTS || 2500),
+
     // The range quoted to someone asking "roughly what will this cost?".
     // Derived from the rate above and a typical 15–18 lb bag, so if the rate
     // changes these have to change with it or the site quotes a range the

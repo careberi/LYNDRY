@@ -219,9 +219,17 @@ function statusBadge(status, order = null) {
     // Stripe is switched off.
     const confirmed = settled || dispatch.collectable(order);
 
+    // THREE ANSWERS, NOT TWO, because "AWAITING CARD" on an order whose card is
+    // sitting right there in the customer record sends somebody to chase a
+    // thing that is not missing. A refused hold is a card on file that would
+    // not take $25, and what it needs is a different card, not a first one.
+    const refused = !confirmed && billing.showUpState(order) === 'REFUSED';
+
     return `<span class="badge" style="background:${
-      confirmed ? 'var(--stage-scheduled)' : 'var(--sunbeam-500)'
-    };">${confirmed ? 'BOOKED' : 'AWAITING CARD'}</span>`;
+      confirmed ? 'var(--stage-scheduled)' : refused ? 'var(--stain-500)' : 'var(--sunbeam-500)'
+    };${refused ? 'color:var(--paper-050);' : ''}">${
+      confirmed ? 'BOOKED' : refused ? 'CARD REFUSED' : 'AWAITING CARD'
+    }</span>`;
   }
 
   const tone = STATUS_TONE[status] || 'var(--ink-200)';
@@ -3172,6 +3180,13 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           // which is the exact question anybody opens this card to answer, and
           // the whole reason migration 0091 stored the code at all.
           'payment_decline_code, payment_attempts, ' +
+          // AND THE $25 HOLD, which this page is the only screen that explains.
+          // Same trap as the two above and the reason the note above them
+          // exists: unselected reads as undefined, so holdLine() would return
+          // an empty string on every order and the hold would be invisible
+          // everywhere rather than only here.
+          'authorization_intent_id, authorized_cents, authorized_at, ' +
+          'authorization_refused_at, authorization_refused_reason, captured_cents, captured_at, ' +
           // THE NAMES BEHIND TWO IDS. The console's exception strip and stage
           // rail say "Fancy K 27.6 lb", not "partner 27.6 lb", and the Order
           // key/value names the promotion that came off. Joined here rather

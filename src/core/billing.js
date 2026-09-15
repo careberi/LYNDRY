@@ -748,8 +748,430 @@ async function retryOutstanding(customer) {
   return settled;
 }
 
+// ---------------------------------------------------------------------------
+// THE $25 SHOW-UP HOLD.
+//
+// Neil, 14 September: the card must accept a $25 hold before a pickup is
+// confirmed, and at the door we charge the real total against it.
+//
+//   total is $25 or less   capture that much and no more; Stripe lets the rest
+//                          of the hold go
+//   total is more          capture the $25, charge the remainder on the same
+//                          card
+//   the remainder refused  KEEP the $25, leave the bags, wash nothing
+//
+// WHAT THE $25 BUYS IS THE TRIP, not credit towards a wash. A van leaving with
+// a driver in it costs the same whether or not a bag ends up in it, and the
+// last of those three outcomes is the one where that distinction is the entire
+// point: the bags stay on the step, the pickup is rebooked, and tomorrow's wash
+// is priced in full. payments.recordShowUp() is what enforces that.
+//
+// IT IS NOT THE PAYMENT HOLD, and the two never meet. That one is a state an
+// order is IN - we are holding somebody's laundry and a charge failed - and is
+// derived, never stored. This is a real authorization at Stripe with an id on
+// the order, and it only exists before anything has been collected. A doorstep
+// refusal leaves the bags where they were found, so there is no laundry to
+// hold, no Payment Hold, and nothing for the cash button to recover.
+// ---------------------------------------------------------------------------
+
+// What we hold. Deliberately not config.pricing.minimumCents, which is the
+// floor on what a wash COSTS - see the note beside it in config.js.
+function showUpCents() {
+  return Math.max(0, Math.round(config.pricing.authorizationCents || 0));
+}
+
+// A LIVE hold on this order, or null. Live means still sitting at Stripe
+// uncaptured: the id is cleared the moment it is taken or let go, so "is there
+// money held against this pickup" is one null check rather than a date
+// comparison nobody would get right twice.
+function showUpHold(order) {
+  if (!order || !order.authorization_intent_id) return null;
+  return {
+    intentId: order.authorization_intent_id,
+    cents: Math.max(0, Number(order.authorized_cents || 0)),
+  };
+}
+
+// DID THE CARD CONFIRM THIS PICKUP? Three answers, and the third is the one
+// that makes the other two safe:
+//
+//   HELD      the card accepted the hold. Still HELD after the money is taken,
+//             because what this answers is whether the pickup was confirmed,
+//             not whether money is still sitting there
+//   REFUSED   we asked and the card said no
+//   UNASKED   nobody asked. Payments switched off, a free order, or any of the
+//             orders taken before this existed
+//
+// UNASKED IS NOT A PROBLEM AND MUST NEVER BECOME ONE. Every order on the board
+// this morning is UNASKED, so a gate that read "no hold" as "not confirmed"
+// would empty tomorrow's round - the same failure the card gate avoided by
+// answering false wherever Stripe is switched off.
+function showUpState(order) {
+  if (!order) return 'UNASKED';
+  // A REFUSAL IS ASKED FIRST because it is always the later fact. An order can
+  // hold, be taken to a door, be refused the balance and go back on tomorrow's
+  // board - and what matters then is the no, not the yes that came before it.
+  // authorizeShowUp() clears the refusal when a fresh hold lands, so a fixed
+  // card reads HELD again.
+  if (order.authorization_refused_at) return 'REFUSED';
+  if (order.authorization_intent_id || order.authorized_at) return 'HELD';
+  return 'UNASKED';
+}
+
+// PLACE THE HOLD. Money held, not taken.
+//
+// Called at booking, and again from the card-saved path for a pickup that was
+// waiting on a card. Safe to call twice: an order that already has a live hold
+// says so and asks Stripe for nothing.
+async function authorizeShowUp(order, customer, { amountCents = null } = {}) {
+  if (!order || !order.id) return { ok: false, skipped: 'no_order' };
+
+  // NOTHING TO HOLD AGAINST. A waived order is collected as normal - CLAUDE.md
+  // is emphatic that nothing to charge is not the same as cannot charge - and
+  // holding $25 on somebody who has just been told "nothing to pay" is the
+  // contradiction that rule exists to avoid.
+  if (order.payment_status === 'WAIVED' || order.payment_status === 'PAID') {
+    return { ok: true, skipped: 'nothing_to_hold' };
+  }
+
+  if (showUpHold(order)) return { ok: true, alreadyHeld: true };
+
+  // Fails open, exactly like needsCardOnFile(): a sandbox with no Stripe key
+  // must not quietly take every pickup off the round.
+  if (!payments.isConfigured) return { ok: true, skipped: 'payments_off' };
+
+  // NOT A REFUSAL. No card at all is the AWAITING CARD path, which already has
+  // its own gate, its own badge and its own chase. Recording it here as a
+  // refusal would say the card said no when there is no card to ask.
+  if (!hasPaymentMethod(customer)) return { ok: false, needsCard: true };
+
+  const amount = amountCents == null ? showUpCents() : Math.round(Number(amountCents));
+  if (!(amount > 0)) return { ok: true, skipped: 'nothing_to_hold' };
+
+  const attempts = Number(order.authorization_attempts || 0);
+
+  const result = await payments.authorize({
+    stripeCustomerId: customer.stripe_customer_id,
+    paymentMethodId: customer.default_payment_method_id,
+    amountCents: amount,
+    description: `LYNDRY pickup #${order.order_number} - held, not taken`,
+    // The attempt number is in the key for the reason CLAUDE.md already gives
+    // about charges: Stripe caches the RESULT of a key, refusals included, so
+    // without it a customer who fixed their card would be handed yesterday's
+    // no for ever.
+    idempotencyKey: `showup_${order.id}_${amount}_${attempts}`,
+    metadata: { lyndry_order_id: order.id, lyndry_customer_id: customer.id },
+  });
+
+  if (result.ok && result.held) {
+    const { error } = await db
+      .from('orders')
+      .update({
+        authorization_intent_id: result.paymentIntentId,
+        authorized_cents: amount,
+        authorized_at: new Date().toISOString(),
+        authorization_refused_at: null,
+        authorization_refused_reason: null,
+        authorization_attempts: attempts + 1,
+      })
+      .eq('id', order.id);
+
+    if (error) throw error;
+    return { ok: true, held: true, amountCents: amount, paymentIntentId: result.paymentIntentId };
+  }
+
+  // THE CARD SAID NO, so the pickup is not confirmed. Written down rather than
+  // only returned, because the thing that acts on it is a route being drawn
+  // tomorrow morning by somebody who was not here when this happened.
+  const reason = result.reason || 'That card would not accept the hold.';
+
+  const { error } = await db
+    .from('orders')
+    .update({
+      authorization_refused_at: new Date().toISOString(),
+      authorization_refused_reason: String(reason).slice(0, 500),
+      authorization_attempts: attempts + 1,
+    })
+    .eq('id', order.id);
+
+  if (error) console.error(`Could not record a refused hold on ${order.id}: ${error.message}`);
+
+  return { ok: false, refused: true, reason, declineCode: result.declineCode || null };
+}
+
+// TAKE SOME OR ALL OF THE HOLD. Never more than was held - Stripe would refuse
+// it, and a hold is a promise about a ceiling.
+async function captureShowUp(order, { amountCents }) {
+  const hold = showUpHold(order);
+  if (!hold) return { ok: false, reason: 'no_hold' };
+
+  const amount = Math.min(hold.cents, Math.max(0, Math.round(Number(amountCents || 0))));
+  if (!(amount > 0)) return { ok: false, reason: 'nothing_to_capture' };
+
+  const result = await payments.capture({
+    paymentIntentId: hold.intentId,
+    amountCents: amount,
+    idempotencyKey: `capture_${order.id}_${amount}`,
+  });
+
+  if (!result.ok) return { ok: false, reason: result.reason, paymentIntentId: hold.intentId };
+
+  // THE ID IS CLEARED AND THE AMOUNT IS KEPT. There is no live hold any more,
+  // so nothing may try to capture or release it again; what was taken stays on
+  // the order because it is the record that the trip was paid for, and on the
+  // one outcome where the bags were left behind it is the only such record.
+  const { error } = await db
+    .from('orders')
+    .update({
+      authorization_intent_id: null,
+      captured_cents: amount,
+      captured_at: new Date().toISOString(),
+    })
+    .eq('id', order.id);
+
+  if (error) console.error(`Could not record the capture on ${order.id}: ${error.message}`);
+
+  return { ok: true, capturedCents: amount, paymentIntentId: hold.intentId };
+}
+
+// LET IT GO WITHOUT TAKING ANYTHING.
+//
+// For a pickup called off before anybody drove to it. NOT for a refusal at the
+// door: the trip happened there, and Neil's rule is that we keep the $25.
+async function releaseShowUp(order) {
+  const hold = showUpHold(order);
+  if (!hold) return { ok: true, nothingHeld: true };
+
+  const result = await payments.releaseAuthorization({ paymentIntentId: hold.intentId });
+
+  // CLEARED EITHER WAY. A hold Stripe has already let go of - they expire on
+  // their own - must not sit on the order looking capturable; and one we
+  // genuinely failed to cancel expires within the week anyway. Leaving the id
+  // there is the worse of the two, because the door would then try to capture
+  // money that is not held.
+  await db
+    .from('orders')
+    .update({ authorization_intent_id: null })
+    .eq('id', order.id)
+    .then(({ error }) => {
+      if (error) console.error(`Could not clear the hold on ${order.id}: ${error.message}`);
+    });
+
+  return { ok: Boolean(result.ok), reason: result.reason || null };
+}
+
+// HOW A DOOR TOTAL IS SPLIT BETWEEN THE HOLD AND THE CARD. Pure, and the whole
+// of Neil's arithmetic in three lines:
+//
+//   $18 against a $25 hold   capture $18, charge nothing; Stripe lets $7 go
+//   $84 against a $25 hold   capture $25, charge $59
+//   $25 against a $25 hold   capture $25, charge nothing
+//
+// It is a function rather than two inline comparisons because it is the rule,
+// and a rule that only exists inside an async function wrapped around two Stripe
+// calls is one nobody can check without a card.
+function doorSplit(totalCents, heldCents) {
+  const total = Math.max(0, Math.round(Number(totalCents || 0)));
+  const held = Math.max(0, Math.round(Number(heldCents || 0)));
+  const capture = Math.min(total, held);
+
+  return { total, capture, charge: total - capture };
+}
+
+// ---------------------------------------------------------------------------
+// THE DOOR. The bags are weighed, this is what it comes to, take the money.
+//
+// Neil's three outcomes, in his order: capture what fits, then charge whatever
+// is left over, and if that is refused keep what was captured.
+//
+// CAPTURE FIRST, THEN THE REMAINDER, and that order is his. It is also the
+// right one: the $25 is the money we are certain of, so taking it first means
+// the trip is paid for whatever happens next.
+//
+// AN ORDER WITH NO LIVE HOLD FALLS STRAIGHT THROUGH to chargeOrder(), which is
+// exactly what every order did before this existed. That is what keeps the
+// orders already on the board working on the morning this deploys.
+// ---------------------------------------------------------------------------
+async function chargeAtTheDoor(order, customer, { totalCents }) {
+  if (order.payment_status === 'WAIVED') return { ok: true, waived: true };
+
+  const hold = showUpHold(order);
+  const { total, capture, charge } = doorSplit(totalCents, hold ? hold.cents : 0);
+
+  // A FREE ORDER COMES TO NOTHING, AND NOTHING IS NOT A REFUSAL.
+  //
+  // FOUND WRITING THIS, AND IT PREDATES IT: chargeOrder() answers `{ ok: false,
+  // reason: 'The order has no price yet.' }` for a price of zero, which is
+  // right at a weigh-in where zero means unpriced and catastrophic at a door,
+  // where loadVan() turns any `ok: false` into declinedAtTheDoor(). A customer
+  // on the first-20-orders-free promotion with a load under the minimum prices
+  // at exactly $0 - so they would have been texted that their card was refused
+  // and had their bags left on the step, over an order we had told them was on
+  // us.
+  //
+  // The door is the only caller that can tell the two zeroes apart, because it
+  // is the one that worked the price out a line earlier. So it answers here
+  // rather than loosening chargeOrder(), which every other caller relies on to
+  // refuse an unpriced order.
+  if (total === 0) return { ok: true, nothingToCharge: true };
+
+  if (!hold) return chargeOrder({ ...order, price_cents: total }, customer);
+
+  // --- It all fits inside the hold ----------------------------------------
+  if (charge === 0) {
+    const took = await captureShowUp(order, { amountCents: capture });
+
+    // A hold that will not capture is not money. Fall back to charging the
+    // card outright rather than treating an unusable authorization as payment.
+    if (!took.ok) return chargeOrder({ ...order, price_cents: total }, customer);
+
+    await settleFromHold(order, {
+      capturedCents: took.capturedCents,
+      paymentIntentId: took.paymentIntentId,
+      total,
+    });
+
+    return {
+      ok: true,
+      fromHold: true,
+      capturedCents: took.capturedCents,
+      chargedCents: took.capturedCents,
+    };
+  }
+
+  // --- More than the hold: take the hold, then the rest --------------------
+  const took = await captureShowUp(order, { amountCents: capture });
+  const kept = took.ok ? took.capturedCents : 0;
+
+  // Off what was actually captured rather than off `charge`, so a hold that
+  // would not capture leaves the whole total to be charged rather than a gap
+  // nobody ever bills for.
+  const rest = total - kept;
+
+  const result = payments.isConfigured
+    ? await payments.chargeOffSession({
+        stripeCustomerId: customer && customer.stripe_customer_id,
+        paymentMethodId: customer && customer.default_payment_method_id,
+        amountCents: rest,
+        description: `LYNDRY wash & fold - ${order.weight_lb} lb`,
+        idempotencyKey: `order_${order.id}_${rest}_${order.payment_attempts || 0}`,
+        metadata: { lyndry_order_id: order.id, lyndry_customer_id: customer && customer.id },
+      })
+    : { ok: false, reason: 'Payments are not switched on.' };
+
+  if (result.ok) {
+    await settleFromHold(order, {
+      capturedCents: kept,
+      paymentIntentId: took.paymentIntentId,
+      remainderCents: rest,
+      remainderIntentId: result.paymentIntentId,
+      total,
+    });
+
+    return { ok: true, fromHold: true, capturedCents: kept, chargedCents: total };
+  }
+
+  // --- THE REMAINDER WAS REFUSED. We keep the $25 and the bags stay. -------
+  //
+  // The ledger row is written HERE rather than at the moment of capture,
+  // because until this line nobody knew what the money was for: the same $25
+  // is part of a wash when the rest clears and a trip charge when it does not,
+  // and applies_to_wash is the difference. The window between the capture and
+  // this row is milliseconds and a failure is logged loudly - the same
+  // exposure recordCard() already carries, and for the same reason: the money
+  // has moved and losing the row is a reporting problem.
+  if (kept > 0) {
+    await payments
+      .recordShowUp(order, {
+        amountCents: kept,
+        paymentIntentId: took.paymentIntentId,
+        note: 'Kept for the trip: the extra charge was refused and the bags were left.',
+      })
+      .catch((err) => console.error(`Could not record the show-up charge: ${err.message}`));
+  }
+
+  await markFailed(order, result.reason, result.paymentIntentId, result.declineCode);
+
+  const url = wantsPaymentLink(order) ? (await createSetupLink(customer)).url : null;
+
+  return {
+    ok: false,
+    declined: true,
+    setupUrl: url,
+    // What we kept, so the doorstep can say so. Neil: the customer paid for the
+    // trip, not for laundry we never took.
+    keptCents: kept,
+    owedCents: rest,
+    message: null,
+  };
+}
+
+// Everything that follows a door charge going through, however it was split.
+// One place, because the ledger, the status and the intent id have to agree.
+async function settleFromHold(
+  order,
+  {
+    capturedCents = 0,
+    paymentIntentId = null,
+    remainderCents = 0,
+    remainderIntentId = null,
+    total = 0,
+  }
+) {
+  await db
+    .from('orders')
+    .update({
+      payment_status: 'PAID',
+      stripe_payment_intent_id:
+        remainderIntentId || paymentIntentId || order.stripe_payment_intent_id || null,
+      paid_at: new Date().toISOString(),
+      payment_failure_reason: null,
+      payment_decline_code: null,
+      authorization_refused_at: null,
+      authorization_refused_reason: null,
+      payment_attempts: (order.payment_attempts || 0) + (remainderCents > 0 ? 1 : 0),
+    })
+    .eq('id', order.id)
+    .then(({ error }) => {
+      if (error) console.error(`Could not settle ${order.id} at the door: ${error.message}`);
+    });
+
+  // TWO ROWS WHEN IT WAS TAKEN TWO WAYS, and both count towards the wash: the
+  // laundry is going in the van, so every cent of it paid for a wash that is
+  // actually happening. This is the branch where the $25 is ordinary money.
+  const priced = { ...order, price_cents: total };
+
+  if (capturedCents > 0) {
+    await payments
+      .recordCard(priced, {
+        amountCents: capturedCents,
+        paymentIntentId,
+        note: 'Taken from the hold placed when the pickup was booked.',
+      })
+      .catch((err) => console.error(`Could not record the captured hold: ${err.message}`));
+  }
+
+  if (remainderCents > 0) {
+    await payments
+      .recordCard(priced, {
+        amountCents: remainderCents,
+        paymentIntentId: remainderIntentId,
+        note: 'The balance over the hold, charged at the door.',
+      })
+      .catch((err) => console.error(`Could not record the balance at the door: ${err.message}`));
+  }
+}
+
 module.exports = {
   refundDeposit,
+  showUpCents,
+  showUpHold,
+  doorSplit,
+  showUpState,
+  authorizeShowUp,
+  captureShowUp,
+  releaseShowUp,
+  chargeAtTheDoor,
   hasPaymentMethod,
   needsCardOnFile,
   describeCard,

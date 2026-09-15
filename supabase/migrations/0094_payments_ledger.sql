@@ -51,6 +51,18 @@ create table if not exists payments (
   recorded_by      uuid references ops_users(id) on delete set null,
   recorded_by_name text,
 
+  -- DOES THIS MONEY PAY FOR THE WASH?
+  --
+  -- Almost always yes. It is false for exactly one thing: the $25 show-up
+  -- charge kept when a driver made the trip, weighed the bags, the extra
+  -- charge was refused and the bags were LEFT ON THE STEP.
+  --
+  -- Neil's rule: the customer paid for the trip, not for laundry we never
+  -- took, so that $25 must never be treated as a wash we owe them. It is a
+  -- real payment and belongs in the ledger; it simply does not come off the
+  -- price of a wash that did not happen - including the rebooked one tomorrow.
+  applies_to_wash boolean not null default true,
+
   note          text,
   created_at    timestamptz not null default now()
 );
@@ -71,7 +83,7 @@ alter table orders
   add column if not exists amount_paid_cents integer not null default 0;
 
 comment on column orders.amount_paid_cents is
-  'Sum of payments.amount_cents for this order, recomputed on every payment. The ledger is the record; this is a cache so the board can ask about a balance without a query per row.';
+  'Sum of payments.amount_cents WHERE applies_to_wash, recomputed on every payment. The ledger is the record; this is a cache so the board can ask about a balance without a query per row.';
 
 -- Row level security on with no policies, like every other table here: the
 -- public anon key gets nothing and the server''s service_role key bypasses it.

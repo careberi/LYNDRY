@@ -3297,15 +3297,138 @@ backstop for orders that never reach a laundromat — anything we wash ourselves
 has no partner weigh-in to trigger the charge. It is a no-op for an order
 already paid.
 
-**The card is charged exactly once per order, and booking takes
-nothing.** For
-a while there was a $25 minimum collected at booking with the balance taken on
-delivery — two charges, two idempotency keys, two things to refund, and a
-customer watching money leave before anybody had touched their laundry. It is
-gone. **The minimum is a floor on `price_cents`, not a payment**: an 8 lb load
-costs $25 and is billed in one go with the rest. `deposit_*` and
-`refundDeposit()` survive only because two real orders were taken under the old
-rules and their money has to stay refundable; nothing writes a new one.
+**THE CARD IS CHARGED ONCE, AND BOOKING NOW HOLDS $25 AGAINST IT.** Neil, 14
+September. That reverses the first half of what this section used to say - "the
+card is charged exactly once per order, and booking takes nothing" - and the old
+reasoning is kept below because most of it still stands.
+
+**A HOLD IS NOT A CHARGE, and that is the whole of why this is not the thing
+that was removed.** What came out was a $25 *payment* at booking with the
+balance taken later: two charges, two idempotency keys, two things to refund,
+and a customer watching money leave before anybody had touched their laundry.
+What is here is one authorization - `capture_method: 'manual'` - that the
+customer's statement shows as pending, and it becomes part of the single charge
+at the door rather than a second one beside it. There is still exactly one
+amount that ever leaves their account for a wash.
+
+**The minimum is still a floor on `price_cents`, not a payment.** An 8 lb load
+costs $25 and is billed in one go. `deposit_*` and `refundDeposit()` still
+survive only because two real orders were taken under the old rules.
+
+**`config.pricing.authorizationCents` is $25 and is NOT `minimumCents`**, though
+they are the same number today. The minimum is the floor on what a wash COSTS;
+this is what a doorstep visit is worth when no wash happens. A test refuses one
+being defined as the other.
+
+### What the hold does
+
+**A PICKUP IS CONFIRMED BY THE CARD ACCEPTING $25, not by a card existing.**
+Neil's words: the card must accept the hold before a pickup is confirmed. A card
+sitting on file that will not take $25 is a van driving to a door for nothing,
+which is the exact trip the hold pays for.
+
+**At the door the driver weighs the bags and we charge the real total**, which
+is `billing.doorSplit()` and three lines:
+
+| The total | |
+|---|---|
+| $25 or less | capture that much of the hold, nothing else. Stripe lets the rest go |
+| more than $25 | capture the $25, charge the remainder on the same card |
+| the remainder refused | **keep the $25**, leave the bags, wash nothing |
+
+**CAPTURE FIRST, THEN THE REMAINDER.** Neil's order, and it is the right one:
+the $25 is the money we are certain of, so taking it first means the trip is
+paid for whatever happens next.
+
+**THE KEPT $25 IS NOT A WASH WE OWE THEM.** Neil's rule, and every part of the
+design exists to hold it: the driver drove there and weighed the bags, the
+laundry was never taken, and tomorrow's rebooked pickup is priced in full.
+`payments.applies_to_wash` is what enforces it - the row is a real payment and
+belongs in the ledger, it simply never reduces the price of a wash. `resettle()`
+sums only rows where it is true, so `amount_paid_cents` does not move, so
+`dispatch.balance()` still owes the whole thing.
+
+The order page says the same thing in words: **Trip (not the wash)**, outside
+the balance, with a sentence saying it does not come off the rebooked pickup.
+An unpriced order with a trip row draws no Total and no Balance at all, because
+Total $0 / Balance $0 / Paid over a doorstep refusal would call an order settled
+that was never charged for.
+
+**IT IS NOT THE PAYMENT HOLD AND THE TWO NEVER MEET.** That one is a state an
+order is IN - we are holding somebody's laundry and a charge failed - and is
+derived, never stored. This is a real authorization at Stripe with an id on the
+order, and it only exists before anything has been collected. Neil said it
+directly: Payment Hold and cash recording apply only when we already have the
+laundry. A doorstep refusal leaves the bags where they were found, so
+`paymentHold()` is false (the order is not `IN_OUR_HANDS`) and `recordCash()`
+refuses it as `not_in_our_hands`. Both fall out of rules that already existed;
+neither needed a special case.
+
+**Do not leave unpaid bags in the van, and do not send unpaid bags to the
+plant.** Both are structural rather than checks: `loadVan()` works the price out
+in memory, charges, and only then writes `van_confirmed_at` - and only a stamped
+order reaches the drop-off leg. A test pins that ordering.
+
+### The three states, and the one that must never become a fourth
+
+`billing.showUpState(order)`:
+
+| | |
+|---|---|
+| `HELD` | the card accepted it. Still HELD after the money is taken - what this answers is whether the pickup was confirmed |
+| `REFUSED` | we asked and the card said no. `collectable()` keeps it off the round and the board badges it **CARD REFUSED** |
+| `UNASKED` | nobody asked: payments switched off, a free order, or any order taken before this existed |
+
+**UNASKED IS COLLECTABLE AND MUST STAY THAT WAY.** Every order on the board the
+morning this deploys is UNASKED, so a gate reading "no hold" as "not confirmed"
+would empty the round - the same failure the card gate avoids by answering false
+wherever Stripe has no key. `authorization_refused_at` is a column for exactly
+this reason: absence has to mean nobody asked.
+
+**A refusal beats an earlier hold**, because it is the later fact - an order can
+hold, go to a door, be refused the balance and come back to tomorrow's board.
+`authorizeShowUp()` clears the refusal when a fresh hold lands, so a customer
+fixing their card is what puts them back on the round.
+
+**A FREE ORDER GETS NO HOLD.** It is told "nothing to pay" in the very next
+message, and holding $25 on that card is the contradiction the waived rule
+exists to prevent. The hold is placed after `claimSlot()` for that reason, which
+is the only thing that knows whether this is one.
+
+**CARD REFUSED IS NOT AWAITING CARD.** They gave us a card and it is named in
+every message about this; telling somebody we need a card sends them looking for
+a problem that is not there. Three badges, not two.
+
+### Who places one, and who lets it go
+
+**`bookPickup()` places it**, after the order is written and after the promotion
+slot is claimed. A refusal is not a failed booking: the order is real and stays
+on the board, it simply gets `holdRefusedMessage()` instead of a confirmation.
+**It fails open** - Stripe being unreachable books the pickup unheld rather than
+turning a good card into a refusal nobody here could clear.
+
+**`card-saved.js` places one on every waiting pickup**, because a pickup is a
+trip and three waiting pickups are three trips. The soonest one decides what the
+customer reads; any others whose hold was refused sit on the routing board in
+red like every other uncollectable stop.
+
+**Cancelling releases it**, in `orders.transition()` beside `releaseSlot()` and
+for the same reason - one door forgetting is money sitting on somebody's card
+for a week over a pickup that is not happening. **The doorstep never releases
+it**: the van had already been.
+
+**The confirmation names the hold in one clause** - "We hold $25.00 on your Visa
+ending 4242 to confirm, and take the real total off it at your door." A $25
+pending charge appearing on a statement with nothing explaining it is a phone
+call at best and a chargeback at worst. It is one clause because that message is
+already at its segment ceiling; it is read off the order rather than passed in,
+so the webhook's confirmation and the booking's cannot disagree.
+
+**`bookDue()` had to be taught too.** It sends its own day-before text rather
+than going through the reminder sweep, so "your usual pickup is tomorrow" would
+have promised a van to a standing-order customer whose stop `collectable()` had
+already removed. Exactly the failure the reminder gate exists to prevent, one
+rule along.
 
 **A booking is confirmed by having a card on file, not by a cleared payment.**
 For an online order there is now no booking at all until that card exists - see

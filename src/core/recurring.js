@@ -211,11 +211,23 @@ async function bookDue({ date } = {}) {
 
       // THE WARNING. Sent the day before, every time, with the way out in the
       // same message. Nobody discovers a charge after the fact.
+      //
+      // UNLESS THE CARD WOULD NOT TAKE THE HOLD, in which case the van is not
+      // coming and this sentence would be a promise nothing can keep.
+      // collectable() has already taken the stop off tomorrow's round, and a
+      // reminder to put the bag out at eight in the morning for a van that will
+      // not arrive is the exact failure the reminder gate exists to prevent -
+      // one rule along.
+      //
+      // It still goes out as A text, because a standing-order customer who
+      // hears nothing has no way to know anything is wrong.
       await sendAndLog(
         customer.phone,
-        `Your usual pickup is tomorrow, ${booking.whenLine(result.order)}. ` +
-          `Order #${result.order.order_number}. ` +
-          `Reply SKIP if you don't need it this week and we'll cancel it, no charge.`,
+        result.holdRefused
+          ? booking.holdRefusedMessage(customer, result.order)
+          : `Your usual pickup is tomorrow, ${booking.whenLine(result.order)}. ` +
+            `Order #${result.order.order_number}. ` +
+            `Reply SKIP if you don't need it this week and we'll cancel it, no charge.`,
         customer.id
       );
 

@@ -159,6 +159,23 @@ async function createOrder(customer, input) {
     );
   }
 
+  // THE CARD IS ON FILE AND IT REFUSED THE HOLD, which is a different problem
+  // from the one above and must not be described as that one. They gave us a
+  // card; what happened is that it would not take $25, and telling somebody who
+  // has a card on file that we need a card sends them looking for a problem
+  // that is not there.
+  //
+  // The order stays on the board and off the round - collectable() refuses a
+  // refused hold - until a card accepts one. Saving a card does that by itself,
+  // so nothing here has to be said twice.
+  if (result.holdRefused) {
+    const url = billing.wantsPaymentLink(result.order)
+      ? (await billing.createSetupLink(customer)).url
+      : null;
+
+    return booking.holdRefusedMessage(customer, result.order, { setupUrl: url });
+  }
+
   // The wording lives in src/core/booking.js so that booking by text and
   // booking on the website produce the identical confirmation.
   return booking.confirmationMessage(customer, result.order, {

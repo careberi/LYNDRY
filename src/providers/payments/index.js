@@ -41,6 +41,11 @@ const disabled = {
   getSavedPaymentMethod: async () => {
     throw new Error('Payments are not configured: STRIPE_SECRET_KEY is missing.');
   },
+  // A HOLD THAT CANNOT BE PLACED IS A REFUSAL, NOT A CRASH. Same shape as the
+  // charge below: a sandbox with no Stripe key must not take down a doorstep.
+  authorize: async () => ({ ok: false, reason: 'Payments are not configured.' }),
+  capture: async () => ({ ok: false, reason: 'Payments are not configured.' }),
+  releaseAuthorization: async () => ({ ok: false, reason: 'Payments are not configured.' }),
   chargeOffSession: async () => ({
     ok: false,
     reason: 'Payments are not configured.',
@@ -102,5 +107,8 @@ module.exports = {
   getSavedPaymentMethod: driver.getSavedPaymentMethod,
   getSavedPaymentMethodFromSetup: driver.getSavedPaymentMethodFromSetup,
   chargeOffSession: driver.chargeOffSession,
+  authorize: driver.authorize,
+  capture: driver.capture,
+  releaseAuthorization: driver.releaseAuthorization,
   verifyWebhook: driver.verifyWebhook,
 };
