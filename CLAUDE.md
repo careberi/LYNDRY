@@ -1934,6 +1934,58 @@ two what-if calculators.
 | **Business** | What you set up and what it earns: Taking orders?, Promotions, Text blast, Bag tags, Unit economics, Route planner |
 | **Resources** | How it all works, What happens to a bag |
 
+**THE BOARD IS FLAT: ONE FIELD PER COLUMN, AND TWO LINKS THAT GO TWO PLACES.**
+Neil's decision lock, 14 September.
+
+| | |
+|---|---|
+| the order number | opens that order |
+| the customer name | opens that customer |
+
+**BOTH USED TO POINT AT THE ORDER**, so there was no way to reach a profile from
+the board at all - and the name read as a link to somebody's history while
+behaving like a link to one row of it. Every instance of a customer now resolves
+to the same page, however many rows they have.
+
+**A MISSING CUSTOMER IS A FALLBACK, NEVER A BROKEN LINK.** An order can
+legitimately have no customer row, and `/ops/customers/undefined` is a 404
+somebody reports as a bug.
+
+**A DRIVER GETS NO CUSTOMER LINK AT ALL** - not one that 403s. Their second
+column is headed **Where** and carries the address, which is the only thing on
+the board telling them which door to drive to. **Taking the address out of the
+CUSTOMER column is not the same as taking it off a driver's board**, and the
+rule that a driver is shown the stop rather than the person is unchanged.
+
+**THREE THINGS CAME OUT FROM UNDER A FIRST FIELD**, and all three were the same
+fault - a `<div>` of smaller grey type inside a cell, in a table you read by
+scanning down a column:
+
+- the **address** under the customer name
+- the **arrival window** under the pickup date, which is two columns now:
+  **Pickup date** and **Pickup time**, and a pickup with no stated time says
+  `—` rather than leaving a blank that reads as a rendering fault
+- **"expected"** under a promotion nobody had applied
+
+**THE PROMOTION COLUMN IS WHAT WAS APPLIED, AND NOTHING ELSE.** An offer
+somebody merely qualifies for has not come off anything yet, and saying so under
+a heading that reads Promotion says it has. `promotions.expectedForMany()` is no
+longer called from the board at all, so the column cannot quietly start showing
+it again; that question belongs on the order or the customer page, where there
+is room for the word to read as a forecast. The discount went with it - what
+came off is the Price column's business.
+
+**Status, clock, weight, price and payment each stay their own column.** The
+lock is about flattening cells, never about shortening the table, and the money
+columns are still absent from a driver's markup rather than hidden in it.
+
+**ONE ROW BUILDER DRAWS EVERY SECTION** - To collect, Being washed, Upcoming,
+Past and the look back at a past day - so they cannot drift. **The customer
+page's order history matches it**, minus the customer, because that page is the
+customer: it used to end in a generic "Open" link and carry one Pickup column,
+so two screens a click apart described the same order two different ways. It
+links by **order number**, not the UUID, because that is what a person reads out.
+
 **THE ADMIN DASHBOARD IS A GRID OF EQUAL CARDS, and nothing else.** Neil's
 call. The weight thresholds were a full-width form dropped into the middle of
 it, which made the page five small cards with one enormous form between them;

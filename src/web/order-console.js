@@ -880,7 +880,9 @@ function orderConsoleBody({
   const customerKv = can.customers
     ? kv([
         ['Name', escapeHtml(c.name || '—')],
-        ['Phone', c.phone ? `<a href="/ops/messages/${escapeHtml(c.phone)}" class="mono">${escapeHtml(c.phone)}</a>` : '—'],
+        // The link is a route parameter and keeps the stored number; the text is
+        // what a person reads.
+        ['Phone', c.phone ? `<a href="/ops/messages/${escapeHtml(c.phone)}" class="mono">${escapeHtml(format.displayPhone(c.phone))}</a>` : '—'],
         can.money ? ['Card', c.card_brand ? `${escapeHtml(c.card_brand.charAt(0).toUpperCase() + c.card_brand.slice(1))} ${escapeHtml(c.card_last4 || '')}` : c.default_payment_method_id ? 'wallet, no card' : 'none on file'] : null,
         ['', `<a href="/ops/customers/${escapeHtml(c.id || '')}">Full profile</a>`],
       ])

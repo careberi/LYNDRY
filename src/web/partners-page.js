@@ -2,6 +2,7 @@
 
 const { escapeHtml } = require('./layout');
 const partners = require('../core/partners');
+const format = require('../core/format');
 const pitchLink = require('../core/pitch-link');
 
 // ---------------------------------------------------------------------------
@@ -566,7 +567,7 @@ ${
           literal "&mdash;" on the page. */ ''}
     ${fact('Address', addressOf(p) ? escapeHtml(addressOf(p)) : '&mdash;')}
     ${fact('Contact', p.contact_name ? escapeHtml(p.contact_name) : '&mdash;')}
-    ${fact('Phone', p.phone ? escapeHtml(p.phone) : '&mdash;')}
+    ${fact('Phone', p.phone ? escapeHtml(format.displayPhone(p.phone)) : '&mdash;')}
     ${fact('Email', p.email ? escapeHtml(p.email) : '&mdash;')}
     ${
       laundromat

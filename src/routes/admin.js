@@ -248,22 +248,22 @@ function statusBadge(status, order = null) {
 // ops screen and the internal name is what a person here would say out loud.
 // The code is shown when there is one, because that is what gets read off a
 // door hanger and typed into a search.
-function promoCell(order, expected) {
+// APPLIED ONLY, AND ONE VALUE. Neil's decision lock, 14 September.
+//
+// It used to draw three things: the name, the discount under it in grey, and -
+// for an order nobody had priced yet - a promotion the customer merely HELD,
+// labelled "expected". Both of those are a second fact wedged into one cell,
+// and the second is worse than untidy: an offer that has not come off anything
+// sitting under a heading that says Promotion reads as one that has.
+//
+// What came off is the Price column's business, and what somebody is expected
+// to qualify for belongs on the order or the customer page, where there is room
+// for the word "expected" to read as a forecast.
+function promoCell(order) {
   const applied = order.promotions;
+  if (!applied) return '—';
 
-  if (applied) {
-    const label = applied.code || applied.name;
-    const off = order.discount_cents ? `<div style="font-size:13px;color:var(--ink-500);">-${money(order.discount_cents)}</div>` : '';
-    return `<span style="font-weight:600;">${escapeHtml(label)}</span>${off}`;
-  }
-
-  if (expected) {
-    const label = expected.code || expected.name;
-    return `<span style="color:var(--ink-500);">${escapeHtml(label)}</span>
-      <div style="font-size:13px;color:var(--ink-500);">expected</div>`;
-  }
-
-  return '—';
+  return `<span style="font-weight:600;">${escapeHtml(applied.code || applied.name)}</span>`;
 }
 
 function paymentBadge(order) {
@@ -2226,18 +2226,16 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     const all = data || [];
     const now = today();
 
-    // WHICH PROMOTION IS COMING, for the orders nobody has priced yet. A priced
-    // order answers from its own row; this covers the rest. Two queries for the
-    // whole board, and none at all if every order on it is already priced.
+    // WHICH PROMOTION IS COMING no longer has a column to go in. Neil's
+    // decision lock, 14 September: the Promotion column shows the promotion
+    // APPLIED to that order and nothing else - an offer somebody is expected
+    // to qualify for has not come off anything yet, and putting it under a
+    // heading that says Promotion says it has.
     //
-    // Best effort: a board that cannot draw because the promotion ledger is
-    // down is worse than a board with one column missing.
-    const expected = roles.can(req.opsUser, 'money.view')
-      ? await promotions.expectedForMany(all).catch((err) => {
-          console.error(`Could not work out promotions for the board: ${err.message}`);
-          return {};
-        })
-      : {};
+    // The two queries that answered it are gone with it. The question is still
+    // worth asking somewhere, and the place for it is the order or the customer
+    // page, where there is room to say "expected" and have it read as a
+    // forecast rather than as a fact.
 
     // --- WHICH DAY ARE WE LOOKING AT ---------------------------------------
     //
@@ -2361,34 +2359,73 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
 
     const showNames = roles.can(req.opsUser, 'customers.view');
 
+    // ONE FIELD PER COLUMN, AND THE TWO LINKS GO TO TWO DIFFERENT PLACES.
+    //
+    // Neil's decision lock, 14 September: the order number opens the order, the
+    // customer name opens the customer. Both used to point at the order, so
+    // there was no way to reach somebody's profile from the board at all -
+    // and the name looked like a link to their history while behaving like a
+    // link to one row of it.
+    //
+    // The address came out from under the name, and the pickup split into two
+    // columns. Both were the same fault: a second fact wedged under the first,
+    // in smaller grey type, in a table you read by scanning down a column.
+    // Detail belongs on the order or the customer page.
     const row = (o) => {
       const c = o.customers || {};
+
+      // A MISSING CUSTOMER IS A FALLBACK, NEVER A BROKEN LINK. An order can
+      // legitimately have no customer row - a phone order typed in before
+      // anybody saved the person, a record since removed - and a link to
+      // /ops/customers/undefined is a 404 somebody reports as a bug.
+      const customerCell = c.id
+        ? `<a href="/ops/customers/${escapeHtml(c.id)}" style="font-weight:600;">${escapeHtml(
+            c.name || 'Unnamed'
+          )}</a>`
+        : `<span style="color:var(--ink-500);">${escapeHtml(c.name || 'Unknown')}</span>`;
+
       return [
         `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
-        // A DRIVER PICKS A STOP OFF THIS BOARD BY WHERE IT IS, NOT BY WHO.
-        // With the name gone the address moves up and carries the column on
-        // its own - it is the half a route is planned with anyway.
+
+        // A DRIVER GETS WHERE, NOT WHO, AND THAT IS WHY THE ADDRESS SURVIVES
+        // HERE AND NOWHERE ELSE. Without customers.view there is no Customer
+        // column and no profile to open - this is a different column with a
+        // different heading, and it is the only thing on the board telling him
+        // which door to drive to. Taking the address out of the Customer
+        // column is not the same as taking it off a driver's board.
         showNames
-          ? `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
-         <div style="font-size:13px;color:var(--ink-500);">${escapeHtml(addressOf(c))}</div>`
+          ? customerCell
           : `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${
               escapeHtml(addressOf(c)) || 'No address'
             }</a>`,
-        // The window under the day, because "Wednesday" is not enough to plan a
-        // route with once customers start naming times.
-        `${shortDate(o.pickup_date)}${
-          o.pickup_window_start
-            ? `<div style="font-size:13px;color:var(--ink-500);">${escapeHtml(booking.arrivalWindow(o))}</div>`
-            : ''
-        }`,
+
+        shortDate(o.pickup_date),
+
+        // The window, on its own. A date with no time is a real state - plenty
+        // of customers never name one - so it says so rather than leaving a
+        // cell that reads as a rendering fault.
+        o.pickup_window_start ? escapeHtml(booking.arrivalWindow(o)) : '—',
+
         statusBadge(o.status, o),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
-        ...(showMoney ? [promoCell(o, expected[o.id]), money(o.price_cents), paymentBadge(o)] : []),
+
+        // APPLIED ONLY. A promotion that is merely expected has not come off
+        // anything yet, and showing it in a column headed Promotion says it
+        // has. Neil's rule: do not show it as if it is applied.
+        ...(showMoney ? [promoCell(o), money(o.price_cents), paymentBadge(o)] : []),
       ];
     };
 
-    const headings = ['Order', showNames ? 'Customer' : 'Where', 'Pickup', 'Status', 'Clock', 'Weight'];
+    const headings = [
+      'Order',
+      showNames ? 'Customer' : 'Where',
+      'Pickup date',
+      'Pickup time',
+      'Status',
+      'Clock',
+      'Weight',
+    ];
     if (showMoney) headings.push('Promotion', 'Price', 'Payment');
 
     // A section is only drawn when it has something in it, so the board is a
@@ -3664,7 +3701,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           <div class="card card-xl" style="padding:28px;margin-bottom:22px;">
             ${sectionHeading('Who', 'Customer')}
             ${detail('Name', escapeHtml(c.name || '—'))}
-            ${detail('Phone', `<a href="tel:${escapeHtml(c.phone)}">${escapeHtml(c.phone || '—')}</a>`)}
+            ${detail('Phone', `<a href="tel:${escapeHtml(c.phone)}">${escapeHtml(format.displayPhone(c.phone) || '—')}</a>`)}
             ${detail('Address', escapeHtml(addressOf(c)) || '—')}
             <div style="padding-top:20px;">
               <a href="/ops/customers/${c.id}" class="btn btn-outline">Full profile ${icon('arrow-right', '16')}</a>
@@ -3760,7 +3797,10 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
       const stats = byCustomer.get(p.id) || { count: 0, spent: 0 };
       return [
         `<a href="/ops/customers/${p.id}" style="font-weight:600;">${escapeHtml(p.name || '—')}</a>`,
-        `<a href="tel:${escapeHtml(p.phone)}">${escapeHtml(p.phone)}</a>`,
+        // THE href KEEPS THE STORED NUMBER AND ONLY THE TEXT IS FORMATTED.
+        // tel: wants E.164; a person wants 201-554-1877. Getting that backwards
+        // is how a dashed number reaches something that dials.
+        `<a href="tel:${escapeHtml(p.phone)}">${escapeHtml(format.displayPhone(p.phone))}</a>`,
         escapeHtml(p.city || '—'),
         String(stats.count),
         ...(showMoney ? [money(stats.spent)] : []),
@@ -4330,8 +4370,16 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       // These are the two fields billing.needsCardOnFile() actually reads. Not
       // card_brand and card_last4 - those are for display, and a wallet can
       // have a usable payment method with neither.
+      //
+      // AND order_number, pickup_time AND THE WINDOW. Neil's table lock, 14
+      // September: an order is identified by its number, and a pickup is two
+      // columns. This list showed neither - it had a generic "Open" link at the
+      // end and one Pickup column - so it could not match the board it sits
+      // one click away from. Tenth time an unselected column decided what a
+      // screen can say.
       .select(
-        'id, status, pickup_date, weight_lb, price_cents, payment_status, ' +
+        'id, order_number, status, pickup_date, pickup_time, ' +
+          'pickup_window_start, pickup_window_end, weight_lb, price_cents, payment_status, ' +
           'customers(stripe_customer_id, default_payment_method_id)'
       )
       .eq('customer_id', person.id)
@@ -4517,7 +4565,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
 
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading('Contact', 'Details')}
-          ${detail('Phone', `<a href="tel:${escapeHtml(person.phone)}">${escapeHtml(person.phone)}</a>`)}
+          ${detail('Phone', `<a href="tel:${escapeHtml(person.phone)}">${escapeHtml(format.displayPhone(person.phone))}</a>`)}
           ${detail('Email', `<a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email || '—')}</a>`)}
           ${detail('Address', escapeHtml(addressOf(person)) || '—')}
           ${detail('Signed up', dateTime(person.created_at))}
@@ -4607,16 +4655,25 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       </div>
 
       ${sectionHeading('Everything they have sent us', 'Order history', (history || []).length)}
+      <!-- THE SAME SHAPE AS THE BOARD, minus the customer - this IS the
+           customer. One field per column, the order number as the link, and
+           the pickup split in two. It used to end in a generic "Open" and
+           carry one Pickup column, so the two screens a click apart described
+           the same order two different ways.
+
+           The number, not the UUID: /ops/orders/1042 is what a person types
+           and what they read out, and the UUID is for the database. -->
       ${table(
         showMoney
-          ? ['Pickup', 'Status', 'Weight', 'Price', 'Payment', '']
-          : ['Pickup', 'Status', 'Weight', ''],
+          ? ['Order', 'Pickup date', 'Pickup time', 'Status', 'Weight', 'Price', 'Payment']
+          : ['Order', 'Pickup date', 'Pickup time', 'Status', 'Weight'],
         (history || []).map((o) => [
+          `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
           shortDate(o.pickup_date),
+          o.pickup_window_start ? escapeHtml(booking.arrivalWindow(o)) : '—',
           statusBadge(o.status, o),
           o.weight_lb ? `${o.weight_lb} lb` : '—',
           ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
-          `<a href="/ops/orders/${o.id}" style="font-weight:600;">Open</a>`,
         ])
       )}`;
 
