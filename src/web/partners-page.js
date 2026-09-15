@@ -2,6 +2,7 @@
 
 const { escapeHtml } = require('./layout');
 const partners = require('../core/partners');
+const pitchLink = require('../core/pitch-link');
 
 // ---------------------------------------------------------------------------
 // The partner directory: /ops/partners
@@ -111,9 +112,8 @@ ${
 <div class="card card-xl" style="padding:26px;margin-top:26px;">
   <p class="eyebrow" style="margin:0 0 10px;">Send the overview</p>
   <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;max-width:64ch;">
-    Texts a laundromat a link to
-    <a href="/for-laundromats" target="_blank" rel="noopener">the page explaining how working with us
-    works</a> - what their part is, what we handle, and the questions they
+    Texts a laundromat a link to the page explaining how working with us
+    works - what their part is, what we handle, and the questions they
     always ask. No prices on it, because none are agreed.
   </p>
   <form method="post" action="/ops/partners/send-overview"
@@ -132,7 +132,11 @@ ${
   </form>
   <p class="field-hint" style="margin-top:12px;">
     Goes out from our own number and is logged in the conversation like any
-    other message${baseUrl ? `. The link is <code>${escapeHtml(baseUrl)}/for-laundromats</code>` : ''}.
+    other message. <strong>The link is good for ${pitchLink.lifetimeMs() / 60000} minutes</strong>
+    and is made fresh each time you press this - so send it to somebody who is
+    going to look now, and send another if they did not. There is no address to
+    copy: the page does not open without a link we sent - so to read it
+    yourself, send it to your own number.
   </p>
 </div>
 
