@@ -131,10 +131,16 @@ test('THE CUSTOMER PAGE LOADS THE CUSTOMER WITH EACH ORDER', () => {
   assert.notEqual(at, -1);
 
   const route = src.slice(at, at + 20000);
-  const q = route.indexOf("'id, status, pickup_date");
+
+  // ANCHORED ON THE QUERY, NOT ON THE FIRST COLUMN IN IT. This pinned the
+  // literal "'id, status, pickup_date" and broke the day the list learned to
+  // select an order number - which is a change that could not possibly
+  // reintroduce the bug it is guarding. A test that fails for the wrong reason
+  // is one somebody loosens rather than reads.
+  const q = route.indexOf(".from('orders')");
   assert.notEqual(q, -1, 'the order history query has moved');
 
-  const block = route.slice(q, q + 400);
+  const block = route.slice(q, route.indexOf('.eq(', q));
   assert.match(block, /customers\(/, 'the order history query does not load the customer');
   assert.match(block, /default_payment_method_id/, 'it does not load what needsCardOnFile reads');
   assert.match(block, /stripe_customer_id/, 'it does not load what needsCardOnFile reads');
