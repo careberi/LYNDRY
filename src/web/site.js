@@ -1,5 +1,7 @@
 'use strict';
 
+const format = require('../core/format');
+
 // ---------------------------------------------------------------------------
 // Site-wide values.
 //
@@ -68,14 +70,13 @@ const PUBLIC_PHONE_LINK = String(config.telnyx.phoneNumber || '').trim();
 // pages fall back to the public number and behave exactly as they did.
 const OPS_PHONE = String(process.env.SUPPORT_PHONE || '').trim();
 
-// +14437452665 -> (443) 745-2665. A number a person reads aloud, not an E.164
+// +14437452665 -> 443-745-2665. A number a person reads aloud, not an E.164
 // string. Anything that is not a plain US number is shown as it was given.
-function displayPhone(raw) {
-  const digits = String(raw || '').replace(/\D/g, '');
-  const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-  if (ten.length !== 10) return String(raw || '');
-  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
-}
+//
+// DELEGATED, because this was the second copy of the same rule. See
+// src/core/format.js - one owner, so every number on the site, in the ops
+// screens and in a text reads the same way.
+const displayPhone = (raw) => format.displayPhone(raw);
 // Derived from the one number above, through the same formatter every other
 // number on the site goes through. It was a second hand-typed constant.
 const PUBLIC_PHONE_DISPLAY = PUBLIC_PHONE_LINK ? displayPhone(PUBLIC_PHONE_LINK) : '';

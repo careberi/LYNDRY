@@ -30,7 +30,7 @@ const { site } = require('./site');
 const { config } = require('../config');
 const partners = require('../core/partners');
 
-const REVIEWED = '3 September 2026';  // the laundromat's weight is required and
+const REVIEWED = '09/03/2026';  // the laundromat's weight is required and
                                       // the card is charged at their weigh-in
 // Previously: the drop-off in three steps; no scale photo; the pickup sequence
 

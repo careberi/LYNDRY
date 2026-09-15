@@ -1,5 +1,7 @@
 'use strict';
 
+const format = require('./format');
+
 // ---------------------------------------------------------------------------
 // Phone numbers are stored in exactly one format: +1 followed by ten digits.
 //
@@ -21,10 +23,17 @@ function normalisePhone(raw) {
   return null;
 }
 
-// For showing a number back to someone: +12015551234 -> (201) 555-1234.
+// For showing a number back to someone: +12015551234 -> 201-555-1234.
+//
+// ONE OWNER, IN src/core/format.js. Neil's decision lock, 14 September: every
+// human-facing US number is XXX-XXX-XXXX. This used to write the brackets
+// itself and src/web/site.js had a second copy doing the same thing, which is
+// how a screen ends up showing two shapes of the same number.
+//
+// Storage is untouched: normalisePhone() above still writes +1 and ten digits,
+// and that is still what goes to the carrier.
 function formatPhone(stored) {
-  const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(String(stored || ''));
-  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : String(stored || '');
+  return format.displayPhone(stored);
 }
 
 module.exports = { normalisePhone, formatPhone };

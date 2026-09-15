@@ -10,6 +10,7 @@ const orders = require('../core/orders');
 const booking = require('../core/booking');
 const settings = require('../core/settings');
 const billing = require('../core/billing');
+const format = require('../core/format');
 const cardSaved = require('../core/card-saved');
 const promotions = require('../core/promotions');
 const auth = require('../core/customer-auth');
@@ -172,7 +173,7 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
     <div class="field">
       <label class="field-label" for="phone">Cell number</label>
       <input class="input input-lg" type="tel" id="phone" name="phone" required
-             autocomplete="tel" inputmode="tel" placeholder="(201) 555-0142"
+             autocomplete="tel" inputmode="tel" placeholder="201-555-0142"
              value="${escapeHtml(phone)}" autofocus>
       <span class="field-hint">Has to be able to get texts.</span>
     </div>
@@ -276,7 +277,7 @@ router.get('/account/login', (req, res) => {
   // reads as having lost their place. It reveals nothing: the cookie is signed
   // by this server and holds the number they typed into this form minutes ago.
   // Shown the way the box asks for it, not the way it is stored: the
-  // placeholder beside it reads (201) 555-0142, and +12015550166 sitting in a
+  // placeholder beside it reads 201-555-0142, and +12015550166 sitting in a
   // field that asks for that is a format nobody typed.
   const phone = formatPhone(auth.readGuest(req) || '');
 
@@ -305,7 +306,7 @@ router.post('/account/login', async (req, res, next) => {
   try {
     const number = normalisePhone(phone);
     if (!number) {
-      return fail('Please enter a valid 10-digit US mobile number, for example (201) 555-0142.');
+      return fail('Please enter a valid 10-digit US mobile number, for example 201-555-0142.');
     }
 
     // THE NUMBER DECIDES WHAT HAPPENS NEXT.
@@ -494,9 +495,13 @@ const STATUS_TONE = {
 // So this is a portal-local formatter and readableDate() is left exactly as it
 // is. Changing that would silently rewrite every confirmation, reminder and
 // weigh-in text as well.
+// DELEGATED, because this stopped being portal-only. Neil's decision lock, 14
+// September, made MM/DD/YYYY the shape everywhere a person sees a date, so the
+// portal's local copy became the second copy of a rule with one owner - see
+// src/core/format.js. The reasoning above is why readableDate() is still left
+// alone for text messages.
 function mdy(iso) {
-  const [y, m, d] = String(iso || '').split('-');
-  return y && m && d ? `${m}/${d}/${y}` : '';
+  return format.displayDate(iso, { empty: '' });
 }
 
 // The same shape whenLine() gives, with the date in figures:

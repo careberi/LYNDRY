@@ -14,6 +14,7 @@ const throttle = require('../core/throttle');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
 const billing = require('../core/billing');
+const format = require('../core/format');
 const pitchLink = require('../core/pitch-link');
 const recurring = require('../core/recurring');
 const issues = require('../core/issues');
@@ -101,55 +102,49 @@ const router = express.Router();
 
 // --- Formatting -------------------------------------------------------------
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// THE MONTH AND WEEKDAY NAME TABLES ARE GONE. Four of them lived here - short
+// days, short months, long days, long months - to build "Tue 26 Aug" and
+// "Tuesday 26 August 2026". Neil's decision lock, 14 September, made every
+// human-facing date MM/DD/YYYY, so there is no month to name and nothing here
+// left to disagree with src/core/format.js about.
 
-// A date-only string, formatted from its own parts. Parsing "2026-08-14" as a
-// Date makes it UTC midnight, which displays as the previous day in New Jersey.
-const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const FULL_MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-function shortDate(iso) {
-  if (!iso) return '—';
-  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
-  const day = DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${day} ${d} ${MONTHS[m - 1]}`;
-}
-
-// The same date written out, for a heading where it is the subject rather than
-// a cell in a table. "Tuesday 26 August 2026" reads as a day; "Tue 26 Aug" reads
-// as a column.
-function longDate(iso) {
-  if (!iso) return '';
-  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
-  const day = FULL_DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return `${day} ${d} ${FULL_MONTHS[m - 1]} ${y}`;
-}
-
-// A timestamp, shown in New Jersey's time rather than the server's.
+// EVERY DATE ON AN OPS SCREEN IS MM/DD/YYYY. Neil's decision lock, 14
+// September, and these two are how it reaches all of them: between them they
+// draw the board, the order page, routing, the reports, the customer records
+// and the message threads.
 //
-// Railway runs in UTC, so this used to render a text sent at 6pm as "10pm" and
-// tip messages sent after 8pm onto the following day. On a message thread that
-// is not a cosmetic problem: the timestamps are how you work out what happened
-// in what order when a customer says nobody ever replied to them.
-const STAMP = new Intl.DateTimeFormat('en-US', {
-  timeZone: booking.SERVICE_TZ,
-  day: 'numeric',
-  month: 'short',
-  hour: 'numeric',
-  minute: '2-digit',
-});
+// They used to write "Tue 26 Aug" and "Tuesday 26 August 2026" - two shapes of
+// the same fact on two screens somebody reads one after the other, which is the
+// mixing the lock exists to end.
+//
+// WHAT THAT COSTS, SO NOBODY IS SURPRISED: the weekday is gone. "Tuesday 26
+// August" told a driver which day a round was without counting, and 09/15/2026
+// does not. That is the trade the lock makes and it is Neil's to make.
+//
+// Both still take a date-only string and never parse it as a Date - see
+// src/core/format.js for why that matters in New Jersey.
+function shortDate(iso) {
+  return format.displayDate(iso ? String(iso).slice(0, 10) : null);
+}
 
+// The same date, for a heading where it is the subject rather than a cell.
+// Identical to shortDate() now - kept as its own name because the call sites
+// mean different things by it, and because a heading is exactly where somebody
+// would otherwise reintroduce a second format.
+function longDate(iso) {
+  return iso ? format.displayDate(String(iso).slice(0, 10), { empty: '' }) : '';
+}
+
+// A TIMESTAMP: THE DATE IN ITS FORMAT, THE TIME BESIDE IT. Neil's rule - when a
+// time is also shown, the date stays MM/DD/YYYY and the time is separate.
+//
+// Still New Jersey's clock rather than the server's. Railway runs in UTC, so
+// this once rendered a text sent at 6pm as "10pm" and tipped anything after 8pm
+// onto the following day - which on a message thread is not cosmetic, because
+// the timestamps are how you work out what happened in what order when a
+// customer says nobody ever replied.
 function dateTime(iso) {
-  if (!iso) return '—';
-
-  const parts = {};
-  for (const p of STAMP.formatToParts(new Date(iso))) parts[p.type] = p.value;
-
-  return `${parts.day} ${parts.month}, ${parts.hour}:${parts.minute} ${parts.dayPeriod.toLowerCase()}`;
+  return format.displayDateTime(iso);
 }
 
 // "just now", "20m ago", "3d ago" — for a conversation list, where how long
@@ -1865,7 +1860,7 @@ function phoneStep({ error = '', next = '/ops', phone = '' } = {}) {
         <div class="field">
           <label class="field-label" for="phone">Mobile number</label>
           <input class="input input-lg" type="tel" id="phone" name="phone" required
-                 autocomplete="tel" inputmode="tel" placeholder="(201) 555-0142"
+                 autocomplete="tel" inputmode="tel" placeholder="201-555-0142"
                  value="${escapeHtml(phone)}" autofocus>
         </div>
         <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:20px;">
@@ -3885,7 +3880,7 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
     <form method="post" action="/ops/customers/new" class="card card-xl" style="padding:26px;max-width:640px;">
       <label class="field-label" for="phone">Their cell number</label>
       <input class="field" id="phone" name="phone" type="tel" required maxlength="20"
-             value="${v('phone')}" placeholder="(201) 555-0123" style="width:100%;margin-bottom:6px;">
+             value="${v('phone')}" placeholder="201-555-0123" style="width:100%;margin-bottom:6px;">
       <p style="font-size:13px;color:var(--ink-500);margin:0 0 18px;">
         This is their account and where every text goes. Read it back to them before you save.
       </p>
@@ -4574,12 +4569,12 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                 <div style="font-size:14px;color:var(--ink-700);margin-top:2px;">
                   ${escapeHtml(recurring.CADENCES[sc.cadence].label)}${
                       paused
-                        ? ` &middot; paused until ${escapeHtml(booking.readableDate(String(sc.paused_until).slice(0, 10)))}`
+                        ? ` &middot; paused until ${escapeHtml(shortDate(String(sc.paused_until).slice(0, 10)))}`
                         : ''
                     }
                 </div>
                 <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);margin-top:4px;">
-                  ${next ? `next ${escapeHtml(booking.readableDate(next))}` : 'nothing due'}
+                  ${next ? `next ${escapeHtml(shortDate(next))}` : 'nothing due'}
                 </div>
               </div>
             </div>`;
@@ -8398,7 +8393,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                    <div>
                      <label class="field-label" for="new_phone">Their mobile number</label>
                      <input class="field" id="new_phone" name="phone" type="tel" required
-                            inputmode="tel" autocomplete="off" placeholder="(201) 555-0142">
+                            inputmode="tel" autocomplete="off" placeholder="201-555-0142">
                    </div>
                    <div>
                      <label class="field-label" for="new_body">What to say</label>
@@ -8927,10 +8922,10 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
                    <p class="eyebrow" style="margin:0 0 4px;color:var(--ink-500);">Pickup reminder scheduled</p>
                    <p style="margin:0;font-size:15px;line-height:1.5;color:var(--ink-700);">
                      Order #${reminder.order.order_number} is
-                     <strong>${escapeHtml(booking.readableDate(reminder.order.pickup_date))}${
+                     <strong>${escapeHtml(shortDate(reminder.order.pickup_date))}${
                        reminder.window ? ` ${escapeHtml(reminder.window)}` : ''
                      }</strong>, so they get "have the bag out" on the evening of
-                     <strong>${escapeHtml(booking.readableDate(reminder.goesOn))}</strong>.
+                     <strong>${escapeHtml(shortDate(reminder.goesOn))}</strong>.
                    </p>
                  </div>
                  <span style="font-size:12px;color:var(--ink-400);">Goes out between 6pm and 9pm</span>
@@ -11184,7 +11179,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
               <div class="field">
                 <label class="field-label" for="t_phone">Mobile number</label>
                 <input class="input input-lg" type="tel" id="t_phone" name="phone" required
-                       inputmode="tel" placeholder="(201) 555-0142">
+                       inputmode="tel" placeholder="201-555-0142">
                 <span class="field-hint">They sign in with this. It has to receive texts.</span>
               </div>
               <div class="field">

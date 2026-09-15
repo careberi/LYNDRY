@@ -187,9 +187,18 @@ test('THE RAIL READS THE EVENT WHEN THE COLUMN IS MISSING, and Out has no column
   assert.ok(!/class="t">—<\/div>/.test(html.split('Picked up')[1]), 'no blank stamp on a delivered order');
 });
 
-test('timestamps say Sep, not Sept', () => {
+test('TIMESTAMPS ARE MM/DD/YYYY, AND THE CLOCK BESIDE THEM DID NOT MOVE', () => {
+  // This used to pin "7 Sep 10:31" and the month name it spelled - en-GB says
+  // "Sept" and the rest of ops said "Sep". Neil's decision lock, 14 September,
+  // removed the month name from the question entirely: every human-facing date
+  // is MM/DD/YYYY.
+  //
+  // THE TIME HALF IS UNCHANGED ON PURPOSE. His rule is that when a time is also
+  // shown the date takes the new format and the time keeps the one it had, and
+  // this rail has always read 24-hour. The rest of ops reads 10:31 PM; both
+  // survive, because the lock is about dates.
   const { stamp } = require('../src/web/order-console');
-  assert.equal(stamp(T('10:31:36')), '7 Sep 10:31');
+  assert.equal(stamp(T('10:31:36')), '09/07/2026 · 10:31');
 });
 
 // --- the bags ----------------------------------------------------------------

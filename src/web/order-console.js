@@ -1,4 +1,5 @@
 'use strict';
+const format = require('../core/format');
 
 // ---------------------------------------------------------------------------
 // THE ORDER PAGE AS A WAREHOUSE TERMINAL.
@@ -44,24 +45,18 @@ const { scanField } = require('./scanner');
 
 const NJ = 'America/New_York';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// "7 Sep 10:31" from an ISO timestamp, in the timezone the vans drive in.
-// Assembled from parts rather than formatted: en-GB spells September "Sept",
-// and the rest of ops (shortDate, readableDate) says "Sep".
+// "09/07/2026 - 10:31" from an ISO timestamp, in the timezone the vans drive
+// in. It used to be "7 Sep 10:31", assembled by hand; the date half now goes
+// through the one owner so the order console cannot disagree with the board it
+// was opened from. See src/core/format.js.
 function stamp(iso) {
-  if (!iso) return '';
-  const parts = {};
-  for (const p of new Intl.DateTimeFormat('en-US', {
-    timeZone: NJ, day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date(iso))) parts[p.type] = p.value;
-  return `${parts.day} ${MONTHS[Number(parts.month) - 1]} ${parts.hour}:${parts.minute}`;
+  return iso ? format.displayDateTime(iso, { empty: '', hour12: false }) : '';
 }
 
-// "10:31" only.
+// The clock only, for a column that already says which day it is.
 function clock(iso) {
-  if (!iso) return '';
-  return new Intl.DateTimeFormat('en-GB', { timeZone: NJ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+  return iso ? format.displayTime(iso, { empty: '', hour12: false }) : '';
 }
 
 function lb(value) {

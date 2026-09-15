@@ -121,7 +121,7 @@ ${
     <div style="flex:1 1 240px;min-width:0;">
       <label class="field-label" for="ov_phone">Their mobile number</label>
       <input class="field" id="ov_phone" name="phone" type="tel" inputmode="tel"
-             autocomplete="off" placeholder="(201) 555-0134" required>
+             autocomplete="off" placeholder="201-555-0134" required>
     </div>
     <div style="flex:1 1 200px;min-width:0;">
       <label class="field-label" for="ov_name">Who they are <span style="font-weight:400;color:var(--ink-500);">(optional)</span></label>
