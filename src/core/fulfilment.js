@@ -226,9 +226,51 @@ function needsWeightFirst(order) {
   };
 }
 
+// NOTHING REACHES A LAUNDROMAT THAT WAS NOT LOADED AND PAID FOR AT THE DOOR.
+//
+// CLAUDE.md has said since the charge moved to the doorstep that "only a
+// stamped order reaches the drop-off leg" - but that was true only because the
+// ROUTE stopped offering the stop, and a screen that hides a control while the
+// route behind it still fires is not a guard. This is the guard.
+//
+// `van_confirmed_at` is written by loadVan() and only after the card clears, so
+// it is the one column that means "these bags were paid for and put in the
+// van". An order that failed at a door has neither that stamp nor any business
+// on a laundromat's floor: the bags are supposed to be on the customer's step.
+//
+// On #2068 the order sat IN_PROCESS after a decline path that had thrown
+// halfway, and twenty-five minutes later it was dropped at Best Wash - which
+// is the move this refuses.
+function readyForPartner(order) {
+  if (!order.van_confirmed_at) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail:
+        'These bags were never confirmed into the van, so they cannot be dropped at a laundromat. ' +
+        'Load the van first.',
+    };
+  }
+
+  if (order.authorization_refused_at) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail:
+        'The card was refused at the door on this order, so the bags belong with the customer, ' +
+        'not at a laundromat. Ring the office.',
+    };
+  }
+
+  return null;
+}
+
 async function dropAtPartner(order, { partnerId, by = {} } = {}) {
   const unweighed = needsWeightFirst(order);
   if (unweighed) return unweighed;
+
+  const notLoaded = readyForPartner(order);
+  if (notLoaded) return notLoaded;
 
   const result = await step(order, 'AT_PARTNER', null, by);
   if (!result.ok) return result;
@@ -1517,11 +1559,30 @@ async function loadVan(order, { by = {} } = {}) {
       ? { ok: true, waived: true }
       : await billing.chargeAtTheDoor(order, customer, { totalCents: priceCents }).catch((err) => {
           console.error(`Could not charge ${order.id} at the door: ${err.message}`);
-          return { ok: false, failed: true, reason: err.message };
+          return { ok: false, threw: true, reason: err.message };
         });
 
-  if (!charge.ok) {
+  // ONLY A REFUSAL LEAVES BAGS ON A DOORSTEP, AND A THROWN ERROR IS NOT ONE.
+  //
+  // This used to read `if (!charge.ok)`, which swept up three different things
+  // and treated all of them as "the customer's card said no": a real refusal, a
+  // sandbox with no Stripe key, and any exception at all - including one raised
+  // AFTER the money had moved.
+  //
+  // That last one happened, on #2068. The card paid $25 off the hold and $13 on
+  // top, and a TypeError in the bookkeeping a line later turned a fully paid
+  // order into a doorstep decline: the customer's tags retired, the pickup put
+  // back to tomorrow, and a text queued telling them their card was refused.
+  //
+  // So the decline path is now reachable only when the card genuinely said no -
+  // `declined` from the issuer, or `needsCard` because there is nothing to
+  // charge. Everything else keeps the bags in the van and asks a person.
+  if (!charge.ok && (charge.declined || charge.needsCard)) {
     return declinedAtTheDoor(order, { by, customer, labels, weight, priceCents, charge });
+  }
+
+  if (!charge.ok) {
+    return couldNotCharge(order, { by, customer, priceCents, charge });
   }
 
   // --- It cleared. Now it is real ------------------------------------------
@@ -1677,9 +1738,96 @@ function leftAtDoorText({ weight, priceCents, needsCard, destination, keptCents 
   );
 }
 
+// SOMETHING BROKE, AND WE DO NOT KNOW WHOSE FAULT IT IS.
+//
+// Not a refusal: the card never said no. An exception on our side, or payments
+// switched off entirely. The money may or may not have moved, and that is the
+// whole reason this is its own outcome rather than a decline.
+//
+// So it does the one thing that is safe under both readings: it changes nothing
+// the customer can see. The bags stay in the van, the tags stay live, the
+// pickup is not put back to tomorrow, and NOBODY IS TEXTED - because "your card
+// was refused" is a lie if it cleared, and the customer cannot act on a bug in
+// our code either way. A person is paged, and the driver is told to ring in.
+async function couldNotCharge(order, { by, customer, priceCents, charge }) {
+  await events.record(order.id, {
+    kind: 'PAYMENT',
+    summary: `Could not take ${money(priceCents)} at the door`,
+    became: 'unknown',
+    by,
+    reason:
+      `The card was not refused - the charge could not be completed. ` +
+      `${charge.reason || 'No reason given.'} Check Stripe before charging again.`,
+  });
+
+  await issues
+    .raise({
+      customer,
+      order,
+      reason:
+        `Door charge of ${money(priceCents)} on #${order.order_number} did not complete, and it was ` +
+        `NOT a decline. ${charge.reason || ''} The bags are still in the van and the customer has not ` +
+        `been told anything. Check Stripe for a payment before charging again.`.trim(),
+    })
+    .catch((err) => console.error(`Could not raise an issue for ${order.id}: ${err.message}`));
+
+  return {
+    ok: false,
+    couldNotCharge: true,
+    priceCents,
+    detail:
+      `${money(priceCents)} did not go through, and the card was NOT refused. ` +
+      `Keep the bags in the van and ring the office - do not try again from here.`,
+  };
+}
+
 async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCents, charge }) {
   const clips = bags.clipsFor(labels);
   const kept = Math.max(0, Number(charge.keptCents || 0));
+
+  // A PAID ORDER CANNOT BE DECLINED, AND THIS IS THE BACKSTOP THAT SAYS SO.
+  //
+  // Read back from the database rather than trusting the row we loaded before
+  // the charge, because the charge is what would have changed it. On #2068 the
+  // card had already paid in full by the time this function was called, and
+  // nothing here asked.
+  //
+  // Belt and braces against the caller: loadVan() now only reaches this on a
+  // real refusal, and this refuses to strand a customer whose money we hold
+  // however it got here.
+  const { data: fresh } = await db
+    .from('orders')
+    .select('payment_status, paid_at, price_cents, amount_paid_cents')
+    .eq('id', order.id)
+    .maybeSingle();
+
+  if (fresh && (fresh.payment_status === 'PAID' || fresh.payment_status === 'WAIVED')) {
+    console.error(
+      `Refused to leave #${order.order_number} at the door: it is ${fresh.payment_status}.`
+    );
+
+    await events.record(order.id, {
+      kind: 'PAYMENT',
+      summary: 'A decline was refused because the order is already paid',
+      became: fresh.payment_status,
+      by,
+      reason:
+        'The doorstep decline path was reached on an order whose card had already paid. ' +
+        'Nothing was changed and the customer was not texted. This is a bug - report it.',
+    });
+
+    await issues
+      .raise({
+        customer,
+        order,
+        reason:
+          `#${order.order_number} reached the doorstep decline path while ${fresh.payment_status}. ` +
+          `The bags stayed in the van and nobody was texted. Report this.`,
+      })
+      .catch((err) => console.error(`Could not raise an issue for ${order.id}: ${err.message}`));
+
+    return { ok: true, alreadyPaid: true, priceCents };
+  }
 
   await events.record(order.id, {
     kind: 'PAYMENT',
@@ -1731,15 +1879,24 @@ async function declinedAtTheDoor(order, { by, customer, labels, weight, priceCen
       if (error) console.error(`Could not park ${order.id} after the door: ${error.message}`);
     });
 
-  // The bags are staying, so nothing may still be attached to them. A clip left
-  // out of the pool is one the next driver cannot use, and a live sticker on a
-  // bag on a doorstep resolves to an order nobody is collecting.
+  // THE CLIPS COME OFF. They are physical stock that lives in the van, and one
+  // left out of the pool is one the next driver cannot use.
   await bags
     .unclipOrder(order.id)
     .catch((err) => console.error(`Could not return the clips on ${order.id}: ${err.message}`));
-  await bags
-    .releaseOrder(order.id)
-    .catch((err) => console.error(`Could not release the tags on ${order.id}: ${err.message}`));
+
+  // AND THE TAGS STAY ON, WHICH REVERSES WHAT THIS DID UNTIL NOW.
+  //
+  // It used to call bags.releaseOrder() - the same function DELIVERY calls to
+  // retire a label. That is what stops /o/<code> resolving, so three stickers
+  // stuck to three bags on somebody's doorstep read as dead, and on /ops/labels
+  // they counted as EXPIRED, which is the word for a finished delivery.
+  //
+  // Neil's rule: dead is only for a finished delivery. Nothing was delivered
+  // here and nothing was even collected - the bags are on the step with our
+  // stickers on them, and the same van comes back for the same order tomorrow.
+  // The honest state is a live tag pointing at a pickup that has not happened
+  // yet, which is exactly what the order now says.
 
   await orders.uncollect(order, {
     by,
@@ -1884,6 +2041,9 @@ module.exports = {
   updateWeightEstimate,
   collect,
   dropAtPartner,
+  // Pure, and exported so the rule can be tested without a van, a laundromat
+  // or a database.
+  readyForPartner,
   markReady,
   recordWeight,
   outForDelivery,

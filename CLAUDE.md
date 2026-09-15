@@ -3208,11 +3208,110 @@ un-redeeming a promotion, which is the one operation here with no honest
 reverse.
 
 **IF IT IS REFUSED, THE BAGS STAY AND THE PICKUP GOES BACK TO TOMORROW.** The
-tags come off, the clips return to the pool, and `orders.uncollect()` puts the
-order back to awaiting collection. The customer is texted the weight, the total,
-that nothing was taken, that the bags are where they left them, and that we can
-come back the same time tomorrow. An issue is raised and the office is paged.
-The driver's screen turns red and names the clips to take off.
+clips return to the pool, **the tags stay on the bags**, and `orders.uncollect()`
+puts the order back to awaiting collection. The customer is texted the weight,
+the total, that nothing was taken, that the bags are where they left them, and
+that we can come back the same time tomorrow. An issue is raised and the office
+is paged. The driver's screen turns red and names the clips to take off.
+
+**THE TAGS USED TO COME OFF TOO, AND THAT WAS WRONG.** See "A SUCCESSFUL DOOR
+CHARGE IS NOT A DECLINE" below: `bags.releaseOrder()` is the call DELIVERY
+makes, and making it here marked stickers on bags we had never collected as
+retired. Neil, 15 September: dead is only for a finished delivery. The stickers
+stay on the bags overnight and the same van comes back for the same order.
+
+### A SUCCESSFUL DOOR CHARGE IS NOT A DECLINE
+
+**ORDER #2068, 15 SEPTEMBER. The card paid in full at a door and the system
+left the bags there anyway** - or tried to. Elliot Stern's card took $25.00 off
+the booking hold and $13.00 on top of it, $38.00 after CLEAN50, and the order
+came out of `loadVan()` marked **card refused**, with its three tags retired.
+Twenty-five minutes later it was dropped at a laundromat it had never been
+driven to. Neil found it on the board.
+
+**TWO FAULTS, STACKED. Neither is the interesting part; the shape they share
+is.** Both are a failure that could only be read as a customer's card saying no.
+
+**ONE. `billing.js` HAD TWO THINGS CALLED `payments`.** The Stripe provider at
+the top of the file, and the ledger in a `require()` buried inside
+`markFailed()`. So every `payments.recordCard(...)` in that file was reaching
+for a function the **provider** does not have.
+
+**A MISSING METHOD THROWS SYNCHRONOUSLY, WHICH IS WHY THE `.catch()` DID NOT
+CATCH IT.** Every one of those calls was written `await payments.recordCard(...)
+.catch(...)` with a comment explaining that the money has already moved so
+losing the row is only a reporting problem. That reasoning was right and the
+code never ran it: the TypeError is raised *evaluating the call*, before the
+promise the catch is attached to exists. The throw went up through
+`settleFromHold()`, out of `chargeAtTheDoor()`, and into `loadVan()`'s own
+`.catch()`, which turned it into `{ ok: false }`.
+
+**`const ledger = require('./payments')` is the fix, and the name is the
+point.** The two modules do different jobs - one moves money at Stripe, one
+writes our rows - and they may never share a name again. A test pins that there
+is exactly one binding of each.
+
+**TWO. `orders.uncollect()` VIOLATED A CHECK CONSTRAINT EVERY SINGLE TIME.**
+`orders_weight_and_price_together` says `(weight_lb is null) = (price_cents is
+null)`. It nulled the weight and left the price. Every bag weighed at a door
+re-prices the order, so there is always a price by then - which means this threw
+on **every** doorstep decline there could ever be, not just this one.
+
+**AND IT IS CALLED NEAR THE END, so the throw took the rest with it.** The tags
+had already been retired and the clips returned; the status never moved, the
+customer was never texted and the office was never paged. The three things that
+matter to somebody standing at a door were the three that did not happen.
+
+**WHAT THE CUSTOMER SAW: nothing.** The decline text was never reached, so the
+one message Elliot got was the correct one naming $38.00 and his Visa. That is
+luck, not design - the text is written before the issue is raised and after the
+uncollect, and a slightly different ordering would have sent it.
+
+### What now refuses to happen
+
+**A THROWN ERROR IS NOT A REFUSAL.** `loadVan()` read `!charge.ok` and treated a
+decline, a sandbox with no Stripe key and any exception at all as the same
+event. The doorstep path is now reachable only on `charge.declined` or
+`charge.needsCard` - the card genuinely saying no, or there being nothing to
+charge. Anything else goes to `couldNotCharge()`, which **changes nothing the
+customer can see**: bags stay in the van, tags stay live, the pickup is not
+moved, nobody is texted, and a person is paged. The money may or may not have
+moved, and that is exactly why it does not guess.
+
+**A PAID ORDER CANNOT BE DECLINED.** `declinedAtTheDoor()` re-reads the order
+before it does anything and refuses to run if it is `PAID` or `WAIVED`, logging
+it and raising an issue instead. It reads back from the database rather than
+trusting the row loaded before the charge, **because the charge is the thing
+that would have changed it**. Belt and braces: the caller already refuses to get
+here, and this catches whatever the next variant of this bug looks like.
+
+**NOTHING REACHES A LAUNDROMAT THAT WAS NOT LOADED AND PAID FOR.**
+`fulfilment.readyForPartner()` refuses `AT_PARTNER` without `van_confirmed_at` -
+the column `loadVan()` writes only after the card clears - and refuses any order
+carrying `authorization_refused_at`. This file already said "only a stamped
+order reaches the drop-off leg", but that was true only because `dispatch.js`
+stopped offering the stop, and **a screen that hides a control while the route
+behind it still fires is not a guard**. #2068 went to Best Wash straight through
+that gap.
+
+**THE TAG PAGE ASKS THE ORDER, NOT THE FLAG.** `/o/<code>` used to refuse any
+label with `released_at` set. That is a column somebody *writes*, and the
+doorstep wrote it - so three stickers physically on three bags in our own van
+read as dead, and the driver could not scan his own load. Liveness is now
+derived from the order's status: `DELIVERED` or `CANCELED` retires a sticker and
+nothing else does. Neil's rule: **if the bag is on the van, the tag is live.**
+It also means a tag wrongly released by some future bug comes back on its own,
+rather than needing a row edited by hand.
+
+**THE REPAIR WAS DONE IN SQL, DELIBERATELY.** #2068 was put back by hand -
+status to `IN_PROCESS`, the partner leg undone, the false refusal cleared, the
+three tags relit, and the two ledger rows `settleFromHold()` threw before
+writing - as direct statements rather than through `fulfilment.js`, because
+every function that moves an order also texts the customer. Nothing was charged
+or refunded; the $38.00 was already at Stripe. `amount_paid_cents` was 0 with a
+$38.00 price, which is a $38.00 balance, which is `dispatch.paymentHold()` -
+so the missing ledger rows were about to hold his delivery and park his other
+pickups behind it.
 
 **This is NOT the delivery rule and must not be confused with it.** At delivery
 a declined card never holds anything up, because we are already holding their

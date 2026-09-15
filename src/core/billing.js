@@ -4,6 +4,22 @@ const crypto = require('crypto');
 
 const db = require('../db');
 const payments = require('../providers/payments');
+
+// THE LEDGER IS NOT THE PROVIDER, AND ONE NAME FOR BOTH COST US ORDER #2068.
+//
+// `payments` above is Stripe: it moves money and knows nothing about our rows.
+// This one writes the `payments` TABLE. Both were called `payments` here - the
+// provider at the top of the file, the ledger in a require() buried inside
+// markFailed() - so every `payments.recordCard(...)` in this file was reaching
+// for a function the Stripe provider does not have.
+//
+// That throws a TypeError SYNCHRONOUSLY, before the promise the `.catch()`
+// beside it is attached to ever exists, so the "best effort" catch on every one
+// of those calls never ran. The throw escaped chargeAtTheDoor() and loadVan()
+// read it as a refusal - on an order whose card had just paid in full. See
+// settleFromHold() and fulfilment.declinedAtTheDoor().
+const ledger = require('./payments');
+
 const { config } = require('../config');
 const { site } = require('../web/site');
 
@@ -613,7 +629,7 @@ async function chargeOrder(order, customer) {
     // AFTER the order is marked paid, and best effort: the money has already
     // moved, so failing to write this row is a reporting problem and undoing
     // the charge over it would be a real one.
-    await payments
+    await ledger
       .recordCard(order, { amountCents: owed, paymentIntentId: result.paymentIntentId })
       .catch((err) => console.error(`Could not record the card payment: ${err.message}`));
 
@@ -706,7 +722,7 @@ async function markFailed(order, reason, paymentIntentId, declineCode = null) {
   // BEST EFFORT AND LAST. Recording the failure is the thing that must not fail;
   // paging about it is not allowed to throw away the record.
   const orders = require('./orders');
-const payments = require('./payments');
+
   if (orders.IN_OUR_HANDS.includes(order.status)) {
     const issues = require('./issues');
     const customer = order.customers || (order.customer_id ? { id: order.customer_id } : null);
@@ -1128,7 +1144,7 @@ async function chargeAtTheDoor(order, customer, { totalCents }) {
   // exposure recordCard() already carries, and for the same reason: the money
   // has moved and losing the row is a reporting problem.
   if (kept > 0) {
-    await payments
+    await ledger
       .recordShowUp(order, {
         amountCents: kept,
         paymentIntentId: took.paymentIntentId,
@@ -1189,7 +1205,7 @@ async function settleFromHold(
   const priced = { ...order, price_cents: total };
 
   if (capturedCents > 0) {
-    await payments
+    await ledger
       .recordCard(priced, {
         amountCents: capturedCents,
         paymentIntentId,
@@ -1199,7 +1215,7 @@ async function settleFromHold(
   }
 
   if (remainderCents > 0) {
-    await payments
+    await ledger
       .recordCard(priced, {
         amountCents: remainderCents,
         paymentIntentId: remainderIntentId,

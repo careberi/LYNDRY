@@ -1192,13 +1192,27 @@ router.get('/o/:code', async (req, res, next) => {
       return res.status(404).type('html').send(nothingHere(req));
     }
 
-    // released_at is what retires a sticker. order_id stays set after delivery
-    // so the ops screens can still show which codes were on the bag, so it is
-    // no longer enough on its own to tell a live label from a finished one.
-    if (!label.order_id || label.released_at) {
+    // A label with no order on it is blank stock, and blank stock is not a page.
+    if (!label.order_id) {
       await bags.recordScan({ code, outcome: 'UNBOUND', ip, userAgent });
       return res.status(404).type('html').send(nothingHere(req));
     }
+
+    // THE ORDER DECIDES WHETHER THIS TAG IS LIVE, NOT `released_at`.
+    //
+    // Neil's rule, 15 September: if the bag is on the van, the tag is live.
+    //
+    // `released_at` used to be checked here and it is the wrong question,
+    // because it is a flag somebody WRITES rather than a fact about the bag.
+    // The doorstep decline wrote it - the same call delivery makes - so three
+    // stickers on three bags that were still in our van read as dead to the
+    // laundromat holding them, and the driver could not scan his own load.
+    //
+    // What actually retires a sticker is the order being finished, and that is
+    // asked below, off the order's own status. Anything still in our hands
+    // resolves, however its label got flagged. That also means a tag wrongly
+    // released by some future bug comes back on its own the moment the order
+    // says the bag is ours, rather than needing a row edited by hand.
 
     // Only the columns this page is allowed to show. Selecting the whole row
     // and then being careful in the template is how a phone number ends up on
@@ -1219,11 +1233,10 @@ router.get('/o/:code', async (req, res, next) => {
     }
 
 
-    // BELT AND BRACES. Delivering an order releases its labels, so a finished
-    // bag's sticker should already point at nothing - but that is a write that
-    // can fail, and an order delivered before this check existed never had it
-    // run at all. A sticker on a bag that is back with its owner must not open
-    // a page about it, and this is the half that cannot silently not happen.
+    // AND THIS IS NOW THE WHOLE TEST. A sticker on a bag that is back with its
+    // owner, or on an order nobody is collecting, must not open a page about
+    // it. Derived from the order rather than from a column somebody remembered
+    // to write, which is the rule the rest of this system already follows.
     if (['DELIVERED', 'CANCELED'].includes(order.status)) {
       await bags.recordScan({ code, orderId: order.id, outcome: 'UNBOUND', ip, userAgent });
       return res.status(404).type('html').send(nothingHere(req));
