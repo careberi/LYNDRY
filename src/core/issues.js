@@ -434,29 +434,52 @@ async function holdFor(customerId) {
   return (data || [])[0] || null;
 }
 
-// HAS A PERSON ACTUALLY REPLIED SINCE THE HOLD WENT ON?
+// MAY THE AI SAY ANYTHING ON THIS THREAD?
 //
-// Both halves matter and this only answers the first. A draft nobody sent is
-// not a reply, so we look for a real outbound row; and the caller only asks
-// this while handling an INBOUND message, which is the second half - the
-// customer has answered. Together that is a conversation that has resumed.
+// One owner for the whole question, because it used to be three calls inlined
+// in the webhook and the middle one was wrong. Extracted 16 September so it can
+// be replayed against a real conversation in a test rather than only reasoned
+// about.
 //
-// Any outbound counts, not just one typed on the ops screen. If some other
-// part of the system has spoken to them since - a delivery text, a booking
-// confirmation - the silence is over either way, and leaving the AI muted
-// after that would strand somebody mid-thread.
-async function personHasReplied(customerId, since) {
-  const { data, error } = await db
-    .from('messages')
-    .select('id')
-    .eq('customer_id', customerId)
-    .eq('direction', 'OUTBOUND')
-    .gt('created_at', since)
-    .limit(1);
+// It answers with BOTH halves of the rule:
+//
+//   quiet: true    a person has taken this over and has not written yet. Say
+//                  nothing at all - not a holding line, not an apology
+//   quiet: false   either there is no hold, or a person has written since it
+//                  went on. The caller lifts it when the customer comes back
+//
+// FAILS QUIET. If the lookup itself breaks we stay silent, because talking over
+// a person handling a complaint is worse than a late reply - and a failure here
+// means the database is down, in which case the reply was going nowhere anyway.
+// This is the same direction aiPause.isPaused() fails in, for the same reason.
+async function aiMustStayQuiet(customerId) {
+  try {
+    const hold = await holdFor(customerId);
+    if (!hold) return { quiet: false, hold: null };
 
-  if (error) throw error;
-  return (data || []).length > 0;
+    const written = await personHasWritten(customerId, hold.created_at);
+    return { quiet: !written, hold };
+  } catch (err) {
+    console.error(`Could not read the AI hold for ${customerId}: ${err.message}`);
+    return { quiet: true, hold: null, unknown: true };
+  }
 }
+
+// personHasReplied() WAS HERE AND IS GONE. DO NOT PUT IT BACK.
+//
+// It asked whether ANY outbound had gone since the hold, and its comment
+// argued the case: "If some other part of the system has spoken to them since
+// - a delivery text, a booking confirmation - the silence is over either way."
+//
+// That reasoning misses the message that is always first. The very next
+// outbound after a handoff is the AI's own "a manager will come back to you
+// shortly", so the hold released itself on the customer's next inbound, every
+// single time, and the AI carried on talking over the person it had just
+// promised them. Manpreet Singh got twenty more AI messages that way.
+//
+// personHasWritten() above is the question that was always meant: an outbound
+// with sent_by on it, typed by somebody. Use that one. A test refuses this name
+// coming back.
 
 module.exports = {
   raise,
@@ -469,8 +492,8 @@ module.exports = {
   alertRecipients,
   listForDay,
   holdFor,
-  personHasReplied,
   personHasWritten,
+  aiMustStayQuiet,
   repageStale,
   REPAGE_AFTER_MINUTES,
 };

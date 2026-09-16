@@ -249,6 +249,37 @@ function welcomeMessage({
 ${cannot}${good} Happy to answer anything about how it all works in the meantime.`;
 }
 
+// HOW RECENTLY COUNTS AS "STILL TALKING". Long enough to cover a thread that
+// is paused while somebody finds their wallet or answers the door, short enough
+// that a genuine returning customer still gets greeted.
+const THREAD_LIVE_MINUTES = 60;
+
+// Is there a conversation going on that a greeting would land in the middle of?
+//
+// Three ways to be busy, and all three mean say nothing:
+//   a person has taken it over   an open ai_hold issue
+//   the AI is switched off       somebody is handling this thread by hand
+//   anybody spoke recently       they are mid-thread, not returning
+async function threadIsLive(customer) {
+  const issues = require('./issues');
+  const aiPause = require('./ai-pause');
+
+  if (await issues.holdFor(customer.id)) return true;
+  if (await aiPause.isPaused(customer.phone)) return true;
+
+  const since = new Date(Date.now() - THREAD_LIVE_MINUTES * 60_000).toISOString();
+
+  const { data, error } = await db
+    .from('messages')
+    .select('id')
+    .eq('customer_id', customer.id)
+    .gt('created_at', since)
+    .limit(1);
+
+  if (error) throw error;
+  return (data || []).length > 0;
+}
+
 // Somebody we already know, who typed their number in again.
 function welcomeBackMessage(customer, { open = true, opensOn = null } = {}) {
   if (!open) return `Welcome back. We're not booking pickups yet, but we'll text you the moment we are.`;
@@ -402,7 +433,31 @@ async function startConversation({
       // told about one - the same rule as the closed sign directly above.
       const opensOn = booking.alwaysAllowed(existing) ? null : await settings.opensOn();
 
-      await sendAndLog(phone, welcomeBackMessage(existing, { open, opensOn }), existing.id);
+      // NOT INTO A CONVERSATION THAT IS ALREADY HAPPENING.
+      //
+      // Manpreet Singh got "Welcome back. Say when you'd like a pickup and
+      // I'll book it." at 10:09, three minutes after telling us not to come and
+      // ten minutes after being handed to a manager. Nothing he texted caused
+      // it - he had typed his number into the website a second time, which
+      // lands here with sendWelcome on.
+      //
+      // "Welcome back" is a greeting for somebody we have not heard from. Sent
+      // to somebody mid-thread it is the system talking over itself, and sent
+      // into a handoff it is the machine talking over the person who is
+      // supposed to be taking it from here.
+      //
+      // IT FAILS SILENT, NOT OPEN. If the check itself breaks we say nothing,
+      // because the cost of a missed greeting is nil and the cost of this
+      // landing on a held thread is what it did to Manpreet.
+      const busy = await threadIsLive(existing).catch(() => true);
+
+      if (busy) {
+        console.warn(
+          `WELCOME ${phone}: already mid-conversation or handed over. Saying nothing.`
+        );
+      } else {
+        await sendAndLog(phone, welcomeBackMessage(existing, { open, opensOn }), existing.id);
+      }
     }
     return { ok: true, customer: existing, created: false };
   }
@@ -491,6 +546,8 @@ module.exports = {
   startConversation,
   welcomeMessage,
   welcomeBackMessage,
+  threadIsLive,
+  THREAD_LIVE_MINUTES,
   introduction,
   CONSENT_SOURCES,
   expiryNote,

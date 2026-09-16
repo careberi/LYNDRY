@@ -140,6 +140,37 @@ async function hasOptedOut(phone) {
   return Boolean(data && data.status === 'UNSUBSCRIBED');
 }
 
+// How close together counts as the same send. Both real duplicates on
+// Manpreet's thread were inside twenty seconds; thirty covers a slower pair
+// without ever swallowing a genuine repeat, which in a real conversation is
+// minutes apart at the least.
+const DUPLICATE_SECONDS = 30;
+
+// Did we just say exactly this to exactly this number?
+//
+// Keyed on the PHONE rather than the customer, like everything else in here -
+// a message can go to a number with no customer row behind it.
+async function alreadySaid(to, text) {
+  try {
+    const since = new Date(Date.now() - DUPLICATE_SECONDS * 1000).toISOString();
+
+    const { data, error } = await db
+      .from('messages')
+      .select('id')
+      .eq('phone', to)
+      .eq('direction', 'OUTBOUND')
+      .eq('body', text)
+      .gt('created_at', since)
+      .limit(1);
+
+    if (error) throw error;
+    return (data || []).length > 0;
+  } catch (err) {
+    console.error(`Could not check for a duplicate text to ${to}: ${err.message}`);
+    return false;
+  }
+}
+
 async function sendAndLog(to, body, customerId, { sentBy = null, kind = null, compliance = false } = {}) {
   let providerMessageId = null;
 
@@ -179,6 +210,39 @@ async function sendAndLog(to, body, customerId, { sentBy = null, kind = null, co
   // logging both use the cleaned text so the record matches the message.
   const text = toPlainText(body);
   warnIfExpensive(text);
+
+  // ---------------------------------------------------------------------
+  // THE SAME TEXT TWICE IN THIRTY SECONDS IS ONE TEXT.
+  //
+  // Neil's rule, 16 September, off Manpreet Singh's thread. He got the
+  // one-time-vs-subscription question at 09:57:12 and again at 09:57:27, and
+  // word-for-word identical "Our 12 to 2pm run is already out..." at 12:15:42
+  // and 12:16:00. Two replies to one burst of messages, fifteen seconds apart,
+  // saying the same thing.
+  //
+  // Every one of those is a billed segment and, worse, it reads as a machine
+  // stuck in a loop at the exact moment the customer is already confused.
+  //
+  // COMPARED AFTER toPlainText(), so two spellings that reach the phone
+  // identically are caught, and EXACTLY - "the earliest we can get to you is
+  // between 10 and 12" and "...between 12 and 2" are different answers and both
+  // must go.
+  //
+  // IT IS HERE BECAUSE EVERY TEXT PASSES THROUGH HERE. The same reasoning as
+  // the opted-out gate above: one place, rather than remembered in twenty.
+  //
+  // IT FAILS OPEN. If the lookup breaks we send, because a duplicate is a
+  // blemish and a missing message can strand somebody mid-booking.
+  //
+  // NOTHING IS WRITTEN TO `messages` when a send is refused, exactly as above:
+  // that table is what reached a phone.
+  if (await alreadySaid(to, text)) {
+    console.warn(
+      `REFUSED to text ${to}: identical message inside ${DUPLICATE_SECONDS}s. ` +
+        `Was: ${text.slice(0, 120)}`
+    );
+    return { sent: false, refused: 'duplicate' };
+  }
 
   // FICTIONAL NUMBERS NEVER REACH THE CARRIER. Logged, so the conversation
   // looks right on the screen, but not sent.

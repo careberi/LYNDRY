@@ -999,11 +999,28 @@ async function handoffToHuman(customer, input, helpers = {}) {
     }
   }
 
+  // THE AI GOES QUIET, AND UNTIL 16 SEPTEMBER IT DID NOT.
+  //
+  // This raised the issue without aiHold, which defaults to false - so
+  // holdFor() found nothing, the gate in sms.js never engaged, and the AI
+  // carried straight on talking after telling the customer a manager would
+  // take over.
+  //
+  // Manpreet Singh is what that looks like. Handoff at 09:59:10, "they'll come
+  // back to you shortly" at 09:59:11, and then twenty more AI messages: an
+  // apology for not understanding, the wash question, "when would you like it
+  // picked up?" three times, and a follow-up nudge two hours later. A person
+  // rang him at 10:03 and got no answer, which is exactly the conversation the
+  // machine was talking over.
+  //
+  // Handing over is the one moment the AI is certain it has run out of road.
+  // Saying so and then carrying on is worse than either.
   const { issue, isNew } = await issues.raise({
     customer,
     order,
     reason,
     customerSaid: helpers.customerSaid,
+    aiHold: true,
   });
 
   console.log(
