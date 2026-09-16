@@ -239,8 +239,44 @@ function collectable(order) {
 //
 // `blocked` is the Set from heldCustomerIds(), passed in rather than looked up,
 // because a board of thirty stops must not be thirty round trips.
+// NO WAY TO CHARGE, NO PICKUP - IN PRODUCTION ONLY.
+//
+// Neil, 16 September: if Stripe is missing in production, refuse the pickup.
+// Do not take bags and hope.
+//
+// needsCardOnFile() answers FALSE when payments are switched off, which is
+// deliberate and stays: a laptop with no Stripe key must not empty the round,
+// and that is the whole reason the gate fails open. But "there is no key" is a
+// different event on a live server from a sandbox. It means every pickup that
+// day would be collected, washed and delivered with nothing charged and no
+// record that anything was owed - and the failure is silent, because an order
+// with no card looks exactly like an order that does not need one.
+//
+// SO THE ENVIRONMENT DECIDES WHICH WAY IT FAILS. Outside production, open, as
+// before. In production, closed: the stops come off the round, the board draws
+// them in its red card, and collect() refuses at the button. A van that does
+// not go out is a bad day; a van that goes out and cannot bill anybody is a
+// bad day nobody finds out about until the invoices do not exist.
+//
+// IT IS NOT A CARD PROBLEM AND DOES NOT SAY IT IS. `no_card_on_file` sends
+// somebody to ask a customer for a card, which would not help: the customer
+// is fine and the server is not.
+function paymentsUnavailable() {
+  return config.env === 'production' && !billing.paymentsConfigured();
+}
+
 function collectRefusal(order, blocked = new Set()) {
   if (!order) return { reason: 'no_order', detail: 'There is no order to collect.' };
+
+  if (paymentsUnavailable()) {
+    return {
+      reason: 'payments_off',
+      detail:
+        `Card payments are not configured on this server, so nothing collected today could ` +
+        `be charged for. Every pickup is held until that is fixed - this is not a problem ` +
+        `with the customer's card.`,
+    };
+  }
 
   if (blocked.has(order.customer_id)) {
     return {

@@ -177,6 +177,20 @@ function needsCardOnFile(customer) {
   return !hasPaymentMethod(customer);
 }
 
+// CAN THIS SERVER TAKE MONEY AT ALL.
+//
+// A different question from needsCardOnFile(), and the distinction is the
+// whole of audit finding #7. That one asks about a CUSTOMER and answers false
+// with no Stripe key, deliberately, so a sandbox does not empty the round.
+// This asks about the SERVER, so a caller that cares about the difference can
+// see it rather than inferring it from a false.
+//
+// Nothing outside src/providers/payments knows what Stripe is, which is why
+// this lives here rather than callers reading the provider directly.
+function paymentsConfigured() {
+  return Boolean(payments.isConfigured);
+}
+
 // How the saved card is described in a text message. "Visa ending 4242".
 function describeCard(customer) {
   if (!hasPaymentMethod(customer)) return null;
@@ -1310,6 +1324,7 @@ module.exports = {
   chargeAtTheDoor,
   hasPaymentMethod,
   needsCardOnFile,
+  paymentsConfigured,
   describeCard,
   cardDestination,
   wantsPaymentLink,
