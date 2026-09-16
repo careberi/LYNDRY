@@ -2,12 +2,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('node:crypto');
 const express = require('express');
 
 const db = require('../db');
 const notify = require('../core/notify');
 const onboarding = require('../core/onboarding');
 const adAttribution = require('../core/ad-attribution');
+const adConversions = require('../core/ad-conversions');
+const signupCard = require('../core/signup-card');
+const billing = require('../core/billing');
 const wash = require('../core/wash');
 const booking = require('../core/booking');
 
@@ -396,11 +400,55 @@ async function render(req, res, page, extra = {}, status = 200, conversionId = n
 // ---------------------------------------------------------------------------
 
 // Values that only certain pages need.
+// The card step's markup. Written here rather than in the page file because it
+// is conditional - the file has one token where this goes, and the page is
+// exactly what it always was when the token is empty.
+//
+// IT IS THE SECOND THING ON THE PAGE, UNDER THE NUMBER WE TEXT FROM. The text
+// handoff is still the product; this is the step that decides whether they ever
+// order. Skipping it is a link rather than a hidden control, because a card
+// nobody has to add is the honest description of what this is.
+function signupCardBlock() {
+  return `
+    <div class="card card-xl" style="padding:26px;max-width:460px;margin:0 auto 34px;text-align:left;">
+      <p class="eyebrow" style="margin:0 0 10px;">One more thing</p>
+      <h2 style="font-family:var(--font-display);font-weight:800;font-size:23px;line-height:1.2;margin:0 0 10px;">
+        Add a card and you are ready to book
+      </h2>
+      <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 18px;">
+        Nothing is charged now, and nothing is charged when you book. We weigh
+        your laundry after we collect it, and that is the moment your card is
+        charged. You need one on file before your first pickup, so it is easiest
+        to do it here.
+      </p>
+      <form method="post" action="/start/card" style="margin:0;">
+        <button type="submit" class="btn btn-ink btn-lg btn-full">Add a card</button>
+      </form>
+      <p style="font-size:14px;line-height:1.5;color:var(--ink-700);margin:14px 0 0;">
+        Handled by Stripe. The card number never touches this website. You can
+        also do it later from the text we just sent.
+      </p>
+    </div>`;
+}
+
 async function extraTokensFor(page, req) {
   // The home page's hero form hands the number over here, so someone who
   // typed it there doesn't have to type it again. It is only ever prefilled —
   // consent still has to be given on this page, with the unticked box.
 
+
+  // THE CARD STEP ON THE SIGNUP THANK-YOU PAGE, and only for somebody who has
+  // genuinely just signed up. The marker is set by POST /start on a real new
+  // customer and nowhere else, so a refused number, a throttle, a bot and an
+  // existing customer all get this page with the block empty - identical to
+  // what they saw before any of this existed.
+  //
+  // WITH PAYMENTS OFF THERE IS NO BUTTON, because there is nothing behind it.
+  // A card step that leads to an error is worse than no card step.
+  if (page.path === '/start/sent') {
+    const offer = Boolean(signupCard.recall(req)) && billing.paymentsConfigured();
+    return { SIGNUP_CARD: offer ? signupCardBlock() : '' };
+  }
 
   // The partner form needs empty values for its fields on a fresh visit.
   if (page.path === '/partners') return partnerTokens();
@@ -431,7 +479,10 @@ async function extraTokensFor(page, req) {
     };
   }
 
-  return {};
+  // EVERY PAGE GETS AN EMPTY CARD BLOCK BY DEFAULT. An unreplaced token renders
+  // as the literal {{SIGNUP_CARD}} on the page, so the safe default is the
+  // empty string rather than relying on only one path ever reaching the file.
+  return { SIGNUP_CARD: '' };
 }
 
 for (const page of PAGES) {
@@ -984,7 +1035,88 @@ const CRAWLERS = [
   'Applebot-Extended',
 ];
 
-const CRAWLER_DISALLOW = ['/ops', '/account', '/bergen', '/health'];
+const CRAWLER_DISALLOW = ['/ops', '/account', '/bergen', '/health', '/ads'];
+
+// ---------------------------------------------------------------------------
+// THE OFFLINE CONVERSION FEED, FOR GOOGLE ADS TO FETCH ON A SCHEDULE.
+//
+// Neil, 11 and 16 September: Google should optimise for customers who pay, not
+// for people who fill in a form. src/core/ad-conversions.js works out what to
+// say; this is the door it is served through.
+//
+// WHY A PASSWORD ON A URL, which is the weakest thing in this codebase. Google
+// Ads' scheduled upload speaks HTTPS with Basic auth and nothing else - no
+// signed token, no key header, no OAuth. So the shape is forced, and everything
+// here is built around assuming the credential is the only protection:
+//
+//   nothing identifying     no name, no email, no address, no order number. A
+//                           click id, a hashed phone, a date and an amount
+//   blank means OFF         an unset password returns 404, never "no password
+//                           needed". A default would be a published default
+//   404, never 401          a wrong password gets the same answer as a path
+//                           that does not exist, so the file cannot be found
+//                           by probing. It is the pitch-link rule: only
+//                           somebody who already holds the credential learns
+//                           that there is anything here
+//   constant time           the same comparison the admin key gets
+//   never indexed           noindex, no-store, and /ads is disallowed in robots
+//
+// A GET THAT WRITES NOTHING. It is a report. Google fetching it twice, or
+// fetching it a hundred times, changes nothing here and nothing at Google -
+// see the idempotence note in ad-conversions.js.
+// ---------------------------------------------------------------------------
+function credentialsMatch(header) {
+  const expected = config.googleAds.uploadPassword;
+  if (!expected) return false;
+
+  const raw = String(header || '');
+  if (!/^Basic /i.test(raw)) return false;
+
+  let decoded = '';
+  try {
+    decoded = Buffer.from(raw.slice(6).trim(), 'base64').toString('utf8');
+  } catch (err) {
+    return false;
+  }
+
+  // The password may itself contain a colon; the user name may not.
+  const split = decoded.indexOf(':');
+  if (split < 0) return false;
+
+  const user = decoded.slice(0, split);
+  const password = decoded.slice(split + 1);
+
+  // CONSTANT TIME, and length-safe: timingSafeEqual throws on a length
+  // mismatch, which would itself leak the length.
+  const same = (a, b) => {
+    const left = Buffer.from(String(a), 'utf8');
+    const right = Buffer.from(String(b), 'utf8');
+    if (left.length !== right.length) return false;
+    return crypto.timingSafeEqual(left, right);
+  };
+
+  return same(user, config.googleAds.uploadUser) && same(password, expected);
+}
+
+router.get('/ads/conversions.csv', async (req, res, next) => {
+  try {
+    if (!credentialsMatch(req.get('authorization'))) {
+      // Deliberately not a 401 with a WWW-Authenticate challenge: that would
+      // announce the file exists. Google's scheduled upload is configured with
+      // the credential up front and never needs to be challenged for one.
+      return res.status(404).type('text/plain').send('Not found');
+    }
+
+    const csv = await adConversions.feed();
+
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Disposition', 'attachment; filename="lyndry-conversions.csv"');
+    return res.type('text/csv; charset=utf-8').send(csv);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/robots.txt', (req, res) => {
   const groups = CRAWLERS.map((agent) =>
@@ -1149,9 +1281,69 @@ router.post('/start', async (req, res, next) => {
     if (result.ok && result.created) {
       adAttribution.markLead(res, result.customer.id, '/start/sent');
       await adAttribution.recordAdClick(req, result.customer.id);
+
+      // AND THE CARD STEP IS OFFERED ON THE NEXT PAGE. Six of six customers
+      // with a card on file have ordered; none of the forty five without one
+      // ever has. Same condition as the lead marker, and for the same reason:
+      // a refusal, a throttle and an existing customer all get the identical
+      // page with no marker, so the button cannot be used to find out which.
+      signupCard.remember(res, result.customer.id);
     }
 
     return done();
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// THE CARD STEP, STRAIGHT AFTER SIGNING UP.
+//
+// Neil, 16 September: card on file is the whole funnel. This is the button on
+// /start/sent, and all it does is take somebody to Stripe's own page.
+//
+// A POST, NOT A LINK, and not a session minted while the page renders. A Stripe
+// setup session created on every page load is litter that expires in a day -
+// the rule the nudge panel already follows - and it would be created for
+// anybody who merely opened the page. Here the session exists only because
+// somebody pressed the button.
+//
+// IT ENROLS NOBODY IN ANYTHING. createSetupLink() takes a customer and saves a
+// payment method. No plan, no recurring schedule, no order and no booking
+// appear anywhere in this path - which is Neil's "do not enrol them on a plan
+// by accident", satisfied by there being no code here that could. A test
+// refuses the words rather than trusting the reading.
+//
+// NOTHING IS CHARGED. Saving a card takes no money, and the page says so before
+// the button rather than after it.
+// ---------------------------------------------------------------------------
+router.post('/start/card', async (req, res, next) => {
+  try {
+    const id = signupCard.recall(req);
+    if (!id) return res.redirect(303, '/start/sent');
+
+    const { data: customer, error } = await db
+      .from('customers')
+      .select('id, phone, name, stripe_customer_id, payment_method_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    // The marker outlived the customer, or somebody has already done this.
+    // Either way there is nothing to do and nothing to say about it.
+    if (!customer || customer.payment_method_id) {
+      signupCard.forget(res);
+      return res.redirect(303, '/start/sent');
+    }
+
+    const link = await billing.createSetupLink(customer);
+    if (!link || !link.url) return res.redirect(303, '/start/sent');
+
+    // One use. Coming back to the page afterwards should not re-offer a step
+    // they have just done, and Stripe's own return page is where they land.
+    signupCard.forget(res);
+    return res.redirect(303, link.url);
   } catch (err) {
     return next(err);
   }

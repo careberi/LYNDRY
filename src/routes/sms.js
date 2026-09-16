@@ -11,6 +11,7 @@ const brain = require('../core/brain');
 const actions = require('../core/actions');
 const onboarding = require('../core/onboarding');
 const promocodes = require('../core/promocodes');
+const adConversions = require('../core/ad-conversions');
 const orders = require('../core/orders');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
@@ -296,6 +297,21 @@ async function handleInbound(inbound) {
           ? `Hey, thanks for scanning.`
           : `Hey, thanks for texting in.`
         : null,
+      // A TAP ON A GOOGLE AD'S MESSAGE BUTTON, WHICH LEAVES NO OTHER TRACE.
+      //
+      // That button opens the phone's SMS app with our number and a starter
+      // text already typed, so the person never loads lyndry.com: no landing
+      // URL, no gclid, no cookie, nothing for migration 0085 to capture. The
+      // typed sentence is the only evidence the click happened, and Google
+      // types it, so an exact match is that button and almost nothing else.
+      //
+      // ONLY ON A BRAND NEW NUMBER, because this is first touch and
+      // startConversation() is only reached for one. Somebody who has texted us
+      // before and happens to send the same words is not a new ad click.
+      //
+      // REPORTING ONLY. Nothing branches on it - not the reply, not the price,
+      // not the promotion. If it is wrong, a number in a report is wrong.
+      firstTouchSource: adConversions.isAdStarterText(text) ? adConversions.GOOGLE_AD_TEXT : null,
     });
 
     if (!started.ok) {
