@@ -168,9 +168,21 @@ function money(cents) {
   return cents == null ? '—' : `$${(cents / 100).toFixed(2)}`;
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
+// WHAT DAY IT IS IN NEW JERSEY, WHICH IS NOT WHAT DAY IT IS ON THE SERVER.
+//
+// This was `new Date().toISOString().slice(0, 10)` - UTC - and CLAUDE.md names
+// that exact expression as the thing never to use for "when". Railway runs in
+// UTC, so from 8pm Eastern onwards it has already rolled over: the board
+// compared every pickup_date against TOMORROW, and a driver opening it at nine
+// in the evening saw tomorrow's collections listed as due now and today's
+// counted as behind.
+//
+// It is not a fourth copy of the rule either. booking.today() is the one owner
+// - the same function the round, the run sheet and every booking rule already
+// ask - so an ops screen and the route it draws cannot disagree about which
+// day it is. Two of the three callers here sat directly under comments
+// promising "New Jersey's day rather than the server's".
+const today = () => booking.today();
 
 // The design system carries a colour per lifecycle stage. Using those rather
 // than inventing new ones keeps the ops screens recognisably LYNDRY.
