@@ -46,7 +46,7 @@ const PAGES = [
     title: 'Home',
     fullTitle: 'Laundry Pickup & Delivery in Bergen County, NJ | LYNDRY',
     head: () => structured.tags([structured.localBusiness(), structured.service()]),
-    description: `Wash and fold pickup in ${site.serviceArea}. ${site.pricePerLb}/lb, $25 minimum, next-day return. Text to book, no app. Houses and apartments.`,
+    description: `Wash and fold pickup in ${site.serviceArea}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, $25 minimum, next-day return. Text to book, no app.`,
   },
   {
     path: '/how-it-works',
@@ -70,7 +70,7 @@ const PAGES = [
           ],
         ]),
       ]),
-    description: `Text LYNDRY, leave the bag, get it back the ${site.turnaround}. ${site.pricePerLb}/lb wash and fold. Nobody needs to be home.`,
+    description: `Text LYNDRY, leave the bag, get it back the ${site.turnaround}. ${site.subscriptionPricePerLb}/lb wash and fold on a subscription, ${site.pricePerLb}/lb one-time. Nobody needs to be home.`,
   },
   {
     path: '/pricing',
@@ -106,7 +106,7 @@ const PAGES = [
     // "charged once on delivery", which is the model that was replaced when the
     // charge point moved to the laundromat's scale - and the same brief says not
     // to change the charge rule. The rule wins over the sentence describing it.
-    description: `${site.pricePerLb} a pound, or ${site.subscriptionPricePerLb} on a subscription. $25 minimum. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
+    description: `${site.subscriptionPricePerLb} a pound on a subscription, or ${site.pricePerLb} a pound for a one-time pickup. $25 minimum. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
   },
   {
     path: '/faq',

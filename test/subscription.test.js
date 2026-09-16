@@ -396,6 +396,15 @@ test('NO PUBLIC PAGE QUOTES ONE RATE ON ITS OWN', () => {
     ['public', 'pages', 'faq.html'],
     ['public', 'pages', 'how-it-works.html'],
     ['public', 'pages', 'terms.html'],
+
+    // THE TWO THAT WERE MISSED, and they are the reason this list is worth
+    // extending rather than trimming. Both are public pages with a price on
+    // them that are deliberately NOT in PAGES, so a sweep that walks the
+    // website's own page list never reaches either: /bergen is the advert
+    // landing page, and /start/sent is the first thing somebody reads after
+    // handing over their number. Both still said $2.00 was the price.
+    ['public', 'pages', 'bergen.html'],
+    ['public', 'pages', 'start-sent.html'],
   ];
 
   for (const bits of pages) {
@@ -405,6 +414,38 @@ test('NO PUBLIC PAGE QUOTES ONE RATE ON ITS OWN', () => {
     // Every page that names one rate names the other.
     if (/PRICE_PER_LB/.test(body)) {
       assert.match(body, /SUBSCRIPTION_PRICE_PER_LB/, `${where} quotes only the one-time rate`);
+    }
+  }
+});
+
+test('AND NEITHER DOES A META DESCRIPTION', () => {
+  // These are the price lines nobody looks at, because they are not ON the
+  // page - they are what Google prints under the link and what an AI reads
+  // when it answers "how much is LYNDRY". Three of them still said $2.00 and
+  // nothing else: the home page, how it works, and every one of the 70 town
+  // pages.
+  //
+  // CHECKED PER SENTENCE, NOT PER FILE. Both files mention both rates
+  // somewhere, so a file-level test passes while one description quietly
+  // quotes a single rate - which is exactly how these survived the pass that
+  // fixed the visible copy.
+  for (const bits of [
+    ['src', 'routes', 'web.js'],
+    ['src', 'routes', 'locations.js'],
+  ]) {
+    const body = fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');
+    const where = bits.join('/');
+
+    const descriptions = [...body.matchAll(/description:\s*`([^`]*)`/g)].map((m) => m[1]);
+    assert.ok(descriptions.length, `${where}: no descriptions found - the shape has changed`);
+
+    for (const text of descriptions) {
+      if (!/site\.pricePerLb/.test(text)) continue;
+      assert.match(
+        text,
+        /site\.subscriptionPricePerLb/,
+        `${where} has a description quoting only the one-time rate: ${text.slice(0, 80)}`
+      );
     }
   }
 });
