@@ -2,12 +2,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('node:crypto');
 const express = require('express');
 
 const db = require('../db');
 const notify = require('../core/notify');
 const onboarding = require('../core/onboarding');
 const adAttribution = require('../core/ad-attribution');
+const adConversions = require('../core/ad-conversions');
 const wash = require('../core/wash');
 const booking = require('../core/booking');
 
@@ -984,7 +986,88 @@ const CRAWLERS = [
   'Applebot-Extended',
 ];
 
-const CRAWLER_DISALLOW = ['/ops', '/account', '/bergen', '/health'];
+const CRAWLER_DISALLOW = ['/ops', '/account', '/bergen', '/health', '/ads'];
+
+// ---------------------------------------------------------------------------
+// THE OFFLINE CONVERSION FEED, FOR GOOGLE ADS TO FETCH ON A SCHEDULE.
+//
+// Neil, 11 and 16 September: Google should optimise for customers who pay, not
+// for people who fill in a form. src/core/ad-conversions.js works out what to
+// say; this is the door it is served through.
+//
+// WHY A PASSWORD ON A URL, which is the weakest thing in this codebase. Google
+// Ads' scheduled upload speaks HTTPS with Basic auth and nothing else - no
+// signed token, no key header, no OAuth. So the shape is forced, and everything
+// here is built around assuming the credential is the only protection:
+//
+//   nothing identifying     no name, no email, no address, no order number. A
+//                           click id, a hashed phone, a date and an amount
+//   blank means OFF         an unset password returns 404, never "no password
+//                           needed". A default would be a published default
+//   404, never 401          a wrong password gets the same answer as a path
+//                           that does not exist, so the file cannot be found
+//                           by probing. It is the pitch-link rule: only
+//                           somebody who already holds the credential learns
+//                           that there is anything here
+//   constant time           the same comparison the admin key gets
+//   never indexed           noindex, no-store, and /ads is disallowed in robots
+//
+// A GET THAT WRITES NOTHING. It is a report. Google fetching it twice, or
+// fetching it a hundred times, changes nothing here and nothing at Google -
+// see the idempotence note in ad-conversions.js.
+// ---------------------------------------------------------------------------
+function credentialsMatch(header) {
+  const expected = config.googleAds.uploadPassword;
+  if (!expected) return false;
+
+  const raw = String(header || '');
+  if (!/^Basic /i.test(raw)) return false;
+
+  let decoded = '';
+  try {
+    decoded = Buffer.from(raw.slice(6).trim(), 'base64').toString('utf8');
+  } catch (err) {
+    return false;
+  }
+
+  // The password may itself contain a colon; the user name may not.
+  const split = decoded.indexOf(':');
+  if (split < 0) return false;
+
+  const user = decoded.slice(0, split);
+  const password = decoded.slice(split + 1);
+
+  // CONSTANT TIME, and length-safe: timingSafeEqual throws on a length
+  // mismatch, which would itself leak the length.
+  const same = (a, b) => {
+    const left = Buffer.from(String(a), 'utf8');
+    const right = Buffer.from(String(b), 'utf8');
+    if (left.length !== right.length) return false;
+    return crypto.timingSafeEqual(left, right);
+  };
+
+  return same(user, config.googleAds.uploadUser) && same(password, expected);
+}
+
+router.get('/ads/conversions.csv', async (req, res, next) => {
+  try {
+    if (!credentialsMatch(req.get('authorization'))) {
+      // Deliberately not a 401 with a WWW-Authenticate challenge: that would
+      // announce the file exists. Google's scheduled upload is configured with
+      // the credential up front and never needs to be challenged for one.
+      return res.status(404).type('text/plain').send('Not found');
+    }
+
+    const csv = await adConversions.feed();
+
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Disposition', 'attachment; filename="lyndry-conversions.csv"');
+    return res.type('text/csv; charset=utf-8').send(csv);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/robots.txt', (req, res) => {
   const groups = CRAWLERS.map((agent) =>

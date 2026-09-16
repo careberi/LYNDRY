@@ -294,6 +294,15 @@ async function startConversation({
   sendWelcome = true,
   claimed = null,
   opening = null,
+  // WHICH MARKETING BROUGHT THEM, when the caller can name it. Today that is
+  // only a tap on a Google search ad's message button, which types a fixed
+  // starter text and never loads the website - so those clicks carry no gclid
+  // and were invisible to the conversion feed. See migration 0098.
+  //
+  // IT IS NOT THE CONSENT SOURCE and must never be folded into it: that column
+  // is a legal record of HOW CONSENT WAS OBTAINED, and INBOUND_TEXT stays the
+  // honest answer for somebody who texted us, whatever made them do it.
+  firstTouchSource = null,
 }) {
   if (!phone) return { ok: false, reason: 'bad_phone' };
 
@@ -409,6 +418,9 @@ async function startConversation({
       sms_consent_at: new Date().toISOString(),
       sms_consent_ip: consentIp,
       sms_consent_source: consentSource,
+      // First touch, like the click ids: written once, here, and never
+      // overwritten. Null unless the caller could name the channel.
+      first_touch_source: firstTouchSource || null,
       status: 'ACTIVE',
     })
     .select('*')

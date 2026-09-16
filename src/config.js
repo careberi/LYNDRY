@@ -184,6 +184,17 @@ const config = Object.freeze({
     enabled:
       process.env.GOOGLE_ADS_ENABLED === 'true' ||
       (process.env.NODE_ENV === 'production' && process.env.GOOGLE_ADS_ENABLED !== 'false'),
+
+    // THE OFFLINE CONVERSION FEED. Google Ads fetches this on a schedule over
+    // HTTPS with Basic auth, which is the only kind of credential its scheduled
+    // upload understands - so it is a password on a URL rather than a signed
+    // token, and everything about the route is built around that being weak.
+    //
+    // BLANK SWITCHES THE ROUTE OFF ENTIRELY. A default password would be a
+    // published one, and this file is in the repo; an unset credential must
+    // never mean "no credential required".
+    uploadUser: process.env.ADS_UPLOAD_USER || 'google',
+    uploadPassword: process.env.ADS_UPLOAD_PASSWORD || '',
   }),
 
   stripe: Object.freeze({
