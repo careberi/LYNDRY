@@ -793,28 +793,6 @@ async function handOffBag(label) {
   return { ok: true, clip: label.clip_number == null ? null : Number(label.clip_number) };
 }
 
-// CARD 3: THE CLIPS ARE BACK IN THE VAN, so they can be used again.
-//
-// This is the one that closes the loop on a piece of physical stock. Until it
-// runs, assignClip() still counts these numbers as out - which is right, because
-// a clip nobody has confirmed is a clip that might be on a laundromat floor.
-async function returnClips(orderIds) {
-  const ids = (orderIds || []).filter(Boolean);
-  if (!ids.length) return { ok: true, clips: [] };
-
-  const { data, error } = await db
-    .from('bag_labels')
-    .update({ clip_returned_at: new Date().toISOString() })
-    .in('order_id', ids)
-    .not('clip_number', 'is', null)
-    .not('unclipped_at', 'is', null)
-    .is('clip_returned_at', null)
-    .select('clip_number');
-
-  if (error) throw error;
-  return { ok: true, clips: (data || []).map((l) => Number(l.clip_number)).sort((a, b) => a - b) };
-}
-
 // THE DRIVER SAYS THE CLIP IS ON. One bag, one confirmation - the step Neil
 // asked for and the one that was missing.
 async function confirmClip(label) {
@@ -865,7 +843,6 @@ module.exports = {
   confirmClip,
   unloadBags,
   handOffBag,
-  returnClips,
   loadBag,
   assignClip,
   unclipOrder,

@@ -5734,61 +5734,6 @@ router.post('/ops/run/bag/:id/weight', guard, may('orders.drive'), async (req, r
   }
 });
 
-// The clip goes on.
-router.post('/ops/run/bag/:id/clip', guard, may('orders.drive'), async (req, res, next) => {
-  try {
-    const found = await returnBagFor(req);
-    if (!found) return res.redirect(303, '/ops/run');
-
-    const on = await bags.confirmClip(found.label);
-    if (!on.ok) {
-      return res.redirect(
-        303,
-        `/ops/run/bag/${found.label.id}?scanned=1&problem=${encodeURIComponent(on.detail)}`
-      );
-    }
-
-    await orderEvents.record(found.order.id, {
-      kind: 'LABEL',
-      summary: `Van clip ${found.label.clip_number} on ${found.label.code}-${found.label.sticker_seq}`,
-      by: { opsUser: req.opsUser },
-    });
-
-    return res.redirect(303, `/ops/run/bag/${found.label.id}?scanned=1`);
-  } catch (err) {
-    return next(err);
-  }
-});
-
-// And into the van, which sends him back to the list.
-router.post('/ops/run/bag/:id/van', guard, may('orders.drive'), async (req, res, next) => {
-  try {
-    const found = await returnBagFor(req);
-    if (!found) return res.redirect(303, '/ops/run');
-
-    const aboard = await bags.loadBag({
-      ...found.label,
-      clipped_at: found.label.clipped_at || new Date().toISOString(),
-    });
-    if (!aboard.ok) {
-      return res.redirect(
-        303,
-        `/ops/run/bag/${found.label.id}?scanned=1&problem=${encodeURIComponent(aboard.detail)}`
-      );
-    }
-
-    await orderEvents.record(found.order.id, {
-      kind: 'LABEL',
-      summary: `${found.label.code}-${found.label.sticker_seq} in the van on clip ${found.label.clip_number}`,
-      by: { opsUser: req.opsUser },
-    });
-
-    return res.redirect(303, '/ops/run');
-  } catch (err) {
-    return next(err);
-  }
-});
-
 // EVERY BAG ABOARD, AND HE SAYS SO. The master button at the foot of the list,
 // the same rule as the collecting: the bags say which, the button says he is
 // finished here. This is what tells the customer it is on the way.
@@ -5956,29 +5901,6 @@ function droppedOrderIds(req) {
     .filter((id) => UUID.test(id));
 }
 
-// Card 1: the bags are out of the van.
-router.post('/ops/run/unloaded', guard, may('orders.drive'), async (req, res, next) => {
-  try {
-    const ids = droppedOrderIds(req);
-    if (!ids.length) return res.redirect(303, '/ops/run');
-
-    const result = await bags.unloadBags(ids);
-    const note = `${result.bags} bag${result.bags === 1 ? '' : 's'} out of the van`;
-
-    for (const id of ids) {
-      await orderEvents.record(id, {
-        kind: 'STATUS',
-        summary: 'Bags taken out of the van at the laundromat',
-        by: { opsUser: req.opsUser },
-      });
-    }
-
-    return res.redirect(303, `/ops/run?note=${encodeURIComponent(note)}`);
-  } catch (err) {
-    return next(err);
-  }
-});
-
 // Card 2: this bag is over the counter and its clip is off.
 router.post('/ops/run/handed-off', guard, may('orders.drive'), async (req, res, next) => {
   try {
@@ -6053,74 +5975,6 @@ router.post('/ops/run/handed-off', guard, may('orders.drive'), async (req, res, 
     }
 
     return res.redirect(303, `/ops/run?note=${encodeURIComponent(`${label.code} handed over`)}`);
-  } catch (err) {
-    return next(err);
-  }
-});
-
-// Card 3: every clip is back in the van, and THAT is what ends the stop.
-//
-// The status move waits for this on purpose. Until the clips are confirmed the
-// drop is still on the driver's route, which is the only thing that will make
-// him walk back for one he left on a counter.
-router.post('/ops/run/clips-back', guard, may('orders.drive'), async (req, res, next) => {
-  try {
-    const ids = droppedOrderIds(req);
-    if (!ids.length) return res.redirect(303, '/ops/run');
-
-    // THE LAUNDROMAT THE RUN SENT HIM TO, when the screen said which. Checked
-    // against the real list of active laundromats, because a form field is not
-    // proof of anything. Falls back to each order's plan only when the stop
-    // named none, which is what this did for every order until 11 September -
-    // and it recorded Fancy K for bags the route had sent to Best Wash.
-    const postedPartner = UUID.test(String((req.body || {}).partner_id || ''))
-      ? String(req.body.partner_id)
-      : null;
-    const { data: sentTo } = postedPartner
-      ? await db
-          .from('partners')
-          .select('id')
-          .eq('id', postedPartner)
-          .eq('type', 'LAUNDROMAT')
-          .eq('status', 'ACTIVE')
-          .maybeSingle()
-      : { data: null };
-
-    const returned = await bags.returnClips(ids);
-
-    const failures = [];
-    for (const id of ids) {
-      const order = await loadOrderForAction(id);
-      if (!order) continue;
-
-      await orderEvents.record(order.id, {
-        kind: 'STATUS',
-        summary: returned.clips.length
-          ? `Van clip${returned.clips.length === 1 ? '' : 's'} ${returned.clips.join(', ')} back in the van`
-          : 'Van clips back in the van',
-        by: { opsUser: req.opsUser },
-      });
-
-      const result = await fulfilment.dropAtPartner(order, {
-        partnerId: (sentTo && sentTo.id) || order.intended_partner_id || null,
-        by: { opsUser: req.opsUser },
-      });
-
-      if (!result.ok) failures.push(`#${order.order_number}: ${result.detail}`);
-    }
-
-    if (failures.length) {
-      return res.redirect(303, `/ops/run?problem=${encodeURIComponent(failures.join(' '))}`);
-    }
-
-    return res.redirect(
-      303,
-      `/ops/run?note=${encodeURIComponent(
-        returned.clips.length
-          ? `Clips ${returned.clips.join(', ')} are free again`
-          : 'Dropped off'
-      )}`
-    );
   } catch (err) {
     return next(err);
   }
