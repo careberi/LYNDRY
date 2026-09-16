@@ -708,10 +708,38 @@ async function assignClip(label, driverId) {
 // numbers free again. Never clears clip_number itself: the order page can then
 // still say which clip a bag travelled under, the same way a released sticker
 // keeps its order.
+//
+// IT STAMPS clip_returned_at TOO, AND UNTIL 16 SEPTEMBER IT DID NOT. That was a
+// silent leak of physical stock: clipsInUse() - the function that hands numbers
+// out - keys on clip_returned_at and NOT on unclipped_at, deliberately, because
+// a clip taken off at a laundromat counter is in the driver's pocket rather
+// than back in the van. So every order that finished through here kept its
+// numbers out of the pool FOR EVER.
+//
+// By the time the start-of-shift inventory screen surfaced it, fifteen of fifty
+// clips were gone - 1 to 14 and 16, every one of them on a DELIVERED order -
+// and the van was down to thirty five and falling by one per bag delivered.
+//
+// WHY BOTH COLUMNS BELONG HERE rather than in the delivery step alone: all four
+// callers mean the same physical thing, that the clip is off the bag and back
+// in the driver's hands. dropAtPartner() hands the bag across a counter,
+// deliver() takes it off at a doorstep, declinedAtTheDoor() says so in as many
+// words ("one left out of the pool is one the next driver cannot use"), and the
+// order page's button is captioned "off at the door, back in the van". Every
+// one of them already believed the number was free; the column was simply never
+// written. Fixing only the delivery leg would have left the same leak reachable
+// from the other three.
+//
+// The gap between the two columns was only ever load-bearing for the old
+// three-card plant drop, where a separate "clips back in the van" tap confirmed
+// it - and that card and its route are gone. handOffBag() is the other half of
+// this and already stamps all three together.
 async function unclipOrder(orderId) {
+  const now = new Date().toISOString();
+
   const { data, error } = await db
     .from('bag_labels')
-    .update({ unclipped_at: new Date().toISOString() })
+    .update({ unclipped_at: now, clip_returned_at: now })
     .eq('order_id', orderId)
     .is('unclipped_at', null)
     .not('clip_number', 'is', null)
