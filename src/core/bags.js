@@ -455,14 +455,64 @@ async function renumber(orderId) {
 // Which is what it physically is - it goes back to the customer stuck to their
 // bag. `release()` above is the other thing, an error correction, and that one
 // genuinely does hand the sticker back to the blank pile.
+// RETIRING A TAG IS SOMETHING ONLY A REAL DELIVERY MAY DO, AND THIS IS THE
+// GUARD RATHER THAN A CONVENTION.
+//
+// Neil, 15 September, on order #2067: a tag on a bag sitting at a laundromat
+// read "dead - the order was delivered". It had not been delivered. The door
+// charge succeeded, the decline path ran anyway, and that path called this
+// function - so a flag meaning "the customer has their laundry back" was set on
+// an order we were still holding.
+//
+// The caller that did it is gone. This is the half that cannot be forgotten by
+// the NEXT caller: a comment saying "only call this from a delivery" is a rule
+// nobody reads at three in the morning, and there have now been two of them.
+//
+// OUT_FOR_DELIVERY COUNTS, and it has to. The driver strips the tags on the
+// doorstep as step two, before the photo that moves the order to DELIVERED - so
+// requiring DELIVERED outright would refuse the one legitimate caller that is
+// not the transition itself.
+//
+// Anything earlier is refused and says so loudly. IN_PROCESS is a doorstep
+// decline, AT_PARTNER is a bag on somebody's shelf, and neither is a delivery.
+const RELEASABLE_FROM = Object.freeze(['OUT_FOR_DELIVERY', 'DELIVERED']);
+
 async function releaseOrder(orderId) {
+  const { data: order, error: readError } = await db
+    .from('orders')
+    .select('status, order_number')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (readError) {
+    console.error(`Could not read order ${orderId} before releasing its tags: ${readError.message}`);
+    return { ok: false, reason: 'unreadable' };
+  }
+
+  // FAILS CLOSED. A tag left live on a delivered bag is a sticker that opens a
+  // page about laundry somebody already has; a tag wrongly retired is a
+  // laundromat unable to scan a bag it is holding. The second is the one that
+  // stops work, so an unanswerable question leaves the tag alone.
+  if (!order || !RELEASABLE_FROM.includes(order.status)) {
+    console.error(
+      `Refused to retire the tags on #${order ? order.order_number : orderId}: ` +
+        `it is ${order ? order.status : 'missing'}, not out for delivery. Tags are retired by a delivery only.`
+    );
+    return { ok: false, reason: 'not_a_delivery', status: order ? order.status : null };
+  }
+
   const { error } = await db
     .from('bag_labels')
     .update({ released_at: new Date().toISOString() })
     .eq('order_id', orderId)
     .is('released_at', null);
 
-  if (error) console.error(`Could not release bag labels for order ${orderId}: ${error.message}`);
+  if (error) {
+    console.error(`Could not release bag labels for order ${orderId}: ${error.message}`);
+    return { ok: false, reason: 'write_failed' };
+  }
+
+  return { ok: true };
 }
 
 // --- The record of who looked ----------------------------------------------
