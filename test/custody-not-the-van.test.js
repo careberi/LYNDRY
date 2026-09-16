@@ -301,3 +301,99 @@ test('and the bag count is what was scanned, not what was typed', () => {
 
   assert.match(body, /bag_count: labels\.length/, 'the count is not taken from the scans');
 });
+
+// --- the laundromat drop ------------------------------------------------------
+
+test('THE DROP IS ONE CARD: HANDED OFF, PER CLIP', () => {
+  // Three cards used to sit here - take the bags out of the van, hand each one
+  // over, confirm the clips are back in the van - and two of them recorded the
+  // bag moving rather than changing hands.
+  const src = withoutComments(SRC('core', 'run.js'));
+
+  assert.match(src, /stop\.dropStage = dropBags\.length \? 'handoff' : 'done'/, 'the drop still has stages');
+  assert.ok(!/'unload'/.test(src), 'the unload stage is back');
+
+  const page = withoutComments(SRC('web', 'run-page.js'));
+  assert.ok(!/dropStage === 'unload'/.test(page), 'the unload card is back');
+  assert.ok(!/run\/unloaded/.test(page), 'the unload form is back');
+  assert.ok(!/run\/clips-back/.test(page), 'the clips-back card is back');
+  assert.match(page, /dropStage === 'handoff'/, 'the handover card has gone');
+});
+
+test('AND HANDING A BAG OVER FREES ITS CLIP IN THE SAME TAP', () => {
+  const src = withoutComments(SRC('core', 'bags.js'));
+  const at = src.indexOf('async function handOffBag');
+  const body = src.slice(at, src.indexOf('\n}', at));
+
+  assert.match(body, /unclipped_at: now/, 'the laundromat does not take custody');
+  assert.match(body, /clip_returned_at: now/, 'the clip is not freed');
+  assert.match(body, /unloaded_at: label\.unloaded_at \|\| now/, 'unloaded_at stopped being written');
+
+  // And it no longer refuses a bag that was never "unloaded".
+  assert.ok(
+    !/Take the bags out of the van first/.test(body),
+    'handing off still demands the unload tap'
+  );
+});
+
+// --- the retrieval ------------------------------------------------------------
+
+test('RETRIEVAL IS SCAN, WEIGH, DONE', () => {
+  const page = withoutComments(SRC('web', 'run-page.js'));
+  const at = page.indexOf('function returnBagStep');
+  const body = page.slice(at, page.indexOf('\n}', at));
+
+  assert.match(body, /if \(!scanned\) return 'scan';/);
+  assert.match(body, /weight_lb == null\) return 'weigh';/);
+  assert.ok(!/'clip'/.test(body), 'the clip confirmation is back');
+  assert.ok(!/'van'/.test(body), 'the put-it-in-the-van step is back');
+});
+
+test('and the clip is stamped with the weight, not confirmed after it', () => {
+  const admin = withoutComments(SRC('routes', 'admin.js'));
+  assert.match(admin, /clipped_at: label\.clipped_at \|\| new Date\(\)\.toISOString\(\)/);
+
+  // The load-out pass stamps it too, so the other retrieval surface agrees.
+  const loadout = withoutComments(SRC('core', 'loadout.js'));
+  assert.match(loadout, /loaded_at: label\.loaded_at \|\| now/, 'the load-out pass lost the stamp');
+
+  const page = withoutComments(SRC('web', 'loadout-page.js'));
+  assert.ok(!/It is in the van/.test(page), 'the load-out van tap is back');
+});
+
+test('PAYMENT HOLD DOES NOT BLOCK RETRIEVAL', () => {
+  // Neil's lock, and it predates this change: refusing to collect finished work
+  // would leave our bags on somebody else's shelf at their cost. Hold keeps
+  // laundry off a customer's doorstep, not off a laundromat's floor.
+  const dispatch = SRC('core', 'dispatch.js');
+  const at = dispatch.indexOf("kind: 'pickup_partner'");
+  assert.notEqual(at, -1, 'the retrieval stop has moved');
+
+  const block = dispatch.slice(at - 900, at + 200);
+  assert.ok(!/paymentHold/.test(block), 'retrieval got gated on payment hold');
+});
+
+test('but it still blocks a delivery', () => {
+  const dispatch = SRC('core', 'dispatch.js');
+  const at = dispatch.indexOf('const deliverStops');
+  const block = dispatch.slice(at, at + 400);
+  assert.match(block, /!paymentHold\(o\)/, 'the delivery leg lost its gate');
+});
+
+// --- the columns stay -----------------------------------------------------
+
+test('loaded_at, unloaded_at AND clip_returned_at ARE ALL STILL WRITTEN', () => {
+  // Neil: keep them if something reads them, just stop asking the driver to
+  // tap them. All three are stamped by the step that makes them true.
+  const bagsSrc = withoutComments(SRC('core', 'bags.js'));
+  const loadoutSrc = withoutComments(SRC('core', 'loadout.js'));
+  const fulfilmentSrc = withoutComments(SRC('core', 'fulfilment.js'));
+
+  const all = bagsSrc + loadoutSrc + fulfilmentSrc;
+  for (const column of ['loaded_at', 'unloaded_at', 'clip_returned_at']) {
+    assert.match(all, new RegExp(column), `${column} is no longer written anywhere`);
+  }
+
+  // And something still reads loaded_at, which is why it is kept.
+  assert.match(SRC('core', 'dispatch.js'), /loaded_at/);
+});

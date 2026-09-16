@@ -978,13 +978,23 @@ async function forDriver(driverId, roundStart = null) {
       stop.dropBags = dropBags.sort((a, b) => a.clip - b.clip);
       stop.clipsToReturn = returning.sort((a, b) => a - b);
 
-      // In order: out of the van, over the counter, clips back. A stage only
-      // opens when the one before it has nothing left in it.
-      stop.dropStage = dropBags.some((b) => !b.unloaded)
-        ? 'unload'
-        : dropBags.length
-          ? 'handoff'
-          : 'clips';
+      // ONE STAGE NOW, AND IT IS THE ONLY CUSTODY EVENT AT A COUNTER.
+      //
+      // Neil's model, 16 September: the van is not a custody state. There were
+      // three cards here - take the bags out of the van, hand each one over,
+      // then confirm the clips are back in the van - and two of them recorded
+      // the bag moving rather than changing hands.
+      //
+      // "Out of the van" was the driver telling us he had picked things up off
+      // his own floor. "Clips back in the van" was him telling us where a
+      // number was, after he had already told us the bag it came off was over
+      // the counter. Neither is a transfer of custody and neither could be
+      // checked.
+      //
+      // WHAT IS LEFT IS THE HANDOVER. Tapping it is the laundromat taking the
+      // bag, which is also the moment the clip stops being on anything - so
+      // the same tap frees it. Done when every clip on the stop is handed off.
+      stop.dropStage = dropBags.length ? 'handoff' : 'done';
     }
   }
 

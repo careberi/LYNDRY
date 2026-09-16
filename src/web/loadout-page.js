@@ -265,10 +265,12 @@ function loadWalkBody({ bags: outstanding, current, state, notice, problem, run,
           ${current.clip_number}
         </div>
       </div>
-      <form method="post" action="/ops/loadout/loaded" style="margin:0;">
-        <input type="hidden" name="label_id" value="${escapeHtml(current.id)}">
-        <button type="submit" class="btn btn-primary btn-lg btn-full">It is in the van</button>
-      </form>`;
+      <!-- NO "IT IS IN THE VAN" TAP. Neil's model, 16 September: the van is
+           transportation, not custody. The bag was weighed at the van, so it is
+           aboard - loadAndClip stamps loaded_at, and the screen shows the clip
+           number he needs rather than asking him to agree that he carried it.
+           A link, not a form, because nothing is being recorded. -->
+      <a class="btn btn-primary btn-lg btn-full" href="/ops/loadout">Next bag</a>`;
   };
 
   return `

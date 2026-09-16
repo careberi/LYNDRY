@@ -238,9 +238,18 @@ async function weighAndClip(labelId, weightLb) {
     return { ok: false, detail: 'That bag has not been collected from the laundromat yet.' };
   }
 
+  // THE BAG IS ABOARD BECAUSE IT WAS WEIGHED AT THE VAN.
+  //
+  // Neil's model, 16 September: the van is not a custody state. There was one
+  // more tap after this - "it is in the van" - which recorded the bag moving
+  // rather than changing hands, and could not be checked by anything. The
+  // column is still written, because the run and the board read it; it is
+  // simply stamped here instead of asked for.
+  const now = new Date().toISOString();
+
   const { error } = await db
     .from('bag_labels')
-    .update({ weight_lb: weight, weighed_at: new Date().toISOString() })
+    .update({ weight_lb: weight, weighed_at: now, loaded_at: label.loaded_at || now })
     .eq('id', labelId);
 
   if (error) throw error;

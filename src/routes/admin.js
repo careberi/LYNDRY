@@ -5713,6 +5713,21 @@ router.post('/ops/run/bag/:id/weight', guard, may('orders.drive'), async (req, r
       );
     }
 
+    // THE CLIP IS ON AND THE BAG IS ABOARD, STAMPED RATHER THAN TAPPED.
+    //
+    // Two steps used to follow this one: confirm the clip, confirm the bag went
+    // in the van. The first asked the driver to agree with a number the line
+    // above had just handed him, and the second is transportation. Both columns
+    // are still written because the run and the load-out read them; neither is
+    // a question any more.
+    await db
+      .from('bag_labels')
+      .update({
+        clipped_at: label.clipped_at || new Date().toISOString(),
+        loaded_at: label.loaded_at || new Date().toISOString(),
+      })
+      .eq('id', label.id);
+
     return res.redirect(303, `/ops/run/bag/${label.id}?scanned=1`);
   } catch (err) {
     return next(err);
