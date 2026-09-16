@@ -179,12 +179,20 @@ async function createOrder(customer, input) {
     // facts in it that cannot be wrong. Both come off the same bookPickup()
     // result the confirmation text reads, so the ceiling named here is the one
     // the pricing code enforces.
+    // AND THE RATE IS THIS ORDER'S, not the one-time rate. Same fault the
+    // weigh-in texts carried: site.pricePerLb is $2.00, and a pickup booked on
+    // a subscription is $1.80. Read off the order the booking just produced,
+    // which is where the confirmation reads it too.
+    const perPound = subscription.perPound(
+      (result.order && result.order.price_per_lb_cents) || config.pricing.perPoundCents
+    );
+
     const money = result.freeOrder
       ? result.freeUpToLb
         ? `This one is on us up to ${result.freeUpToLb} lb - anything over that is ` +
-          `${site.pricePerLb} a pound, charged after we weigh it. `
+          `${perPound}, charged after we weigh it. `
         : `This one is on us, so there is nothing to pay. `
-      : `Nothing gets taken now - it's ${site.pricePerLb} a pound with a ` +
+      : `Nothing gets taken now - it's ${perPound} with a ` +
         `${billing.money(config.pricing.minimumCents)} minimum, charged after we weigh it. `;
 
     return (

@@ -16,6 +16,11 @@ const promotions = require('./promotions');
 const settings = require('./settings');
 const tags = require('./tags');
 const issues = require('./issues');
+// THE RATE IN A MESSAGE COMES FROM THE ORDER, and this is what says it in
+// English. Every text below that names a price per pound reads the order's own
+// rate through it rather than site.pricePerLb, which is the one-time rate and
+// is the wrong number for a subscriber. See the note on `perPoundOf`.
+const subscription = require('./subscription');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -55,6 +60,31 @@ function money(cents) {
 
 // A state machine refusal is a normal thing that happens when a driver taps
 // twice, not a crash. It becomes a 409 or a red line on the screen.
+// WHAT THIS ORDER IS PRICED AT, IN ENGLISH, FOR THE CUSTOMER TO READ.
+//
+// Found by an outside audit, 16 September, and it is the fifth sentence in
+// this file to name a rate that had stopped being true - CLAUDE.md already
+// says "if the charge point moves again, grep for 'a pound'". This time the
+// rate moved rather than the moment.
+//
+// EVERY ONE OF THESE MESSAGES WAS BUILT FROM site.pricePerLb, which is
+// config.pricing.perPoundCents and is the ONE-TIME rate. The arithmetic beside
+// it is built from order.price_per_lb_cents, which is $1.80 on a subscription.
+// So a subscriber weighed at 38 lb was charged $68.40 and texted "$68.40 at
+// $2.00 a pound" - a sum that does not work, on the message that tells them
+// what has just left their account.
+//
+// THE FALLBACK IS THE ONE-TIME RATE, not a throw. An order taken before
+// price_per_lb_cents existed has null there and was genuinely sold at $2.00,
+// which is what config.pricing.perPoundCents still says. Same shape as the
+// confirmation in booking.js, deliberately: two sentences about one order's
+// price must not read it two different ways.
+function perPoundOf(order) {
+  return subscription.perPound(
+    (order && order.price_per_lb_cents) || config.pricing.perPoundCents
+  );
+}
+
 function refusal(err) {
   if (/cannot go from/i.test(err.message)) {
     return { ok: false, reason: 'illegal', detail: err.message };
@@ -579,8 +609,8 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   const howPriced = minimumApplied
     ? `${opening}, which is under our ${money(floor)} minimum${extras}, so the total is ${money(priceCents)}.`
     : surcharge > 0
-      ? `${opening}, so that's ${money(byWeight)} at ${site.pricePerLb} a pound${extras} - ${money(priceCents)} in total.`
-      : `${opening}, so the total is ${money(priceCents)} at ${site.pricePerLb} a pound.`;
+      ? `${opening}, so that's ${money(byWeight)} at ${perPoundOf(order)}${extras} - ${money(priceCents)} in total.`
+      : `${opening}, so the total is ${money(priceCents)} at ${perPoundOf(order)}.`;
 
   // What happens to the money, said as something still to come. Nothing is
   // taken here, so a sentence in the past tense would be a lie the customer
@@ -1396,7 +1426,7 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   const opening = `Your laundry weighed ${billable} lb`;
   const base = minimumApplied
     ? `${opening}, which is under our ${money(floor)} minimum, so that is ${money(beforeDiscount)}.`
-    : `${opening}, so that is ${money(beforeDiscount)} at ${site.pricePerLb} a pound.`;
+    : `${opening}, so that is ${money(beforeDiscount)} at ${perPoundOf(order)}.`;
 
   // SAY WHAT CAME OFF. A total that is lower than the arithmetic the customer
   // can do themselves reads as a mistake unless the reason is in the same
@@ -1677,7 +1707,15 @@ async function loadVan(order, { by = {} } = {}) {
     const text =
       charge.waived || charge.nothingToCharge
         ? waivedWeighInText(weight)
-        : doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer });
+        : doorTotalText({
+            weight,
+            beforeDiscount,
+            priceCents,
+            deal,
+            minimumApplied,
+            customer,
+            perPound: perPoundOf(order),
+          });
 
     await sendAndLog(customer.phone, text, customer.id).catch((err) =>
       console.error(`Could not text the door total for ${order.id}: ${err.message}`)
@@ -1695,13 +1733,17 @@ async function loadVan(order, { by = {} } = {}) {
 // WHAT THEY READ WHEN IT CLEARED AT THE DOOR. The weight, what it comes to, and
 // what came off. Written here rather than by the AI, like every message about
 // money.
-function doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer }) {
+// `perPound` is passed in rather than read off an order, because this one is
+// built from figures worked out in memory BEFORE anything is written - which is
+// the whole design of the doorstep charge. The caller has the order and hands
+// the rate over with the rest of the sums.
+function doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer, perPound }) {
   const card = billing.describeCard(customer) || 'card';
   const opening = `Your laundry weighed ${weight} lb`;
 
   const base = minimumApplied
     ? `${opening}, which is under our ${money(beforeDiscount)} minimum, so that is ${money(beforeDiscount)}.`
-    : `${opening}, so that is ${money(beforeDiscount)} at ${site.pricePerLb} a pound.`;
+    : `${opening}, so that is ${money(beforeDiscount)} at ${perPound}.`;
 
   // SAY WHAT CAME OFF. A total lower than the arithmetic somebody can do in
   // their head reads as a mistake unless the reason is in the same message. The
