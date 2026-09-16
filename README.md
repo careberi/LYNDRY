@@ -42,7 +42,7 @@ One repo, one deploy, no build step. There is nothing to compile.
 
 ## Running it on your own computer
 
-You need [Node.js](https://nodejs.org) version 20 or newer. Check what you have
+You need [Node.js](https://nodejs.org) version 22 or newer. Check what you have
 by opening a terminal and running `node --version`.
 
 **1. Install the libraries the project depends on.** You only do this once, and
