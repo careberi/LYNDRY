@@ -5959,11 +5959,23 @@ router.post('/ops/run/handed-off', guard, may('orders.drive'), async (req, res, 
       return res.redirect(303, `/ops/run?problem=${encodeURIComponent(result.detail)}`);
     }
 
-    await orderEvents.record(label.order_id, {
-      kind: 'LABEL',
-      summary: `${label.code} handed to the laundromat, van clip ${label.clip_number} off`,
-      by: { opsUser: req.opsUser },
-    });
+    // ONLY THE FIRST TAP WRITES A ROW. handOffBag() already answers this - it
+    // returns `already` for a bag whose clip is off - and the route was ignoring
+    // it, which is how #2064 came to say "WZ7MZ8 handed to the laundromat, van
+    // clip 10 off" twice, 2.22 seconds apart. Tapping again at a counter is a
+    // driver making sure, not a second handover.
+    //
+    // orderEvents.record() would now refuse the duplicate anyway, on a clock.
+    // This is the same answer known exactly rather than inferred from timing,
+    // and a driver who comes back to the same bag an hour later still gets one
+    // row rather than a second.
+    if (!result.already) {
+      await orderEvents.record(label.order_id, {
+        kind: 'LABEL',
+        summary: `${label.code} handed to the laundromat, van clip ${label.clip_number} off`,
+        by: { opsUser: req.opsUser },
+      });
+    }
 
     // THE LAST BAG OVER THE COUNTER IS THE ORDER CHANGING HANDS.
     //
