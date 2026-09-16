@@ -1590,6 +1590,87 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
 // rolling back would mean un-redeeming a promotion, which is the one operation
 // here with no honest reverse.
 // ---------------------------------------------------------------------------
+// FINISH PICKUP: THE ONE ORDER-LEVEL TAP AT A DOORSTEP.
+//
+// Neil's model, 16 September: the van is not a custody state, it is
+// transportation. Confirm custody transfers, identity, measurements and
+// exceptions - never movement into or out of a vehicle.
+//
+// WHAT THIS IS NOT: a new way to charge a card. It is loadVan() with the
+// bookkeeping the driver used to do by hand done for him. Every rule underneath
+// is untouched - the price is worked out in memory, the card is charged, and
+// only then is van_confirmed_at written, so a refused card still leaves the
+// bags on the step with the pickup not complete.
+//
+// WHAT IT DOES FOR HIM:
+//
+//   the count      bag_count is how many bags he scanned, not a number he
+//                  typed before he had scanned any
+//   the clips      already assigned by the weigh route; confirmed here rather
+//                  than tapped per bag
+//   the loading    loaded_at is stamped for every bag at once. The column
+//                  survives because other things read it; the TAP does not,
+//                  because "it is in the van" is three feet of walking no
+//                  screen can verify
+//
+// IT REFUSES A HALF-WEIGHED LOAD. The price is the sum of the bags, so one
+// unweighed bag is a charge short by a bag - and unlike the old flow, where
+// the sequence physically hid the next step, nothing stops a driver reaching
+// this button early.
+async function finishPickup(order, { by = {} } = {}) {
+  if (order.van_confirmed_at) return { ok: true, already: true };
+
+  const labels = (await bags.forOrder(order.id, 'PICKUP')).filter((l) => !l.sticker_seq);
+
+  if (!labels.length) {
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail: 'Scan a bag before finishing the pickup. There is nothing to take yet.',
+    };
+  }
+
+  const unweighed = labels.filter((l) => l.weight_lb == null);
+  if (unweighed.length) {
+    const which = unweighed.map((l) => l.code).join(', ');
+    return {
+      ok: false,
+      reason: 'invalid',
+      detail: `${unweighed.length} bag${unweighed.length === 1 ? ' has' : 's have'} no weight yet (${which}). Weigh ${unweighed.length === 1 ? 'it' : 'them'} first.`,
+    };
+  }
+
+  // THE COUNT IS WHAT HE SCANNED. Written before loadVan() reads it, because
+  // loadVan refuses an order whose bag_count does not match what is weighed -
+  // that guard is worth keeping and this is what satisfies it honestly.
+  if (Number(order.bag_count || 0) !== labels.length) {
+    const { error } = await db
+      .from('orders')
+      .update({ bag_count: labels.length })
+      .eq('id', order.id);
+
+    if (error) throw error;
+    order = { ...order, bag_count: labels.length };
+  }
+
+  // The internal columns, stamped together rather than one tap at a time. Both
+  // are still read - loaded_at by the run and the load-out pass, clipped_at by
+  // the clip pool - so they are kept and simply stopped being questions.
+  const now = new Date().toISOString();
+
+  for (const label of labels) {
+    const patch = {};
+    if (!label.clipped_at && label.clip_number != null) patch.clipped_at = now;
+    if (!label.loaded_at) patch.loaded_at = now;
+    if (!Object.keys(patch).length) continue;
+
+    const { error } = await db.from('bag_labels').update(patch).eq('id', label.id);
+    if (error) throw error;
+  }
+
+  return loadVan({ ...order, bag_count: labels.length }, { by });
+}
+
 async function loadVan(order, { by = {} } = {}) {
   const labels = await bags.forOrder(order.id, 'PICKUP');
   const expected = Number(order.bag_count || 0);
@@ -2158,6 +2239,7 @@ module.exports = {
   pricedSentence,
   settleWeight,
   loadVan,
+  finishPickup,
   recordPartnerScale,
   doorTotalText,
   leftAtDoorText,

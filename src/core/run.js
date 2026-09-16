@@ -39,98 +39,95 @@ const { sendAndLog } = require('./notify');
 // rather than a thing kept alongside them.
 // A PICKUP, IN THE ORDER A DRIVER ACTUALLY DOES IT.
 //
-// He is standing at a door with his hands full. So: how many bags are there?
-// Then one bag at a time - tag on it, then on the scale -
-// and on to the next. Then they go in the van.
+// He is standing at a door with his hands full, so it is one bag at a time:
+// scan the tag on it, put it on the scale, and the clip number comes back. Then
+// the next one. Then Finish Pickup, once, for the order.
 //
-// The old order asked for stickers before anybody had said how many bags there
-// were, and then for one total weight at the end, which asks him to add up in
-// his head and loses which bag was the heavy one.
+// THE VAN IS NOT A CUSTODY STATE - Neil's model, 16 September. Every bag used
+// to carry two more taps, confirming the clip and confirming it went in the
+// van, and neither established anything the scan and the scale had not: the
+// clip is assigned by the weigh route itself, and "it is in the van" is three
+// feet of walking no screen can verify. Three bags cost fifteen taps; they
+// cost seven.
 async function tasksForCollect(order) {
   // PICKUP labels only. A delivery sticker bound later at the laundromat is not
   // a spare bag at this door, and counting it here would make the collect stop
   // look like it had one more bag than the driver is standing in front of.
   const labels = await bags.forOrder(order.id, 'PICKUP');
-  const known = order.bag_count != null;
-  const bagCount = Number(order.bag_count || 0);
 
-  // NEIL'S SEQUENCE, AND THE ORDER OF IT IS THE POINT.
+  // THE SCREEN SHOWS ONE STEP AT A TIME and refuses to show the next until the
+  // one before it is done, which is what stops the doorstep shortcut: a driver
+  // who can see the weight box before he has tagged the bag will use it, and
+  // then nobody knows which bag weighed what. That rule is unchanged; what went
+  // is the steps that were not doing anything.
+  // NO "COLLECT THE BAGS" TAP AND NO BAG COUNT.
   //
-  //   1. take the bags       2. tag each one      3. weigh each one      4. load
+  // Both were questions asked before anything had happened. "Collect the bags"
+  // announced an intention; scanning the first tag IS taking the bag, so the
+  // scan is the custody event and the bind route moves the order to IN_PROCESS
+  // on the way past. "How many bags" asked for a number the driver was about
+  // to demonstrate by scanning them - finishPickup() counts what was scanned.
   //
-  // Collecting comes FIRST, before anything is tagged or weighed. That is the
-  // real order of events at a door: he is handed the bags and then deals with
-  // them. Marking it collected is also what tells the customer we have been,
-  // and making that wait until the last bag is on the scale would delay their
-  // text for no reason.
-  //
-  // The screen shows exactly one of these at a time and refuses to show the
-  // next until the one before it is done, which is what stops the doorstep
-  // shortcut: a driver who can see the weight box before he has tagged the bag
-  // will use it, and then nobody knows which bag weighed what.
-  const tasks = [
-    {
-      key: 'collected',
-      // "Bags collected" once it is done - Neil's wording. The ticked row is a
-      // record of what happened, and a bare "Collected" does not say what was.
-      title: order.collected_at
-        ? 'Bags collected'
-        : known
-          ? `Collect ${bagCount} bag${bagCount === 1 ? '' : 's'}`
-          : 'Collect the bags',
-      // NO SUPPORTING LINE. Neil deleted it off the screen himself: the button
-      // says "I have the bags", and that it also texts the customer is our
-      // plumbing, not his instruction.
-      detail: null,
-      spot: spotOf(order),
-      spotPhoto: spotPhotoOf(order),
-      access: accessOf(order),
-      spotLabel: 'The bags are here',
-      done: Boolean(order.collected_at),
-    },
-    {
-      key: 'bag_count',
-      // A STATEMENT, NOT A QUESTION. The card reads "TASK: ... for order #1940",
-      // and a question mark landing in the middle of that made a sentence out
-      // of two halves that do not join. Neil's wording.
-      // The ticked row names the order it counted for - Neil's wording. This
-      // title only ever shows in the list: the moment the count is known the
-      // step is done, so the card has already moved on to the first bag.
-      title: known
-        ? `${bagCount} bag${bagCount === 1 ? '' : 's'} with order #${order.order_number}`
-        : 'Enter the number of bags collected',
-      // No supporting line. Neil deleted it off the screen: the task says to
-      // enter the number of bags collected, and how the screen behaves next is
-      // ours to worry about.
-      detail: null,
-      done: known,
-    },
-  ];
+  // The spot and its photo move onto the first bag's step, because that is now
+  // the first thing on the screen at that door and it is where he is looking.
+  const tasks = [];
 
-  // TWO STEPS PER BAG, NOT ONE. Tag it, then weigh it.
-  //
-  // They used to be a single task that was only done once the bag was both
-  // labelled and weighed, which reads fine on a list and badly on a doorstep:
-  // it gave no separate instruction for the tag, and a driver who had stuck one
-  // on saw the same unfinished line as one who had not.
+  // TWO STEPS PER BAG, AND ONLY TWO. Tag it, then weigh it - the clip comes
+  // back from the weigh route, so it is shown rather than confirmed.
   //
   // The photo stays part of weighing rather than a step of its own, because it
   // is one form - splitting them would let a weight be recorded with nothing
   // behind it.
-  for (let position = 1; position <= bagCount; position += 1) {
-    const label = labels.find((l) => l.position === position) || null;
+  // THE LOOP WALKS WHAT HAS BEEN SCANNED, NOT A NUMBER SOMEBODY TYPED.
+  //
+  // It used to count from 1 to bag_count, which meant the count had to exist
+  // before the first bag could be tagged. With that question gone the list is
+  // simply the bags he has already done, plus one open slot for the next one -
+  // "Another bag?" - until he taps Finish Pickup. The count is whatever that
+  // list turned out to be.
+  const done = labels
+    .filter((l) => !l.sticker_seq)
+    .sort((a, b) => Number(a.position || 0) - Number(b.position || 0));
+
+  // One more slot than he has filled, so there is always a next bag to scan,
+  // and none once the pickup is finished.
+  const slots = order.van_confirmed_at ? done.length : done.length + 1;
+
+  for (let position = 1; position <= slots; position += 1) {
+    const label = done.find((l) => Number(l.position) === position) || done[position - 1] || null;
 
     tasks.push({
       key: `tag_${position}`,
       position,
       label,
+      // THE DOOR IS ON THE FIRST STEP NOW. It used to ride on "Collect the
+      // bags", which no longer exists, and this is the first thing on the
+      // screen at that door - which is where he is looking when he needs it.
+      spot: position === 1 ? spotOf(order) : null,
+      spotPhoto: position === 1 ? spotPhotoOf(order) : null,
+      access: position === 1 ? accessOf(order) : null,
+      spotLabel: 'The bags are here',
       title: label
         ? `Bag #${position} tagged - ${label.code}`
-        : `Put a Bag Tag on Bag #${position}`,
+        : position === 1
+          ? 'Scan the first bag'
+          : 'Another bag? Scan its tag',
       // The rest of Neil's sentence, which sits after the order number. Only
       // while there is nothing on the bag yet - once it is tagged the step is
       // done and reads as a record of it, not an instruction.
       titleTail: label ? null : '& scan the QR code on the bag tag',
+      // AND HE CAN STOP HERE INSTEAD. The run shows one task at a time, so an
+      // open "Another bag?" slot with nothing beside it is a dead end: Finish
+      // Pickup sits behind it in the list and he can never reach it. Once at
+      // least one bag is weighed, this step carries the finish control too -
+      // which is the actual question at that point, "another one, or is that
+      // all of them?"
+      canFinish:
+        !label &&
+        position > 1 &&
+        done.length > 0 &&
+        done.every((l) => l.weight_lb != null),
+      bags: done.length,
       // No supporting line, and no note about the code format under the box.
       // Both deleted off the screen by Neil: the task already says to tag the
       // bag and scan it, and the field is labelled.
@@ -177,119 +174,52 @@ async function tasksForCollect(order) {
       // against the tag, so there is nowhere to put the number.
       blockedBy: label ? null : 'tag',
     });
-
-    // THREE STEPS PER BAG, NOT TWO. Tag it, weigh it, CLIP it.
-    //
-    // The clip used to be assigned silently at the scale and mentioned once at
-    // the end, inside "Clips 1 on, then load them". Neil walked a real order
-    // and was never told to put a clip on anything - the number existed in the
-    // database and nowhere in his hands. A step nobody is shown is a step that
-    // does not happen.
-    //
-    // It is per bag because the clip is per bag. One confirmation, naming the
-    // number, on the bag he is holding right now - not a list of numbers at the
-    // end to be matched up against bags already in the van.
-    tasks.push({
-      key: `clip_${position}`,
-      position,
-      label,
-      // ON THE TAG, NOT ON "BAG #1". Neil's sentence: "Put Van Clip #1 on Tag ID
-      // 6ZP4DN." The tag is the bag's identity - it is stuck to it - where the
-      // bag number is a position in a count that exists only on this screen.
-      // With two bags in his arms the sticker is the thing he can actually
-      // check against.
-      //
-      // The code is in the title rather than added by the page, so the
-      // checklist entry underneath is a whole sentence too; run-page.js turns
-      // that code into the link.
-      title:
-        label && label.clipped_at
-          // The finished entry is a record, so it is shorter than the
-          // instruction: "Van Clip #1 on 6ZP4DN". The words "Tag ID" are there
-          // to tell him what to look for; once it is done, the code alone says
-          // which bag it went on.
-          ? `Van Clip #${label.clip_number} on ${label.code}`
-          : label && label.clip_number != null
-            ? `Put Van Clip #${label.clip_number} on Bag ${label.code}`
-            : `Clip Bag #${position}`,
-      short: 'Put the van clip on',
-      // The task line says which clip on which bag; the number is on screen
-      // at 40px. There is nothing left for a line underneath to add.
-      detail: null,
-      done: Boolean(label && label.clipped_at),
-      clip: label ? label.clip_number : null,
-      // The clip is handed out by weighing, so there is nothing to put on until
-      // the bag has been on the scale.
-      blockedBy: label && label.weight_lb != null ? null : 'weigh',
-    });
-
-    // FOUR STEPS PER BAG: tag, weigh, clip, LOAD.
-    //
-    // Neil's sequence, said in full: "bag one tagged, and then bag one twenty
-    // five pounds, and then bag one van clip one, and then put bag on van, and
-    // then on bag two." He deals with ONE BAG COMPLETELY and then picks up the
-    // next, which is what a person actually does at a door with their hands
-    // full - not four bags tagged, then four weighed, then four loaded.
-    //
-    // It also means a bag is never left standing on a porch while its
-    // neighbour is being weighed, which is the failure the old one-tap-at-the-
-    // end version could not see.
-    tasks.push({
-      key: `load_${position}`,
-      position,
-      label,
-      // BY ITS CLIP, NOT ITS BAG NUMBER. Neil's wording, and it is the right
-      // name at this moment: the clip went on a step ago and is now what the
-      // bag is called for the rest of the van leg - it is what he reads off the
-      // load and what he says at a laundromat counter. "Bag 1" is a position
-      // in a count nobody can see once the bag is in his arms.
-      //
-      // The bag number survives where there is no clip yet, which cannot
-      // normally happen - the step is blocked until it is clipped - but a
-      // heading that says "Van Clip #null" would be worse than a plain one.
-      title:
-        label && label.loaded_at
-          ? label.clip_number != null
-            ? `Van Clip #${label.clip_number} on the van`
-            : `Bag #${position} in the van`
-          : label && label.clip_number != null
-            ? `Put Van Clip #${label.clip_number} on the van`
-            : `Put Bag #${position} in the van`,
-      short: 'Deposit bag in van',
-      detail: null,
-      done: Boolean(label && label.loaded_at),
-      clip: label ? label.clip_number : null,
-      // Nothing goes in the van without its clip on, because the clip is the
-      // only way it gets found again.
-      blockedBy: label && label.clipped_at ? null : 'clip',
-    });
   }
 
-  // THE LAST STEP, AND IT IS NOT THE SAME AS THE LAST BAG BEING WEIGHED.
+  // FINISH PICKUP: THE ONE ORDER-LEVEL TAP, AND THE ONLY CUSTODY EVENT HERE.
   //
-  // Clips are handed out when a bag goes on the scale, so by here the system
-  // already knows the numbers - what it does not know is whether the bags are
-  // actually in the van. That gap is exactly where one gets left on a porch,
-  // which is the whole reason this step exists rather than being assumed.
+  // Neil's model, 16 September: the van is not a custody state, it is
+  // transportation. Confirm custody transfers, identity, measurements and
+  // exceptions - never movement into or out of a vehicle.
+  //
+  // WHAT THIS REPLACED. Every bag used to carry four taps: scan it, weigh it,
+  // confirm the clip, confirm it went in the van. The last two confirmed
+  // nothing the first two had not already established - the clip is assigned
+  // by the weigh route itself, and "it is in the van" is three feet of walking
+  // that no screen can verify anyway. Three bags cost twelve taps plus three
+  // order-level ones. It is now two per bag and one for the order.
+  //
+  // WHAT IT DOES NOT REPLACE: the charge. This is still loadVan() underneath,
+  // which works the price out in memory, charges the card, and only then
+  // stamps van_confirmed_at - so a refused card leaves the bags on the step
+  // with the pickup not complete, exactly as before. The tap moved; the money
+  // did not.
+  //
+  // NO BAG COUNT IS ASKED FOR ANY MORE EITHER. It used to be a question before
+  // anybody had scanned anything; the count is now simply how many bags were
+  // scanned, which is a fact rather than an answer, and finishPickup() writes
+  // it.
   const clips = bags.clipsFor(labels);
-  const everyBagDone = bagCount > 0 && tasks.slice(2).every((t) => t.done);
+  const scanned = labels.filter((l) => !l.sticker_seq);
+  const weighed = scanned.filter((l) => l.weight_lb != null);
 
-  // ONLY WHERE THERE ARE NO BAGS TO WALK. With a bag count the loading is done
-  // one bag at a time above, and this would be a second tap that means the same
-  // thing - the order-level stamp is written by the last bag going aboard.
-  //
-  // It survives for the case where the count is not known yet, so the sequence
-  // still has an end rather than trailing off.
-  if (!bagCount) {
-    tasks.push({
-      key: 'van',
-      title: order.van_confirmed_at ? 'In the van' : 'Put them in the van',
-      detail: 'Tap this once all of them are actually in the van.',
-      done: Boolean(order.van_confirmed_at),
-      clips,
-      blockedBy: everyBagDone ? null : 'bags',
-    });
-  }
+  tasks.push({
+    key: 'finish',
+    title: order.van_confirmed_at
+      ? `Pickup finished - ${scanned.length} bag${scanned.length === 1 ? '' : 's'}`
+      : 'Finish Pickup',
+    short: 'Finish Pickup',
+    detail: order.van_confirmed_at
+      ? null
+      : 'These are all the bags you are taking. This charges the card.',
+    done: Boolean(order.van_confirmed_at),
+    clips,
+    bags: scanned.length,
+    // NOTHING TO FINISH UNTIL SOMETHING IS WEIGHED, and a half-weighed load is
+    // not a load: the price is the sum of the bags, so one unweighed bag is a
+    // charge that is short by a bag.
+    blockedBy: scanned.length && weighed.length === scanned.length ? null : 'bags',
+  });
 
   return tasks;
 }
@@ -473,9 +403,10 @@ async function tasksForDeliver(order) {
     ];
   }
 
+  // The numbers he is carrying, so the card can name them. clipsOff and
+  // stripped went with the two taps that read them: nothing is gated on either
+  // any more, because the delivery photo is what actually frees them.
   const clips = bags.clipsFor(aboard);
-  const clipsOff = aboard.length > 0 && clips.length === 0;
-  const stripped = aboard.length > 0 && aboard.every((b) => b.released_at);
 
   return [
     // NO "MARK IT OUT FOR DELIVERY" STEP HERE, and that is Neil's call after
@@ -490,24 +421,23 @@ async function tasksForDeliver(order) {
     //
     // A step that only asks the driver to tell the system what it could have
     // worked out itself is a step that should not exist.
-    {
-      key: 'clips',
-      title: clipsOff
-        ? 'Bags out of the van'
-        : clips.length
-          ? `Take clips ${clips.join(', ')} out`
-          : 'Take the bags out',
-      detail: 'Set them apart from the load. Those numbers go back in the van.',
-      done: clipsOff,
-      clips,
-    },
-    {
-      key: 'strip',
-      title: stripped ? 'Tags off' : 'Take the bag tags off',
-      detail: "Ours and the laundromat's. Neither goes into a customer's house.",
-      done: stripped,
-      blockedBy: clipsOff ? null : 'clips',
-    },
+    // THE CLIPS AND THE TAGS ARE A REMINDER NOW, NOT TWO TAPS.
+    //
+    // Neil, 16 September: one screen - the clips to bring, remove tags and
+    // clips, the return-spot photo, take the delivery photo. That photo
+    // finishes the order and frees the tags and the clips.
+    //
+    // Both taps were confirmations of something deliver() does anyway:
+    // releaseOrder() retires every tag and unclipOrder() puts every number
+    // back in the pool, and they have done so since long before these steps
+    // existed. So the driver was being asked to tell the system twice about
+    // work the system was going to record either way - and neither tap could
+    // verify anything, because no screen can see a clip come off a bag.
+    //
+    // WHAT IS NOT LOST: the instruction. Nothing from LYNDRY goes into a
+    // customer's house, and the reminder that says so is now on the one card
+    // he is actually looking at rather than two cards he taps past. It rides
+    // on the task as `remove` so run-page.js can draw it in one place.
     {
       key: 'delivered',
       // SAY WHAT TO DO, THEN WHERE. Neil: "there is unnecessary wording on each
@@ -523,8 +453,17 @@ async function tasksForDeliver(order) {
       spotPhoto: spotPhotoOf(order),
       access: accessOf(order),
       spotLabel: 'Leave them here',
+      // THE ONE REMINDER, on the card he is already reading. Nothing from
+      // LYNDRY goes into a customer's house, and taking the photo is what
+      // frees these in the system - he is not asked to say so separately.
+      remove: clips.length
+        ? `Bring clips ${clips.join(', ')}. Take our tags and clips off before you leave.`
+        : 'Take our tags and clips off before you leave.',
+      clips,
       done: Boolean(order.delivered_at),
-      blockedBy: stripped ? null : 'strip',
+      // NOT BLOCKED ON THE TAGS ANY MORE, because there is no tap to block on.
+      // The photo is the step, and it is what retires them.
+      blockedBy: null,
     },
   ];
 }
