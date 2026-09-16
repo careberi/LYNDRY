@@ -14,6 +14,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Unit tests import modules that construct the Supabase client even when
+      # they never make a database call. Use an intentionally unreachable local
+      # endpoint so imports work without exposing or touching production.
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
 
     steps:
       - name: Check out repository
