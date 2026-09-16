@@ -2475,6 +2475,101 @@ function optOutControl(person, mayDo) {
 // Admin only, through orders.override. A driver may work an order and may not
 // call it off, which is a decision about the customer rather than a step in the
 // round - the same line the driver reassignment already draws.
+// AN EXTRA PICKUP ON AN EXISTING PLAN.
+//
+// Neil's ask, 16 September: a subscriber wants a stop this week that their
+// plan does not cover, and it should be on the plan - $1.80 a pound, counted
+// under it - rather than a one-time pickup beside it.
+//
+// THIS IS NOT A REVERSAL OF "AN EXTRA PICKUP IS $2.00", THOUGH IT READS LIKE
+// ONE. Migration 0096 wrote both cases down when subscription_id was added:
+//
+//   a subscriber books a pickup and says nothing   one-time rate, no plan
+//   somebody deliberately adds one TO the plan     plan's rate, on the plan
+//
+// The difference is whether the plan was chosen for that pickup, which is the
+// same doctrine as "never enrolled by accident" read from the other end. A
+// text saying "can you come Thursday too" chooses nothing, so it stays $2.00.
+// This button says "on this plan" on it, and pressing it is the choosing.
+//
+// ONE FUNCTION FOR BOTH SCREENS. It is drawn on the customer page and in the
+// side column of an order, and a second copy would be a second set of rules
+// about who may book what.
+//
+// IT DRAWS NOTHING WITHOUT AN ACTIVE PLAN, which is what keeps a one-time
+// customer at $2.00: there is no control to press, so there is no path to the
+// cheaper rate for somebody who never picked one. A paused plan still counts -
+// pausing stops the nightly pass booking it, and has nothing to say about a
+// stop somebody is asking for on purpose.
+function extraPickupCard(customer, schedules, { back = '', mayBook = false } = {}) {
+  if (!customer || !mayBook) return '';
+
+  const active = (schedules || []).filter((s) => s.status === 'ACTIVE');
+  if (!active.length) return '';
+
+  // The earliest day anybody can be asked for. booking.bookPickup() re-checks
+  // this and everything else; the attribute only keeps the picker honest.
+  const earliest = booking.today();
+
+  const plan = (s) =>
+    `${recurring.DAY_NAMES[s.weekday]}${
+      s.time_of_day ? ` at ${booking.readableTime(s.time_of_day)}` : ''
+    }, ${recurring.CADENCES[s.cadence].label}`;
+
+  // WHICH PLAN, only when there is a choice to make. A customer with one plan
+  // is not asked a question with one answer; the id rides hidden instead.
+  const which =
+    active.length === 1
+      ? `<input type="hidden" name="schedule_id" value="${escapeHtml(active[0].id)}">`
+      : `<label class="field-label" for="schedule_id">Which plan</label>
+         <select class="input input-lg" id="schedule_id" name="schedule_id" required
+                 style="width:100%;margin-bottom:16px;">
+           ${active
+             .map(
+               (s) =>
+                 `<option value="${escapeHtml(s.id)}">${escapeHtml(plan(s))}</option>`
+             )
+             .join('')}
+         </select>`;
+
+  return `
+  <div class="card card-xl" style="padding:28px;">
+    ${sectionHeading('On this plan', 'Book an extra pickup')}
+
+    <p style="margin:6px 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);">
+      A stop their plan does not already cover, charged at the plan's rate of
+      ${escapeHtml(subscription.subscriptionRate())} and counted under it. It does
+      not change the plan, and calling it off later leaves the plan running.
+    </p>
+
+    <form method="post" action="/ops/customers/${escapeHtml(customer.id)}/extra-pickup${escapeHtml(back)}" style="margin:0;">
+      ${which}
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="flex:1 1 160px;min-width:160px;">
+          <label class="field-label" for="pickup_date">Day</label>
+          <input class="input input-lg" type="date" id="pickup_date" name="pickup_date"
+                 min="${escapeHtml(earliest)}" required style="width:100%;">
+        </div>
+        <div style="flex:1 1 160px;min-width:160px;">
+          <label class="field-label" for="pickup_time">Time (optional)</label>
+          <input class="input input-lg" type="time" id="pickup_time" name="pickup_time"
+                 style="width:100%;">
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg btn-full" type="submit">
+        Book it on this plan
+      </button>
+
+      <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:12px 0 0;">
+        They get the usual booking confirmation by text, naming the day, the
+        window and ${escapeHtml(subscription.subscriptionRate())}.
+      </p>
+    </form>
+  </div>`;
+}
+
 function cancelCard(order, mayCancel) {
   if (!mayCancel) return '';
   if (order.status === 'CANCELED') return '';
@@ -2815,6 +2910,14 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     const doorScan = await loadout.allBagsScanned(order);
     const history = await orderEvents.forOrder(order.id);
 
+    // Their plans, for the extra-pickup card. Only when somebody looking at
+    // this page could actually press the button - a driver cannot, and this is
+    // a query on every order page otherwise.
+    const plans =
+      order.customer_id && roles.can(req.opsUser, 'orders.override')
+        ? await recurring.forCustomer(order.customer_id).catch(() => [])
+        : [];
+
     // Only fetched when the bag could actually be dropped somewhere, so every
     // other order page does not pay for a query it will not use.
     const laundromats = order.status === 'IN_PROCESS' ? await partners.activeLaundromats() : [];
@@ -2992,6 +3095,12 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
       ${cancelCard(order, roles.can(req.opsUser, 'orders.override'))}
+      ${extraPickupCard(order.customers, plans, {
+        // Back to this order rather than to the profile: somebody who pressed a
+        // button on an order belongs on that order afterwards.
+        back: `?order=${encodeURIComponent(order.order_number)}`,
+        mayBook: roles.can(req.opsUser, 'orders.override'),
+      })}
       <!-- THE ACTION CARDS ARE GONE FROM THIS PAGE, at Neil's request.
            pickupSequence() and workCard() rendered the legal next steps as
            full-width buttons here, which made the order page a second way to
@@ -4146,6 +4255,10 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           }
         </div>
 
+        ${extraPickupCard(person, schedules, {
+          mayBook: roles.can(req.opsUser, 'orders.override'),
+        })}
+
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading('Wash', 'Preferences')}
           ${detail('Temperature', escapeHtml(prefs.water_temp || 'COLD'))}
@@ -4475,6 +4588,134 @@ function signedUpVia(person) {
 // STOP keyword, where the confirmation is legally expected in reply to their
 // own text, nothing here was prompted by anything they just sent.
 // ---------------------------------------------------------------------------
+
+// AN EXTRA PICKUP ON AN EXISTING PLAN.
+//
+// BEHIND orders.override, which is the line cancelling a pickup and retrying a
+// card already draw: booking somebody a stop they will be charged for is a
+// decision about the customer, not a step in the round. A driver may not.
+//
+// THE PLAN IS PASSED THROUGH TO bookPickup(), which is the same function both
+// front doors call and the only place a pickup is written. Nothing here prices
+// anything: orders.create() reads subscription.rateForCents(subscriptionId), so
+// the $1.80 arrives because the plan id did, and a bad id means $2.00 rather
+// than a wrong plan's rate.
+//
+// EVERY BOOKING RULE STILL APPLIES. The closed sign, the opening date, the
+// service area, the wash preferences, one pickup per day, the promotion slot
+// and the show-up hold are all bookPickup()'s, and none of them is skipped
+// because an admin pressed the button. A refusal comes back as a sentence.
+router.post(
+  '/ops/customers/:id/extra-pickup',
+  guard,
+  may('orders.override'),
+  async (req, res, next) => {
+    try {
+      if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
+
+      // Back where they came from, and only ever to a path we built. The order
+      // number rides in the query and is checked for digits before it is used.
+      const fromOrder = String(req.query.order || '').trim();
+      const back = /^\d+$/.test(fromOrder)
+        ? `/ops/orders/${fromOrder}`
+        : `/ops/customers/${req.params.id}`;
+
+      const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
+
+      const { data: customer, error } = await db
+        .from('customers')
+        .select('*')
+        .eq('id', req.params.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!customer) return notFoundPage(res, 'No customer with that id.');
+
+      // THE PLAN HAS TO BE THEIRS AND HAS TO BE RUNNING. A schedule id is a
+      // value the browser posted, so it is looked up against this customer's
+      // own plans rather than trusted - otherwise the field is a way to price
+      // one person's pickup against somebody else's subscription.
+      const schedules = await recurring.forCustomer(customer.id);
+      const wanted = String(req.body.schedule_id || '').trim();
+      const plan = schedules.find((s) => s.id === wanted && s.status === 'ACTIVE') || null;
+
+      if (!plan) {
+        return said('problem', 'That plan is not one of theirs, or it is no longer running.');
+      }
+
+      const date = String(req.body.pickup_date || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return said('problem', 'Pick a day for the extra pickup.');
+      }
+
+      const time = String(req.body.pickup_time || '').trim() || null;
+
+      const result = await booking.bookPickup(customer, {
+        pickupDate: date,
+        pickupTime: time,
+        // WHICH PLAN IT IS PRICED AND COUNTED UNDER. This one line is the whole
+        // feature: it is what makes the pickup $1.80 and ties it to the plan.
+        subscriptionId: plan.id,
+        // NOT fromSchedule. Nothing automatic created this - a person did, which
+        // is exactly the distinction that column exists to keep.
+        fromSchedule: false,
+        // An admin booked it on somebody's behalf, which is the phone door.
+        placedVia: booking.DOORS.PHONE,
+        placedBy: req.opsUser,
+      });
+
+      if (!result.ok) {
+        return said('problem', result.detail || 'That pickup could not be booked.');
+      }
+
+      await events.record(result.order.id, {
+        kind: 'CREATED',
+        summary: `Extra pickup added to their ${subscription.CUSTOMER_WORD.toLowerCase()}`,
+        was: 'not booked',
+        became: `${date}${time ? ` at ${time}` : ''}, ${subscription.subscriptionRate()}`,
+        by: { opsUser: req.opsUser },
+        reason:
+          'Booked by hand on an existing plan, so it is priced and counted under it. ' +
+          'Calling it off later does not touch the plan.',
+      });
+
+      // THE CONFIRMATION, FROM THE SAME FUNCTION THE OTHER TWO DOORS USE.
+      //
+      // A booked pickup nobody was told about is a van arriving at a door with
+      // no bag out - the mirror of the cancel rule, which exists for the same
+      // reason. The wording reads the order, so it names $1.80 because the
+      // order says $1.80.
+      //
+      // Best effort and last: the pickup is real either way, and a screen that
+      // says "booked" while the text failed is better than one that hides the
+      // booking. The banner says which happened.
+      let told = true;
+      await notify
+        .sendAndLog(
+          customer.phone,
+          booking.confirmationMessage(customer, result.order, {
+            source: booking.DOORS.PHONE,
+            rolled: result.rolled,
+            freeOrder: result.freeOrder,
+            freeUpToLb: result.freeUpToLb,
+          }),
+          customer.id
+        )
+        .catch((err) => {
+          told = false;
+          console.error(`Booked #${result.order.order_number} but could not text them: ${err.message}`);
+        });
+
+      return said(
+        'note',
+        `Order #${result.order.order_number} booked on their plan at ${subscription.subscriptionRate()}. ` +
+          (told ? 'They have been texted the confirmation.' : 'The confirmation text did NOT send - tell them.')
+      );
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (req, res, next) => {
   try {
