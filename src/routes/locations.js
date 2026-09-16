@@ -123,17 +123,18 @@ function priceBlock() {
   <section class="dotfield">
     <div class="container section" style="max-width:900px;">
       <p class="eyebrow eyebrow-brand">Pricing</p>
-      <h2 class="display-3">${escapeHtml(site.pricePerLb)} a pound.</h2>
+      <h2 class="display-3">${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription.</h2>
       <p style="font-size:18px;line-height:1.6;color:var(--ink-800);max-width:52ch;">
-        ${escapeHtml(MINIMUM)} minimum per pickup. Your laundry is weighed
-        after we pick it up, and your card is charged once, after we weigh it.
-        Nothing is charged when you book. No delivery fee and no membership.
+        Pickups ${escapeHtml(site.subscriptionFrequencies)}. One-time pickups
+        are ${escapeHtml(site.pricePerLb)} a pound. ${escapeHtml(MINIMUM)}
+        minimum per pickup either way. Your laundry is weighed after we pick it
+        up, and your card is charged once, after we weigh it. Nothing is charged
+        when you book.
       </p>
       <p style="margin-top:14px;font-size:18px;line-height:1.6;color:var(--ink-800);max-width:52ch;">
-        On a subscription it is ${escapeHtml(site.subscriptionPricePerLb)} a pound,
-        with pickups ${escapeHtml(site.subscriptionFrequencies)}. Same
-        ${escapeHtml(MINIMUM)} minimum, same charge after we weigh it. It is a
-        rate, not a membership: nothing to join and no minimum number of pickups.
+        No delivery fee and no membership. A subscription is a rate, not a club:
+        nothing to join, no joining fee and no minimum number of pickups, and
+        you can change how often we come or cancel at any time.
       </p>
       <p style="margin-top:22px;font-size:16px;">
         <a href="/pricing">See the full wash and fold pricing</a>.
@@ -192,8 +193,9 @@ router.get(HUB_PATH, async (req, res) => {
     <h1 class="display-2" style="margin-bottom:14px;">Laundry pickup in ${COUNTY}</h1>
     <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:50ch;margin:0;">
       Wash and fold pickup and delivery across ${COUNTY}. Text to book.
-      ${escapeHtml(site.pricePerLb)} a pound, ${escapeHtml(MINIMUM)} minimum.
-      Next day back at the door.
+      ${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription,
+      ${escapeHtml(site.pricePerLb)} a pound one-time, ${escapeHtml(MINIMUM)}
+      minimum either way. Next day back at the door.
     </p>
   </div>
 </section>
@@ -225,7 +227,7 @@ ${cta(null)}`;
       renderPage({
         title: `Laundry Pickup in ${COUNTY}, NJ`,
         fullTitle: `Laundry Pickup in ${COUNTY}, NJ | ${site.name}`,
-        description: `Wash and fold laundry pickup across all 70 ${COUNTY} towns. ${site.pricePerLb} a pound, ${MINIMUM} minimum, next-day return. Text to book, no app.`,
+        description: `Wash and fold laundry pickup across all 70 ${COUNTY} towns. ${site.subscriptionPricePerLb} a pound on a subscription, ${site.pricePerLb} one-time, ${MINIMUM} minimum, next-day return. Text to book, no app.`,
         path: HUB_PATH,
         body,
         head: jsonLd(schema({ path: HUB_PATH, areaServed: null })),
@@ -266,7 +268,9 @@ router.get('/:slug', async (req, res, next) => {
     {
       q: `How much is wash and fold in ${town.name}?`,
       a:
-        `${site.pricePerLb} a pound with a ${MINIMUM} minimum per pickup. We weigh ` +
+        `${site.subscriptionPricePerLb} a pound on a subscription, with pickups ` +
+        `${site.subscriptionFrequencies}, or ${site.pricePerLb} a pound for a one-time ` +
+        `pickup. A ${MINIMUM} minimum per pickup applies either way. We weigh ` +
         `your laundry after we pick it up and charge your card once, after we weigh it. ` +
         `Nothing is charged when you book, and there is no delivery fee.`,
     },
@@ -349,7 +353,7 @@ ${cta(town)}
       renderPage({
         title: `Laundry Pickup in ${town.name}, NJ`,
         fullTitle: `Laundry Pickup in ${town.name}, NJ | ${site.name}`,
-        description: `Wash and fold pickup in ${town.name}, ${COUNTY}. ${site.pricePerLb}/lb, ${MINIMUM} minimum, next-day return. Text ${site.name} to book, no app.`,
+        description: `Wash and fold pickup in ${town.name}, ${COUNTY}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, ${MINIMUM} minimum, next-day return. Text ${site.name} to book, no app.`,
         path,
         body,
         head: jsonLd([...schema({ path, areaServed: town.name }), faqSchema]),

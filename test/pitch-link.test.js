@@ -98,7 +98,12 @@ test('A TAMPERED TOKEN IS REFUSED, however small the edit', () => {
   for (const forged of [
     `${forward}.${nonce}.${sig}`,
     `${minted}.${'0'.repeat(nonce.length)}.${sig}`,
-    `${minted}.${nonce}.${sig.slice(0, -1)}0`,
+    // FLIPPED, NOT SET. This read `${sig.slice(0, -1)}0`, which is not a
+    // forgery at all when the signature already ends in 0 - the "forged" token
+    // is then byte-for-byte the real one and verify() rightly accepts it. The
+    // signature is hex, so that was a one-in-sixteen red build for a year, and
+    // it finally came up during an unrelated copy change.
+    `${minted}.${nonce}.${sig.slice(0, -1)}${sig.slice(-1) === '0' ? '1' : '0'}`,
     `${minted}.${nonce}.${sig}extra`,
     `${minted}.${nonce}`,
   ]) {

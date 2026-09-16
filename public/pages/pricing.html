@@ -8,7 +8,7 @@
 
 <section class="container" style="padding:88px 40px 48px;">
   <p class="eyebrow eyebrow-brand">Pricing</p>
-  <h1 class="display-2">One price. No surprises.</h1>
+  <h1 class="display-2">Two rates. No surprises.</h1>
   <p class="lead" style="max-width:44ch;">Weighed after pickup, texted to you right away, charged once we weigh it.</p>
 </section>
 
@@ -56,32 +56,37 @@
          rather than as emphasis. The fill and the badge carry it. -->
     <div class="card card-lg card-xl card-accent"
          style="padding:30px;display:flex;flex-direction:column;" data-reveal>
-      <span class="badge badge-ink" style="margin-bottom:18px;">One price</span>
-      <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Wash &amp; fold</p>
+      <span class="badge badge-ink" style="margin-bottom:18px;">Wash &amp; fold</span>
+      <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Subscription</p>
 
-      <!-- BOTH RATES, BECAUSE THERE ARE TWO AND THIS PAGE SHOWED ONE.
-           The checkout offers a one-time pickup or a subscription, and every
-           public page quoted the one-time rate as "the price" - so somebody
-           read this, chose from a menu of one, and met a cheaper option at the
-           till. A subscription here is a RATE, not a club: see the FAQ below,
-           and see that "no membership" further down is still true. -->
+      <!-- THE SUBSCRIPTION RATE IS THE BIG NUMBER. Neil, 15 September.
+           It is the cheaper of the two and the one most people should be on, so
+           it leads; the one-time rate sits under it rather than being hidden.
+           Both are here because the checkout offers both, and a page that
+           showed one meant somebody could choose from a menu of one and meet a
+           cheaper option at the till.
+           A subscription is a RATE, not a club - see the FAQ below, and see
+           that "no membership" further down is still true. -->
       <div style="display:flex;align-items:baseline;gap:8px;">
-        <span style="font-family:var(--font-display);font-weight:900;font-size:62px;letter-spacing:-0.05em;line-height:0.85;">{{PRICE_PER_LB}}</span>
-        <span style="font-size:15px;font-weight:600;">per pound, one-time</span>
-      </div>
-
-      <div style="display:flex;align-items:baseline;gap:8px;margin-top:18px;padding-top:18px;border-top:2px solid var(--ink-100);">
-        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.04em;line-height:0.85;">{{SUBSCRIPTION_PRICE_PER_LB}}</span>
+        <span style="font-family:var(--font-display);font-weight:900;font-size:62px;letter-spacing:-0.05em;line-height:0.85;">{{SUBSCRIPTION_PRICE_PER_LB}}</span>
         <span style="font-size:15px;font-weight:600;">per pound, on a subscription</span>
       </div>
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:10px 0 0;">
         Pickups {{SUBSCRIPTION_FREQUENCIES}}. Change it or cancel it any time.
       </p>
 
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:18px;padding-top:18px;border-top:2px solid var(--ink-100);">
+        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.04em;line-height:0.85;">{{PRICE_PER_LB}}</span>
+        <span style="font-size:15px;font-weight:600;">per pound, one-time</span>
+      </div>
+      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:10px 0 0;">
+        Book whenever you need us. Nothing booked after it.
+      </p>
+
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:20px 0 26px;">
-        {{MINIMUM}} minimum per pickup, either way. That's the first {{MINIMUM_LB}}.
-        Nothing is charged when you book. We weigh your bag after pickup, text
-        you the total, and charge once. A typical bag runs {{ESTIMATE_RANGE}}.
+        {{MINIMUM}} minimum per pickup, either way. Nothing is charged when you
+        book. We weigh your bag after pickup, text you the total, and charge
+        once. No membership.
       </p>
       <a href="/#get-started" class="btn btn-ink btn-full">Get started {{ICON_ARROW_SM}}</a>
     </div>
@@ -174,7 +179,7 @@
       </div>
       <div class="qa">
         <h3>How do I know what I'll be charged?</h3>
-        <p>We weigh your laundry after picking it up and multiply by {{PRICE_PER_LB}}. A typical {{BAG_WEIGHT}} bag works out around {{ESTIMATE_RANGE}}. You get the exact figure by text before the charge goes through.</p>
+        <p>We weigh your laundry after picking it up and multiply by your rate: {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, or {{PRICE_PER_LB}} a pound for a one-time pickup. A {{MINIMUM}} minimum per pickup applies either way. A typical {{BAG_WEIGHT}} bag works out around {{ESTIMATE_RANGE}} at the one-time rate. You get the exact figure by text before the charge goes through.</p>
       </div>
       <div class="qa">
         <h3>How do I pay?</h3>
@@ -182,15 +187,15 @@
       </div>
       <div class="qa">
         <h3>When exactly am I charged?</h3>
-        <p>Once, and you are told as it happens. Nothing is taken when you book. Your laundry is weighed at the laundromat, and that is the moment your card is charged: the text with the weight and the total comes at the same time. You are only ever charged for a pickup, never for having an account. If you set up a repeating pickup we text you the evening before each one, so nothing is ever charged without warning.</p>
+        <p>Once per pickup, after we weigh it, and you are told as it happens. Nothing is taken when you book. The text with the weight and the total arrives at the moment your card is charged. You are only ever charged for a pickup, never for having an account and never on a subscription cycle: a subscription books pickups and each one is charged after it is weighed, exactly like a one-time pickup. We text you the evening before every pickup, so nothing is ever charged without warning.</p>
       </div>
       <div class="qa">
-        <h3>What if my laundry weighs less than {{MINIMUM_LB}}?</h3>
-        <p>The {{MINIMUM}} minimum is the price. A small load still gets a full pickup, a full wash and fold, and a full delivery, which is what the minimum covers. Cancel before we pick up and there is nothing to pay.</p>
+        <h3>What if my laundry weighs very little?</h3>
+        <p>The {{MINIMUM}} minimum per pickup is the price, and it is the same {{MINIMUM}} on either rate. A small load still gets a full pickup, a full wash and fold, and a full delivery, which is what the minimum covers. Cancel before we pick up and there is nothing to pay.</p>
       </div>
       <div class="qa">
         <h3>Do you charge for pickup or delivery?</h3>
-        <p>No. Both are included in the {{PRICE_PER_LB}} a pound.</p>
+        <p>No. Both are included in the per-pound rate, whichever one you are on.</p>
       </div>
       <div class="qa" style="border-bottom:none;">
         <h3>What if something needs special handling?</h3>

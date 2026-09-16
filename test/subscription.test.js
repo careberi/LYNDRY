@@ -383,3 +383,129 @@ test('AND "NO MEMBERSHIP" SURVIVES, because it is still true', () => {
     );
   }
 });
+
+// --- every public page tells the same story ---------------------------------
+
+test('NO PUBLIC PAGE QUOTES ONE RATE ON ITS OWN', () => {
+  // Neil, 15 September: the pricing panel disagreed with itself. "Is there a
+  // subscription?" was updated and the answers under it were not, so the same
+  // card said $2.00 was the price twice more.
+  const pages = [
+    ['public', 'pages', 'home.html'],
+    ['public', 'pages', 'pricing.html'],
+    ['public', 'pages', 'faq.html'],
+    ['public', 'pages', 'how-it-works.html'],
+    ['public', 'pages', 'terms.html'],
+
+    // THE TWO THAT WERE MISSED, and they are the reason this list is worth
+    // extending rather than trimming. Both are public pages with a price on
+    // them that are deliberately NOT in PAGES, so a sweep that walks the
+    // website's own page list never reaches either: /bergen is the advert
+    // landing page, and /start/sent is the first thing somebody reads after
+    // handing over their number. Both still said $2.00 was the price.
+    ['public', 'pages', 'bergen.html'],
+    ['public', 'pages', 'start-sent.html'],
+  ];
+
+  for (const bits of pages) {
+    const body = fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');
+    const where = bits.join('/');
+
+    // Every page that names one rate names the other.
+    if (/PRICE_PER_LB/.test(body)) {
+      assert.match(body, /SUBSCRIPTION_PRICE_PER_LB/, `${where} quotes only the one-time rate`);
+    }
+  }
+});
+
+test('AND NEITHER DOES A META DESCRIPTION', () => {
+  // These are the price lines nobody looks at, because they are not ON the
+  // page - they are what Google prints under the link and what an AI reads
+  // when it answers "how much is LYNDRY". Three of them still said $2.00 and
+  // nothing else: the home page, how it works, and every one of the 70 town
+  // pages.
+  //
+  // CHECKED PER SENTENCE, NOT PER FILE. Both files mention both rates
+  // somewhere, so a file-level test passes while one description quietly
+  // quotes a single rate - which is exactly how these survived the pass that
+  // fixed the visible copy.
+  for (const bits of [
+    ['src', 'routes', 'web.js'],
+    ['src', 'routes', 'locations.js'],
+  ]) {
+    const body = fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');
+    const where = bits.join('/');
+
+    const descriptions = [...body.matchAll(/description:\s*`([^`]*)`/g)].map((m) => m[1]);
+    assert.ok(descriptions.length, `${where}: no descriptions found - the shape has changed`);
+
+    for (const text of descriptions) {
+      if (!/site\.pricePerLb/.test(text)) continue;
+      assert.match(
+        text,
+        /site\.subscriptionPricePerLb/,
+        `${where} has a description quoting only the one-time rate: ${text.slice(0, 80)}`
+      );
+    }
+  }
+});
+
+test('and the charge copy never names a laundromat', () => {
+  // CLAUDE.md: to the customer, LYNDRY picks up, washes, folds and brings it
+  // back. How that gets done is ours. The charge answers said "weighed at the
+  // laundromat", which is the one place that leaked.
+  const pages = [
+    ['public', 'pages', 'pricing.html'],
+    ['public', 'pages', 'faq.html'],
+    ['public', 'pages', 'how-it-works.html'],
+  ];
+
+  for (const bits of pages) {
+    const body = fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');
+    assert.ok(!/at the laundromat/i.test(body), `${bits.join('/')} names a laundromat`);
+  }
+
+  const web = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'web.js'), 'utf8');
+  const faqBlock = web.slice(0, web.indexOf('for-laundromats'));
+  assert.ok(!/weighed at the laundromat/i.test(faqBlock), 'the FAQ structured data names a laundromat');
+});
+
+test('THE SUBSCRIPTION RATE IS THE BIG NUMBER, not the one-time rate', () => {
+  // Neil: $1.80 leads and $2.00 sits under it. Checked by which token comes
+  // first in each page's price block, because the markup is what decides it.
+  const first = (file, block) => {
+    const body = fs.readFileSync(path.join(__dirname, '..', ...file), 'utf8');
+    const at = body.indexOf(block);
+    assert.notEqual(at, -1, `${file.join('/')}: ${block} has moved`);
+    const region = body.slice(at, at + 1400);
+    const sub = region.indexOf('SUBSCRIPTION_PRICE_PER_LB');
+    const one = region.indexOf('PRICE_PER_LB}}') >= 0 ? region.indexOf('{{PRICE_PER_LB}}') : -1;
+    return { sub, one };
+  };
+
+  // Pricing card: the subscription figure is rendered before the one-time one.
+  const pricing = first(['public', 'pages', 'pricing.html'], 'font-size:62px');
+  assert.ok(pricing.sub > -1 && pricing.one > -1, 'both rates should be in the price card');
+  assert.ok(pricing.sub < pricing.one, 'the one-time rate is still the big number on /pricing');
+
+  // Home: the heading names the subscription rate.
+  const home = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'home.html'), 'utf8');
+  assert.match(
+    home,
+    /<h2 class="display-3">\{\{SUBSCRIPTION_PRICE_PER_LB\}\}/,
+    'the home headline no longer leads with the subscription rate'
+  );
+
+  // How it works: the big figure in the price card.
+  const hiw = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'how-it-works.html'), 'utf8');
+  assert.match(hiw, /font-size:56px[^>]*>\{\{SUBSCRIPTION_PRICE_PER_LB\}\}/);
+
+  // Town pages.
+  const towns = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'locations.js'), 'utf8');
+  assert.match(towns, /display-3">\$\{escapeHtml\(site\.subscriptionPricePerLb\)\} a pound on a subscription/);
+});
+
+test('and "One price" is gone, because there are two', () => {
+  const pricing = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'pricing.html'), 'utf8');
+  assert.ok(!/One price/.test(pricing), '/pricing still says One price');
+});
