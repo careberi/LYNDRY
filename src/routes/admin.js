@@ -184,6 +184,61 @@ const STATUS_TONE = {
   CANCELED: 'var(--ink-200)',
 };
 
+// ---------------------------------------------------------------------------
+// EVERY NOTICE IN OPS IS DRAWN HERE, AND IT WRITES NO INLINE STYLE.
+//
+// Neil, 16 September: the banners were still the public site. An open issue
+// was a full-bleed Stain red strip in 24px display type with a hard ink
+// shadow, on a grey terminal made of hairlines - and a held weight was the
+// same thing in Sunbeam yellow.
+//
+// THE REASON IT SURVIVED THE REST OF THE RESTYLE IS THE STYLE ATTRIBUTE. Every
+// one of these carried its own `background:var(--stain-500)` inline, and an
+// inline style beats every stylesheet rule, so no skin could reach the one
+// piece of markup a restyle is actually about. Neil's instruction was to beat
+// those exact rules or stop writing them; this stops writing them. There are
+// no colours in the markup below at all, which is what makes the look
+// changeable from `.ops-note` in ops.css and impossible to drift per screen.
+//
+// COLOUR IS THE MEANING AND NOT THE DECORATION. `bad` is somebody must act,
+// `warn` is something is waiting, `good` is it worked, and `info` is neither.
+// The tone is a 3px left rule and the label; the panel stays white, because a
+// banner that is on screen all day cannot also be the loudest thing on it.
+//
+// `title` and `body` are HTML, not text: the callers already build their own
+// emphasis and their own escaped values, exactly as the rest of this file
+// does. `label` is the only one taken as plain text, because it is always a
+// short fixed phrase written here.
+function opsNote({
+  tone = 'info',
+  label = null,
+  title = null,
+  body = '',
+  go = null,
+  href = null,
+  role = null,
+} = {}) {
+  const tones = { bad: ' ops-note--bad', warn: ' ops-note--warn', good: ' ops-note--good', info: '' };
+  const cls = `ops-note${tones[tone] || ''}`;
+
+  const inner =
+    (label ? `<span class="ops-note__label">${escapeHtml(label)}</span>` : '') +
+    (title ? `<span class="ops-note__title">${title}</span>` : '') +
+    (body ? `<p class="ops-note__body">${body}</p>` : '');
+
+  // A banner that is a link puts where it goes on the right, so the whole
+  // panel is the target and the words still say what tapping it does.
+  const content = go
+    ? `<div class="ops-note__row"><div>${inner}</div><span class="ops-note__go">${escapeHtml(go)}</span></div>`
+    : inner;
+
+  const attrs = `class="${cls}"${role ? ` role="${role}"` : ''}`;
+
+  return href
+    ? `<a href="${escapeHtml(href)}" ${attrs}>${content}</a>`
+    : `<div ${attrs}>${content}</div>`;
+}
+
 // REQUESTED IS TWO DIFFERENT THINGS AND THE BOARD SAID THE SAME WORD FOR BOTH.
 //
 // Neil, looking at #1973: the card had been saved and the customer had been
@@ -671,19 +726,13 @@ ${
     // reason the issues banner is: a switch on a screen nobody visits daily is
     // a switch that gets left on by accident.
     serviceClosed
-      ? `<a href="/ops/settings" style="display:block;text-decoration:none;margin-bottom:20px;">
-           <div class="card" style="padding:16px 24px;background:var(--sunbeam-500);">
-             <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
-               <div>
-                 <div class="eyebrow" style="margin:0 0 4px;">Pre-launch</div>
-                 <div style="font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.1;">
-                   Not taking orders
-                 </div>
-               </div>
-               <span style="font-weight:700;text-decoration:underline;">Change it</span>
-             </div>
-           </div>
-         </a>`
+      ? opsNote({
+          tone: 'warn',
+          label: 'Pre-launch',
+          title: 'Not taking orders',
+          go: 'Change it',
+          href: '/ops/settings',
+        })
       : ''
 }
 ${
@@ -694,19 +743,14 @@ ${
     // be impossible to forget, and a banner you can close is a banner that
     // gets closed.
     openIssues
-      ? `<a href="/ops/issues" style="display:block;text-decoration:none;margin-bottom:32px;">
-           <div class="card" style="padding:18px 24px;background:var(--stain-500);color:var(--paper-050);">
-             <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
-               <div>
-                 <div class="eyebrow" style="margin:0 0 4px;color:var(--paper-050);">Needs a person</div>
-                 <div style="font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.1;">
-                   ${openIssues} unresolved ${openIssues === 1 ? 'issue' : 'issues'}
-                 </div>
-               </div>
-               <span style="font-size:16px;font-weight:700;text-decoration:underline;">Open them</span>
-             </div>
-           </div>
-         </a>`
+      ? opsNote({
+          tone: 'bad',
+          label: 'Needs a person',
+          title: `${openIssues} unresolved ${openIssues === 1 ? 'issue' : 'issues'}`,
+          go: 'Open them',
+          href: '/ops/issues',
+          role: 'alert',
+        })
       : ''
   }
 ${body}
@@ -1065,8 +1109,7 @@ function pickupSequence(
       // "Correct something" says nothing about what is about to change, and a
       // driver tapping it should already know.
       fixing
-        ? `<div style="margin:0 0 20px;padding:14px 18px;border:2px solid var(--ink-900);border-radius:12px;
-                       background:var(--sunbeam-500);">
+        ? `<div class="ops-note ops-note--warn">
              <p style="margin:0 0 10px;font-size:16px;line-height:1.5;">
                <strong>Correcting a value.</strong> The old one and the new one
                both go on the order with your name against them.
@@ -1245,45 +1288,36 @@ function returnCheckCard(order, mayRelease) {
   const cameBack = Number(order.return_weight_lb);
 
   return `
-  <section class="card" style="background:var(--stain-500);color:var(--paper-050);margin-bottom:20px;">
-    <p class="eyebrow" style="margin:0 0 8px;color:var(--paper-050);">The driver is stopped</p>
-    <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 14px;">
-      What came back does not match
-    </h2>
+  <section class="ops-note ops-note--bad" role="alert">
+    <span class="ops-note__label">The driver is stopped</span>
+    <span class="ops-note__title">What came back does not match</span>
 
-    <div style="display:flex;gap:22px;flex-wrap:wrap;margin:0 0 16px;
-                font-variant-numeric:tabular-nums;">
-      <div><p class="eyebrow" style="margin:0 0 2px;color:var(--paper-050);">We collected</p>
-           <p style="font-size:26px;font-weight:800;margin:0;">${wentIn.toFixed(1)} lb</p></div>
-      <div><p class="eyebrow" style="margin:0 0 2px;color:var(--paper-050);">Came back</p>
-           <p style="font-size:26px;font-weight:800;margin:0;">${cameBack.toFixed(1)} lb</p></div>
-      <div><p class="eyebrow" style="margin:0 0 2px;color:var(--paper-050);">Difference</p>
-           <p style="font-size:26px;font-weight:800;margin:0;">${
-             check.difference > 0 ? '+' : ''
-           }${Number(check.difference).toFixed(1)} lb</p></div>
+    <div class="ops-note__figures">
+      <div><span class="ops-note__label">We collected</span>
+           <b>${wentIn.toFixed(1)} lb</b></div>
+      <div><span class="ops-note__label">Came back</span>
+           <b>${cameBack.toFixed(1)} lb</b></div>
+      <div><span class="ops-note__label">Difference</span>
+           <b>${check.difference > 0 ? '+' : ''}${Number(check.difference).toFixed(1)} lb</b></div>
     </div>
 
-    <p style="font-size:15px;line-height:1.6;margin:0 0 18px;max-width:62ch;">
-      ${escapeHtml(check.detail)}
-    </p>
+    <p class="ops-note__body">${escapeHtml(check.detail)}</p>
 
     ${
       mayRelease
-        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/release-return" style="margin:0;">
-             <label class="field-label" for="why" style="color:var(--paper-050);">Why is it safe to send</label>
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/release-return" style="margin:12px 0 0;">
+             <label class="field-label" for="why">Why is it safe to send</label>
              <input class="input input-lg" type="text" id="why" name="reason" maxlength="200"
                     required placeholder="What you checked and what you found">
              <button class="btn btn-lg btn-full" type="submit" style="margin-top:16px;">
                Release it for delivery
              </button>
            </form>
-           <p style="font-size:13px;line-height:1.5;margin:14px 0 0;opacity:0.85;">
+           <p class="ops-note__body muted" style="margin-top:10px;">
              This does not change any weight or price. It records that you looked,
              and lets the driver carry on.
            </p>`
-        : `<p style="font-size:15px;line-height:1.6;margin:0;font-weight:700;">
-             An admin has to release this one.
-           </p>`
+        : `<p class="ops-note__body"><strong>An admin has to release this one.</strong></p>`
     }
   </section>`;
 }
@@ -1321,18 +1355,16 @@ function declinedCard(order, mayCharge, mayText) {
   const notACard = hasMethod && !customer.card_brand && !customer.card_last4;
 
   const line = (label, value) => `
-    <p style="margin:0 0 6px;font-size:15px;line-height:1.6;">
-      <span class="eyebrow" style="margin:0 8px 0 0;">${escapeHtml(label)}</span>${value}
+    <p class="ops-note__body">
+      <span class="ops-note__label" style="display:inline;margin:0 8px 0 0;">${escapeHtml(label)}</span>${value}
     </p>`;
 
   return `
-  <section class="card" style="background:var(--sunbeam-500);margin-bottom:20px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Nothing has been taken</p>
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 12px;">
-      ${escapeHtml(money(order.price_cents))} was refused
-    </h2>
+  <section class="ops-note ops-note--warn">
+    <span class="ops-note__label">Nothing has been taken</span>
+    <span class="ops-note__title">${escapeHtml(money(order.price_cents))} was refused</span>
 
-    <p style="font-size:15px;line-height:1.6;margin:0 0 16px;max-width:62ch;">
+    <p class="ops-note__body">
       They were texted the weight, the total and a link to sort it out, and the
       delivery goes ahead either way. If they save a card on that link the money
       settles itself.
@@ -1344,31 +1376,31 @@ function declinedCard(order, mayCharge, mayText) {
 
     ${
       !hasMethod
-        ? `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;max-width:62ch;font-weight:700;">
+        ? `<p class="ops-note__body"><strong>
              There is nothing on file to charge. They have to add a payment
              method before this can go anywhere.
-           </p>`
+           </strong></p>`
         : notACard
-          ? `<p style="font-size:15px;line-height:1.6;margin:14px 0 0;max-width:62ch;font-weight:700;">
+          ? `<p class="ops-note__body"><strong>
                What they saved is a wallet rather than a card, so we hold no
                brand and no last four for them. If the account behind it is
                refusing the charge, pressing this again will not change that:
                ring them and ask them to put a card on instead.
-             </p>`
+             </strong></p>`
           : ''
     }
 
     ${
       mayCharge
         ? `<form method="post" action="/ops/orders/${escapeHtml(order.order_number)}/charge"
-                 style="margin:18px 0 0;">
+                 style="margin:14px 0 0;">
              <button class="btn btn-primary btn-lg btn-full" type="submit">
                Try the card again
              </button>
            </form>`
-        : `<p style="font-size:15px;line-height:1.6;margin:18px 0 0;font-weight:700;">
+        : `<p class="ops-note__body" style="margin-top:12px;"><strong>
              An admin has to try this one again.
-           </p>`
+           </strong></p>`
     }
 
     <!-- ASK THEM TO FIX IT THEMSELVES, which is the one that usually works.
@@ -1408,12 +1440,10 @@ function heldWeightCard(order, maySettle) {
   // there is nothing for a person to decide, only something to re-run.
   if (!order.weight_held_at) {
     return `
-  <section class="card" style="background:var(--sunbeam-500);margin-bottom:20px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Nothing has been charged</p>
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 12px;">
-      The price never settled
-    </h2>
-    <p style="font-size:15px;line-height:1.6;margin:0 0 18px;max-width:62ch;">
+  <section class="ops-note ops-note--warn">
+    <span class="ops-note__label">Nothing has been charged</span>
+    <span class="ops-note__title">The price never settled</span>
+    <p class="ops-note__body">
       We weighed it ${ours.toFixed(2)} lb and the laundromat ${theirs.toFixed(2)} lb,
       which is close enough to bill - but the step that prices it did not finish,
       so the customer has not been told a total and their card has not been
@@ -1421,14 +1451,12 @@ function heldWeightCard(order, maySettle) {
     </p>
     ${
       maySettle
-        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/settle-weight" style="margin:0;">
+        ? `<form method="post" action="/ops/orders/${escapeHtml(order.id)}/settle-weight" style="margin:12px 0 0;">
              <button class="btn btn-primary btn-lg btn-full" type="submit">
                Settle it and charge the card
              </button>
            </form>`
-        : `<p style="font-size:15px;line-height:1.6;margin:0;font-weight:700;">
-             An admin has to settle this one.
-           </p>`
+        : `<p class="ops-note__body"><strong>An admin has to settle this one.</strong></p>`
     }
   </section>`;
   }
@@ -1443,29 +1471,23 @@ function heldWeightCard(order, maySettle) {
       <input class="input input-lg" type="number" id="${name}" name="${name}"
              value="${escapeHtml(String(value))}" step="0.01" min="0" max="400"
              inputmode="decimal" required>
-      <p style="font-size:13px;color:var(--ink-500);margin:6px 0 0;line-height:1.45;">
+      <p class="muted" style="margin:6px 0 0;">
         ${escapeHtml(hint)}
       </p>
     </div>`;
 
   return `
-  <section class="card" style="background:var(--sunbeam-500);margin-bottom:20px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Nothing has been charged</p>
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 12px;">
-      The two scales disagree
-    </h2>
+  <section class="ops-note ops-note--warn">
+    <span class="ops-note__label">Nothing has been charged</span>
+    <span class="ops-note__title">The two scales disagree</span>
 
-    <div style="display:flex;gap:22px;flex-wrap:wrap;margin:0 0 16px;
-                font-variant-numeric:tabular-nums;">
-      <div><p class="eyebrow" style="margin:0 0 2px;">We weighed</p>
-           <p style="font-size:26px;font-weight:800;margin:0;">${ours.toFixed(2)} lb</p></div>
-      <div><p class="eyebrow" style="margin:0 0 2px;">They weighed</p>
-           <p style="font-size:26px;font-weight:800;margin:0;">${theirs.toFixed(2)} lb</p></div>
-      <div><p class="eyebrow" style="margin:0 0 2px;">Apart</p>
-           <p style="font-size:26px;font-weight:800;margin:0;">${gap.toFixed(2)} lb</p></div>
+    <div class="ops-note__figures">
+      <div><span class="ops-note__label">We weighed</span><b>${ours.toFixed(2)} lb</b></div>
+      <div><span class="ops-note__label">They weighed</span><b>${theirs.toFixed(2)} lb</b></div>
+      <div><span class="ops-note__label">Apart</span><b>${gap.toFixed(2)} lb</b></div>
     </div>
 
-    <p style="font-size:15px;line-height:1.6;margin:0 0 18px;max-width:62ch;">
+    <p class="ops-note__body">
       The customer has not been told a price and their card has not been
       touched. Deciding here does both: it prices the order, charges the card
       and texts them the total.
@@ -1486,9 +1508,7 @@ function heldWeightCard(order, maySettle) {
                Settle it and charge the card
              </button>
            </form>`
-        : `<p style="font-size:15px;line-height:1.6;margin:0;font-weight:700;">
-             An admin has to settle this one.
-           </p>`
+        : `<p class="ops-note__body"><strong>An admin has to settle this one.</strong></p>`
     }
   </section>`;
 }
@@ -1606,8 +1626,8 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
         // picture of the drop-off, not of each bag.
         bagScan.total && !bagScan.allScanned
         ? `
-      <div style="padding:20px;border:2px solid var(--ink-900);border-radius:14px;background:var(--sunbeam-500);">
-        <p style="margin:0 0 6px;font-family:var(--font-display);font-weight:900;font-size:22px;line-height:1.15;">
+      <div class="ops-note ops-note--warn">
+        <p class="ops-note__title">
           Scan ${bagScan.total === 1 ? 'the bag' : `all ${bagScan.total} bags`} first
         </p>
         <p style="margin:0 0 16px;font-size:15px;line-height:1.55;">
@@ -1648,8 +1668,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
             enctype="multipart/form-data" style="margin:0;display:flex;flex-direction:column;gap:10px;">
         ${
           bagScan.total
-            ? `<p style="margin:0 0 6px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
-                         background:var(--suds-300);font-size:15px;font-weight:600;">
+            ? `<p class="ops-note ops-note--good">
                  All ${bagScan.total} bag${bagScan.total === 1 ? '' : 's'} scanned. Take the photo.
                </p>`
             : ''
@@ -1695,8 +1714,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
 
     ${
       mustWeighFirst
-        ? `<p style="margin:0 0 4px;padding:14px 18px;border:2px solid var(--ink-900);border-radius:12px;
-                     background:var(--sunbeam-500);font-size:16px;line-height:1.45;">
+        ? `<p class="ops-note ops-note--warn">
              <strong>Weigh it before it goes anywhere.</strong> The weight sets the price, and it
              has to be ours rather than the partner's. Nothing else opens until it's in.
            </p>`
@@ -1710,8 +1728,7 @@ function workCard(order, { canAct, notice, problem, bagScan = { total: 0, scanne
     ${
       mustRecordReturn
         ? `
-      <p style="margin:0 0 18px;padding:14px 18px;border:2px solid var(--ink-900);border-radius:12px;
-                background:var(--sunbeam-500);font-size:16px;line-height:1.45;">
+      <p class="ops-note ops-note--warn">
         <strong>Weigh what came back before anything moves.</strong> It gets
         checked against the ${escapeHtml(String(order.weight_lb || '?'))} lb we
         collected, and only then do the clips go on. The customer is told
@@ -1861,7 +1878,7 @@ function loginShell({ heading, intro, error = '', form }) {
 
       ${
         error
-          ? `<div role="alert" class="card card-xl" style="padding:20px;margin-bottom:22px;background:var(--stain-100);box-shadow:6px 6px 0 var(--stain-500);">
+          ? `<div role="alert" class="ops-note ops-note--bad">
                <p style="font-size:16px;line-height:1.5;color:var(--ink-900);margin:0;">${escapeHtml(error)}</p>
              </div>`
           : ''
@@ -2546,8 +2563,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
           // the warning and no control, which is right: handing work to
           // somebody else is a scheduling decision, not a step in the route.
           crew.orphans.length
-            ? `<div style="margin:16px 0 0;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                           background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+            ? `<div class="ops-note ops-note--bad" role="alert" style="margin-top:16px;">
                  <strong>${crew.orphans.length} order${crew.orphans.length === 1 ? '' : 's'} with no driver.</strong>
                  Nobody is going to collect ${crew.orphans.length === 1 ? 'it' : 'them'} until somebody owns
                  ${crew.orphans.length === 1 ? 'it' : 'them'}.
@@ -2942,9 +2958,9 @@ function optOutControl(person, mayDo) {
 
   if (person.status === 'UNSUBSCRIBED') {
     return `
-    <div class="card card-xl" style="padding:26px;margin-bottom:24px;background:var(--stain-100);">
-      <p class="eyebrow" style="margin:0 0 8px;">Texting</p>
-      <h2 style="font-family:var(--font-display);font-weight:800;font-size:22px;margin:0 0 12px;">
+    <div class="ops-note ops-note--bad">
+      <span class="ops-note__label">Texting</span>
+      <h2 class="ops-note__title">
         This number is opted out
       </h2>
       <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-800);max-width:62ch;">
@@ -3514,8 +3530,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         // button that did not work. ?note= and ?problem= on the redirect, so a
         // refresh repeats the message and never the action.
         req.query.note
-          ? `<p style="margin:0 0 20px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                       background:var(--suds-300);font-size:16px;font-weight:600;white-space:pre-wrap;">${escapeHtml(
+          ? `<p class="ops-note ops-note--good" style="white-space:pre-wrap;">${escapeHtml(
                          String(req.query.note).slice(0, 300)
                        )}</p>`
           : ''
@@ -3912,8 +3927,7 @@ const PHONE_ORDER_STATE = 'NJ';
 // two that exist are both local consts inside other functions and neither is
 // exported; a third small copy beats reaching into a page module for it.
 const phoneBanner = (text) => `
-  <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-            background:var(--stain-100);font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+  <p class="ops-note ops-note--bad" role="alert">${escapeHtml(text)}</p>`;
 
 
 function phoneCustomerForm({ values = {}, problem = null } = {}) {
@@ -4494,16 +4508,14 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
 
       ${
         askNote
-          ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                       background:var(--suds-300);font-size:16px;font-weight:600;white-space:pre-wrap;">${escapeHtml(
+          ? `<p class="ops-note ops-note--good" style="white-space:pre-wrap;">${escapeHtml(
                          askNote
                        )}</p>`
           : ''
       }
       ${
         askProblem
-          ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                       background:var(--stain-100);font-size:16px;font-weight:600;">${escapeHtml(askProblem)}</p>`
+          ? `<p class="ops-note ops-note--bad" role="alert">${escapeHtml(askProblem)}</p>`
           : ''
       }
 
@@ -7698,8 +7710,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
       <div style="max-width:640px;">
         ${
           madeHref
-            ? `<div style="margin:0 0 22px;padding:16px 19px;border:2px solid var(--ink-900);
-                           border-radius:14px;background:var(--suds-500);box-shadow:var(--shadow-pop-xs);">
+            ? `<div class="ops-note ops-note--good">
                  <p style="margin:0 0 10px;font-size:16px;line-height:1.5;font-weight:700;">
                    ${madeCount} tag${madeCount === 1 ? '' : 's'} made. The PDF is
                    downloading - ${madeCount * bags.STICKERS_PER_TAG} labels, one to a page.
@@ -7734,7 +7745,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 
       ${
         blank < 10
-          ? `<div class="card card-xl" style="padding:22px;margin-bottom:28px;background:var(--sunbeam-500);max-width:560px;">
+          ? `<div class="ops-note ops-note--warn" style="max-width:560px;">
                <p style="margin:0;font-size:16px;line-height:1.6;font-weight:600;">
                  ${blank === 0 ? 'No blank bag tags left.' : `Only ${blank} blank bag tag${blank === 1 ? '' : 's'} left.`}
                  Print a sheet before the next route - a driver with no tag
@@ -8533,7 +8544,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
 
       ${
         leads.length
-          ? `<div class="card" style="padding:18px 22px;margin-bottom:28px;background:var(--sunbeam-500);">
+          ? `<div class="ops-note ops-note--warn">
                <p style="margin:0 0 4px;font-size:16px;">
                  <strong>${leads.length} ${leads.length === 1 ? 'number has' : 'numbers have'} texted without signing up.</strong>
                  The AI answered them in the thread. Nothing else chases them.
@@ -8569,7 +8580,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
         // it, and a thread with the AI muted is one where nothing at all
         // replies to a customer.
         pausedThreads.length
-          ? `<div class="card" style="padding:18px 22px;margin-bottom:28px;background:var(--sunbeam-500);">
+          ? `<div class="ops-note ops-note--warn">
                <p style="margin:0 0 4px;font-size:16px;">
                  <strong>The AI is switched off on ${pausedThreads.length} ${
                    pausedThreads.length === 1 ? 'conversation' : 'conversations'
@@ -8967,8 +8978,8 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         // at the thread, not by dismissing a number you never read.
         !customer
           ? leadOpen
-            ? `<div class="card card-xl" style="padding:22px;margin-bottom:20px;background:var(--sunbeam-500);">
-                 <p class="eyebrow" style="margin:0 0 8px;">Never signed up</p>
+            ? `<div class="ops-note ops-note--warn">
+                 <span class="ops-note__label">Never signed up</span>
                  <p style="font-size:16px;line-height:1.6;margin:0 0 14px;">
                    They texted and never became a customer. Reply below, or mark
                    it dealt with to clear it from the conversations screen.
@@ -9007,9 +9018,8 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         // of the hold is that somebody is sitting there with no reply. A hold
         // nobody notices is just a customer being ignored.
         hold
-          ? `<div class="card card-xl" style="padding:22px;margin-bottom:20px;background:var(--stain-100);
-                        border-color:var(--stain-500);">
-               <p class="eyebrow" style="margin:0 0 8px;color:var(--stain-500);">The AI has stopped replying</p>
+          ? `<div class="ops-note ops-note--bad" role="alert">
+               <span class="ops-note__label">The AI has stopped replying</span>
                <p style="font-size:16px;line-height:1.6;margin:0;">
                  ${escapeHtml(hold.reason)}
                </p>
@@ -11255,14 +11265,14 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
       ${
         req.query.note
-          ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
+          ? `<div class="ops-note ops-note--good">
                <p style="font-size:16px;margin:0;">${escapeHtml(String(req.query.note).slice(0, 300))}</p>
              </div>`
           : ''
       }
       ${
         req.query.based
-          ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
+          ? `<div class="ops-note ops-note--good">
                <p style="font-size:16px;margin:0;">Base saved. Putting it on the map now - the
                route and the assignment start using it as soon as it lands.</p>
              </div>`
@@ -11270,14 +11280,14 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
       }
       ${
         req.query.added
-          ? `<div class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--suds-100);">
+          ? `<div class="ops-note ops-note--good">
                <p style="font-size:16px;margin:0;">Added. They can sign in with that number now.</p>
              </div>`
           : ''
       }
       ${
         req.query.error
-          ? `<div role="alert" class="card card-xl" style="padding:18px 22px;margin-bottom:24px;background:var(--stain-100);box-shadow:6px 6px 0 var(--stain-500);">
+          ? `<div role="alert" class="ops-note ops-note--bad">
                <p style="font-size:16px;margin:0;">${escapeHtml(String(req.query.error))}</p>
              </div>`
           : ''
@@ -11601,4 +11611,7 @@ function notFoundPage(res, message) {
 // labelState is exported for the same reason readyForPartner is: it is a pure
 // rule about what a tag is, and it decides whether a screen tells a laundromat
 // their bag was delivered. Testable without a database or a browser.
-module.exports = { router, statusBadge, labelState };
+// opsNote is exported for the same reason statusBadge and labelState are: the
+// rule it carries is worth pinning, and the only way to pin "a notice writes no
+// colour into its own markup" is to call it and look at what comes back.
+module.exports = { router, statusBadge, labelState, opsNote };

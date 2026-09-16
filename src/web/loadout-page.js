@@ -355,16 +355,14 @@ function loadoutBody({ run, built, notice, problem }) {
 
   ${
     problem
-      ? `<p style="margin:0 0 20px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--stain-500);color:var(--paper-050);font-size:17px;font-weight:700;">
+      ? `<p role="alert" class="ops-note ops-note--bad">
            ${escapeHtml(problem)}
          </p>`
       : ''
   }
   ${
     notice
-      ? `<p style="margin:0 0 20px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--suds-300);font-size:16px;font-weight:600;">
+      ? `<p class="ops-note ops-note--good">
            ${escapeHtml(notice)}
          </p>`
       : ''

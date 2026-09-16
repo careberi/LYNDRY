@@ -113,14 +113,12 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
 
   ${
     problem
-      ? `<p style="margin:0 0 22px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--stain-500);color:var(--paper-050);font-weight:700;">${escapeHtml(problem)}</p>`
+      ? `<p role="alert" class="ops-note ops-note--bad">${escapeHtml(problem)}</p>`
       : ''
   }
   ${
     notice
-      ? `<p style="margin:0 0 22px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--suds-300);font-size:16px;">${escapeHtml(notice)}</p>`
+      ? `<p class="ops-note ops-note--good">${escapeHtml(notice)}</p>`
       : ''
   }
 

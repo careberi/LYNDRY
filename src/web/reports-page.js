@@ -127,9 +127,8 @@ function reportsBody({ report, partners = [], form = {} }) {
 
   ${
     gaps.length
-      ? `<div style="margin:0 0 22px;padding:15px 18px;border:2px solid var(--ink-900);border-radius:13px;
-                     background:var(--sunbeam-500);">
-           <p class="eyebrow" style="margin:0 0 8px;">Read this before you invoice</p>
+      ? `<div class="ops-note ops-note--warn">
+           <span class="ops-note__label">Read this before you invoice</span>
            <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.6;">
              ${gaps.map((g) => `<li>${escapeHtml(g)}</li>`).join('')}
            </ul>
