@@ -71,6 +71,12 @@ const RUN_FIELDS =
   // would go back on the round. Tenth time this trap has been worth a note.
   'authorization_intent_id, authorized_at, authorization_refused_at, ' +
   'customers(id, name, address_line1, address_line2, city, state, postal_code, lat, lng, geocode_failed, estimated_weight_lb, ' +
+  // WHERE THE BAG SITS, AS A PICTURE. The run draws the card off this, and an
+  // unselected column reads as undefined - which here means the photo simply
+  // never appears, on every stop, with nothing failing. That is the whole
+  // trap this file has a dozen notes about, and the reason it is named here
+  // rather than left to whoever adds the next screen.
+  'pickup_spot_photo_path, pickup_spot_photo_at, ' +
   'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
 // WHAT IS STILL OWED ON AN ORDER, IN CENTS.
