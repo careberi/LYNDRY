@@ -407,6 +407,16 @@ function dropCards(stop) {
             style="margin:0 0 14px;padding:16px 18px;border:2px solid var(--ink-900);
                    border-radius:14px;background:var(--paper-200);">
         <input type="hidden" name="code" value="${escapeHtml(b.code)}">
+        <!-- WHICH LAUNDROMAT HE IS ACTUALLY STANDING IN. The last bag handed
+             over is what moves the order to AT_PARTNER, and it has to be
+             recorded against the laundromat this screen navigated him to
+             rather than the plan the order was booked with - which may name a
+             different one, and did on a real order. -->
+        ${
+          stop.partner && stop.partner.id
+            ? `<input type="hidden" name="partner_id" value="${escapeHtml(stop.partner.id)}">`
+            : ''
+        }
         <!-- THE CLIP FIRST. Neil's order, and it is how he finds the bag: he is
              looking down at a van full of them for a number, and the sticker is
              what he reads once it is in his hand to check he took the right one. -->
