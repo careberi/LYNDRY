@@ -181,7 +181,26 @@ async function dueOn(date) {
 
   for (const schedule of data || []) {
     if (!schedule.customers || schedule.customers.status !== 'ACTIVE') continue;
-    if (nextDate(schedule) !== date) continue;
+
+    // ASKED ABOUT THE DAY WE WERE HANDED, NOT ABOUT TODAY.
+    //
+    // This was `nextDate(schedule)`, and the second argument defaults to
+    // booking.today() - so a function whose entire job is "which schedules
+    // fall on THIS date" answered it by working out the next pickup from the
+    // wall clock and seeing whether the two happened to match.
+    //
+    // IT WORKED FOR THE NIGHTLY PASS BY COINCIDENCE, which is why nobody
+    // noticed: that pass asks about tomorrow, the query above has already
+    // narrowed to tomorrow's weekday, and nextWeekday() is inclusive - so
+    // counting from today and counting from tomorrow land on the same
+    // candidate. Identical answer, reached for the wrong reason.
+    //
+    // It is not a coincidence that survives anything else. Ask about a date in
+    // the past to backfill a missed night and nextDate() returns a future one,
+    // so nothing is ever due and the pass silently books nobody. Ask about a
+    // date further out and a fortnightly or monthly plan counts its off-week
+    // from the wrong end.
+    if (nextDate(schedule, date) !== date) continue;
 
     // Never book on top of something ON THAT DAY. They may have arranged this
     // pickup themselves, the sweep may have already run, or two of their
