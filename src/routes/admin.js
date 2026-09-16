@@ -6001,6 +6001,57 @@ router.post('/ops/run/handed-off', guard, may('orders.drive'), async (req, res, 
       by: { opsUser: req.opsUser },
     });
 
+    // THE LAST BAG OVER THE COUNTER IS THE ORDER CHANGING HANDS.
+    //
+    // A REGRESSION FIX. Moving an order to AT_PARTNER used to be the job of
+    // the "clips are back in the van" card, which went when the van stopped
+    // being a custody state - so the bags were handed over one at a time and
+    // the order stayed IN_PROCESS for ever. A stop that cannot be completed is
+    // a route that stops dead.
+    //
+    // It belongs here rather than on a button because it is not a separate act:
+    // the laundromat has the whole order the moment it has the last bag of it.
+    // Deriving it from the bags is also what makes it true however he got
+    // there - one bag at a time, a reload, or a second phone.
+    //
+    // THE LAUNDROMAT HE IS STANDING IN, not the one the order was planned for.
+    // dropAtPartner() falls back to the plan when it is given nothing, and the
+    // plan goes stale - CLAUDE.md records a real order navigated to one
+    // laundromat and recorded against another.
+    const remaining = (await bags.forOrder(label.order_id, 'PICKUP')).filter(
+      (l) => !l.sticker_seq && l.clip_number != null && l.unclipped_at == null
+    );
+
+    if (!remaining.length) {
+      const order = await loadOrderForAction(label.order_id);
+      const partnerId = UUID.test(String((req.body || {}).partner_id || ''))
+        ? String((req.body || {}).partner_id)
+        : null;
+
+      if (order && order.status === 'IN_PROCESS') {
+        const dropped = await fulfilment
+          .dropAtPartner(order, { partnerId, by: { opsUser: req.opsUser } })
+          .catch((err) => {
+            console.error(`Handed off the last bag of #${order.order_number} but could not drop it: ${err.message}`);
+            return { ok: false, detail: err.message };
+          });
+
+        if (!dropped.ok) {
+          return res.redirect(
+            303,
+            `/ops/run?problem=${encodeURIComponent(
+              `${label.code} handed over, but the order did not move to the laundromat: ${dropped.detail || 'unknown'}`
+            )}`
+          );
+        }
+
+        return res.redirect(
+          303,
+          `/ops/run?note=${encodeURIComponent(`#${order.order_number} is with the laundromat.`)}`
+        );
+      }
+    }
+
     return res.redirect(303, `/ops/run?note=${encodeURIComponent(`${label.code} handed over`)}`);
   } catch (err) {
     return next(err);

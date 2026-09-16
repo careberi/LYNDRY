@@ -397,3 +397,66 @@ test('loaded_at, unloaded_at AND clip_returned_at ARE ALL STILL WRITTEN', () => 
   // And something still reads loaded_at, which is why it is kept.
   assert.match(SRC('core', 'dispatch.js'), /loaded_at/);
 });
+
+// --- the drop actually completes ---------------------------------------------
+
+test('THE LAST BAG HANDED OVER MOVES THE ORDER TO THE LAUNDROMAT', () => {
+  // A REGRESSION THIS PINS. dropAtPartner() used to be called by the "clips are
+  // back in the van" card, which went when the van stopped being a custody
+  // state - so bags were handed over one at a time and the order stayed
+  // IN_PROCESS for ever. A stop that cannot be completed stops the route dead.
+  const admin = withoutComments(SRC('routes', 'admin.js'));
+  const at = admin.indexOf("router.post('/ops/run/handed-off'");
+  assert.notEqual(at, -1, 'the handoff route has moved');
+
+  const body = admin.slice(at, admin.indexOf('\nrouter.', at + 10));
+
+  assert.match(body, /fulfilment\s*\n?\s*\.dropAtPartner\(order/, 'the handoff never drops the order');
+
+  // Derived from the bags, so it is true however he got there - one at a time,
+  // a reload, or a second phone.
+  assert.match(body, /bags\.forOrder\(label\.order_id, 'PICKUP'\)/);
+  assert.match(body, /if \(!remaining\.length\)/, 'it does not wait for the last bag');
+});
+
+test('and it records the laundromat he is standing in, not the plan', () => {
+  // dropAtPartner() falls back to the booking-time plan when given nothing, and
+  // that plan goes stale - a real order was navigated to one laundromat and
+  // would have been recorded against another.
+  const admin = withoutComments(SRC('routes', 'admin.js'));
+  const at = admin.indexOf("router.post('/ops/run/handed-off'");
+  const body = admin.slice(at, admin.indexOf('\nrouter.', at + 10));
+
+  assert.match(body, /partner_id/, 'the handoff ignores which laundromat this is');
+  assert.match(body, /UUID\.test/, 'the posted partner id is trusted unchecked');
+
+  // And the form sends it.
+  // To the form's own close, not a guessed window - the comment inside it is
+  // long enough that a fixed slice stops before the input it is looking for.
+  const page = withoutComments(SRC('web', 'run-page.js'));
+  const from = page.indexOf('run/handed-off');
+  const form = page.slice(from, page.indexOf('</form>', from));
+
+  assert.match(form, /name="partner_id"/, 'the handoff form does not carry the laundromat');
+});
+
+test('a partly handed-over order is not dropped early', () => {
+  const admin = withoutComments(SRC('routes', 'admin.js'));
+  const at = admin.indexOf("router.post('/ops/run/handed-off'");
+  const body = admin.slice(at, admin.indexOf('\nrouter.', at + 10));
+
+  // The remaining set is bags still wearing a clip on the pickup leg, which is
+  // exactly what the drop card lists.
+  assert.match(body, /clip_number != null && l\.unclipped_at == null/);
+  assert.match(body, /!l\.sticker_seq/, 'it counts laundromat stickers as ours');
+});
+
+test('and it only moves an order that is still in our hands', () => {
+  // A second tap, a refresh, or a bag handed over after the order already
+  // moved must not try to drop it again.
+  const admin = withoutComments(SRC('routes', 'admin.js'));
+  const at = admin.indexOf("router.post('/ops/run/handed-off'");
+  const body = admin.slice(at, admin.indexOf('\nrouter.', at + 10));
+
+  assert.match(body, /order\.status === 'IN_PROCESS'/, 'it drops an order in any state');
+});
