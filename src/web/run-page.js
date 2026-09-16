@@ -393,32 +393,6 @@ function dropCards(stop) {
     (stop.partner && stop.partner.id
       ? `<input type="hidden" name="partner_id" value="${escapeHtml(stop.partner.id)}">`
       : '');
-
-  // --- CARD 1: out of the van ----------------------------------------------
-  if (stop.dropStage === 'unload') {
-    const bags = stop.dropBags || [];
-    return `
-    <form method="post" action="/ops/run/unloaded" class="clip-form" style="margin:0;">
-      ${orderInputs}
-      ${dropTask(
-        `Collect bags in the van for drop off at ${where}`,
-        'Collect the bags below and confirm each one by its Van Clip.'
-      )}
-      ${bags
-        .map((b) => clipSwitch('clip', b.clip, `Van Clip #${b.clip}`, 'Collected: false', 'Collected: true'))
-        .join('')}
-      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:8px;">
-        ${
-          // Neil wrote "Bag(s) are collected". The count is known here, so it
-          // says which rather than carrying the bracket - one switch is a bag,
-          // three are bags.
-          bags.length === 1 ? 'Bag is collected' : 'Bags are collected'
-        }
-      </button>
-    </form>`;
-  }
-
-  // --- CARD 2: over the counter, one bag at a time -------------------------
   if (stop.dropStage === 'handoff') {
     const bags = stop.dropBags || [];
     return `
@@ -447,27 +421,16 @@ function dropCards(stop) {
   }
 
   // --- CARD 3: the clips are back ------------------------------------------
-  const clips = stop.clipsToReturn || [];
+  // EVERY CLIP IS OVER THE COUNTER. There used to be one more card here,
+  // asking him to confirm the clips were back in the van - a fact about where a
+  // number is, after he had already said the bag it came off was handed over.
+  // Freeing the clip is part of handing the bag off now, so there is nothing
+  // left to confirm and the stop is simply finished.
   return `
-    <form method="post" action="/ops/run/clips-back" class="clip-form" style="margin:0;">
-      ${orderInputs}
-      ${dropTask(
-        'Return Van Clips to the van',
-        clips.length === 1
-          ? 'Confirm the Van Clip from this drop-off is back in the van.'
-          : `Confirm that all ${clips.length} Van Clips from this drop-off are back in the van.`
-      )}
-      ${clips
-        .map((n) => clipSwitch('clip', n, `Van Clip #${n}`, 'In the van: false', 'In the van: true'))
-        .join('')}
-      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:8px;">
-        ${
-          // "on the van", the same preposition the load step uses. The count is
-          // known, so it says which rather than carrying Neil's bracket.
-          clips.length === 1 ? 'Clip is back on the van' : 'Clips are back on the van'
-        }
-      </button>
-    </form>`;
+    ${dropTask(
+      `Every bag is with ${where}`,
+      'Nothing left at this stop. The clips are free.'
+    )}`;
 }
 
 // WHERE HE IS, at the foot of the card - the same place and the same weight a
@@ -532,6 +495,20 @@ function taskCard(run, user = null) {
                      border:1px solid var(--c-line,#d1d5db);border-radius:2px;">`
       : '';
 
+  // WHAT COMES BACK OFF THE BAGS, on the one card he is already reading.
+  //
+  // It replaced two taps - "out of the van, clips off" and "tags are off" -
+  // neither of which could verify anything, and both of which confirmed work
+  // that taking the delivery photo records anyway. The instruction survives
+  // because nothing of ours goes into a customer's house; the confirmations do
+  // not, because a screen cannot see a clip come off a bag.
+  const remove =
+    task && task.remove
+      ? `<p style="margin:10px 0 0;padding:10px 12px;border:1px solid var(--c-line,#d1d5db);
+                   border-left:3px solid #b45309;background:var(--c-row,#fff);
+                   font-size:14px;line-height:1.45;">${escapeHtml(task.remove)}</p>`
+      : '';
+
   const where =
     task && task.spot
       ? stopLine('Where', escapeHtml(task.spot), 'stop-line-plain') +
@@ -540,8 +517,9 @@ function taskCard(run, user = null) {
             escapeHtml(task.access) +
             '</p>'
           : '') +
-        spotPhoto
-      : '<div style="height:6px;"></div>';
+        spotPhoto +
+        remove
+      : remove || '<div style="height:6px;"></div>';
 
   // THE SAME TWO LABELLED LINES AS THE CARD BEFORE IT. He taps "I'm here" and
   // this replaces the travel card, so TASK and WHERE stay in the same places
@@ -643,13 +621,60 @@ function taskControl(stop, task, order, back = '?from=run') {
   // anything to hang a weight on - and because a driver who has stuck one on
   // deserves to see that step tick over rather than the same unfinished line.
   if (task.key.startsWith('tag_')) {
+    // THE SPOT PHOTO RIDES ON THE FIRST BAG NOW. It used to hang off the
+    // "Collect the bags" step, which no longer exists - scanning the first tag
+    // is the custody event, so this is the first thing on the screen at that
+    // door and the moment he is looking at the doorstep anyway.
+    //
+    // Its own form, so the scan field never starts carrying a file, and
+    // offered rather than demanded: a note for the next driver, not evidence.
+    const spot =
+      task.position === 1
+        ? `
+    <form method="post" action="/ops/orders/${order.order_number}/spot-photo${back}"
+          enctype="multipart/form-data" style="margin:20px 0 0;">
+      <label class="field-label" for="spot_photo">
+        ${task.spotPhoto ? 'Replace the photo of the spot' : 'Photo of the spot (optional)'}
+      </label>
+      <input class="input input-lg" type="file" id="spot_photo" name="photo"
+             accept="image/*" capture="environment" required
+             style="width:100%;margin-bottom:12px;">
+      <button type="submit" class="btn btn-outline btn-lg btn-full">
+        ${task.spotPhoto ? 'Use this one instead' : 'Save it for next time'}
+      </button>
+      <p class="muted" style="margin:8px 0 0;font-size:13px;line-height:1.45;">
+        Kept on the customer so the next pickup knows the door. Never sent to
+        them, and not the delivery photo.
+      </p>
+    </form>`
+        : '';
+
+    // OR THAT WAS THE LAST ONE. Without this the open slot is a dead end: the
+    // run shows one task at a time, so Finish Pickup sits behind "Another bag?"
+    // in the list and is never reachable. This is the real question at that
+    // moment - another one, or is that all of them?
+    const finish = task.canFinish
+      ? `
+    <form method="post" action="/ops/orders/${order.order_number}/finish-pickup${back}"
+          style="margin:20px 0 0;padding-top:20px;border-top:1px solid var(--c-line,#d1d5db);">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        Finish Pickup - ${task.bags} bag${task.bags === 1 ? '' : 's'}
+      </button>
+      <p class="muted" style="margin:8px 0 0;font-size:13px;line-height:1.45;">
+        That is all of them. This charges the card.
+      </p>
+    </form>`
+      : '';
+
     return `
       ${scanField({
         action: `/ops/orders/${order.order_number}/label${back}`,
         label: `Code off the tag for bag #${task.position}`,
         buttonLabel: `That's bag #${task.position}`,
         autofocus: true,
-      })}`;
+      })}
+      ${finish}
+      ${spot}`;
   }
 
   if (task.key.startsWith('weigh_')) {
@@ -767,63 +792,12 @@ function taskControl(stop, task, order, back = '?from=run') {
     </form>`;
   }
 
-  // STEP ONE NOW, not the last thing. He is handed the bags and then deals with
-  // them, which is the real order of events at a door - and marking it
-  // collected is what texts the customer to say we have been, so making that
-  // wait until the last bag is on the scale would delay their message for
-  // nothing.
-  if (task.key === 'collected') {
-    // A PHOTO OF THE SPOT, OFFERED HERE AND NEVER DEMANDED.
-    //
-    // Neil, 16 September. It is a note for the next driver, not evidence, so
-    // nothing is gated on it: the collect button above does not care whether
-    // one exists, and a driver in the rain is not held up by a camera.
-    //
-    // A STILL PHOTO, THE SAME MECHANISM AS THE BAG SCAN. `capture` opens the
-    // phone's own camera - autofocus, exposure, torch - with no live stream to
-    // keep alive and no permission prompt of ours to refuse. `accept` keeps
-    // the picker on images where a camera is not offered.
-    //
-    // ITS OWN FORM, because it posts a file and the collect button must not
-    // start carrying one. Two forms on one card, which is the same shape the
-    // conversation screen already uses for Send it and the AI switch.
-    //
-    // IT SAYS WHAT IT IS FOR. A driver pointing a camera at somebody's porch
-    // should know the customer never sees this and that it is not a delivery
-    // photo - that is the difference between a note and surveillance.
-    const spot = `
-    <form method="post" action="/ops/orders/${order.order_number}/spot-photo${back}"
-          enctype="multipart/form-data" style="margin:16px 0 0;">
-      <label class="field-label" for="spot_photo">
-        ${task.spotPhoto ? 'Replace the photo of the spot' : 'Photo of the spot (optional)'}
-      </label>
-      <input class="input input-lg" type="file" id="spot_photo" name="photo"
-             accept="image/*" capture="environment" required
-             style="width:100%;margin-bottom:12px;">
-      <button type="submit" class="btn btn-outline btn-lg btn-full">
-        ${task.spotPhoto ? 'Use this one instead' : 'Save it for next time'}
-      </button>
-      <p class="muted" style="margin:8px 0 0;font-size:13px;line-height:1.45;">
-        Kept on the customer so the next pickup knows the door. Never sent to
-        them, and not the delivery photo.
-      </p>
-    </form>`;
-
-    return `
-    <form method="post" action="/ops/orders/${order.order_number}/collected${back}" style="margin:0;">
-      <button type="submit" class="btn btn-primary btn-lg btn-full">
-        ${order.bag_count ? `Got all ${order.bag_count}` : 'I have the bags'}
-      </button>
-    </form>
-    ${spot}`;
-  }
-
   // THE LAST STEP, and it is not the same as the last bag being weighed. The
   // clips were handed out at the scale; what nothing else can tell us is
   // whether the bags actually made it into the van.
-  if (task.key === 'van') {
+  if (task.key === 'finish') {
     return `
-    <form method="post" action="/ops/orders/${order.order_number}/in-van${back}" style="margin:0;">
+    <form method="post" action="/ops/orders/${order.order_number}/finish-pickup${back}" style="margin:0;">
       ${
         (task.clips || []).length
           ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
@@ -837,34 +811,12 @@ function taskControl(stop, task, order, back = '?from=run') {
              </div>`
           : ''
       }
-      <button type="submit" class="btn btn-primary btn-lg btn-full">They are in the van</button>
-    </form>`;
-  }
-
-  if (task.key === 'clips') {
-    return `
-    <form method="post" action="/ops/orders/${order.order_number}/clips-off${back}" style="margin:0;">
-      ${
-        (task.clips || []).length
-          ? `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px;">
-               ${task.clips
-                 .map(
-                   (n) => `<span style="min-width:58px;padding:12px 16px;border:2px solid var(--ink-900);
-                                        border-radius:12px;background:var(--sunbeam-500);text-align:center;
-                                        font-family:var(--font-mono);font-weight:700;font-size:26px;">${n}</span>`
-                 )
-                 .join('')}
-             </div>`
-          : ''
-      }
-      <button type="submit" class="btn btn-primary btn-lg btn-full">Out of the van, clips off</button>
-    </form>`;
-  }
-
-  if (task.key === 'strip') {
-    return `
-    <form method="post" action="/ops/orders/${order.order_number}/strip${back}" style="margin:0;">
-      <button type="submit" class="btn btn-primary btn-lg btn-full">Tags are off</button>
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        Finish Pickup${task.bags ? ` - ${task.bags} bag${task.bags === 1 ? '' : 's'}` : ''}
+      </button>
+      <p class="muted" style="margin:10px 0 0;font-size:13px;line-height:1.45;">
+        These are all the bags you are taking. This charges the card.
+      </p>
     </form>`;
   }
 
@@ -1712,11 +1664,19 @@ function doorBagBody({ label, problem = null }) {
 //
 // THE STEP IS DERIVED FROM THE BAG, not carried in a session. Reload it, come
 // back on another phone, and it is at the same point.
+// SCAN, WEIGH, DONE - AND THE CLIP COMES BACK WITH THE WEIGHT.
+//
+// Neil's model, 16 September: the van is not a custody state. There were two
+// more steps after the scale - confirm the clip is on, confirm the bag is in
+// the van - and neither was a custody transfer. The clip is assigned by the
+// weigh route itself, so "confirm the clip" asked him to agree with a number
+// we had just handed him; and the van, again, is transportation.
+//
+// What identifies the bag is the scan, what reconciles it is the weight, and
+// the clip is the answer the screen gives back.
 function returnBagStep(label, scanned) {
   if (!scanned) return 'scan';
   if (label.weight_lb == null) return 'weigh';
-  if (!label.clipped_at) return 'clip';
-  if (!label.loaded_at) return 'van';
   return 'done';
 }
 
@@ -1778,60 +1738,20 @@ function returnBagBody({ label, order, scanned = false, problem = null }) {
       </form>`)}`;
   }
 
-  if (step === 'clip') {
-    return `${head}${card(`
-      ${
-        // No detail. The switch below is the number, at 26px, and the button
-        // under it says what tapping does.
-        dropTask(`Put Van Clip #${label.clip_number} on bag ${name}`)
-      }
-      <form method="post" action="/ops/run/bag/${label.id}/clip" class="clip-form" style="margin:0;">
-        <label class="clip-toggle" style="margin:0 0 18px;">
-          <input type="checkbox" name="in_hand" required>
-          <span class="clip-number">Van Clip #${escapeHtml(label.clip_number)}</span>
-          <span class="clip-state">
-            <span class="clip-state-off">Not in use</span>
-            <span class="clip-state-on">In use</span>
-          </span>
-        </label>
-        <button type="submit" class="btn btn-primary btn-lg btn-full">
-          Van Clip #${escapeHtml(label.clip_number)} is on bag ${escapeHtml(name)}
-        </button>
-      </form>`)}`;
-  }
-
+  // NOTHING LEFT TO CONFIRM. The clip was assigned when the weight was saved
+  // and the bag is plainly not on the counter any more, so the two taps that
+  // used to sit here - "the clip is on" and "it is in the van" - were the
+  // driver agreeing with the screen twice.
   return `${head}${card(`
-    ${
-      // No detail on any of the four now. Each screen is a task, a control, and
-      // a button that says what tapping it does.
-      dropTask(`Put bag ${name} into the van`)
-    }
-    <form method="post" action="/ops/run/bag/${label.id}/van" class="clip-form" style="margin:0;">
-      <label class="clip-toggle" style="margin:0 0 18px;">
-        <input type="checkbox" name="aboard" required>
-        <span class="clip-number">Van Clip #${escapeHtml(label.clip_number)}</span>
-        <span class="clip-state">
-          <span class="clip-state-off">In the van: false</span>
-          <span class="clip-state-on">In the van: true</span>
-        </span>
-      </label>
-      <button type="submit" class="btn btn-primary btn-lg btn-full">
-        Bag ${escapeHtml(name)} is on the van
-      </button>
-    </form>`)}
-    ${scannerScript()}`;
+    ${dropTask(
+      `Bag ${name} is done`,
+      label.clip_number == null
+        ? 'Weighed and identified.'
+        : `Weighed, and on Van Clip #${escapeHtml(label.clip_number)}.`
+    )}
+    <a class="btn btn-primary btn-lg btn-full" href="/ops/run">Back to the list</a>`)}`;
 }
 
-// --- THE BAGS AT A CUSTOMER'S DOOR, AS A LIST ------------------------------
-//
-// Neil's flow, and the third screen in this shape: how many bags, then a button
-// per bag, then one bag at a time on its own screen, then a button that says
-// the van is loaded.
-//
-// A BAG IS ADDRESSED BY ITS POSITION, not by a row id. Nothing exists in
-// bag_labels until a tag is bound, so bag #2 of three has no id to link to
-// until it has a sticker on it - and the whole point of the list is that he can
-// open bag #2 before he has touched it.
 function pickupList(stop) {
   const bags = stop.pickupBags || [];
   const number = stop.order ? stop.order.order_number : '';

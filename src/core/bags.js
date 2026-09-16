@@ -752,16 +752,41 @@ async function unloadBags(orderIds) {
 // One bag at a time, because that is how they are handed over - and because a
 // bag confirmed singly is a bag somebody looked at. The clip comes off here but
 // is NOT free yet: it is loose in his hand until the third card.
+// HANDING A BAG OVER IS THE WHOLE EVENT AT A COUNTER.
+//
+// Neil's model, 16 September: the van is not a custody state. This used to be
+// the middle of three taps - take it out of the van, hand it over, confirm the
+// clip is back in the van - and the two around it recorded the bag moving
+// rather than changing hands.
+//
+// IT NO LONGER DEMANDS unloaded_at. That guard made a driver tell us he had
+// picked a bag up off his own floor before we would believe he had handed it
+// across a counter. The column is still written - the run and the load-out read
+// it - but it is stamped here rather than tapped, because a bag going over a
+// counter has self-evidently left the van.
+//
+// AND THE CLIP IS FREED IN THE SAME BREATH. The old rule was that a clip was
+// only available again once somebody confirmed it was back in the van, because
+// it might be sitting on a laundromat counter. That is true and it is an
+// inventory question, not a fulfilment one: the clip comes off the bag AT the
+// counter, which is this moment, and making the driver say so twice bought a
+// certainty no screen could actually check. Clip inventory is its own job.
 async function handOffBag(label) {
   if (!label) return { ok: false, detail: 'No such bag.' };
-  if (!label.unloaded_at) {
-    return { ok: false, detail: 'Take the bags out of the van first.' };
-  }
   if (label.unclipped_at) return { ok: true, already: true };
+
+  const now = new Date().toISOString();
 
   const { error } = await db
     .from('bag_labels')
-    .update({ unclipped_at: new Date().toISOString() })
+    .update({
+      // The bag left the van to get to the counter. Stamped, never asked.
+      unloaded_at: label.unloaded_at || now,
+      // Over the counter: the laundromat has it.
+      unclipped_at: now,
+      // And the number is free. One tap, because it is one event.
+      clip_returned_at: now,
+    })
     .eq('id', label.id);
 
   if (error) throw error;

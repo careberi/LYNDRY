@@ -149,10 +149,10 @@ test('IT IS A STILL PHOTO, THE SAME MECHANISM AS THE BAG SCAN', () => {
   // A file input with capture="environment" opens the phone's own camera -
   // autofocus, exposure, torch - with no live stream to keep alive.
   const page = SRC('web', 'run-page.js');
-  const at = page.indexOf("task.key === 'collected'");
-  assert.notEqual(at, -1, 'the collect control has moved');
+  const at = page.indexOf("task.key.startsWith('tag_')");
+  assert.notEqual(at, -1, 'the tag control has moved');
 
-  const block = page.slice(at, page.indexOf("task.key === 'van'", at));
+  const block = page.slice(at, page.indexOf("task.key.startsWith('weigh_')", at));
 
   assert.match(block, /capture="environment"/, 'it does not open the camera');
   assert.match(block, /type="file"/, 'it is not a file input');
@@ -166,12 +166,12 @@ test('AND NOTHING IS GATED ON IT', () => {
   // A note for the next driver, not evidence. The collect button does not care
   // whether a photo exists, and a driver in the rain is not held up by one.
   const page = SRC('web', 'run-page.js');
-  const at = page.indexOf("task.key === 'collected'");
-  const block = page.slice(at, page.indexOf("task.key === 'van'", at));
+  const at = page.indexOf("task.key.startsWith('tag_')");
+  const block = page.slice(at, page.indexOf("task.key.startsWith('weigh_')", at));
 
   // The collect form is its own form and carries no file.
-  const collectForm = block.slice(block.indexOf('/collected'));
-  assert.ok(!/enctype/.test(collectForm.slice(0, 200)), 'the collect button now posts a file');
+  const collectForm = block.slice(block.indexOf('/label'));
+  assert.ok(!/enctype/.test(collectForm.slice(0, 120)), 'the scan field now posts a file');
 
   // And the run never blocks a task on it.
   const run = withoutComments(SRC('core', 'run.js'));

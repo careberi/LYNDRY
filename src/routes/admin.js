@@ -5713,6 +5713,21 @@ router.post('/ops/run/bag/:id/weight', guard, may('orders.drive'), async (req, r
       );
     }
 
+    // THE CLIP IS ON AND THE BAG IS ABOARD, STAMPED RATHER THAN TAPPED.
+    //
+    // Two steps used to follow this one: confirm the clip, confirm the bag went
+    // in the van. The first asked the driver to agree with a number the line
+    // above had just handed him, and the second is transportation. Both columns
+    // are still written because the run and the load-out read them; neither is
+    // a question any more.
+    await db
+      .from('bag_labels')
+      .update({
+        clipped_at: label.clipped_at || new Date().toISOString(),
+        loaded_at: label.loaded_at || new Date().toISOString(),
+      })
+      .eq('id', label.id);
+
     return res.redirect(303, `/ops/run/bag/${label.id}?scanned=1`);
   } catch (err) {
     return next(err);
@@ -6189,6 +6204,15 @@ orderAction('collected', (order, req) =>
 // What it does before stamping anything is price the order off our own scale
 // and put it on the card, and if that is refused the bags do not move. See
 // fulfilment.loadVan().
+// FINISH PICKUP. The one order-level tap at a doorstep, and the charge point.
+//
+// `in-van` survives as its own action because the JSON API and the order page
+// still post to it, and it is the same function underneath - finishPickup()
+// only does the bookkeeping the driver used to do by hand first.
+orderAction('finish-pickup', (order, req) =>
+  fulfilment.finishPickup(order, { by: { opsUser: req.opsUser } })
+);
+
 orderAction('in-van', (order, req) => fulfilment.loadVan(order, { by: { opsUser: req.opsUser } }));
 
 // AT THE DOOR, STEP ONE: the bags are out of the van and the clips are off.
@@ -7256,6 +7280,36 @@ router.post('/ops/orders/:id/label', guard, may('orders.act'), async (req, res, 
 
     if (!result.ok) {
       return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+    }
+
+    // SCANNING THE FIRST BAG IS TAKING CUSTODY OF IT.
+    //
+    // The "Collect the bags" tap is gone. It announced an intention - the bag
+    // was still on the step when it was pressed - and the real event is this
+    // one: a tag from our roll is now on a bag in his hand. So the order moves
+    // to IN_PROCESS here, and the customer gets the same text they always got,
+    // at the same doorstep, a few seconds earlier.
+    //
+    // collect() carries the card gate with it (dispatch.collectRefusal), so an
+    // order that must not be collected still cannot be - the refusal simply
+    // arrives on the scan rather than on a button that no longer exists.
+    //
+    // ONLY ON THE PICKUP LEG. A sticker going on at a laundromat counter is a
+    // bag they packed and has nothing to do with taking custody at a door.
+    if (leg !== 'DELIVERY' && !order.collected_at && order.status === 'REQUESTED') {
+      const took = await fulfilment
+        .collect(order, { by: { opsUser: req.opsUser } })
+        .catch((err) => {
+          console.error(`Scanned a bag on #${order.order_number} but could not collect: ${err.message}`);
+          return { ok: false, detail: err.message };
+        });
+
+      if (!took.ok) {
+        return res.redirect(
+          303,
+          `${back}?problem=${encodeURIComponent(took.detail || 'That pickup cannot be collected.')}`
+        );
+      }
     }
 
     // Scanning the same sticker twice is not a mistake worth a red banner.
