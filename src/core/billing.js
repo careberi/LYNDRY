@@ -642,9 +642,29 @@ async function chargeOrder(order, customer) {
 
   // --- The card was refused ------------------------------------------------
   //
-  // We deliver anyway and chase by text. Holding someone's clothes over a
-  // declined card is a bad look and legally murky; the exposure is one order's
-  // revenue. That was a deliberate business decision, not an oversight.
+  // THIS USED TO SAY "we deliver anyway and chase by text", AND IT IS THE
+  // OPPOSITE OF THE RULE NOW. Neil reversed it on 14 September, on #2060 -
+  // collected, weighed, charged $84.00, refused, and sitting washed at a
+  // laundromat while nothing in the system would have stopped it being driven
+  // to his door.
+  //
+  // The old sentence was written when the charge happened AT delivery, so
+  // "deliver and chase" was the only option that did not strand somebody on a
+  // doorstep. The charge moved to the door on 12 September, which is what
+  // changed the argument: a customer whose card fails at their own step keeps
+  // their bags and nothing has left the property. The only laundry that can
+  // reach this line is laundry we took in good faith and then could not bill
+  // for.
+  //
+  // SO: an in-hand decline is a PAYMENT HOLD. markFailed() below raises it and
+  // rings the office, dispatch.paymentHold() keeps the bag out of the
+  // customer's doorway, and the sibling block parks their other pickups.
+  // Retrieval off a laundromat is still allowed; delivery is not.
+  //
+  // A DOORSTEP DECLINE IS STILL NOT A HOLD, and the difference is custody.
+  // fulfilment.declinedAtTheDoor() leaves the bags where it found them and
+  // puts the pickup back to tomorrow - we are not holding anything, so there
+  // is nothing to hold up. Do not merge the two paths.
 
   await markFailed(order, result.reason, result.paymentIntentId, result.declineCode);
 
@@ -691,6 +711,64 @@ async function chargeOrder(order, customer) {
 // code is not a thing to build behaviour on - but it is the difference between
 // a person knowing to tell somebody "there is no money in the account today"
 // and knowing to tell them "this one cannot be charged unless you are there".
+// WHAT THE OFFICE IS TOLD IS OWED, AND IT IS THE REMAINDER.
+//
+// This quoted order.price_cents, which is what the wash cost and not what is
+// left to collect. Take $70 in cash against an $84 bill and the page still
+// read "$84.00 outstanding" - so somebody rings a customer who has already
+// paid most of it and asks for all of it again. The ledger had the right
+// number the whole time.
+//
+// dispatch.balance() is the one owner of "what is still owed", and it is
+// required INSIDE the function on purpose: dispatch requires this file at the
+// top, so a top-level require here would close the cycle. The row is handed in
+// as FAILED because that is the state it is being written into - balance()
+// answers 0 for anything else, and at the moment this is called the update may
+// not have landed yet.
+function paymentHoldReason(order) {
+  const dispatch = require('./dispatch');
+  const owed = dispatch.balance({ ...order, payment_status: 'FAILED' });
+
+  return (
+    `Payment hold: ${money(owed)} outstanding on #${order.order_number} and we are ` +
+    `holding the laundry. It will not go out for delivery until the balance is nothing. ` +
+    `Ring them.`
+  );
+}
+
+// THE ONES THAT WERE ALREADY FAILED WHEN THE RULE ARRIVED.
+//
+// markFailed() is the only line where an order BECOMES failed, which makes it
+// the only honest place to call "the moment it entered hold" - and it is why
+// every order that was already sitting there when the hold shipped has never
+// been paged about. #2060 is the real one: failed on 12 September, the hold
+// rule landed on the 14th, and the office was never told.
+//
+// SO THE BOARD SWEEPS THEM, once per draw, over the rows it has already got in
+// its hand. Not a migration and not a backfill script: an order can enter this
+// state at any time through a path that never calls markFailed - a cash
+// payment that does not cover the bill, a row edited by hand - and a sweep on
+// the screen that draws the red card cannot go stale.
+//
+// ensurePaymentHold() is what makes this safe to call every time: it pages
+// once, writes the sentence once, and does nothing at all on every draw after
+// that. Best effort throughout; drawing the board must never fail because the
+// issue ledger did.
+async function ensureExistingHolds(held = []) {
+  const issues = require('./issues');
+
+  for (const order of held || []) {
+    const customer = order.customers || (order.customer_id ? { id: order.customer_id } : null);
+    if (!customer) continue;
+
+    await issues
+      .ensurePaymentHold({ customer, order, reason: paymentHoldReason(order) })
+      .catch((err) =>
+        console.error(`Could not name the payment hold on #${order.order_number}: ${err.message}`)
+      );
+  }
+}
+
 async function markFailed(order, reason, paymentIntentId, declineCode = null) {
   const { error } = await db
     .from('orders')
@@ -728,14 +806,7 @@ async function markFailed(order, reason, paymentIntentId, declineCode = null) {
     const customer = order.customers || (order.customer_id ? { id: order.customer_id } : null);
     if (customer) {
       await issues
-        .raise({
-          customer,
-          order,
-          reason:
-            `Payment hold: ${money(order.price_cents)} outstanding on #${order.order_number} and we are ` +
-            `holding the laundry. It will not go out for delivery until the balance is nothing. ` +
-            `Ring them.`,
-        })
+        .ensurePaymentHold({ customer, order, reason: paymentHoldReason(order) })
         .catch((err) => console.error(`Could not raise the payment hold issue: ${err.message}`));
     }
   }
@@ -1252,6 +1323,8 @@ module.exports = {
   updateCardMessage,
   recordSavedCard,
   chargeOrder,
+  paymentHoldReason,
+  ensureExistingHolds,
   retryOutstanding,
   money,
 };

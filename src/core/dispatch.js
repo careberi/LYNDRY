@@ -143,7 +143,15 @@ async function heldCustomerIds(customerIds = []) {
 
   const { data, error } = await db
     .from('orders')
-    .select('customer_id, status, payment_status, price_cents')
+    // amount_paid_cents IS NOT OPTIONAL HERE, and leaving it out is the
+    // seventh time an unselected column has quietly decided what a screen
+    // knows. balance() reads it as Number(order.amount_paid_cents || 0), so
+    // undefined is indistinguishable from nothing paid - which means an order
+    // with $70 of cash against an $84 bill reads as owing the whole $84, and
+    // goes on blocking every other pickup that customer has after the money
+    // has arrived. The cash ledger is the one thing this query exists to
+    // respect and it was the one column it did not ask for.
+    .select('customer_id, status, payment_status, price_cents, amount_paid_cents')
     .in('customer_id', ids)
     .in('status', orders.IN_OUR_HANDS)
     .eq('payment_status', 'FAILED');
@@ -206,6 +214,66 @@ function collectable(order) {
 //
 // IT FAILS OPEN. A ledger lookup that is down must not empty a day's work or
 // silence every reminder in the system; collectable() still applies underneath.
+// WHY THIS PICKUP CANNOT BE COLLECTED, IN ONE SENTENCE, OR NULL.
+//
+// ONE OWNER FOR A RULE THAT HAD TWO HALVES IN TWO PLACES. The board asked
+// collectable() plus the sibling block; fulfilment.collect() asked only
+// "have they got a card". So the stop vanished off the round and the button
+// behind it still worked - a driver on the order page, a second phone, or
+// POST /ops/collected all collected laundry the board had already decided we
+// could not bill for. CLAUDE.md states the rule this breaks in as many words:
+// a screen that hides a control while the route behind it still fires is not
+// a guard, and all the doors refuse together or none of them do.
+//
+// THE SIBLING BLOCK IS ASKED FIRST, AND IT IS ASKED OF A WAIVED ORDER TOO.
+// That looks like it contradicts the waived rule directly below it and does
+// not, because the two answer different questions. collectable() asks whether
+// THIS order can be billed - a waived one needs no card, which is the whole
+// point of waiving it. The sibling block asks whether this CUSTOMER already
+// has laundry of ours they have not paid for. Deciding to do somebody a
+// favour on today's pickup does not settle the bill on the one sitting at a
+// laundromat, so the favour does not unpark it. This ordering is what the
+// board already did - `collectable(order) && !blocked.has(...)` applied the
+// sibling test outside the waived short-circuit - and getting it backwards
+// here would have quietly changed the round.
+//
+// `blocked` is the Set from heldCustomerIds(), passed in rather than looked up,
+// because a board of thirty stops must not be thirty round trips.
+function collectRefusal(order, blocked = new Set()) {
+  if (!order) return { reason: 'no_order', detail: 'There is no order to collect.' };
+
+  if (blocked.has(order.customer_id)) {
+    return {
+      reason: 'payment_hold',
+      detail:
+        `This customer already has laundry of ours that has not been paid for, so their ` +
+        `other pickups are parked until it clears. Settle or waive that order first.`,
+    };
+  }
+
+  if (order.payment_status === 'WAIVED') return null;
+
+  if (billing.showUpState(order) === 'REFUSED') {
+    return {
+      reason: 'hold_refused',
+      detail:
+        `The card would not accept the ${billing.money(config.pricing.authorizationCents)} hold ` +
+        `that confirms a pickup, so this one is off the round until a card accepts one.`,
+    };
+  }
+
+  if (billing.needsCardOnFile(order.customers || {})) {
+    return {
+      reason: 'no_card_on_file',
+      detail:
+        `Order #${order.order_number} has no payment method on file, so it cannot be billed. ` +
+        `Ask them for a card from the order page, or waive it, before collecting.`,
+    };
+  }
+
+  return null;
+}
+
 async function routableCheck(pickups = []) {
   const blocked = await heldCustomerIds((pickups || []).map((o) => o && o.customer_id)).catch(
     (err) => {
@@ -214,7 +282,7 @@ async function routableCheck(pickups = []) {
     }
   );
 
-  return (order) => collectable(order) && !blocked.has(order && order.customer_id);
+  return (order) => !collectRefusal(order, blocked);
 }
 
 // Every stop on today's run, in the order it will be driven.
@@ -1059,10 +1127,26 @@ async function board(dateIso, fromTime, driverId = null) {
   // Bags we are holding that still need washing, and bags a laundromat has
   // finished. Not filtered by date: a bag collected yesterday and still in the
   // van is today's problem whatever its pickup date says.
+  // AT_PARTNER IS IN THIS LIST NOW, AND ONLY FOR THE RED CARD.
+  //
+  // A charge that fails while the bags are on a laundromat floor is a payment
+  // hold like any other - the sibling block already parks that customer's
+  // other pickups off the back of it - and the board drew no card naming it,
+  // because the one query that feeds `held` never asked for AT_PARTNER rows.
+  // So the state existed, acted on the round, and was invisible on the screen
+  // that exists to explain the round. Same doctrine as the unassigned-order
+  // banner: they come off the board, they do not disappear from it.
+  //
+  // IT DOES NOT BECOME A STOP. Every stop list below filters on its own status
+  // - stillAtDoor, unweighed and needsWash on IN_PROCESS, deliverStops on
+  // READY or OUT_FOR_DELIVERY - so nothing here offers to collect, drop off or
+  // deliver an order sitting at a laundromat. Retrieval is deliberately still
+  // allowed while held: refusing it would leave our bags on somebody else's
+  // shelf at their cost.
   let handQuery = db
     .from('orders')
     .select(BOARD_FIELDS)
-    .in('status', ['IN_PROCESS', 'READY', 'OUT_FOR_DELIVERY']);
+    .in('status', ['IN_PROCESS', 'AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY']);
   if (driverId) handQuery = handQuery.eq('driver_id', driverId);
 
   const { data: inHand, error: handError } = await handQuery;
@@ -1239,6 +1323,17 @@ const billing = require('./billing');
   // van_confirmed_at, and only a stamped order reaches that leg, so new unpaid
   // work cannot get to a laundromat by accident.
   const held = (inHand || []).filter(paymentHold);
+
+  // AND THE OFFICE IS TOLD ABOUT EVERY ONE OF THEM, not only the ones that
+  // became held while somebody was watching. markFailed() pages at the moment
+  // a charge fails, which leaves out every order that was already failed when
+  // that rule shipped - #2060 among them. This names them once each, and does
+  // nothing on every draw after that. Deliberately not awaited into the
+  // board's own result: a slow or broken issue ledger must not stop the round
+  // being drawn.
+  billing
+    .ensureExistingHolds(held)
+    .catch((err) => console.error(`Could not sweep the payment holds: ${err.message}`));
   const deliverStops = (inHand || [])
     .filter((o) => o.status === 'OUT_FOR_DELIVERY' || o.status === 'READY')
     .filter((o) => !paymentHold(o))
@@ -1482,9 +1577,21 @@ const billing = require('./billing');
   const carryingLb =
     dropWeight + (inHand || []).filter((o) => o.status === 'READY').reduce((t, o) => t + Number(o.weight_lb || 0), 0);
 
+  // WHAT IS ACTUALLY IN THE VAN, WHICH IS NOT EVERYTHING IN OUR HANDS.
+  //
+  // This summed the whole in-hand list, which was the same set as "aboard"
+  // until AT_PARTNER joined it above. A bag at a laundromat is on their floor,
+  // not on the van, so counting it here would inflate the load and start
+  // drawing "this is more than the van holds" over a van that is half empty.
+  // Named explicitly rather than left implicit, because the bug would have
+  // arrived through a query one screen away rather than through this line.
+  const ABOARD = ['IN_PROCESS', 'READY', 'OUT_FOR_DELIVERY'];
+
   const carryingBags =
     (pickups || []).reduce((t, o) => t + Number(o.bag_count || 1), 0) +
-    (inHand || []).reduce((t, o) => t + Number(o.bag_count || 1), 0);
+    (inHand || [])
+      .filter((o) => ABOARD.includes(o.status))
+      .reduce((t, o) => t + Number(o.bag_count || 1), 0);
 
   const overWeight = capacity.maxWeightLb != null && carryingLb > capacity.maxWeightLb;
   const overBags = capacity.maxBags != null && carryingBags > capacity.maxBags;
@@ -1830,6 +1937,10 @@ module.exports = {
   paymentHold,
   heldCustomerIds,
   routableCheck,
+  // Exported because fulfilment.collect() is the other door onto the same
+  // rule. Two copies of this predicate is exactly how the board and the
+  // button came to disagree.
+  collectRefusal,
   chooseLaundromat,
   dropoffGroups,
   orderDropStops,
