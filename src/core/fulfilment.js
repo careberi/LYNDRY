@@ -85,6 +85,47 @@ function perPoundOf(order) {
   );
 }
 
+// HOW A PRICE IS EXPLAINED TO THE CUSTOMER, IN ONE PLACE.
+//
+// THE MINIMUM IS A FLOOR ON THE WASH, AND A PAID OPTION SITS ON TOP OF IT.
+// $25 is the minimum; fragrance-free at $2 does not make the minimum $27, and
+// three different sentences here said it did or nearly did.
+//
+// There were three copies of this and only recordWeight's was right:
+//
+//   recordWeight    correct - named the floor, named the surcharge separately
+//   settleWeight    asked `beforeDiscount > byWeight`, so a 13 lb load at
+//                   $26 plus a $2 option came to $28, 28 > 26 was true, and
+//                   the customer was told their order was UNDER a minimum
+//                   they were comfortably over
+//   doorTotalText   asked the right question and printed the wrong number -
+//                   "under our $27.00 minimum" when the minimum is $25.00
+//
+// So this is the one that was already correct, lifted out, with the other two
+// converging on it rather than being patched where they stood. Three copies of
+// a sentence about somebody's bill is three chances to be wrong about it.
+//
+// `verb` is the only thing that differs between callers, and it is not
+// cosmetic: with a promotion still to come off, "that is" is honest and "the
+// total is" is not, because a lower number follows in the next clause.
+function pricedSentence({ opening, byWeight, floor, surcharge, total, perPound, verb = 'that is' }) {
+  const extras = surcharge > 0 ? ` plus ${money(surcharge)} for the wash options you chose` : '';
+
+  if (floor > byWeight) {
+    return `${opening}, which is under our ${money(floor)} minimum${extras}, so ${verb} ${money(total)}.`;
+  }
+
+  // OVER THE MINIMUM AND CARRYING AN EXTRA. The pounds have to be shown on
+  // their own or the sum does not work: "$28.00 at $2.00 a pound" on 13 lb is
+  // arithmetic the customer can see is wrong, and that is exactly what the two
+  // broken copies sent.
+  if (surcharge > 0) {
+    return `${opening}, so that's ${money(byWeight)} at ${perPound}${extras} - ${money(total)} in total.`;
+  }
+
+  return `${opening}, so ${verb} ${money(total)} at ${perPound}.`;
+}
+
 function refusal(err) {
   if (/cannot go from/i.test(err.message)) {
     return { ok: false, reason: 'illegal', detail: err.message };
@@ -602,15 +643,16 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // do in their head and get $70. The same rule the discount already follows:
   // a total that does not match the obvious arithmetic reads as a mistake
   // unless the reason is in the same message.
-  const extras = surcharge > 0 ? ` plus ${money(surcharge)} for the wash options you chose` : '';
-
-  // With no add-ons the weight total IS the total, and saying the same figure
-  // twice reads as a system that cannot add up.
-  const howPriced = minimumApplied
-    ? `${opening}, which is under our ${money(floor)} minimum${extras}, so the total is ${money(priceCents)}.`
-    : surcharge > 0
-      ? `${opening}, so that's ${money(byWeight)} at ${perPoundOf(order)}${extras} - ${money(priceCents)} in total.`
-      : `${opening}, so the total is ${money(priceCents)} at ${perPoundOf(order)}.`;
+  const howPriced = pricedSentence({
+    opening,
+    byWeight,
+    floor,
+    surcharge,
+    total: priceCents,
+    perPound: perPoundOf(order),
+    // Nothing comes off after this one, so it really is the total.
+    verb: 'the total is',
+  });
 
   // What happens to the money, said as something still to come. Nothing is
   // taken here, so a sentence in the past tense would be a lie the customer
@@ -1421,12 +1463,15 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   const customer = order.customers;
   const withCustomer = { ...settled, customers: customer };
 
-  const minimumApplied = beforeDiscount > byWeight;
-
   const opening = `Your laundry weighed ${billable} lb`;
-  const base = minimumApplied
-    ? `${opening}, which is under our ${money(floor)} minimum, so that is ${money(beforeDiscount)}.`
-    : `${opening}, so that is ${money(beforeDiscount)} at ${perPoundOf(order)}.`;
+  const base = pricedSentence({
+    opening,
+    byWeight,
+    floor,
+    surcharge,
+    total: beforeDiscount,
+    perPound: perPoundOf(order),
+  });
 
   // SAY WHAT CAME OFF. A total that is lower than the arithmetic the customer
   // can do themselves reads as a mistake unless the reason is in the same
@@ -1583,7 +1628,6 @@ async function loadVan(order, { by = {} } = {}) {
   // settleWeight() has always used, because the minimum is what a small load is
   // worth and an extra we were asked for is separate work.
   const beforeDiscount = Math.max(byWeight, floor) + surcharge;
-  const minimumApplied = floor > byWeight;
 
   const deal = customer
     ? await promotions.discountFor(customer, order, beforeDiscount).catch((err) => {
@@ -1709,10 +1753,12 @@ async function loadVan(order, { by = {} } = {}) {
         ? waivedWeighInText(weight)
         : doorTotalText({
             weight,
+            byWeight,
+            floor,
+            surcharge,
             beforeDiscount,
             priceCents,
             deal,
-            minimumApplied,
             customer,
             perPound: perPoundOf(order),
           });
@@ -1737,13 +1783,24 @@ async function loadVan(order, { by = {} } = {}) {
 // built from figures worked out in memory BEFORE anything is written - which is
 // the whole design of the doorstep charge. The caller has the order and hands
 // the rate over with the rest of the sums.
-function doorTotalText({ weight, beforeDiscount, priceCents, deal, minimumApplied, customer, perPound }) {
+// `floor` and `surcharge` are passed in beside the sums for the same reason
+// `perPound` is: this text is built from figures worked out in memory before
+// anything is written, which is the whole design of the doorstep charge. It
+// used to be handed a `minimumApplied` boolean instead, and then printed
+// beforeDiscount as though that were the minimum - so a 13 lb load with a $2
+// wash option read "under our $27.00 minimum" when the minimum is $25.00.
+function doorTotalText({ weight, byWeight, floor, surcharge, beforeDiscount, priceCents, deal, customer, perPound }) {
   const card = billing.describeCard(customer) || 'card';
   const opening = `Your laundry weighed ${weight} lb`;
 
-  const base = minimumApplied
-    ? `${opening}, which is under our ${money(beforeDiscount)} minimum, so that is ${money(beforeDiscount)}.`
-    : `${opening}, so that is ${money(beforeDiscount)} at ${perPound}.`;
+  const base = pricedSentence({
+    opening,
+    byWeight,
+    floor,
+    surcharge,
+    total: beforeDiscount,
+    perPound,
+  });
 
   // SAY WHAT CAME OFF. A total lower than the arithmetic somebody can do in
   // their head reads as a mistake unless the reason is in the same message. The
@@ -2093,6 +2150,12 @@ async function reconcileReturn(order, returned, { by = {} } = {}) {
 module.exports = {
   collectedMessage,
   waivedWeighInText,
+  // Exported so a test can read the sentence a customer actually gets. The
+  // first version of that test re-declared this function inside itself, which
+  // meant the behavioural half was checking a copy: the predicate could be
+  // broken in here and every assertion still passed. Same reason labelState
+  // and readyForPartner are exported.
+  pricedSentence,
   settleWeight,
   loadVan,
   recordPartnerScale,
