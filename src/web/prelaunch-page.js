@@ -16,12 +16,8 @@ const { config } = require('../config');
 
 function banner(text, tone) {
   if (!text) return '';
-  const skin =
-    tone === 'bad'
-      ? 'border-color:var(--stain-500);background:var(--stain-100);box-shadow:6px 6px 0 var(--stain-500);'
-      : 'background:var(--suds-300);';
-  return `<p role="${tone === 'bad' ? 'alert' : 'status'}" class="card card-xl"
-             style="padding:16px 20px;margin:0 0 24px;font-size:16px;font-weight:600;${skin}">
+  return `<p role="${tone === 'bad' ? 'alert' : 'status'}"
+             class="ops-note ops-note--${tone === 'bad' ? 'bad' : 'good'}">
             ${escapeHtml(text)}
           </p>`;
 }
@@ -1233,9 +1229,8 @@ function broadcastBody({ counts, recent, notice, problem, draft = '' }) {
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
 
-<div class="card card-xl" style="padding:24px;margin-bottom:24px;border-color:var(--stain-500);
-            box-shadow:6px 6px 0 var(--stain-500);background:var(--stain-100);">
-  <p class="eyebrow" style="margin:0 0 10px;">Before you send</p>
+<div class="ops-note ops-note--bad">
+  <span class="ops-note__label">Before you send</span>
   <ul style="margin:0;padding-left:20px;font-size:16px;line-height:1.7;">
     <li><strong>Anyone who replied STOP is never included</strong>, whatever
         group you pick. That is not a setting and cannot be turned off.</li>

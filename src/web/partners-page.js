@@ -93,14 +93,12 @@ function partnerListBody({ list, notice, problem = null, baseUrl = '' }) {
 
 ${
   notice
-    ? `<p style="margin:20px 0 0;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                 background:var(--suds-300);font-size:16px;font-weight:600;">${escapeHtml(notice)}</p>`
+    ? `<p class="ops-note ops-note--good" style="margin-top:20px;">${escapeHtml(notice)}</p>`
     : ''
 }
 ${
   problem
-    ? `<p role="alert" style="margin:20px 0 0;padding:14px 17px;border:2px solid var(--stain-500);border-radius:12px;
-                 background:var(--stain-100);font-size:16px;font-weight:600;">${escapeHtml(problem)}</p>`
+    ? `<p role="alert" class="ops-note ops-note--bad" style="margin-top:20px;">${escapeHtml(problem)}</p>`
     : ''
 }
 
@@ -282,8 +280,7 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
 
   ${
     problem
-      ? `<p style="margin:0 0 22px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--stain-500);color:var(--paper-050);font-weight:700;">${escapeHtml(problem)}</p>`
+      ? `<p role="alert" class="ops-note ops-note--bad">${escapeHtml(problem)}</p>`
       : ''
   }
 
@@ -538,18 +535,17 @@ function partnerDetailBody({ partner, history, hours = [], load = null, notice }
 
 ${
   notice
-    ? `<p style="margin:0 0 24px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                 background:var(--suds-300);font-size:16px;font-weight:600;">${escapeHtml(notice)}</p>`
+    ? `<p class="ops-note ops-note--good">${escapeHtml(notice)}</p>`
     : ''
 }
 
 ${
   suspicious
-    ? `<div class="card card-xl" style="padding:24px;margin-bottom:28px;background:var(--stain-500);color:var(--paper-050);">
-         <p class="eyebrow" style="margin:0 0 6px;color:var(--paper-050);">Worth looking at</p>
-         <p style="font-family:var(--font-display);font-weight:900;font-size:24px;line-height:1.15;margin:0 0 10px;">
+    ? `<div class="ops-note ops-note--bad">
+         <span class="ops-note__label">Worth looking at</span>
+         <span class="ops-note__title">
            Their scale reads heavy nearly every time
-         </p>
+         </span>
          <p style="margin:0;font-size:15px;line-height:1.6;">
            ${history.heavier} of ${history.total} bags came back heavier than ours,
            averaging ${drift > 0 ? '+' : ''}${drift.toFixed(2)} lb. An honest scale is

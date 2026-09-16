@@ -140,8 +140,8 @@ ${strip(problem, 'var(--stain-100)')}
 
 ${
   !followUpsOn
-    ? `<div class="card" style="padding:16px 20px;margin-bottom:24px;background:var(--sunbeam-500);">
-         <p style="margin:0;font-size:16px;line-height:1.55;">
+    ? `<div class="ops-note ops-note--warn">
+         <p class="ops-note__body">
            <strong>Follow-ups are switched off for the whole business.</strong>
            Nothing below will be chased until they are turned back on from
            <a href="/ops/settings">Taking orders?</a>.

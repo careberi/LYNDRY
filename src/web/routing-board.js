@@ -291,9 +291,9 @@ function offTheRound(board, showNames) {
     .join('');
 
   return `
-  <div class="card" style="padding:18px 22px;margin:0 0 22px;background:var(--stain-500);color:var(--paper-050);">
-    <div class="eyebrow" style="margin:0 0 6px;color:var(--paper-050);">Not on the round</div>
-    <p style="margin:0 0 10px;font-family:var(--font-display);font-weight:900;font-size:20px;line-height:1.15;">
+  <div class="ops-note ops-note--bad" role="alert">
+    <span class="ops-note__label">Not on the round</span>
+    <p class="ops-note__title">
       ${off.length} ${off.length === 1 ? 'pickup has' : 'pickups have'} no payment method on file
     </p>
     <ul style="margin:0 0 10px;padding-left:20px;font-size:15px;line-height:1.6;">${rows}</ul>
@@ -329,9 +329,9 @@ function onPaymentHold(board, showNames, showMoney) {
     .join('');
 
   return `
-  <div class="card" style="padding:18px 22px;margin:0 0 22px;background:var(--stain-500);color:var(--paper-050);">
-    <div class="eyebrow" style="margin:0 0 6px;color:var(--paper-050);">On payment hold</div>
-    <p style="margin:0 0 10px;font-family:var(--font-display);font-weight:900;font-size:20px;line-height:1.15;">
+  <div class="ops-note ops-note--bad" role="alert">
+    <span class="ops-note__label">On payment hold</span>
+    <p class="ops-note__title">
       ${held.length} ${held.length === 1 ? 'order is' : 'orders are'} not going out until they are paid
     </p>
     <ul style="margin:0 0 10px;padding-left:20px;font-size:15px;line-height:1.6;">${rows}</ul>
@@ -454,8 +454,7 @@ function routingBoardBody({
                : 'The day has not started, so the route is solved from there.'
            }
          </p>`
-      : `<p style="margin:0 0 26px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                    background:var(--sunbeam-500);font-size:15px;line-height:1.55;">
+      : `<p class="ops-note ops-note--warn">
            <strong>Everybody's stops at once, from the service base.</strong>
            Useful for seeing the whole day, but nobody drives this - pick a
            driver to get a route that starts where they do.
@@ -468,8 +467,7 @@ function routingBoardBody({
 
   ${
     problem
-      ? `<p style="margin:0 0 22px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--stain-500);color:var(--paper-050);font-weight:700;">${escapeHtml(problem)}</p>`
+      ? `<p role="alert" class="ops-note ops-note--bad">${escapeHtml(problem)}</p>`
       : ''
   }
 
@@ -616,8 +614,7 @@ function routingBoardBody({
     // THE VAN PHYSICALLY WILL NOT HOLD IT. Shown, never silently trimmed - what
     // comes off the van is the driver's call, not the router's.
     board.load && board.load.overloaded
-      ? `<p style="margin:0 0 24px;padding:14px 17px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.55;">
+      ? `<p role="alert" class="ops-note ops-note--bad">
            <strong>This is more than the van holds.</strong>
            ${board.load.pounds.toFixed(0)} lb and ${board.load.bags} bags against
            ${board.load.maxWeightLb} lb and ${board.load.maxBags}${

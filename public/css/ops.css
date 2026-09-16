@@ -422,9 +422,20 @@ body > main.container {
 .console .hint { color: var(--c-muted); font-size: 12px; margin-top: 6px; }
 
 /* --- the page-level banners the route already passes ----------------------- */
-.console .flash { padding: 8px 10px; margin: 0 0 12px; border: 1px solid var(--c-line-strong); background: #fff; }
-.console .flash.problem { border-color: #ef4444; background: var(--c-red-bg); color: var(--c-red); }
-.console .flash.done { border-color: #16a34a; background: var(--c-green-bg); color: var(--c-green); }
+/* THE CONSOLE FLASH IS THE SAME OBJECT AS .ops-note, so it says the same
+   thing the same way. It predates the component and drew a filled red or
+   green panel; the tone is the left rule now, and the panel stays white -
+   otherwise the one screen with the most notices on it is the one screen
+   where they look different. */
+.console .flash {
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  background: var(--c-row);
+  border: 1px solid var(--c-line);
+  border-left: 3px solid var(--c-line-strong);
+}
+.console .flash.problem { border-left-color: #b91c1c; }
+.console .flash.done { border-left-color: #15803d; }
 /* --- the shared table, off inline styles ---------------------------------
 
    admin.js's table() used to write padding, borders and type onto every cell.
@@ -893,3 +904,140 @@ body > main.container {
 .ops-terminal .card {
   scroll-margin-top: 56px;
 }
+
+/* --- notices, and the one look they all share -----------------------------
+
+   THE BANNER WAS THE LAST PIECE OF THE PUBLIC SITE LEFT IN OPS. Neil, 16
+   September: an issue is raised and the strip across the top is cream card
+   stock with a hard ink shadow and a 24px display face, sitting on a grey
+   terminal. Every other thing on the page had been flattened around it.
+
+   ONE CLASS, AND IT IS NOT UNDER .ops-terminal. That scope is opt-in - 43 of
+   the 89 adminPage calls ask for it - so a notice styled there would look
+   right on half the screens and like the marketing site on the rest. The
+   issues banner in particular renders in the shared shell on EVERY ops page,
+   which is exactly the set .ops-terminal does not cover. This sheet is loaded
+   on every ops page and nowhere else, so plain selectors are both safe and
+   the only thing that reaches all of them.
+
+   WHITE PANEL ON THE GREY GROUND, HAIRLINE, 13px. Same furniture as a table,
+   because a notice is something you read at a desk next to one.
+
+   COLOUR CARRIES MEANING AND NOTHING ELSE. The old banners flooded the whole
+   panel - a full-bleed Stain red strip for an open issue, Sunbeam yellow for
+   a held weight - which is a lot of shouting for something that is on screen
+   all day, and it left no louder register for the genuinely urgent. The tone
+   lives in a 3px left rule and the label above the text; the panel stays
+   white. Red means somebody must act, amber means something is waiting, green
+   means it worked. */
+.ops-note {
+  display: block;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--c-row, #fff);
+  border: 1px solid var(--c-line, #d1d5db);
+  border-left: 3px solid var(--c-line-strong, #9ca3af);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--c-ink, #111827);
+  font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* A notice is often a link to the screen that fixes it. It must not pick up
+   the blue underline a link in a table gets - the whole panel is the target. */
+a.ops-note,
+a.ops-note:hover { text-decoration: none; color: var(--c-ink, #111827); }
+
+.ops-note--bad { border-left-color: #b91c1c; }
+.ops-note--warn { border-left-color: #b45309; }
+.ops-note--good { border-left-color: #15803d; }
+
+/* The eyebrow, minus the display face and the letter-spacing of a poster.
+   11px is the label size the rest of ops uses. */
+.ops-note__label {
+  display: block;
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-muted, #6b7280);
+}
+
+.ops-note--bad .ops-note__label { color: var(--c-red, #991b1b); }
+.ops-note--warn .ops-note__label { color: var(--c-amber, #92400e); }
+.ops-note--good .ops-note__label { color: var(--c-green, #166534); }
+
+/* WHAT WAS A 24px DISPLAY HEADLINE IS 13px BOLD. It is a sentence, not a
+   masthead, and it sits one line above the explanation it belongs to. */
+.ops-note__title {
+  display: block;
+  margin: 0 0 4px;
+  /* NOT the font shorthand. `font: 700 13px/1.35 inherit` looks tidier and is
+     invalid - a CSS-wide keyword is not a <family-name>, so the browser drops
+     the whole declaration and the title renders at body weight. Found by
+     looking at the rendered page, not by reading the rule. */
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.ops-note__body { margin: 0; }
+.ops-note__body + .ops-note__body { margin-top: 6px; }
+
+/* The "open them" / "change it" affordance on a banner that is a link. */
+.ops-note__go {
+  color: var(--c-link, #1d4ed8);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Some notices carry a figure or two - two scales that disagree, a count.
+   Tabular so the columns line up, and nowhere near the old 26px. */
+.ops-note__figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-note__figures b { display: block; font-size: 15px; font-weight: 700; }
+
+/* A banner that is a link puts its target on the right on a wide screen and
+   underneath on a phone. */
+.ops-note__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* --- beating what is still written inline ---------------------------------
+
+   Neil: beat those exact inline rules, or stop writing them. Everything this
+   pass touched stopped writing them, which is why the block above is plain
+   classes with no !important in it.
+
+   These two are the exception, and they earn it: .card and .card-xl come from
+   lyndry.css and are still on some of the converted markup for their padding,
+   so the cream fill and the hard offset shadow would come back through the
+   class rather than through a style attribute. Naming them on .ops-note is
+   how the panel stays white. */
+.ops-note.card,
+.ops-note.card-xl {
+  background: var(--c-row, #fff);
+  border: 1px solid var(--c-line, #d1d5db);
+  border-left: 3px solid var(--c-line-strong, #9ca3af);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.ops-note.card.ops-note--bad,
+.ops-note.card-xl.ops-note--bad { border-left-color: #b91c1c; }
+.ops-note.card.ops-note--warn,
+.ops-note.card-xl.ops-note--warn { border-left-color: #b45309; }
+.ops-note.card.ops-note--good,
+.ops-note.card-xl.ops-note--good { border-left-color: #15803d; }

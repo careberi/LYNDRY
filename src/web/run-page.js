@@ -183,8 +183,7 @@ function travelCard(run, user = null) {
               style="margin-bottom:14px;">
              ${run.navigating ? 'Directions again' : 'Take me there'} ${icon('arrow-right', '22')}
            </a>`
-        : `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
-                     background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
+        : `<p role="alert" class="ops-note ops-note--bad">
              ${
                stop.kind === 'dropoff'
                  ? 'No laundromat has been picked for these bags. Nobody is open, or none is set up. Sort that on Routing before you drive anywhere.'
@@ -199,8 +198,7 @@ function travelCard(run, user = null) {
       // by now that laundromat may be shut or full, and the driver should ring
       // ahead rather than turn up on the strength of a week-old decision.
       stop.fromPlan
-        ? `<p style="margin:0 0 14px;padding:12px 15px;border:2px solid var(--ink-900);border-radius:12px;
-                     background:var(--sunbeam-500);font-size:15px;line-height:1.5;">
+        ? `<p class="ops-note ops-note--warn">
              This is where the order was <strong>planned</strong> to go when it
              was booked. Nothing confirmed it is open right now, so ring ahead.
            </p>`
@@ -875,13 +873,11 @@ function partnerCard(run) {
   if (blocked.length) {
     return `
     <div style="${CARD}">
-      <div style="padding:18px 20px;border:2px solid var(--ink-900);border-radius:14px;
-                  background:var(--stain-500);color:var(--paper-050);margin-bottom:18px;">
-        <p class="eyebrow" style="margin:0 0 8px;color:var(--paper-050);">Do not leave</p>
-        <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;
-                   line-height:1.1;margin:0 0 14px;">
+      <div class="ops-note ops-note--bad" role="alert">
+        <span class="ops-note__label">Do not leave</span>
+        <span class="ops-note__title">
           The weights do not match
-        </h2>
+        </span>
         ${blocked
           .map(
             (b) => `
