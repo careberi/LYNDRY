@@ -39,6 +39,19 @@
       </p>
     </div>
 
+    <!-- THE CARD STEP, and it is empty for almost everybody who lands here.
+         Filled by extraTokensFor() in src/routes/web.js only when POST /start
+         has just created a real customer and Stripe is configured; a refused
+         number, a throttle, a bot and somebody already on the books all get
+         this page exactly as it was before the step existed.
+
+         The comment at the top of this file says the page is deliberately a
+         dead end with no form on it. That still holds for ACCOUNTS - there is
+         no password and nothing to sign up for. It stopped holding for the
+         card: six of six customers with one on file have ordered and none of
+         the forty five without one ever has. See src/core/signup-card.js. -->
+    {{SIGNUP_CARD}}
+
     <div class="card card-xl" style="padding:32px;text-align:left;max-width:520px;margin:0 auto;">
       <p class="eyebrow" style="margin-bottom:14px;">What happens next</p>
 
