@@ -288,3 +288,32 @@ test('nothing about the timing, the wording or quiet hours moved', () => {
   assert.match(body, /tomorrow/i);
   assert.ok(!/card|payment|pay/i.test(body), 'the reminder started talking about money');
 });
+
+test('THE SKIP LOG NAMES A REFUSED HOLD AS A REFUSED HOLD', () => {
+  // There are three reasons a pickup is not routable and the log could only
+  // say two. A card that refused the $25 hold makes collectable() false, so it
+  // fell through to the else and was written down as "no card on file" - a
+  // different problem, with a different fix, which sends whoever reads the log
+  // chasing a card that is already on the account.
+  //
+  // THE GATE ITSELF WAS ALWAYS RIGHT. routableCheck() removed the stop either
+  // way; only the sentence explaining it was wrong. That is why this is a test
+  // about the log and not about the round.
+  const at = SOURCE.indexOf('if (!routable(order))');
+  assert.notEqual(at, -1, 'the routable skip has moved');
+
+  const block = SOURCE.slice(at, SOURCE.indexOf('continue;', at));
+
+  assert.ok(block.includes("'payment hold'"), 'the sibling hold lost its name');
+  assert.ok(block.includes("'show-up hold refused'"), 'a refused hold is still called a missing card');
+  assert.ok(block.includes("'no card on file'"), 'the genuine no-card case lost its name');
+  assert.ok(block.includes('showUpState'), 'nothing asks whether the hold was refused');
+});
+
+test('and a skipped reminder still does not stamp reminder_sent_at', () => {
+  // Unchanged, and worth pinning beside the edit above: if a card arrives
+  // before the pass runs again, the column must still mean "we sent it".
+  const at = SOURCE.indexOf('if (!routable(order))');
+  const block = SOURCE.slice(at, SOURCE.indexOf('continue;', at));
+  assert.ok(!/reminder_sent_at/.test(block), 'a skipped reminder now stamps the column');
+});

@@ -150,7 +150,16 @@ test('NOTHING IS STORED. No column, no new status', () => {
     .split('\n')
     .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
     .join('\n');
-  assert.ok(!/payment_hold/.test(code), 'a payment_hold column crept in');
+
+  // `reason: 'payment_hold'` IS NOT A COLUMN, and it has to be allowed here or
+  // this test refuses the refusal key. It is the word collectRefusal() hands
+  // back to say WHY a stop is off the round - the same key deliver() has used
+  // for a while - and it never reaches the database. Stripped by its exact
+  // shape rather than loosened to a weaker pattern, so a genuine
+  // `.select('payment_hold')` or `.eq('payment_hold', ...)` still fails.
+  const withoutRefusalKey = code.split("reason: 'payment_hold'").join('');
+
+  assert.ok(!/payment_hold/.test(withoutRefusalKey), 'a payment_hold column crept in');
   assert.ok(!/PART_PAID/.test(code), 'a PART_PAID status crept in');
 });
 
@@ -283,4 +292,195 @@ test('BOTH FIELD LISTS CARRY customer_id, AND THIS IS THE SEVENTH TIME', () => {
     const naked = block.split('stripe_customer_id').join('');
     assert.ok(naked.includes('customer_id'), `${list} does not select customer_id`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// THE DOORS, AFTER THE 15 SEPTEMBER AUDIT.
+//
+// Everything below is about the gap between what the BOARD decided and what
+// the BUTTON would still do. The board applied three rules; fulfilment's
+// collect() applied one. So a stop could be off the round and collectable
+// anyway - from the order page, a second phone, or POST /ops/collected.
+//
+// CLAUDE.md already states the rule this broke: a screen that hides a control
+// while the route behind it still fires is not a guard, and all the doors
+// refuse together or none of them do.
+// ---------------------------------------------------------------------------
+
+test('THE SIBLING QUERY ASKS FOR WHAT HAS BEEN PAID', () => {
+  // balance() reads amount_paid_cents, an unselected column is undefined, and
+  // Number(undefined || 0) is 0 - so a part-paid order looks wholly unpaid and
+  // goes on parking every other pickup that customer has after the cash has
+  // arrived. Same trap as the two field lists above, one query along.
+  const src = SOURCE('dispatch.js');
+  const at = src.indexOf('async function heldCustomerIds');
+  assert.notEqual(at, -1, 'heldCustomerIds has moved');
+
+  const select = src.slice(src.indexOf('.select(', at), src.indexOf('.in(', at));
+  assert.ok(
+    select.includes('amount_paid_cents'),
+    'heldCustomerIds does not select amount_paid_cents'
+  );
+  assert.ok(select.includes('price_cents'), 'heldCustomerIds stopped selecting price_cents');
+});
+
+test('THE BOARD LOOKS AT A LAUNDROMAT FLOOR TOO', () => {
+  // A charge that fails while the bags are at a partner is a hold like any
+  // other, and the sibling block already acts on it - the board simply never
+  // drew a card naming it, because the in-hand query left AT_PARTNER out.
+  const src = SOURCE('dispatch.js');
+  const at = src.indexOf('let handQuery = db');
+  assert.notEqual(at, -1, 'the in-hand query has moved');
+
+  const block = src.slice(at, src.indexOf(';', at));
+  for (const status of ['IN_PROCESS', 'AT_PARTNER', 'READY', 'OUT_FOR_DELIVERY']) {
+    assert.ok(block.includes(status), `the in-hand query does not include ${status}`);
+  }
+});
+
+test('and a bag at a laundromat is not counted as being in the van', () => {
+  // The hazard that came with the line above: carryingBags summed the whole
+  // in-hand list, which stopped meaning "aboard" the moment AT_PARTNER joined
+  // it. Left alone it would draw "this is more than the van holds" over a van
+  // that is half empty.
+  const src = SOURCE('dispatch.js');
+  const at = src.indexOf('const carryingBags =');
+  assert.notEqual(at, -1, 'carryingBags has moved');
+
+  const block = src.slice(at, src.indexOf(';', at));
+  assert.ok(
+    block.includes('ABOARD'),
+    'carryingBags counts everything in hand, including a partner floor'
+  );
+});
+
+test('COLLECT REFUSES FOR ALL THREE REASONS, NOT JUST THE CARD', () => {
+  const order = {
+    order_number: 1,
+    customer_id: 'A',
+    customers: withCard,
+    payment_status: 'UNPAID',
+  };
+
+  assert.equal(dispatch.collectRefusal(order, new Set()), null);
+  assert.equal(dispatch.collectRefusal(order, new Set(['A'])).reason, 'payment_hold');
+
+  assert.equal(
+    dispatch.collectRefusal(
+      { ...order, authorization_refused_at: '2026-09-16T00:00:00Z' },
+      new Set()
+    ).reason,
+    'hold_refused'
+  );
+
+  assert.equal(
+    dispatch.collectRefusal({ ...order, customers: {} }, new Set()).reason,
+    'no_card_on_file'
+  );
+});
+
+test('A WAIVED ORDER IS STILL PARKED BEHIND AN UNPAID ONE OF THEIR OWN', () => {
+  // The one that reads like a contradiction and is not. collectable() asks
+  // whether THIS order can be billed, and a waived one needs no card - that is
+  // the point of waiving it. The sibling block asks whether this CUSTOMER has
+  // laundry of ours they have not paid for, and deciding to do somebody a
+  // favour today does not settle the bill on the bag sitting at a laundromat.
+  //
+  // The board already behaved this way, because it applied the sibling test
+  // outside the waived short-circuit. Getting that order of tests wrong would
+  // have quietly changed the round.
+  const waived = { order_number: 2, customer_id: 'A', customers: {}, payment_status: 'WAIVED' };
+
+  assert.equal(dispatch.collectRefusal(waived, new Set()), null, 'a waived order needs no card');
+  assert.equal(
+    dispatch.collectRefusal(waived, new Set(['A'])).reason,
+    'payment_hold',
+    'a waived order skipped its own sibling block'
+  );
+});
+
+test('AND collect() READS THAT SAME PREDICATE', () => {
+  // Source-read, because calling it would move an order and text somebody.
+  const src = SOURCE('fulfilment.js');
+  const at = src.indexOf('async function collect(');
+  assert.notEqual(at, -1, 'collect() has moved');
+
+  const body = src.slice(at, src.indexOf('async function', at + 30));
+
+  assert.ok(body.includes('collectRefusal'), 'collect() does not use the shared refusal');
+  assert.ok(body.includes('heldCustomerIds'), 'collect() never looks up the sibling hold');
+
+  // And it no longer carries its own copy of the card test, which is how the
+  // two doors came to disagree in the first place.
+  assert.ok(!/needsCardOnFile/.test(body), 'collect() still has its own copy of the card predicate');
+});
+
+test('THE OFFICE IS PAGED ONCE, AND TOLD THE REMAINDER', () => {
+  // #2060 was already FAILED when the hold rule shipped, so markFailed() never
+  // ran for it - and raise() would not have paged anyway, because it returns an
+  // open issue untouched.
+  const billingSrc = SOURCE('billing.js');
+
+  assert.ok(billingSrc.includes('ensurePaymentHold'), 'markFailed does not use ensurePaymentHold');
+  assert.ok(billingSrc.includes('function paymentHoldReason'), 'the hold sentence has no owner');
+  assert.ok(billingSrc.includes('ensureExistingHolds'), 'nothing sweeps the already-failed rows');
+
+  const at = billingSrc.indexOf('function paymentHoldReason');
+  const block = billingSrc.slice(at, billingSrc.indexOf('\n}', at));
+
+  assert.ok(block.includes('dispatch.balance'), 'the hold sentence does not use the balance');
+  assert.ok(
+    !/money\(order\.price_cents\)/.test(block),
+    'the hold sentence still quotes the full price'
+  );
+
+  const dispatchSrc = SOURCE('dispatch.js');
+  assert.ok(
+    dispatchSrc.includes('ensureExistingHolds'),
+    'the board never names the holds that predate the rule'
+  );
+});
+
+test('and the hold sentence names what is left, not what it cost', () => {
+  // $70 in cash against an $84 bill used to page "$84.00 outstanding", which
+  // sends somebody to ring a customer who has already paid most of it.
+  const billing = require('../src/core/billing');
+
+  assert.match(billing.paymentHoldReason({ order_number: 2060, price_cents: 8400 }), /\$84\.00/);
+  assert.match(
+    billing.paymentHoldReason({ order_number: 2060, price_cents: 8400, amount_paid_cents: 7000 }),
+    /\$14\.00/
+  );
+});
+
+test('a second page for the same customer is impossible, not discouraged', () => {
+  // The board redraws on every load, so paging per draw would text every admin
+  // all afternoon - which is how an alert becomes something people switch off.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'issues.js'), 'utf8');
+  const at = src.indexOf('async function ensurePaymentHold');
+  assert.notEqual(at, -1, 'ensurePaymentHold has gone');
+
+  const body = src.slice(at, src.indexOf('// Text every admin', at));
+
+  assert.ok(body.includes('HOLD_PREFIX'), 'nothing marks an issue as already being a hold');
+  assert.ok(body.includes('paged: false'), 'the existing-issue path does not say it did not page');
+
+  // Paging happens only through raise(), which is reached only when there is
+  // no open issue at all.
+  assert.ok(!/alertAdmins/.test(body), 'ensurePaymentHold pages directly');
+});
+
+test('THE DECLINE COMMENT NO LONGER TEACHES DELIVER-AND-CHASE', () => {
+  // Neil reversed this on 14 September, and the comment above markFailed() in
+  // chargeOrder() still described the old rule - which is what the next person
+  // to read that file would have implemented.
+  const src = SOURCE('billing.js');
+  const at = src.indexOf('--- The card was refused');
+  assert.notEqual(at, -1, 'the decline branch has moved');
+
+  const block = src.slice(at, src.indexOf('await markFailed', at));
+
+  assert.ok(!/We deliver anyway and chase by text/.test(block), 'the old rule is still taught');
+  assert.ok(/PAYMENT HOLD/i.test(block), 'the comment does not name the rule that replaced it');
+  assert.ok(/doorstep/i.test(block), 'the comment no longer keeps the doorstep exception');
 });

@@ -281,8 +281,20 @@ async function sendDue({ date = null } = {}) {
     // them to put the bag out would be the system contradicting its own round.
     // NOT STAMPED, for the same reason STOP is not: if a card arrives before
     // the pass runs again the column must still mean "we sent it".
+    // THREE REASONS, AND IT COULD ONLY SAY TWO. A pickup whose card refused
+    // the $25 hold is not routable and IS collectable-false, so it fell into
+    // the else and was written down as "no card on file" - which is a
+    // different problem with a different fix, and sends whoever reads the log
+    // chasing a card that is already on the account. The gate itself was
+    // right; only the sentence explaining it was wrong.
     if (!routable(order)) {
-      skipped.push({ order, reason: collectable(order) ? 'payment hold' : 'no card on file' });
+      const reason = collectable(order)
+        ? 'payment hold'
+        : billing.showUpState(order) === 'REFUSED'
+          ? 'show-up hold refused'
+          : 'no card on file';
+
+      skipped.push({ order, reason });
       continue;
     }
 

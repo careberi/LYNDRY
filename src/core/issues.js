@@ -111,6 +111,74 @@ async function raise({ customer, order, reason, customerSaid, aiHold = false }) 
   return { issue, isNew: true };
 }
 
+// THE OFFICE HEARS ABOUT A PAYMENT HOLD EXACTLY ONCE.
+//
+// raise() opens at most one issue per customer and returns the existing one
+// untouched, which is right for the thing it was built for - the AI getting
+// stuck twice in one conversation is one problem, not two. It is wrong for a
+// hold, and #2060 is what that looks like: it was already FAILED with an open
+// issue on the customer when the hold rule shipped, so markFailed() called
+// raise(), raise() found the open row, and nobody was ever paged. An order
+// sat holding somebody's laundry with the office believing it had been told.
+//
+// THREE OUTCOMES, AND THE MIDDLE ONE IS THE POINT:
+//
+//   no open issue      open one and page, exactly as before
+//   open, not a hold   write the hold sentence onto that thread, do NOT page
+//   already a hold     do nothing at all
+//
+// NOT PAGING ON THE SECOND IS DELIBERATE. A person is already being asked to
+// look at this customer, and the board redraws every time somebody opens it -
+// paging per draw would text every admin all afternoon, which is how an alert
+// becomes something people turn off. The sentence lands where they will read
+// it, which is the issue they are already holding.
+//
+// `Payment hold:` IS THE MARKER AND IT IS A PREFIX, not a column. There is no
+// issue_kind and this does not add one: the reason text already says what the
+// issue is, and the caller writes that sentence.
+const HOLD_PREFIX = 'Payment hold:';
+
+async function ensurePaymentHold({ customer, order, reason }) {
+  if (!customer || !customer.id) return { ok: false, reason: 'no_customer' };
+
+  const { data: existing, error: findError } = await db
+    .from('issues')
+    .select('*')
+    .eq('customer_id', customer.id)
+    .eq('status', 'OPEN')
+    .maybeSingle();
+
+  if (findError) throw findError;
+
+  if (!existing) {
+    const { issue } = await raise({ customer, order, reason });
+    return { ok: true, paged: true, issue };
+  }
+
+  // Already says it. Nothing to add and nobody to tell.
+  if (String(existing.reason || '').startsWith(HOLD_PREFIX)) {
+    return { ok: true, paged: false, named: false, issue: existing };
+  }
+
+  // An open issue about something else. The hold goes on the same thread so
+  // whoever picks it up sees both, and the original sentence is kept rather
+  // than overwritten - it is why somebody was paged in the first place.
+  const merged = `${reason}\n\nAlso open: ${existing.reason}`.slice(0, 500);
+
+  const { error } = await db
+    .from('issues')
+    .update({ reason: merged, order_id: existing.order_id || (order ? order.id : null) })
+    .eq('id', existing.id);
+
+  if (error) {
+    console.error(`Could not write the payment hold onto issue ${existing.id}: ${error.message}`);
+    return { ok: false, reason: 'unwritable' };
+  }
+
+  existing.reason = merged;
+  return { ok: true, paged: false, named: true, issue: existing };
+}
+
 // Text every admin. Best effort: a failure here must never stop the customer
 // getting their reply, but it is shouted in the log because a silent failure
 // means nobody is coming.
@@ -392,6 +460,8 @@ async function personHasReplied(customerId, since) {
 
 module.exports = {
   raise,
+  ensurePaymentHold,
+  HOLD_PREFIX,
   listOpen,
   listRecent,
   openCount,

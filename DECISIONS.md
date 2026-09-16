@@ -5,6 +5,27 @@ Newest section at the top of each list. Review whenever you like.
 
 ---
 
+## What LYNDRY charges today
+
+**One-time pickup: $2.00 a pound. Subscription: $1.80 a pound**, with pickups
+weekly, every 2 weeks or every month — and "every month" means every four weeks
+on the same weekday, because the round is weekday-based. A $25 minimum applies
+per pickup on either rate. The card is charged once, after the bags are weighed.
+
+The single source of truth is `pricing.perPoundCents` and
+`pricing.subscriptionPerPoundCents` in `src/config.js`; this line describes
+them and has drifted from them before.
+
+**EVERYTHING BELOW ABOUT $39 A BAG IS HISTORY, NOT PRICE.** The open question
+further down — "pay-as-you-go only, or memberships too?" — was answered by the
+two rates above, and the $39 standardised-bag model was never built. It is kept
+because the reasoning around memberships and the constraint that came out of it
+("customers must not be forced into a subscription just to establish a payment
+method") are both still live, and that constraint is exactly why the $1.80 rate
+is a rate rather than a club. Do not read a price off it.
+
+---
+
 ## Live infrastructure
 
 - **Site:** [lyndry.com](https://lyndry.com), hosted on Railway, auto-deploying

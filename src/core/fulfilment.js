@@ -136,16 +136,35 @@ async function collect(order, { bagCount, by = {} } = {}) {
   // follows: all the doors refuse together, or none of them do. The JSON API
   // reaches this same function.
   //
-  // A WAIVED order is collected as normal. There is nothing to charge, which
-  // is the point of waiving it.
-  if (order.payment_status !== 'WAIVED' && billing.needsCardOnFile(order.customers || {})) {
-    return {
-      ok: false,
-      error: 'no_card_on_file',
-      detail:
-        `Order #${order.order_number} has no payment method on file, so it cannot be billed. ` +
-        `Ask them for a card from the order page, or waive it, before collecting.`,
-    };
+  // THREE REASONS, ONE OWNER, AND THIS DOOR ONLY KNEW ABOUT ONE OF THEM.
+  //
+  // It asked "have they got a card" and nothing else, while the board asked
+  // that plus the refused show-up hold plus the sibling payment hold. So two
+  // of the three states that take a stop off the round left the button behind
+  // it working: the order page, a second phone and POST /ops/collected would
+  // all have collected laundry the route had already decided we could not
+  // bill for.
+  //
+  // dispatch.collectRefusal() is the predicate both doors read now, so they
+  // cannot drift the way these two did. The sibling lookup is one query for
+  // one order here - it is the same function the board runs over thirty at a
+  // time, and a driver standing at a door is worth the round trip.
+  //
+  // IT FAILS OPEN ON THE LOOKUP ALONE. If the ledger cannot be read we collect
+  // rather than strand a driver at a doorstep over a query - the same
+  // direction dispatch.routableCheck() already fails, and the same reason the
+  // card gate answers false where Stripe is switched off.
+  const blocked = await dispatch
+    .heldCustomerIds([order.customer_id])
+    .catch((err) => {
+      console.error(`Could not check the payment hold on #${order.order_number}: ${err.message}`);
+      return new Set();
+    });
+
+  const refusal = dispatch.collectRefusal(order, blocked);
+
+  if (refusal) {
+    return { ok: false, error: refusal.reason, detail: refusal.detail };
   }
 
   // The one new fact: we have the bag. The turnaround was promised in the
