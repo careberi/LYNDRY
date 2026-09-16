@@ -508,6 +508,30 @@ function taskCard(run, user = null) {
   // account - a gate code, a doorman to ask, which path - and without it here
   // it would be a box on a form that nothing ever read. It rides with the spot
   // because both answer the same question at the same doorstep.
+  // AND THE SAME ANSWER AS A PICTURE, when somebody has taken one.
+  //
+  // Neil, 16 September. "Front door" is four words that mean six different
+  // things along a street of conversions, and the driver who wrote it is not
+  // the one reading it next week. It sits directly under the words rather than
+  // anywhere else on the card, because it is the same answer to the same
+  // question and splitting them would make it furniture.
+  //
+  // SERVED OFF THE ORDER, NOT THE CUSTOMER. A driver has orders.view and
+  // deliberately does not have customers.view, so a customer-scoped URL would
+  // 403 on the one screen this exists for.
+  //
+  // NO LINK TO ANYTHING, and it is not a delivery photo: nothing here is
+  // texted, nothing is public, and the image is behind a one-minute signed
+  // redirect that only an ops session can follow.
+  const spotPhoto =
+    task && task.spotPhoto
+      ? `<img src="/ops/orders/${encodeURIComponent(task.spotPhoto.orderNumber)}/spot-photo"
+              alt="Where this customer leaves the bag"
+              loading="lazy"
+              style="display:block;margin:10px 0 0;width:100%;max-width:420px;
+                     border:1px solid var(--c-line,#d1d5db);border-radius:2px;">`
+      : '';
+
   const where =
     task && task.spot
       ? stopLine('Where', escapeHtml(task.spot), 'stop-line-plain') +
@@ -515,7 +539,8 @@ function taskCard(run, user = null) {
           ? '<p style="margin:6px 0 0;font-size:15px;line-height:1.45;color:var(--ink-700);">' +
             escapeHtml(task.access) +
             '</p>'
-          : '')
+          : '') +
+        spotPhoto
       : '<div style="height:6px;"></div>';
 
   // THE SAME TWO LABELLED LINES AS THE CARD BEFORE IT. He taps "I'm here" and
@@ -748,12 +773,49 @@ function taskControl(stop, task, order, back = '?from=run') {
   // wait until the last bag is on the scale would delay their message for
   // nothing.
   if (task.key === 'collected') {
+    // A PHOTO OF THE SPOT, OFFERED HERE AND NEVER DEMANDED.
+    //
+    // Neil, 16 September. It is a note for the next driver, not evidence, so
+    // nothing is gated on it: the collect button above does not care whether
+    // one exists, and a driver in the rain is not held up by a camera.
+    //
+    // A STILL PHOTO, THE SAME MECHANISM AS THE BAG SCAN. `capture` opens the
+    // phone's own camera - autofocus, exposure, torch - with no live stream to
+    // keep alive and no permission prompt of ours to refuse. `accept` keeps
+    // the picker on images where a camera is not offered.
+    //
+    // ITS OWN FORM, because it posts a file and the collect button must not
+    // start carrying one. Two forms on one card, which is the same shape the
+    // conversation screen already uses for Send it and the AI switch.
+    //
+    // IT SAYS WHAT IT IS FOR. A driver pointing a camera at somebody's porch
+    // should know the customer never sees this and that it is not a delivery
+    // photo - that is the difference between a note and surveillance.
+    const spot = `
+    <form method="post" action="/ops/orders/${order.order_number}/spot-photo${back}"
+          enctype="multipart/form-data" style="margin:16px 0 0;">
+      <label class="field-label" for="spot_photo">
+        ${task.spotPhoto ? 'Replace the photo of the spot' : 'Photo of the spot (optional)'}
+      </label>
+      <input class="input input-lg" type="file" id="spot_photo" name="photo"
+             accept="image/*" capture="environment" required
+             style="width:100%;margin-bottom:12px;">
+      <button type="submit" class="btn btn-outline btn-lg btn-full">
+        ${task.spotPhoto ? 'Use this one instead' : 'Save it for next time'}
+      </button>
+      <p class="muted" style="margin:8px 0 0;font-size:13px;line-height:1.45;">
+        Kept on the customer so the next pickup knows the door. Never sent to
+        them, and not the delivery photo.
+      </p>
+    </form>`;
+
     return `
     <form method="post" action="/ops/orders/${order.order_number}/collected${back}" style="margin:0;">
       <button type="submit" class="btn btn-primary btn-lg btn-full">
         ${order.bag_count ? `Got all ${order.bag_count}` : 'I have the bags'}
       </button>
-    </form>`;
+    </form>
+    ${spot}`;
   }
 
   // THE LAST STEP, and it is not the same as the last bag being weighed. The

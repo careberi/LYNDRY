@@ -86,6 +86,8 @@ const fulfilment = require('../core/fulfilment');
 
 // The delivery photo arrives from a phone camera, so it is held in memory and
 // pushed straight to storage. Same limits as the JSON API.
+const spotPhoto = require('../core/spot-photo');
+
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -6499,6 +6501,85 @@ router.get('/ops/orders/:id/scale-photo', guard, may('money.view'), async (req, 
 
     res.set('Cache-Control', 'no-store, private');
     return res.redirect(302, signed.signedUrl);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// --- The photo of where the bag sits ----------------------------------------
+//
+// Neil's ask, 16 September: one still photo of the spot, so the next driver
+// knows which door.
+//
+// BOTH ROUTES ARE KEYED OFF THE ORDER, NOT THE CUSTOMER, and that is the whole
+// reason they live here rather than under /ops/customers. A driver has
+// orders.view and orders.act and deliberately does NOT have customers.view -
+// CLAUDE.md's rule that a driver is shown the stop rather than the person - so
+// a customer-scoped URL would 403 on the one screen this exists for. The order
+// is how he reaches the stop; the customer is what the photo hangs off.
+//
+// orders.act to take one, orders.view to look: taking a photo is a step in the
+// round, and seeing the door is just reading the stop.
+
+router.post(
+  '/ops/orders/:id/spot-photo',
+  guard,
+  may('orders.act'),
+  upload.single('photo'),
+  async (req, res, next) => {
+    try {
+      const order = await loadOrderForAction(req.params.id);
+      if (!order) return notFoundPage(res, 'No order with that number.');
+
+      const back =
+        req.query.from === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
+
+      if (!order.customer_id) {
+        return res.redirect(
+          303,
+          `${back}?problem=${encodeURIComponent('That order has no customer to attach a photo to.')}`
+        );
+      }
+
+      const result = await spotPhoto.save(order.customer_id, req.file);
+
+      if (!result.ok) {
+        return res.redirect(303, `${back}?problem=${encodeURIComponent(result.detail)}`);
+      }
+
+      // NOT AN ORDER EVENT. The change log is what happened to THIS order, and
+      // this happened to the customer - it will still be true three orders
+      // from now. Writing it there would put a line on one pickup about a fact
+      // that outlives it.
+      return res.redirect(
+        303,
+        `${back}?note=${encodeURIComponent(
+          result.replaced
+            ? 'Spot photo replaced. The next pickup will show the new one.'
+            : 'Spot photo saved. The next pickup will show it.'
+        )}`
+      );
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.get('/ops/orders/:id/spot-photo', guard, may('orders.view'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const path = order.customers && order.customers.pickup_spot_photo_path;
+    if (!path) return notFoundPage(res, 'No spot photo for that customer.');
+
+    const url = await spotPhoto.signedUrl(path);
+    if (!url) return notFoundPage(res, 'That photo could not be opened.');
+
+    // Signed for a minute and never cached, so a URL out of an address bar is
+    // already dead and a shared device does not keep somebody's doorstep.
+    res.set('Cache-Control', 'no-store, private');
+    return res.redirect(302, url);
   } catch (err) {
     return next(err);
   }

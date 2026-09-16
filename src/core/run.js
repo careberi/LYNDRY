@@ -83,6 +83,7 @@ async function tasksForCollect(order) {
       // plumbing, not his instruction.
       detail: null,
       spot: spotOf(order),
+      spotPhoto: spotPhotoOf(order),
       access: accessOf(order),
       spotLabel: 'The bags are here',
       done: Boolean(order.collected_at),
@@ -402,6 +403,7 @@ async function tasksAfterPickup(order) {
     // the same sentence twice on one screen.
     detail: 'Photograph them where you leave them. This charges the card.',
     spot: spotOf(order),
+    spotPhoto: spotPhotoOf(order),
       access: accessOf(order),
     spotLabel: 'Leave them here',
     done: order.status === 'DELIVERED',
@@ -463,6 +465,7 @@ async function tasksForDeliver(order) {
             : `Drop ${carrying} bag${carrying === 1 ? '' : 's'} off`,
         detail: 'Photograph them where you leave them.',
         spot: spotOf(order),
+      spotPhoto: spotPhotoOf(order),
       access: accessOf(order),
         spotLabel: 'Leave them here',
         done: Boolean(order.delivered_at),
@@ -517,6 +520,7 @@ async function tasksForDeliver(order) {
       title: 'Drop the bags off',
       detail: 'Photograph them where you leave them.',
       spot: spotOf(order),
+      spotPhoto: spotPhotoOf(order),
       access: accessOf(order),
       spotLabel: 'Leave them here',
       done: Boolean(order.delivered_at),
@@ -553,6 +557,31 @@ function spotOf(order) {
 
   // Customers type "front door", not "Front door", and this is read at a run.
   return spot.charAt(0).toUpperCase() + spot.slice(1);
+}
+
+// AND THE SAME ANSWER AS A PICTURE.
+//
+// Neil, 16 September: one still photo of where the bag sits, so the next
+// driver knows which door. "Front door" is four words that mean six different
+// things across a street of Victorian conversions, and the driver who took the
+// photo is not the one reading it next week.
+//
+// IT IS THE CUSTOMER'S, NOT THE ORDER'S, which is why this reads the customer
+// row rather than anything on the pickup. The same photo serves every pickup
+// they ever have and does not need retaking each week.
+//
+// ORDER NUMBER RIDES ALONG because the ops route that serves the image is keyed
+// off the ORDER, not the customer: a driver has orders.view and deliberately
+// does not have customers.view, so a customer-scoped URL would 403 on the one
+// screen this exists for.
+function spotPhotoOf(order) {
+  const customer = (order && order.customers) || null;
+  if (!customer || !customer.pickup_spot_photo_path) return null;
+
+  return {
+    orderNumber: order.order_number,
+    takenAt: customer.pickup_spot_photo_at || null,
+  };
 }
 
 // HOW TO GET TO THE SPOT. The gate code, the doorman, which path - saved once
