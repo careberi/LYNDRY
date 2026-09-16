@@ -288,11 +288,18 @@ async function sendDue({ date = null } = {}) {
     // chasing a card that is already on the account. The gate itself was
     // right; only the sentence explaining it was wrong.
     if (!routable(order)) {
-      const reason = collectable(order)
-        ? 'payment hold'
-        : billing.showUpState(order) === 'REFUSED'
-          ? 'show-up hold refused'
-          : 'no card on file';
+      // FOUR REASONS NOW, and the new one is about the server rather than the
+      // customer: with no way to charge in production nothing is collected at
+      // all, so every pickup skips for that reason and none of them is a card
+      // problem. Named first, because when it is true it is true of the whole
+      // board and the other three are noise.
+      const reason = !billing.paymentsConfigured()
+        ? 'card payments are not configured'
+        : collectable(order)
+          ? 'payment hold'
+          : billing.showUpState(order) === 'REFUSED'
+            ? 'show-up hold refused'
+            : 'no card on file';
 
       skipped.push({ order, reason });
       continue;

@@ -66,9 +66,16 @@ const disabled = {
 function chooseDriver() {
   if (!config.stripe.secretKey) {
     if (config.env === 'production') {
+      // THE SECOND SENTENCE USED TO READ "Orders can still be booked and
+      // delivered; nothing will be charged", and that was the behaviour the
+      // 15 September audit called a production fail-open. It is no longer
+      // true: dispatch.collectRefusal() takes every pickup off the round in
+      // production when there is no way to charge, so the van does not go out
+      // and collect laundry nobody can be billed for.
       console.warn(
-        'PAYMENTS ARE DISABLED: STRIPE_SECRET_KEY is not set. Orders can still be ' +
-          'booked and delivered; nothing will be charged.'
+        'PAYMENTS ARE DISABLED: STRIPE_SECRET_KEY is not set. NO PICKUP WILL BE ' +
+          'COLLECTED until it is - orders can still be booked, and every one of them ' +
+          'is held off the round.'
       );
     }
     return disabled;
