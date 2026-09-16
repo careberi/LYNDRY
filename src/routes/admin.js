@@ -43,9 +43,11 @@ const orderEvents = require('../core/order-events');
 const dispatch = require('../core/dispatch');
 const drivers = require('../core/drivers');
 const runCore = require('../core/run');
+const clips = require('../core/clips');
 const { routingBoardBody } = require('../web/routing-board');
 const signInTap = require('../web/sign-in-tap');
 const { runBody, returnBagBody, doorBagBody, pickupBagBody } = require('../web/run-page');
+const { clipsPage } = require('../web/clips-page');
 const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
 const LABEL_LABEL = labelPdf.DEFAULT_LABEL;
@@ -428,6 +430,10 @@ const OPS_MENUS = Object.freeze([
       // matters - everything else is looking something up. Behind orders.drive,
       // so an admin who has not put themselves on the route is not offered one.
       { href: '/ops/run', label: 'Your route', permission: 'orders.drive' },
+      // START OF SHIFT ONLY. It sits in the menu rather than on the route,
+      // because it is a thing you go and look at once before setting off -
+      // putting it on a stop would be the tap Neil ruled out.
+      { href: '/ops/clips', label: 'Clips in the van', permission: 'orders.drive' },
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
@@ -5181,6 +5187,42 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
 // ?driver= here on purpose - this is not a screen for looking at somebody
 // else's day, that is what the routing board is for.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// CLIPS IN THE VAN - START OF SHIFT, AND NOWHERE ELSE.
+//
+// Neil, 16 September. Freeing a clip at the counter means nobody confirms it is
+// back in the van, so "is clip 17 actually here" has no answer any more. His
+// call: that is an inventory problem rather than a fulfilment one, and it must
+// not become a tap on every stop.
+//
+// SO IT IS A SCREEN, NOT A STEP. It is in the menu, it is read-only, it posts
+// nothing, and no order can be changed from it. A driver looks at it once
+// before setting off and counts the second list against what is physically in
+// front of him.
+//
+// HIS OWN VAN AND NOBODY ELSE'S, the same rule the route follows: there is no
+// ?driver= and the pool is scoped to whoever is signed in. Clips are per
+// driver, so somebody else's clip 4 is not his problem.
+router.get('/ops/clips', guard, withIssues, may('orders.drive'), async (req, res, next) => {
+  try {
+    const stock = await clips.inventory(req.opsUser.id);
+
+    return res.type('html').send(
+      adminPage({
+        terminal: true,
+        title: 'Clips in the van',
+        active: '/ops/clips',
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+        body: clipsPage(stock),
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
