@@ -454,20 +454,30 @@ async function answerWithBrain(customer, text, from) {
   // sent something, AND the customer has answered it - which is this message.
   // A draft nobody sent is not a reply, and a reply nobody responded to is not
   // a conversation that has resumed.
-  const hold = await issues.holdFor(customer.id).catch(() => null);
+  //
+  // A PERSON MEANS A PERSON: an outbound with sent_by on it, typed by somebody
+  // on the ops screen. This used to ask personHasReplied(), which counted ANY
+  // outbound since the hold - and the first outbound after a handoff is always
+  // the AI's own "a manager will come back to you shortly". So the handoff line
+  // released the hold it had just created, on the customer's very next message.
+  //
+  // The re-page sweep has always drawn the line in the right place, and its
+  // comment says why: "A status text or the AI's own reply does not count,
+  // because neither is the manager the customer was promised." Both halves ask
+  // the same question now, through the same function.
+  const { quiet, hold } = await issues.aiMustStayQuiet(customer.id);
+
+  // QUIET IS CHECKED BEFORE THE HOLD, not inside it. aiMustStayQuiet() fails
+  // quiet, and a failure returns no hold to inspect - so testing `hold` first
+  // would walk straight past the silence it just asked for.
+  if (quiet) {
+    // Their message is already logged by the caller. Silence is the whole
+    // point - an auto-reply here would tell them a machine is still on it.
+    console.warn(`HOLD    ${from}: a person owes them the next message. Saying nothing.`);
+    return;
+  }
 
   if (hold) {
-    const answered = await issues.personHasReplied(customer.id, hold.created_at).catch(() => false);
-
-    if (!answered) {
-      // Their message is already logged by the caller. Silence is the whole
-      // point - an auto-reply here would tell them a machine is still on it.
-      console.warn(
-        `HOLD    ${from}: a person owes them the next message. Saying nothing.`
-      );
-      return;
-    }
-
     // A person spoke and the customer has come back. Pick the thread up.
     // Resolved by nobody in particular - no ops user did this, the customer
     // coming back did. The resolution line says so.

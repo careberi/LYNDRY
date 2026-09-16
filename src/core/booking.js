@@ -839,10 +839,31 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
   // edited later and the van's range is the van's range.
   if (!owner && !inServiceArea(customer)) return { ok: false, reason: 'out_of_area' };
 
-  // No preferences, no booking. The AI is told to ask; this is what makes
-  // sure, because a model is not a guarantee and a wash nobody specified is
-  // not a wash we should run.
-  if (!hasPreferences(customer)) return { ok: false, reason: 'no_preferences' };
+  // WASH PREFERENCES ARE NO LONGER A GATE ON BOOKING, AND THAT REVERSES THE
+  // RULE THIS LINE ENFORCED. Neil, 16 September: "Wash prefs after the pickup
+  // is booked, not before."
+  //
+  // The old line read "No preferences, no booking. The AI is told to ask; this
+  // is what makes sure, because a model is not a guarantee and a wash nobody
+  // specified is not a wash we should run." That reasoning is still right about
+  // the WASH. It was wrong about the BOOKING, and Manpreet Singh is why: he
+  // asked for a pickup at least four times, and the questions standing between
+  // him and a booking - a plan, then water temperature, then softener - were
+  // asked while he was trying to say "come now". He never got a pickup.
+  //
+  // THE ORDER IS NOW: name, address, when, door spot, BOOK, then how to wash
+  // it. A booked pickup with the wash still to settle is a phone call or one
+  // more text; an unbooked customer is gone.
+  //
+  // WHAT STILL PROTECTS THE WASH, because the gate was doing a real job:
+  // there are still NO DEFAULT PREFERENCES anywhere, nothing invents one, the
+  // AI asks for them as the next beat after the booking, the nudge panel lists
+  // the gap on the customer and the order, and the laundromat's own page will
+  // not show wash instructions it has not been given. What has gone is a
+  // refusal to take the order at all.
+  //
+  // hasPreferences() is untouched and still exported: it is what the nudge and
+  // the screens read.
 
   const detail = dateProblem(pickupDate);
   if (detail) return { ok: false, reason: 'bad_date', detail };
