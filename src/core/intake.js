@@ -353,8 +353,16 @@ const FIELDS = [
     // THE CARD ROW IS NOT AN ORDINARY REQUEST ROW. The words are editable; the
     // link is not, and it does not exist until the button is pressed - minting
     // one on every page load would leave a trail of Stripe sessions behind.
-    ask: 'Send Card Link',
-    update: 'Send Update Link',
+    //
+    // IT IS CALLED "ASK", NOT "SEND", AND THAT IS NOT TIDYING. There is a
+    // second button now - "Send card link", on the customer page and in the
+    // conversation's send area - which texts the same /pay address with no
+    // sentence around it at all. Two controls a thumb apart both reading "Send
+    // Card Link" and sending different messages is the sort of thing somebody
+    // presses once and then does not trust again. This one asks, in words; that
+    // one sends a link.
+    ask: 'Ask for a card',
+    update: 'Ask them to update it',
     // What the composer is prefilled with. The URL is appended by send(), which
     // is why this sentence ends on a colon.
     text: (c) => `${greet(c)} We just need a card on file before pickup. You can securely add it here:`,

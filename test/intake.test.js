@@ -271,7 +271,7 @@ test('a completed row stays on screen and offers an update', () => {
 
   assert.equal(t.get('name').action, 'Request Update');
   assert.equal(t.get('address').action, 'Request Update');
-  assert.equal(t.get('card').action, 'Send Update Link');
+  assert.equal(t.get('card').action, 'Ask them to update it');
 });
 
 test('a missing row asks rather than updates', () => {
@@ -279,7 +279,11 @@ test('a missing row asks rather than updates', () => {
 
   assert.equal(t.get('name').action, 'Request Name');
   assert.equal(t.get('address').action, 'Request Address');
-  assert.equal(t.get('card').action, 'Send Card Link');
+  // NOT "Send card link", which is the OTHER button - the one on the customer
+  // page and in the conversation's send area that texts the bare /pay address
+  // with no sentence around it. Two controls a thumb apart reading the same
+  // words and sending different messages is what this naming avoids.
+  assert.equal(t.get('card').action, 'Ask for a card');
 });
 
 test('asking a stranger their name does not greet them by a name we do not have', () => {
