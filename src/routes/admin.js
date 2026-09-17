@@ -3379,6 +3379,23 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
 
     res.type('html').send(
       adminPage({
+        // THE WHOLE REASON THIS PAGE LOOKED DIFFERENT, and it was one missing
+        // word. Neil, 16 September: "Conversations matches the terminal. The
+        // order page does not."
+        //
+        // The body was never the problem. orderConsoleBody() renders a
+        // `.console`, which IS the terminal skin - the same --c- tokens, the
+        // same 13px system type, the same hairlines and tabular numbers as
+        // .ops-terminal. What it does not have is a ground: the note on
+        // `.console` in ops.css says so in as many words, because painting one
+        // drew a grey box with a cream seam down either side, and the fix was
+        // to inherit whatever the chrome paints.
+        //
+        // The chrome only paints grey when it is told to. terminal:true is the
+        // opt-in - 43 of 89 adminPage calls have it - and this was one of the
+        // ones that did not, so a terminal-styled body sat on a cream page with
+        // display-font chrome around it. Exactly the split he is describing.
+        terminal: true,
         title: `#${order.order_number}`,
         active: '/ops',
         body,
