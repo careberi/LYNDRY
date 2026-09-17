@@ -21,10 +21,10 @@ const pitchLink = require('../core/pitch-link');
 const recurring = require('../core/recurring');
 const issues = require('../core/issues');
 const aiPause = require('../core/ai-pause');
-const nudges = require('../core/nudges');
+const intake = require('../core/intake');
 const followups = require('../core/followups');
 const reminders = require('../core/reminders');
-const { nudgePanel } = require('../web/nudge-panel');
+const { intakeTable } = require('../web/intake-table');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
 const { orderConsoleBody } = require('../web/order-console');
@@ -2878,16 +2878,16 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     // no reassign control, so the query would be work for nothing.
     const team = roles.can(req.opsUser, 'customers.view') ? await drivers.active() : [];
 
-    // WHAT IS STILL NEEDED FROM THE CUSTOMER, for the panel in the side column.
+    // WHAT WE KNOW ABOUT THE CUSTOMER, for the table in the side column.
     // Worked out here rather than in the markup because that is built inside a
     // synchronous function and this reads the database.
     //
-    // Skipped entirely for a driver: they never see the panel, so working it
+    // Skipped entirely for a driver: they never see the table, so working it
     // out for them would be three queries for markup that is thrown away.
     const canAskOnOrder =
       roles.can(req.opsUser, 'messages.send') && c.status !== 'UNSUBSCRIBED';
-    const orderGaps = roles.can(req.opsUser, 'customers.view')
-      ? await nudges.gapsFor(c)
+    const orderFields = roles.can(req.opsUser, 'customers.view')
+      ? await intake.fieldsFor(c).catch(() => [])
       : [];
 
     // The conversation around this order. There is no order id on a message,
@@ -3012,11 +3012,17 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
              <button class="cbtn" type="submit">Move</button>
            </form></div>`
         : '',
-      // Only while the order is live. The gaps are facts about the PERSON -
+      // Only while the order is live. Every row is a fact about the PERSON -
       // "nothing booked" is true of everybody whose last pickup ran - and on a
       // finished order the only sentence worth sending is "make it regular".
-      can.customers && stillRunning && orderGaps.length
-        ? `<h2 id="send">Send</h2>${nudgePanel({ gaps: orderGaps, action: `/ops/customers/${c.id}/ask?order=${order.order_number}`, canSend: canAskOnOrder, heading: 'Still needed from them' })}`
+      can.customers && stillRunning && orderFields.length
+        ? intakeTable({
+            fields: orderFields,
+            action: `/ops/customers/${c.id}/ask?order=${order.order_number}`,
+            canSend: canAskOnOrder,
+            ago: timeAgo,
+            optedOut: c.status === 'UNSUBSCRIBED',
+          })
         : '',
     ].join('');
 
@@ -3343,12 +3349,13 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             //
             // It posts to the customer's route, not the order's: every one of
             // these gaps is a fact about the person, not about this order.
-            orderGaps.length
-              ? `<div style="margin-bottom:22px;">${nudgePanel({
-                  gaps: orderGaps,
+            orderFields.length
+              ? `<div style="margin-bottom:22px;">${intakeTable({
+                  fields: orderFields,
                   action: `/ops/customers/${c.id}/ask?order=${order.order_number}`,
                   canSend: canAskOnOrder,
-                  heading: 'Still needed from them',
+                  ago: timeAgo,
+                  optedOut: c.status === 'UNSUBSCRIBED',
                 })}</div>`
               : ''
           }` : ''}
@@ -3806,7 +3813,14 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
           customer.address_line2 ? `, ${escapeHtml(customer.address_line2)}` : ''
         }${customer.city ? `, ${escapeHtml(customer.city)}` : ''}<br>
         Bag goes: ${spot ? escapeHtml(spot) : '<strong>not recorded</strong>'}<br>
-        Wash: ${escapeHtml(wash.describeSaved(prefs) || 'not set')}<br>
+        <!-- CHOSEN OR DEFAULTED, SAID OUT LOUD. describeSaved() falls back to
+             cold and softener when nothing is set, so `|| 'not set'` could never
+             fire and this panel read a default back as though the customer had
+             picked it. That is the distinction the intake table exists to draw,
+             and it belongs here too. -->
+        Wash: ${escapeHtml(wash.describeSaved(prefs))}${
+          booking.hasPreferences(customer) ? '' : ' <strong>(default, they have not said)</strong>'
+        }<br>
         Card: ${
           customer.default_payment_method_id
             ? `${escapeHtml(customer.card_brand || 'card')} ending ${escapeHtml(customer.card_last4 || '')}`
@@ -4029,16 +4043,21 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
 
     const showMoney = roles.can(req.opsUser, 'money.view');
 
-    // WHAT IS STILL MISSING, worked out fresh every time from the same
-    // predicates bookPickup() refuses on. Never stored - see src/core/nudges.js
-    // for why an "intake stage" column would have been the wrong answer.
+    // WHAT WE KNOW ABOUT THEM, worked out fresh every time. Never stored - see
+    // src/core/intake.js for why an "intake stage" column would have been the
+    // wrong answer.
     //
-    // The buttons are behind messages.send, because pressing one texts a real
-    // phone, and absent entirely for a number that has opted out: STOP is a
-    // legal instruction and a button that offers to text them anyway is worse
-    // than no button.
-    const gaps = await nudges.gapsFor(person);
-    const canAsk = roles.can(req.opsUser, 'messages.send') && person.status !== 'UNSUBSCRIBED';
+    // READ ONLY HERE, AND THAT IS DELIBERATE. Neil moved the ask buttons off
+    // this page and onto the conversation, because pressing one here meant
+    // writing into a thread you could not see. That reason still holds for
+    // SENDING and does not hold for READING: "what does LYNDRY know about this
+    // person" is exactly the question a profile answers, and the row that wants
+    // asking links straight to the thread where the answer will arrive.
+    //
+    // It also replaces a query whose result was thrown away. gapsFor() was
+    // still being run on every load of this page after the panel moved, and
+    // nothing rendered it.
+    const intakeFields = await intake.fieldsFor(person).catch(() => []);
 
     // WHAT THEY HOLD, AND WHAT YOU COULD GIVE THEM.
     //
@@ -4120,9 +4139,10 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
            profile. Every one of these puts a message in a thread, and pressing
            them here meant writing into a conversation you could not see.
 
-           They are still one function - src/web/nudge-panel.js - rendered on
-           the thread and in the side column of an order. What is gone is the
-           third copy, not the feature. -->
+           The TABLE is here, below, and reading is not sending: "what does
+           LYNDRY know about this person" is exactly what a profile is for. It
+           is the same function - src/web/intake-table.js - drawn without its
+           actions, and the conversation is one click away. -->
 
       ${
         // AN OFFER IS A THING THEY HOLD, not a code they type. Said on the
@@ -4297,6 +4317,20 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         </div>
 
       </div>
+
+      ${
+        // EVERY FIELD, ABOVE THE HISTORY. Read only - the actions live on the
+        // conversation, where the reply lands.
+        intakeFields.length
+          ? intakeTable({
+              fields: intakeFields,
+              action: `/ops/customers/${person.id}/ask`,
+              canSend: false,
+              ago: timeAgo,
+              optedOut: person.status === 'UNSUBSCRIBED',
+            })
+          : ''
+      }
 
       ${sectionHeading('Everything they have sent us', 'Order history', (history || []).length)}
       <!-- THE SAME SHAPE AS THE BOARD, minus the customer - this IS the
@@ -8596,16 +8630,17 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
     const digits = phone.replace(/\D/g, '');
     const canSend = roles.can(req.opsUser, 'messages.send');
 
-    // WHAT IS STILL MISSING FOR THIS PERSON, if they are a customer at all.
+    // WHAT WE KNOW ABOUT THIS PERSON, if they are a customer at all.
     //
-    // Derived every time from the same predicates checkSlot() refuses on -
-    // never stored - so it cannot disagree with what a booking would actually
-    // do. See the note in src/core/nudges.js.
+    // Derived every time from the customer, the order, the subscription and the
+    // payment state - never stored - so the table cannot disagree with what a
+    // booking would actually do. See the note in src/core/intake.js.
     //
-    // A number with no customer row has no gaps rather than every gap: they
-    // have told us nothing because there is nothing to tell yet, and offering
-    // to text a stranger for their wash preferences is not a thing to do.
-    const nudgeGaps = customer ? await nudges.gapsFor(customer).catch(() => []) : [];
+    // A number with no customer row gets no table rather than ten empty rows:
+    // they have told us nothing because there is nothing to tell yet, and
+    // offering to text a stranger for their wash preferences is not a thing to
+    // do.
+    const intakeFields = customer ? await intake.fieldsFor(customer).catch(() => []) : [];
 
     // STOP is a legal instruction, not a preference, so the message box is
     // absent entirely for an opted-out number - a box that lets somebody type
@@ -8838,6 +8873,30 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           : ''
       }
 
+      ${
+        // WHAT WE KNOW, ABOVE THE CONVERSATION. Neil's rule 35: customer
+        // header, then the fields, then the thread, then the freeform box.
+        //
+        // IT REPLACED THE "WHAT IS STILL MISSING" CARDS, which sat UNDER the
+        // thread - so the answer to "what do we actually have on this person"
+        // was a scroll past forty messages, and on a fully set up customer it
+        // was not on the page at all.
+        //
+        // The actions still post into this thread and the reply still lands
+        // here, which is why they belong on this screen rather than on the
+        // profile: on the profile you were writing into a conversation you
+        // could not see while pressing the button.
+        intakeFields.length
+          ? intakeTable({
+              fields: intakeFields,
+              action: `/ops/customers/${customer.id}/ask?thread=${encodeURIComponent(digits)}`,
+              canSend: canWrite,
+              ago: timeAgo,
+              optedOut: Boolean(customer && customer.status === 'UNSUBSCRIBED'),
+            })
+          : ''
+      }
+
       <div class="card card-xl" style="padding:28px;">
         ${
           thread.length
@@ -8917,28 +8976,6 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
                    }
                  </div>
                  <span style="font-size:12px;color:var(--ink-400);">Only ever one, and only if they stay quiet</span>
-               </div>`
-            : ''
-        }
-
-        ${
-          // WHAT IS STILL MISSING, WHERE THE MESSAGES ARE. Neil's call.
-          //
-          // These buttons each send a fixed sentence asking for one thing we
-          // still need, and the reply lands in this thread - so this is where
-          // they belong. On the profile they were writing into a conversation
-          // you could not see while pressing them.
-          //
-          // Absent for somebody with nothing missing, and for a customer we
-          // have no row for at all: a number that has only ever texted us has
-          // no name, no address and nothing to chase.
-          nudgeGaps.length && canWrite
-            ? `<div style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-100);">
-                 ${nudgePanel({
-                   gaps: nudgeGaps,
-                   action: `/ops/customers/${customer.id}/ask?thread=${encodeURIComponent(digits)}`,
-                   canSend: canWrite,
-                 })}
                </div>`
             : ''
         }
@@ -9435,10 +9472,10 @@ router.post('/ops/customers/:id/promotion', guard, may('service.manage'), async 
 // ---------------------------------------------------------------------------
 // POST /ops/customers/:id/ask - text them for one missing thing
 //
-// The buttons on the "what is still missing" panel, which appears on the
-// customer page and in the side column of an order. One route for every gap,
-// with the gap named in a form field, so five buttons cannot become five
-// implementations of "send a text".
+// The one door behind every row of the intake table, which appears on the
+// conversation, on the customer and in the side column of an order. One route
+// for every field, with the field named in a form field, so ten buttons cannot
+// become ten implementations of "send a text".
 //
 // Behind messages.send rather than customers.view: this puts a message on a
 // real phone, which is a different act from reading a profile.
@@ -9475,19 +9512,42 @@ router.post('/ops/customers/:id/ask', guard, may('messages.send'), async (req, r
 
     if (!person) return notFoundPage(res, 'No customer with that id.');
 
-    const gap = String((req.body || {}).gap || '');
+    const body = req.body || {};
 
-    // nudges.send() re-derives the gap rather than trusting the button, so a
-    // page left open since this morning cannot ask somebody for a card they
-    // saved an hour ago. Its refusals are turned into sentences here.
-    const result = await nudges.send(gap, person);
+    // WHICH ROW, WHAT THE ADMIN TYPED, AND WHAT THEY WERE LOOKING AT.
+    //
+    // `message` is the whole of Neil's rule 15: the composer opens prefilled
+    // with the standard wording and sends exactly what is in it, so there is
+    // one workflow rather than a standard button beside a custom one. `state`
+    // is what the row said when the page was drawn, and is what makes the
+    // stale check below possible - see intake.send().
+    const field = String(body.field || '');
+    const message = String(body.message || '');
+    const state = String(body.state || '') || null;
+
+    // intake.send() re-derives the row rather than trusting the form, so a page
+    // left open since this morning cannot ask somebody for a card they saved an
+    // hour ago. Its refusals are turned into sentences here.
+    const result = await intake.send(field, person, { message, state });
 
     if (!result.ok) {
-      if (result.reason === 'already_done') {
-        return said('note', 'Nothing sent - they have already given us that. The panel is up to date now.');
+      if (result.reason === 'stale') {
+        const now = result.field;
+        return said(
+          'note',
+          `Nothing sent. That has changed since this page was opened - ` +
+            `${now.label.toLowerCase()} now reads "${now.value || 'nothing'}". ` +
+            `The table is up to date.`
+        );
+      }
+      if (result.reason === 'not_askable') {
+        return said('note', 'Nothing sent - there is nothing to ask for on that row.');
       }
       if (result.reason === 'unsubscribed') {
         return said('problem', 'That number has opted out. We cannot text them.');
+      }
+      if (result.reason === 'empty') {
+        return said('problem', 'Nothing sent - the message was empty.');
       }
       return said('problem', 'That is not something we can ask for.');
     }

@@ -825,7 +825,8 @@ BUT "another", "a second one", "also", "as well" and "add" mean ADD, and you cal
 Never leave somebody with nothing booked when they were trying to book. If you cancel a pickup for somebody who was in the middle of arranging a different one, say so and offer the new time in the same breath.
 If they mention a time, whether that is "at 6", "sixish", "after work" or "first thing", put your best reading of it in pickup_time and book. Do not ask them to confirm the exact minute, and never ask for a time they did not bring up. We quote a window back to them afterwards, so a rough reading is fine.
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
-Wash preferences are chosen ONCE, by the customer, during their first setup. There are no defaults and you never invent one: if the notes below say NONE YET, ask before their first booking, in one message, and use the exact wording given in the setup beats above - not your own version of it. The bag location is NOT part of that message. Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
+Wash preferences are chosen ONCE, by the customer, and they are NOT a reason to hold up a booking. BOOK FIRST, ASK AFTER. If the notes below say NONE YET, book the pickup and then ask in one message, using the exact wording given in the setup beats above - not your own version of it. The bag location is NOT part of that message. Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
+YOU NEVER INVENT A PREFERENCE AND YOU NEVER READ ONE BACK THAT NOBODY CHOSE. When nobody has said, the laundry is washed cold with softener, which is what we do by default - but that is OURS, not theirs. Never tell somebody they are "set up with" cold water, never put it in a recap as though they had chosen it, and never say it has been noted. If they have chosen nothing, the wash simply is not mentioned.
 Never state a price as a fact. If asked what it will cost, say it is ${site.pricePerLb} a pound and a typical bag runs about ${site.estimateRange}, weighed after pickup.
 REPEATING PICKUPS
 We come every week or every other week, on a day they choose. Those are the only two frequencies; never offer a third.
@@ -1018,7 +1019,7 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
           .washLines(prefs)
           .map(([k, v]) => `${k.toLowerCase()} ${v.toLowerCase()}`)
           .join(', ')}`
-      : 'Saved wash preferences: NONE YET. They must choose before their first booking; ask.',
+      : 'Saved wash preferences: NONE YET. This does NOT hold up a booking - book first, then ask once. Do not state a temperature or a softener back to them; they have chosen neither.',
     prefs.default_pickup_method
       ? `Usual pickup: leaves the bag outside`
       : 'Usual spot: not chosen yet; ask where the driver should pick the laundry up and drop it back off.',

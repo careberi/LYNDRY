@@ -194,11 +194,17 @@ function hasName(customer) {
 
 // Have they actually told us how to wash their clothes?
 //
-// There are NO default preferences. Washing somebody's clothes warm when they
-// never said so is how clothes get ruined, and "we've set you up with cold
-// water and standard detergent" went to a real customer who had chosen
-// nothing. A first booking is refused until these exist, which is what makes
-// the asking mandatory rather than polite.
+// IT IS NOT A GATE ON A BOOKING AND HAS NOT BEEN SINCE 16 SEPTEMBER - see the
+// long note in bookPickup(). What it answers now is EXPLICIT against DEFAULT:
+// true means they chose, false means nobody has said and the wash falls back to
+// cold with softener. That is the distinction the intake table draws and it is
+// the one that matters here.
+//
+// WHAT HAS NOT CHANGED: a default is never written into their row, and nobody
+// may read one back to them as though they had picked it. "We've set you up
+// with cold water and standard detergent" went to a real customer who had
+// chosen nothing, and Neil called it unacceptable. Defaulting the WASH is fine;
+// telling somebody it is their SETTING is not.
 function hasPreferences(customer) {
   const prefs = customer.preferences || {};
 

@@ -171,7 +171,12 @@ async function alreadySaid(to, text) {
   }
 }
 
-async function sendAndLog(to, body, customerId, { sentBy = null, kind = null, compliance = false } = {}) {
+async function sendAndLog(
+  to,
+  body,
+  customerId,
+  { sentBy = null, kind = null, compliance = false, askedFor = null } = {}
+) {
   let providerMessageId = null;
 
   // ---------------------------------------------------------------------
@@ -269,6 +274,11 @@ async function sendAndLog(to, body, customerId, { sentBy = null, kind = null, co
     // What kind of message this was. Null is honest for everything that has
     // not been classified - see migration 0065. Only 'AI' earns a follow-up.
     kind: kind || null,
+    // WHICH INTAKE FIELD THIS ASKED FOR, and null for everything that asked for
+    // nothing - which is almost every message. It is what lets the intake table
+    // say "asked, awaiting reply" instead of inviting the same question again
+    // an hour later. See src/core/intake.js and migration 0099.
+    asked_for: askedFor || null,
   });
 
   if (error) console.error('Failed to log outbound message:', error.message);

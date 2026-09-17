@@ -49,7 +49,7 @@ alternative in front of Neil:
 
 - **A stored `conversation_state` column.** The re-ask bug it was meant to fix
   is real and is fixed by deriving the next question from what is already
-  stored — see `pending_pickup` and the nudge gaps. A state column is a second
+  stored — see `pending_pickup` and the intake table. A state column is a second
   copy of facts the database holds, and goes stale the first time anybody
   edits a customer by hand.
 - **Message 1 cut to two segments.** Neil rewrote it to four deliberately and
@@ -719,12 +719,31 @@ not offer an exception and must not say it will make a note — taking the field
 away stops it SAVING one, not PROMISING one, and a promise made in a text thread
 is one the people doing the washing never see.
 
-**There are no default wash preferences, anywhere.** A new customer is asked
-  once, in the thread, during setup — water temperature, detergent, softener,
-  and where the driver finds the bag — and `bookPickup()` refuses a first
-  booking until they exist. Never invent a setting and never tell somebody
-  what they've been "set up with"; that sentence went to a real customer and
-  Neil called it unacceptable. Once saved, never asked again.
+**A WASH PREFERENCE IS ASKED FOR, NEVER REQUIRED, AND THAT REVERSES WHAT THIS
+  LINE SAID UNTIL 16 SEPTEMBER.** It read: *"There are no default wash
+  preferences, anywhere... `bookPickup()` refuses a first booking until they
+  exist."*
+
+  Two decisions took it apart. Manpreet Singh asked for a pickup at least four
+  times while a water-temperature question stood between him and a booking, and
+  Neil's rule off that thread was **"wash prefs after the pickup is booked, not
+  before"** - the gate came out of `bookPickup()`. Then the intake-table brief:
+  *"Wash preference questions are useful personalization, not a reason to lose
+  the booking."* Cold water and softener are what happens when nobody has said,
+  and an order books, holds and collects perfectly well on them.
+
+  **WHAT SURVIVES IS THE HALF THAT MATTERED.** A default is **never written into
+  the customer's row** - `wash.choiceFor()` falls back at read time, so a null
+  column still means "nobody has said". Nothing may read one back to them:
+  never invent a setting, never put it in a recap, and never tell somebody what
+  they have been "set up with". That sentence went to a real customer and Neil
+  called it unacceptable, and it is still unacceptable. Defaulting the WASH is
+  fine; calling it their CHOICE is not.
+
+  That distinction is the whole of `EXPLICIT` against `DEFAULT` on the intake
+  table, and `booking.hasPreferences()` is what draws it. The day anything
+  starts writing `COLD` into that column on signup, the table starts lying.
+  Once genuinely saved, never asked again.
 - Uncertain, or the customer is upset? `handoff_to_human` rather than guessing.
 
   **AND A HANDOFF HAS TO REACH A PERSON, WHICH ONCE IT DID NOT.** It texts
@@ -1266,7 +1285,7 @@ system noticed - so a half-set-up customer sat there for ever.
 | Rule | |
 |---|---|
 | The last message is the AI's own reply, or a chase of it | anything else means we are not waiting on them |
-| **An early nudge, two hours in, only mid-setup** | somebody who said "Yes" and never gave a name has put the phone down, not lost interest; a day later the moment has gone. Mid-setup is derived from the nudge gaps — no name, address, wash or card |
+| **An early nudge, two hours in, only mid-setup** | somebody who said "Yes" and never gave a name has put the phone down, not lost interest; a day later the moment has gone. Mid-setup is derived from `intake.blocking()` — no name, address or card. Wash was in that list until 16 September and is not a gap any more |
 | **A final chase, a day after the question** | measured from the AI's question, not from the nudge |
 | **Two per silence, and the count is read off the thread** | both are `kind = 'FOLLOW_UP'`; one sent inside the first day was the early one. Two since their last word, or one sent after the day mark, and it is over |
 | There was a conversation | at least one message from them and two from us. "Thanks" / "no problem" is not something to chase |
@@ -1293,7 +1312,7 @@ safe direction: an unlabelled history can never trigger a chase at somebody who
 had a conversation last week.
 
 **THIS ONE MESSAGE IS WRITTEN BY THE AI**, which is the exception to the rule in
-`src/core/nudges.js`. Those ask for one of five known-missing things and can be
+`src/core/intake.js`. Those ask for one named field and can be
 written out in advance; a chase has to refer to a conversation that could have
 been about anything, and the fixed-sentence version is "just following up!",
 which is worse than nothing. `brain.followUpMessage()` gets the thread and **no
@@ -2650,53 +2669,127 @@ second thing is one nobody trusts. What it does instead is say so on the way
 back - writing to somebody while the AI is still answering them is how two of
 us reply to the same message.
 
-**WHAT IS STILL MISSING, AND ONE BUTTON PER THING.** Neil's ask: an admin
-should be able to press a button at each step of getting an order started -
-their details, how they want it washed, where the bag goes, a card, when they
-want collecting - and have a text go out asking for exactly that. It is in
-`src/core/nudges.js`, rendered by `src/web/nudge-panel.js` on the customer page
-and in the side column of an order, from one function.
+**EVERY FIELD, ITS VALUE, WHERE THE VALUE CAME FROM, AND A WAY TO ASK.**
+Neil's brief, 16 September. `src/core/intake.js` reads the rows,
+`src/web/intake-table.js` draws them, on the conversation, the customer page and
+the side column of an order, from one function.
 
-**IT IS NOT A SECOND STATUS ON THE ORDER, and that is the part worth keeping.**
-He described these as stages an order moves through. They are not: the order
+**IT REPLACED "WHAT IS STILL MISSING", AND THE REPLACEMENT IS A CHANGE OF
+MODEL.** The old panel listed gaps and nothing else, so the screen answered
+"what should I ask for" and could not answer "what do we actually know". His
+words: *"Not explicitly supplied does not automatically mean missing."*
+
+| | |
+|---|---|
+| `EXPLICIT` | they told us |
+| `DEFAULT` | we have a safe business default and can proceed |
+| `MISSING` | genuinely needed before the relevant workflow can move |
+| `N/A` | does not apply to this customer |
+
+**A DEFAULT IS NOT A WARNING.** Anything unanswered used to be a gap with a
+button on it, so "cold water" and "no address" looked the same - which turned
+every optional preference into a problem and hid the two or three that were.
+**Cold - Default** is a finished row.
+
+**AND THE TABLE IS ALWAYS THERE.** The cards appeared only when something was
+missing, so a fully set up customer's screen said nothing at all about what we
+held. Completed rows stay and each offers an update.
+
+**THE TEN ROWS**: name, address, pickup date, pickup time, pickup location,
+water temperature, fabric softener, service type, frequency, card. **Detergent
+is not one and must not become one** - it is standard across the board and lives
+in `wash.STANDARDS`. **There is no "request return location"** - one spot serves
+both legs, and a second question about it is the form this product exists not to
+be.
+
+**IT IS NOT A SECOND STATUS ON THE ORDER**, which is the part carried over
+whole. He described these as stages an order moves through and they are not: the
 state machine is about where the BAG is, only `orders.js` may move it, and every
-one of these happens before a bag exists. A stored "intake stage" would be a
-second copy of facts the database already holds - a name, an address,
-preferences, a card - free to disagree with them the first time anybody did
-something by hand. So a gap is **derived every time**, from the same predicates
-`checkSlot()` refuses on, and listed in the order it refuses them. Same rule as
-BOOKED on the board and the partner load.
+row here exists before a bag does. A stored "intake stage" would be a second
+copy of facts the database already holds. **Every row is derived, every time**,
+from the customer, the order, the subscription and the payment state. The table
+is a projection of the system, never another copy of it.
 
-**THE MESSAGES ARE WRITTEN IN CODE, NOT BY THE AI.** Neil's call, taken with
-the alternative in front of him. They are fixed sentences, so the screen shows
-the exact words and the segment count **before** the button is pressed - a
-button that texts a customer something nobody has read is not one anybody
-should press - and because texting somebody who has not just texted us is the
-one thing the AI has never done.
+**WHICH IS ALSO WHAT MAKES EXPLICIT AND DEFAULT DISTINGUISHABLE AT ALL**, and it
+only works because nothing writes a default into a customer's row. See the wash
+note in the AI layer above.
 
-**The AI still does the part that matters.** The nudge lands in `messages` like
-any other outbound, and the AI is handed the last ten before it replies - so it
-sees the question that was asked and handles whatever comes back, including
-"actually make it Friday", in the thread as usual.
+**THREE KINDS OF NEEDED, WHERE THERE USED TO BE ONE FLAG.** `blocks: true` meant
+"`bookPickup()` refuses without it", and wash preferences carried it wrongly for
+weeks after that stopped being true.
 
-**A nudge is NOT stamped `sent_by`.** A person pressed the button but nobody
-typed the sentence, and stamping it would put the AI into the handover
-behaviour as though a colleague were working the thread by hand.
+| | |
+|---|---|
+| `BOOKING` | name, address. No pickup can be created |
+| `PICKUP` | the pickup date. Its absence is the ordinary resting state of a customer between orders |
+| `DISPATCH` | the card. The pickup exists; this is what stands between it and a van |
+| none | useful personalisation, never a reason to lose the booking |
 
-**Only the card message is not written there.** `billing.setupLinkMessage()`
-already owns that wording and mints the `/pay/<token>` in it, so the button
-sends the same sentence the AI and the website already send. The panel cannot
-call it to build the preview - that would create a Stripe session on every page
-load - so it shows the wording with the link stubbed and says so.
+`intake.blocking()` counts `BOOKING` and `DISPATCH` only. **A missing pickup
+date is never "stuck"** - counting it would paint every settled customer red and
+pull all of them into the AI's early nudge, which is what `followups.js` reads
+this for.
 
-**`send()` re-derives the gap rather than trusting the button.** A page left
-open since the morning would otherwise ask somebody for a card they saved an
-hour ago.
+**ONE WORKFLOW, NOT TWO.** There is no "send standard" beside a "send custom".
+The action opens a composer **prefilled with the standard wording**, the admin
+edits it or does not, and Send sends exactly what is in the box. The sentence is
+still written in code and still shown in full before anything goes - a button
+that texts a customer something nobody has read is not one anybody should press
+- and now the person reading it can fix it.
+
+**IT OPENS WITH `:target` AND NOTHING ELSE** - the action is a plain link to the
+row's own id and CSS shows that row. No JavaScript, like every other ops screen,
+and one composer at a time for free, so there is never a second half-typed
+message on screen that somebody thinks they sent.
+
+**THE CARD ROW IS NOT AN ORDINARY ROW.** The words are editable and **the link
+is not**: it does not exist until Send is pressed, because minting one on every
+page load would leave a trail of Stripe sessions behind, and an admin-editable
+payment URL in a text message is the shape of the thing `cardDestination()`
+exists to avoid. It is a deliberate second wording beside
+`billing.setupLinkMessage()`, on the same argument `updateCardText()` already
+makes: that one is what the system sends on its own, this one is a person
+pressing a button.
+
+**A MESSAGE FROM THE TABLE IS NOT STAMPED `sent_by`, EVEN WHEN THE WORDS WERE
+EDITED.** A person pressed a button; nobody is working the thread by hand.
+`sent_by` is what puts `brain.js` into its handover behaviour, and that is wrong
+for a one-line question whose whole purpose is that the AI handles the answer.
+**The AI still does the part that matters**: the message lands in `messages`
+like any other outbound and it is handed the last ten before it replies, so one
+customer text can settle five rows at once.
+
+**`send()` RE-READS THE TRUTH RATHER THAN TRUSTING THE FORM**, and the check is
+now "is this still the same answer" rather than "is it still missing", because
+every row has an action whether or not it is missing. The state the admin was
+looking at rides in the form; a changed answer is refused and says what it is
+now. Neil's case: the card row reads Missing, the customer saves a card in their
+own browser, and Send Card Link must not go.
+
+**`messages.asked_for` IS THE ONE THING STORED** (migration 0099), so a row can
+say **Asked - awaiting reply** instead of inviting the same question four times
+in a morning. It is a label on an outbound saying what that message asked for -
+a fact about something we DID, like `reminder_sent_at` - not a state the
+customer is in. It cannot be derived from the text, because the whole point of
+the composer is that the wording changes. Anything the customer says clears
+every outstanding ask; working out which row their reply answered is the AI's
+job, and it can answer five at once.
+
+**READ ONLY ON THE CUSTOMER PAGE.** Neil moved the ask buttons off the profile
+and onto the conversation, because pressing one there meant writing into a
+thread you could not see. That still holds for SENDING and does not hold for
+READING - "what does LYNDRY know about this person" is exactly what a profile
+answers - so the table is drawn there without its actions. It also replaced a
+query whose result was being thrown away.
+
+**An opted-out customer keeps the table and loses every button.** STOP is a
+legal instruction; `send()` refuses before the carrier does, so the screen can
+say why rather than report a send that quietly did nothing.
 
 **With the shop shut, nobody is asked when they want collecting.**
 `bookPickup()` would refuse whatever they answered, and inviting a customer to
 book something that is then refused is the mistake the closed sign has already
-caused once. The pickup nudge also states the opening date when there is one.
+caused once. The pickup row also states the opening date when there is one.
 
 **There is deliberately no "confirm the order" button**, though Neil named one.
 There is exactly one confirmation - the recap, a yes, then it books - and a

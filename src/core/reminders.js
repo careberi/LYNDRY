@@ -134,7 +134,7 @@ function spotOf(order) {
 }
 
 // The message. Written here, in code, like every other thing we send without
-// being asked - see src/core/nudges.js for why the AI does not write these.
+// being asked - see src/core/intake.js for why the AI does not write these.
 //
 // Kept to one segment for the ordinary case. A customer whose spot is a
 // sentence long can push it to two, and that is the right trade: their own
