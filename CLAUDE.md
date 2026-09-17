@@ -2199,6 +2199,29 @@ it again; that question belongs on the order or the customer page, where there
 is room for the word to read as a forecast. The discount went with it - what
 came off is the Price column's business.
 
+**AND THE ORDER PAGE ANSWERS IT NOW, WHICH THAT NOTE HAD BEEN PROMISING SINCE 14
+SEPTEMBER.** Neil, 17 September, about Pamela's #2069: *"order 2069 should also
+have the clean50 promotion applied to it."* It already was - she holds a live
+CLEAN50 and `discountFor()` takes 50% off the moment the bag is weighed, $16.50
+off a $33.00 load when run against the real row. What was wrong is that nothing
+said so.
+
+**THE ROW ONLY EXISTED ONCE AN ORDER WAS PRICED.** `promotion_id` and
+`discount_cents` are written by `loadVan()` at the doorstep, which is right -
+they are the record of what actually came off - but it left every order before
+that moment looking as though it had no promotion at all, which is the opposite
+of the truth for anybody holding one.
+
+**THE FACT AND THE FORECAST ARE NEVER BOTH DRAWN.** `expectedPromotion` is null
+on anything carrying a `promotion_id`, and the forecast says **expected** in the
+value rather than only in the heading. **No figure**, deliberately: the discount
+is a percentage of a price nobody has weighed, so any number there would be
+invented - and a pound figure on a screen becomes the figure somebody quotes.
+
+It is behind `money.view` like every other figure on that page, one query that
+is skipped entirely on a priced order, and a failed lookup draws no row rather
+than breaking the page.
+
 **Status, clock, weight, price and payment each stay their own column.** The
 lock is about flattening cells, never about shortening the table, and the money
 columns are still absent from a driver's markup rather than hidden in it.

@@ -875,6 +875,30 @@ function orderConsoleBody({
     can.money ? ['Photo in', order.weight_photo_path ? `<a href="/ops/orders/${n}/scale-photo">scale</a>` : 'none'] : null,
     ['Photo out', order.delivery_photo_url ? `<a href="/p/${escapeHtml(order.id)}" target="_blank" rel="noopener">delivery</a>` : 'none'],
     order.promotionName ? ['Promotion', `${escapeHtml(order.promotionName)}${order.discount_cents ? ` · -${escapeHtml(money(order.discount_cents))}` : ''}`] : null,
+
+    // WHAT IS COMING OFF, ON AN ORDER NOTHING HAS COME OFF YET.
+    //
+    // The row above is the FACT: loadVan() wrote it when it priced the order.
+    // This is the FORECAST, and the two are never both drawn - expectedPromotion
+    // is null on anything that already carries a promotion_id.
+    //
+    // IT SAYS EXPECTED IN THE VALUE, NOT ONLY IN THE HEADING. That is the whole
+    // reason the board is not allowed to carry this: a name sitting under a word
+    // that reads Promotion says the money has already come off. Here there is
+    // room for the sentence to be honest, which is why Neil sent the question to
+    // this page.
+    //
+    // NO FIGURE, DELIBERATELY. The discount is a percentage of a price nobody
+    // has weighed yet, so any number here would be invented - and a pound
+    // figure on a screen becomes the figure somebody quotes.
+    !order.promotionName && order.expectedPromotion
+      ? [
+          'Promotion',
+          `<span class="muted">expected:</span> ${escapeHtml(
+            order.expectedPromotion.code || order.expectedPromotion.name
+          )} · comes off when it is weighed`,
+        ]
+      : null,
   ]);
 
   const customerKv = can.customers

@@ -2985,11 +2985,46 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       text: canAskOnOrder,
     };
     const driverRow = team.find((d) => d.id === order.driver_id) || null;
+
+    // WHICH PROMOTION IS COMING OFF THIS ONE, WHEN NOTHING HAS COME OFF YET.
+    //
+    // Neil, 17 September, about Pamela's #2069: "order 2069 should also have the
+    // clean50 promotion applied to it". It already was - she holds a live
+    // CLEAN50 and discountFor() takes 50% off the moment the bag is weighed -
+    // and this page said nothing about it, so there was no way to know that
+    // without running the pricing code by hand.
+    //
+    // THE ROW BELOW ONLY EXISTS ONCE AN ORDER IS PRICED. promotion_id and
+    // discount_cents are written by loadVan() at the doorstep, which is right:
+    // they are the record of what actually came off. But it leaves every order
+    // before that moment looking as though it has no promotion at all, which is
+    // the opposite of the truth for anybody holding one.
+    //
+    // THIS IS THE PLACE THE BOARD SENT IT. Neil's table lock, 14 September, took
+    // the forecast off the board because a column headed Promotion must mean
+    // APPLIED - and the note left behind says where it belongs: "the order or
+    // the customer page, where there is room to say 'expected' and have it read
+    // as a forecast rather than as a fact." It was never built there. It is
+    // here now, and it says expected in as many words.
+    //
+    // ONE QUERY, AND ONLY WHEN THERE IS A FORECAST TO MAKE. expectedForMany()
+    // skips any order that already carries a promotion_id, so a priced order
+    // asks the database nothing.
+    const expected = can.money
+      ? await promotions.expectedForMany([order]).catch((err) => {
+          console.error(`Could not work out the promotion on ${order.id}: ${err.message}`);
+          return {};
+        })
+      : {};
+
     const consoleOrder = {
       ...order,
       driverName: driverRow ? driverRow.name : order.driver_id && order.driver_id === req.opsUser.id ? req.opsUser.name : null,
       partnerName: order.partners ? order.partners.name : null,
       promotionName: order.promotions ? order.promotions.code || order.promotions.name : null,
+      // A PREDICTION, AND NAMED AS ONE. Null on anything already priced, so the
+      // two can never be shown at once.
+      expectedPromotion: expected[order.id] || null,
     };
     const askedView = String(req.query.log || '').trim();
     const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';

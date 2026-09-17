@@ -26,6 +26,12 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const withoutComments = (src) =>
+  src
+    .split('\n')
+    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+    .join('\n');
+
 const SRC = fs
   .readFileSync(path.join(__dirname, '..', 'src', 'routes', 'admin.js'), 'utf8')
   .split('\r\n')
@@ -127,15 +133,32 @@ test('THE PROMOTION COLUMN SHOWS WHAT WAS APPLIED, AND NOTHING ELSE', () => {
   assert.ok(!/discount_cents/.test(body), 'the discount is back under the promotion name');
 });
 
-test('and the two queries that fed it are gone with it', () => {
-  // Nothing on the board asks the promotion ledger what is coming any more, so
-  // the column cannot quietly start showing it again.
-  const code = SRC.split('\n')
-    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
-    .join('\n');
+test('and the BOARD no longer asks the promotion ledger what is coming', () => {
+  // The column cannot quietly start showing a forecast again.
+  //
+  // SCOPED TO THE BOARD ROUTE NOW, NOT THE WHOLE FILE. This read admin.js end
+  // to end and refused expectedForMany() anywhere in it - right while nothing
+  // called it, and wrong the moment the question was answered where Neil's own
+  // lock said it belonged: the order page, where there is room to say
+  // 'expected' and have it read as a forecast rather than as a fact. The order
+  // page calls it now. The board still must not.
+  const at = SRC.indexOf("router.get('/ops', ");
+  assert.ok(at > 0, 'the board route has moved');
 
-  assert.ok(!/expectedForMany/.test(code), 'the board still works out expected promotions');
-  assert.ok(!/promoCell\(o, /.test(code), 'promoCell is still passed an expected promotion');
+  const board = withoutComments(SRC.slice(at, SRC.indexOf('\nrouter.', at + 10)));
+
+  assert.ok(!/expectedForMany/.test(board), 'the board still works out expected promotions');
+  assert.ok(!/promoCell\(o, /.test(board), 'promoCell is still passed an expected promotion');
+});
+
+test('and the board cell shows only what was APPLIED', () => {
+  // The row builder is shared by every section, so this is the guarantee that
+  // matters however the route above is written.
+  const at = SRC.indexOf('function promoCell');
+  assert.ok(at > 0, 'promoCell has moved');
+
+  const cell = withoutComments(SRC.slice(at, at + 900));
+  assert.ok(!/expected/i.test(cell), 'the board cell has learned the word expected');
 });
 
 // --- and the columns that stay ----------------------------------------------
