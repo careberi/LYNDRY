@@ -39,11 +39,31 @@ const issues = require('./issues');
 // so this costs nothing and protects the case that matters. It shouts, because
 // silence that nobody can explain is its own problem.
 async function isPaused(phone) {
-  const { data, error } = await db
-    .from('ai_pauses')
-    .select('paused')
-    .eq('phone', phone)
-    .maybeSingle();
+  // WRAPPED, because there are two ways this can fail and it only handled one.
+  // Supabase reports most trouble as { error } in the response, which the check
+  // below catches - but a client that cannot reach the network at all THROWS,
+  // and that exception used to travel straight out of here. The comment above
+  // has always said this fails closed; against a throw it did not.
+  //
+  // It is now the single gate on whether Lyn speaks, which makes the gap worth
+  // closing: an unreadable switch must mean silence, not an unhandled error
+  // whose behaviour depends on who called.
+  let data;
+  let error;
+
+  try {
+    ({ data, error } = await db
+      .from('ai_pauses')
+      .select('paused')
+      .eq('phone', phone)
+      .maybeSingle());
+  } catch (err) {
+    console.error(
+      `Could not read the AI pause for ${phone}: ${err.message}. ` +
+        'Saying nothing rather than risk talking over somebody.'
+    );
+    return true;
+  }
 
   if (error) {
     console.error(
