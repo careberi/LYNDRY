@@ -194,58 +194,95 @@ async function step(order, to, buildMessage, by = {}) {
 // be one: a second way to tell somebody the van is outside is a second way to
 // tell them twice.
 //
-// ONCE IS ENFORCED BY THE STAMP, NOT BY THE CALLER. Four things can reach this
-// - the location step, I'm here, collect() as a backstop, and the JSON API
-// behind it - and the guarantee cannot depend on each of them remembering.
-// here_texted_at is set the first time and read every time; see migration
-// 0101 for why it is stored rather than derived off the thread.
+// CLAIM FIRST, THEN SEND. THE OTHER ORDER ROUND IS NOT ONCE-ONLY.
 //
-// THE STAMP GOES ON AFTER THE ATTEMPT, whether or not the carrier took it. An
-// opted-out number is refused at notify.sendAndLog(), and that refusal must
-// not leave the driver stuck on a screen he cannot get past: the text is for
-// the customer, the step is for him, and one failing is not a reason to stop
-// the other.
+// This read here_texted_at, saw null, sent the text, and only then wrote the
+// stamp with `.is('here_texted_at', null)` on it. Neil, 17 September:
 //
-// IT READS THE ROW BACK FIRST. The caller is holding an order it loaded before
-// the driver tapped anything, and on a double tap - which is a thumb on a
-// phone at a door, so it happens - both copies would say the text had not gone.
+//   "Two taps can both finish steps 1-3 before either reaches step 4.
+//    .is('here_texted_at', null) on the UPDATE does not protect an SMS that
+//    was already sent."
+//
+// He is right, and the conditional update was doing real work - just not the
+// work it was credited with. It made the STAMP once-only. The SMS sits before
+// it, so two thumbs a moment apart both read null, both send, and only then
+// does one of them lose the write. The guard protected the column and the
+// column was never the thing that mattered.
+//
+// SO THE WRITE IS THE CLAIM AND IT HAPPENS FIRST. One statement: stamp the row
+// where the column is still null, and ask for the row back. Postgres decides
+// which of the two concurrent updates matches, and exactly one gets a row.
+// Whoever gets it sends; whoever does not returns quietly, having sent nothing
+// and changed nothing.
+//
+// WHAT IT COSTS, SAID OUT LOUD: the claim is stamped before the message is
+// handed to the carrier, so a provider that is down loses that text rather
+// than retrying it. That is the right way round here - the alternative is a
+// customer being told twice that a van is outside, and the arrival is the one
+// message with a person standing on the doorstep to make up for it. The audit
+// line records what actually happened rather than claiming a send.
+//
+// THE DRIVER IS NEVER BLOCKED. Every failure below is caught and logged: he is
+// standing at a door, and the text is for the customer while the step is for
+// him.
 async function announceArrival(order, { by = {} } = {}) {
   if (!order || !order.id) return { ok: false, reason: 'no order' };
 
-  const { data: fresh, error } = await db
-    .from('orders')
-    .select('id, order_number, here_texted_at, payment_status, price_cents, customer_id')
-    .eq('id', order.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!fresh) return { ok: false, reason: 'no order' };
-  if (fresh.here_texted_at) return { ok: true, already: true };
-
-  const customer = order.customers || null;
-
-  if (customer && customer.phone) {
-    await sendAndLog(customer.phone, collectedMessage(fresh), customer.id).catch((err) =>
-      console.error(`Could not text the arrival for ${order.id}: ${err.message}`)
-    );
-  }
-
-  const { error: stampError } = await db
+  const { data: claimed, error } = await db
     .from('orders')
     .update({ here_texted_at: new Date().toISOString() })
     .eq('id', order.id)
-    // THE STAMP IS THE LOCK. Two taps a second apart both read a null above;
-    // only one of them writes, because the second no longer matches. Without
-    // it the read-then-write is a race with a thumb on the other side of it.
-    .is('here_texted_at', null);
+    .is('here_texted_at', null)
+    .select('id, order_number, payment_status, price_cents')
+    .maybeSingle();
 
-  if (stampError) throw stampError;
+  if (error) throw error;
+
+  // Somebody else has it. Not an error and not a second text.
+  if (!claimed) return { ok: true, already: true };
+
+  const customer = order.customers || null;
+
+  if (!customer || !customer.phone) {
+    await events
+      .record(order.id, {
+        kind: 'STATUS',
+        summary: 'At the door - nobody to tell, no number on the order',
+        by,
+      })
+      .catch(() => {});
+
+    return { ok: true, claimed: true, texted: false, reason: 'no number' };
+  }
+
+  const result = await sendAndLog(customer.phone, collectedMessage(claimed), customer.id).catch(
+    (err) => {
+      console.error(`Could not text the arrival for ${order.id}: ${err.message}`);
+      return { sent: false, refused: err.message };
+    }
+  );
+
+  // THE AUDIT LINE SAYS WHAT HAPPENED, NOT WHAT WAS INTENDED. "Told them we are
+  // here" against a number that had opted out is a record of something that did
+  // not occur, and the change log is the thing anybody reads afterwards to find
+  // out whether the customer knew.
+  const refused = Boolean(result && result.refused);
+  const reachedCarrier = Boolean(result && result.providerMessageId);
 
   await events
-    .record(order.id, { kind: 'STATUS', summary: 'At the door - told them we are here', by })
+    .record(order.id, {
+      kind: 'STATUS',
+      summary: refused
+        ? 'At the door - the text was refused, so they were not told'
+        : reachedCarrier
+          ? 'At the door - told them we are here'
+          : 'At the door - the carrier would not take the text, so they may not have been told',
+      reason: refused ? result.refused : null,
+      by,
+    })
     .catch(() => {});
 
-  return { ok: true, texted: Boolean(customer && customer.phone) };
+  return { ok: true, claimed: true, texted: !refused, refused: refused ? result.refused : null };
 }
 
 function collectedMessage(order) {
@@ -314,18 +351,29 @@ async function collect(order, { bagCount, by = {} } = {}) {
   // one. It goes at the door now, from announceArrival(), which is called by
   // the location step and by I'm here.
   //
-  // IT IS STILL CALLED FROM HERE, as a backstop and not as a second door. Not
-  // every collection comes through the run: the order page and POST
-  // /ops/collected reach this function directly, and a customer whose driver
-  // used one of those must still be told. It is stamped, so this cannot be the
-  // second text - it is the only one, on the paths where nothing else fired.
+  // AND THERE IS NO BACKSTOP HERE EITHER. Neil's lock, 17 September:
+  //
+  //   "No customer text is allowed to originate from this action. Remove the
+  //    announceArrival() backstop from collect(). The transition to IN_PROCESS
+  //    must be operationally silent. Arrival messaging belongs to the explicit
+  //    customer-pickup arrival action, not to collection/custody/tag binding.
+  //    If somebody uses an admin/order-page collection action without first
+  //    recording arrival, that does NOT give collect() permission to
+  //    manufacture an arrival message. Keep those concepts separate."
+  //
+  // The backstop was written on the reasoning that a driver who collects from
+  // the order page or the JSON API would otherwise tell the customer nothing.
+  // That is true and it is not this function's problem to solve: arriving and
+  // taking custody are two events, and a collection recorded by an admin at a
+  // desk is not evidence that anybody is standing outside anybody's house.
+  // Sending it from here would be the system inventing an arrival it cannot
+  // see.
+  //
+  // SO THIS IS SILENT, CATEGORICALLY. Nothing customer-facing originates from
+  // binding a tag or from the move to IN_PROCESS.
   const result = await step(order, 'IN_PROCESS', null, by);
 
   if (!result.ok) return result;
-
-  await announceArrival(result.order || order, { by }).catch((err) =>
-    console.error(`Could not text the arrival for ${order.id}: ${err.message}`)
-  );
 
   // THE NEXT ONE IS BOOKED THE MOMENT THIS ONE IS IN THE VAN.
   //
@@ -2326,6 +2374,7 @@ async function reconcileReturn(order, returned, { by = {} } = {}) {
 module.exports = {
   collectedMessage,
   announceArrival,
+  recordPartnerScale,
   waivedWeighInText,
   // Exported so a test can read the sentence a customer actually gets. The
   // first version of that test re-declared this function inside itself, which

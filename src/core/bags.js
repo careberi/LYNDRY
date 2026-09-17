@@ -734,19 +734,100 @@ async function assignClip(label, driverId) {
 // three-card plant drop, where a separate "clips back in the van" tap confirmed
 // it - and that card and its route are gone. handOffBag() is the other half of
 // this and already stamps all three together.
+// ---------------------------------------------------------------------------
+// ONE CLIP, BACK IN THE POOL. THE ONLY PLACE THAT DECIDES WHAT THAT MEANS.
+//
+// Neil, 17 September, describing a clip that never came back:
+//
+//   "clean return bag has a clip / driver removes that clip during doorstep
+//    prep / the per-bag action sets unclipped_at / but clipsInUse() considers a
+//    clip unavailable until clip_returned_at is set / final unclipOrder() only
+//    updates rows whose unclipped_at is still NULL / because doorstep prep
+//    already populated unclipped_at, final cleanup skips the row / the physical
+//    clip is back in the van but the software can continue treating it as
+//    occupied"
+//
+// Every word of that is what the code did. The two columns had drifted into
+// meaning the same thing in one place and different things in another:
+//
+//   unclipped_at        the clip came OFF the bag
+//   clip_returned_at    the NUMBER is free for the next bag
+//
+// handOffBag() at a laundromat counter set both, so the dirty leg was fine.
+// The doorstep prep tap set only the first, through a generic column write
+// that knew nothing about clips - and unclipOrder(), the sweep that was
+// supposed to catch the rest, filtered on `unclipped_at is null` and therefore
+// skipped exactly the rows the doorstep had already touched. The clip was in
+// the van and off the pool for good.
+//
+// SO THERE IS ONE OPERATION AND EVERY DOOR CALLS IT. A second route stamping a
+// column and hoping is how this happened.
+//
+// IT NEVER MOVES unclipped_at BACKWARDS. If the driver said the clip came off
+// ten minutes ago, that is when it came off; this only adds the fact that the
+// number is free.
+async function releaseClip(label) {
+  if (!label || !label.id) return { ok: false, detail: 'No such bag.' };
+  if (label.clip_number == null) return { ok: true, clip: null, none: true };
+
+  const clip = Number(label.clip_number);
+  if (label.clip_returned_at) return { ok: true, clip, already: true };
+
+  const now = new Date().toISOString();
+
+  const { error } = await db
+    .from('bag_labels')
+    .update({ unclipped_at: label.unclipped_at || now, clip_returned_at: now })
+    .eq('id', label.id)
+    // Only if it is still out. Two taps cannot both claim to have returned it.
+    .is('clip_returned_at', null);
+
+  if (error) throw error;
+  return { ok: true, clip };
+}
+
+// Every clip still out on this order, back in the pool. The sweep behind the
+// per-bag taps, run at a laundromat drop and at a delivery.
+//
+// IT KEYS ON clip_returned_at, NOT unclipped_at, AND THAT IS THE WHOLE FIX. It
+// read `.is('unclipped_at', null)`, which asks "has nobody taken this clip off
+// yet" - so any bag whose clip the driver had already removed by hand was
+// skipped by the one thing that was supposed to free it. The question this has
+// to ask is whether the NUMBER is free, and that is the other column.
+//
+// TWO PASSES, BECAUSE unclipped_at MUST NOT BE OVERWRITTEN. A bag the driver
+// unclipped at the door already has an honest timestamp on it and a blanket
+// update would replace it with now.
 async function unclipOrder(orderId) {
   const now = new Date().toISOString();
 
-  const { data, error } = await db
+  // Never touched: the clip came off and the number goes free in one moment.
+  const { data: fresh, error: freshError } = await db
     .from('bag_labels')
     .update({ unclipped_at: now, clip_returned_at: now })
     .eq('order_id', orderId)
+    .is('clip_returned_at', null)
     .is('unclipped_at', null)
     .not('clip_number', 'is', null)
     .select('clip_number');
 
-  if (error) throw error;
-  return (data || []).map((l) => Number(l.clip_number)).sort((a, b) => a - b);
+  if (freshError) throw freshError;
+
+  // Already off the bag, never put back. This is the row the old filter lost.
+  const { data: stranded, error: strandedError } = await db
+    .from('bag_labels')
+    .update({ clip_returned_at: now })
+    .eq('order_id', orderId)
+    .is('clip_returned_at', null)
+    .not('unclipped_at', 'is', null)
+    .not('clip_number', 'is', null)
+    .select('clip_number');
+
+  if (strandedError) throw strandedError;
+
+  return [...(fresh || []), ...(stranded || [])]
+    .map((l) => Number(l.clip_number))
+    .sort((a, b) => a - b);
 }
 
 // What is on the van right now, as clip numbers, grouped by order. What the
@@ -812,13 +893,18 @@ async function handOffBag(label) {
       unloaded_at: label.unloaded_at || now,
       // Over the counter: the laundromat has it.
       unclipped_at: now,
-      // And the number is free. One tap, because it is one event.
-      clip_returned_at: now,
     })
     .eq('id', label.id);
 
   if (error) throw error;
-  return { ok: true, clip: label.clip_number == null ? null : Number(label.clip_number) };
+
+  // AND THE NUMBER GOES FREE THROUGH THE ONE FUNCTION THAT DECIDES THAT. It
+  // used to be a third column in the update above, which is how the doorstep
+  // came to have its own idea of what returning a clip means. One tap is still
+  // one event; it is simply not this file saying so twice.
+  const released = await releaseClip({ ...label, unclipped_at: now });
+
+  return { ok: true, clip: released.clip };
 }
 
 // THE DRIVER SAYS THE CLIP IS ON. One bag, one confirmation - the step Neil
@@ -874,6 +960,7 @@ module.exports = {
   loadBag,
   assignClip,
   unclipOrder,
+  releaseClip,
   clipsFor,
   recordBagWeight,
   totalWeight,

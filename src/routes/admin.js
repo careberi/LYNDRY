@@ -5540,17 +5540,43 @@ router.post('/ops/run/door/:id/:step', guard, may('orders.drive'), async (req, r
     }
 
     if (!label[step.column]) {
-      const { error } = await db
-        .from('bag_labels')
-        .update({ [step.column]: new Date().toISOString() })
-        .eq('id', label.id);
-      if (error) throw error;
+      // THE CLIP IS NOT AN ORDINARY COLUMN AND MUST NOT BE WRITTEN LIKE ONE.
+      //
+      // This stamped `unclipped_at` through the generic write below, which says
+      // the clip came OFF the bag and says nothing about the NUMBER being free.
+      // clipsInUse() reads clip_returned_at, and unclipOrder() - the sweep that
+      // was meant to catch the rest - filtered on `unclipped_at is null`, so it
+      // skipped exactly the rows this tap had already touched. The clip was
+      // back in the van and off the pool for good.
+      //
+      // bags.releaseClip() is the one operation that decides what returning a
+      // clip means. It stamps both, and it is what the laundromat counter calls
+      // too - so a number is free at the moment the driver says the clip is in
+      // his hand, whichever end of the day that happens at.
+      if (String(req.params.step) === 'clip') {
+        const released = await bags.releaseClip(label);
+        if (!released.ok) return res.redirect(303, `/ops/run/door/${label.id}`);
 
-      await orderEvents.record(order.id, {
-        kind: 'LABEL',
-        summary: `${label.code}-${label.sticker_seq}: ${step.says}`,
-        by: { opsUser: req.opsUser },
-      });
+        await orderEvents.record(order.id, {
+          kind: 'LABEL',
+          summary:
+            `${label.code}-${label.sticker_seq}: ${step.says}` +
+            (released.clip == null ? '' : ` - clip ${released.clip} back in the van`),
+          by: { opsUser: req.opsUser },
+        });
+      } else {
+        const { error } = await db
+          .from('bag_labels')
+          .update({ [step.column]: new Date().toISOString() })
+          .eq('id', label.id);
+        if (error) throw error;
+
+        await orderEvents.record(order.id, {
+          kind: 'LABEL',
+          summary: `${label.code}-${label.sticker_seq}: ${step.says}`,
+          by: { opsUser: req.opsUser },
+        });
+      }
     }
 
     // The clip is the last of the three, so that is when he goes back to the

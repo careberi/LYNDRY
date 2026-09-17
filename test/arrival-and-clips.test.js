@@ -83,33 +83,73 @@ test('COLLECT NO LONGER TEXTS THEM, because scanning a tag is not arriving', () 
   assert.ok(collect.includes("step(order, 'IN_PROCESS', null"), 'the transition still carries a message');
 });
 
-test('it still tells them, as a backstop, for the doors that are not the run', () => {
-  // The order page and POST /ops/collected reach collect() directly. A customer
-  // whose driver used one of those must still be told.
+// THIS REVERSES WHAT THIS FILE ASSERTED YESTERDAY, and Neil's lock is why:
+//
+//   "No customer text is allowed to originate from this action... If somebody
+//    uses an admin/order-page collection action without first recording
+//    arrival, that does NOT give collect() permission to manufacture an
+//    arrival message. Keep those concepts separate."
+//
+// The backstop existed so a driver collecting from the order page or the JSON
+// API would not leave the customer told nothing. That gap is real and it is
+// not this function's to fill: a collection recorded at a desk is not evidence
+// that anybody is standing outside anybody's house.
+test('STEP 6 CANNOT SEND A CUSTOMER TEXT, CATEGORICALLY', () => {
   const collect = fn(['core', 'fulfilment.js'], 'async function collect', '\nasync function');
-  assert.ok(collect.includes('announceArrival('), 'a collection outside the run says nothing at all');
+
+  assert.ok(!collect.includes('announceArrival('), 'the backstop is back');
+  assert.ok(!collect.includes('sendAndLog'), 'collect() texts somebody directly');
+  assert.ok(!collect.includes('collectedMessage'), 'collect() builds the arrival message');
+  assert.ok(collect.includes("step(order, 'IN_PROCESS', null"), 'the transition carries a message again');
 });
 
-test('ONE TEXT, AND THE STAMP IS WHAT ENFORCES IT', () => {
+// THE CLAIM COMES FIRST. THIS TEST USED TO ASSERT THE OPPOSITE.
+//
+// It required the send to happen before the stamp, on the reasoning that a
+// failed send should not mark the customer as told. Neil, 17 September:
+//
+//   "Two taps can both finish steps 1-3 before either reaches step 4.
+//    .is('here_texted_at', null) on the UPDATE does not protect an SMS that
+//    was already sent. The existing regression test is therefore asserting the
+//    wrong thing when it requires the send to happen before the stamp."
+//
+// He is right. The conditional update made the STAMP once-only and the SMS sat
+// in front of it, so the column was protected and the thing that mattered was
+// not.
+test('ONE TEXT, AND THE CLAIM IS TAKEN BEFORE ANYTHING IS SENT', () => {
   const announce = fn(['core', 'fulfilment.js'], 'async function announceArrival', '\nfunction collectedMessage');
 
-  // Read back, not trusted: the caller is holding an order it loaded before the
-  // driver tapped anything.
-  assert.ok(announce.includes("from('orders')"), 'it does not re-read the order');
-  assert.ok(announce.includes('if (fresh.here_texted_at) return'), 'it can send a second time');
-
-  // And the write is the lock, so two taps a second apart cannot both send.
-  assert.ok(announce.includes("here_texted_at: new Date().toISOString()"), 'nothing is stamped');
-  assert.ok(announce.includes(".is('here_texted_at', null)"), 'the stamp is not conditional, so it is a race');
-});
-
-test('the stamp goes on after the send, not instead of it', () => {
-  const announce = fn(['core', 'fulfilment.js'], 'async function announceArrival', '\nfunction collectedMessage');
-
+  const claims = announce.indexOf("here_texted_at: new Date().toISOString()");
   const sends = announce.indexOf('sendAndLog');
-  const stamps = announce.indexOf('here_texted_at: new Date');
 
-  assert.ok(sends > 0 && stamps > sends, 'it stamps before it has tried to send');
+  assert.ok(claims > 0, 'nothing is claimed');
+  assert.ok(sends > 0, 'nothing is sent');
+  assert.ok(claims < sends, 'it sends before it has claimed the right to send');
+
+  // One statement: stamp where it is still null and ask for the row back.
+  assert.ok(announce.includes(".is('here_texted_at', null)"), 'the claim is unconditional');
+  assert.ok(/\.select\('id, order_number/.test(announce), 'the claim does not ask for the row back');
+  assert.ok(announce.includes('if (!claimed) return'), 'a lost claim still sends');
+
+  // And the old shape is gone.
+  assert.ok(!announce.includes('if (fresh.here_texted_at) return'), 'the read-then-send is back');
+});
+
+test('THE AUDIT LINE SAYS WHAT HAPPENED, NOT WHAT WAS INTENDED', () => {
+  // "Told them we are here" against a number that had opted out is a record of
+  // something that did not occur, and the change log is what anybody reads
+  // afterwards to find out whether the customer knew.
+  const announce = fn(['core', 'fulfilment.js'], 'async function announceArrival', '\nfunction collectedMessage');
+
+  assert.ok(announce.includes('result.refused'), 'a refusal is not noticed');
+  assert.ok(announce.includes('providerMessageId'), 'a carrier that would not take it reads as sent');
+  assert.ok(announce.includes('the text was refused'), 'there is no wording for a refusal');
+});
+
+test('and notify says which of the two happened', () => {
+  const notify = fn(['core', 'notify.js'], 'async function sendAndLog', '\nmodule.exports');
+
+  assert.ok(notify.includes('return { sent: true, providerMessageId, text };'), notify.slice(-400));
 });
 
 test('BOTH OF NEIL\'S TRIGGERS ARE ONE CODE PATH', () => {
@@ -154,6 +194,68 @@ test('THE DOOR IS DONE BY here_texted_at, NEVER BY arrived_at', () => {
   assert.ok(tasks.includes("key: 'here'"), 'there is no location step');
   assert.ok(tasks.includes('done: Boolean(order.here_texted_at)'), 'the step is done by the wrong column');
   assert.ok(!/done: Boolean\(order\.arrived_at\)/.test(tasks), 'it is done by arrived_at');
+});
+
+// --- step 15: the laundromat's scale is an accounting event ------------------
+
+test('STEP 15 CANNOT SEND A CUSTOMER TEXT, CATEGORICALLY', () => {
+  // Neil's lock: "Make Step 15 structurally incapable of sending a customer
+  // SMS. Use the internal partner-scale/accounting path instead of a customer
+  // settlement path where appropriate."
+  const bag = withoutComments(SRC('routes', 'bag.js'));
+
+  // The weight route no longer reaches the function that prices, charges and
+  // texts. That is the whole of it: settleWeight() is the customer settlement
+  // path and nothing on a page with no sign-in may call it.
+  assert.ok(!bag.includes('.settleWeight('), 'the weigh-in still settles the customer price');
+  assert.ok(bag.includes('.recordPartnerScale('), 'it no longer records what we owe the laundromat');
+});
+
+test('and the only text bag.js sends is the internal ready-for-collection one', () => {
+  // Neil: "The READY action may continue sending its INTERNAL
+  // ready-for-collection notification to LYNDRY staff."
+  const bag = withoutComments(SRC('routes', 'bag.js'));
+
+  const sends = [...bag.matchAll(/sendAndLog\(([^)]*)\)/g)].map((m) => m[1]);
+  assert.equal(sends.length, 1, `bag.js sends ${sends.length} different messages`);
+
+  // To a staff number, with a null customer - not to the customer on the order.
+  assert.match(sends[0], /^to, body, null$/, sends[0]);
+});
+
+test('nothing on the weight path can move the customer price or the card', () => {
+  const bag = withoutComments(SRC('routes', 'bag.js'));
+
+  for (const forbidden of ['chargeOrder', 'chargeAtTheDoor', 'price_cents', 'payment_status', 'amount_paid_cents']) {
+    assert.ok(!bag.includes(forbidden), `bag.js touches ${forbidden}`);
+  }
+});
+
+test('recordPartnerScale is the accounting path, and it cannot text or charge', () => {
+  const scale = fn(['core', 'fulfilment.js'], 'async function recordPartnerScale', '\nasync function');
+
+  // What it may do.
+  assert.ok(scale.includes('partner_bill_lb'), 'it does not work out what we owe them');
+  assert.ok(scale.includes('weight_band'), 'it does not record which band they fell in');
+  assert.ok(scale.includes('issues'), 'a disagreement raises nothing');
+  assert.ok(scale.includes('events.record'), 'it writes no event');
+
+  // What it may not.
+  for (const forbidden of ['sendAndLog', 'chargeOrder', 'chargeAtTheDoor', 'price_cents']) {
+    assert.ok(!scale.includes(forbidden), `recordPartnerScale reaches ${forbidden}`);
+  }
+});
+
+test('one issue for one pair of scales, raised by the function that compares them', () => {
+  // Both halves of the route used to raise their own beside it, with wording
+  // that said NOTHING HAS BEEN CHARGED - true when this step was the charge
+  // point, false since 12 September.
+  const bag = withoutComments(SRC('routes', 'bag.js'));
+
+  assert.ok(!/NOTHING HAS BEEN CHARGED/.test(bag), 'the stale wording is still on the page');
+
+  const scale = fn(['core', 'fulfilment.js'], 'async function recordPartnerScale', '\nasync function');
+  assert.ok(scale.includes('Scales disagree'), 'nothing raises the disagreement');
 });
 
 // --- a paid order is never charged twice -------------------------------------

@@ -948,6 +948,38 @@ on record. A bag that travelled under clip 16 travelled under clip 16, and a
 record edited to fit today's rules is not a record. `assignClip()` counts 1 to
 the pool and stops, so they simply stop being offered.
 
+**A CLIP TAKEN OFF AT A DOOR CAME BACK TO THE VAN AND NEVER CAME BACK TO THE
+POOL.** Neil found it, 17 September. Two columns had drifted into meaning the
+same thing in one place and different things in another:
+
+| | |
+|---|---|
+| `unclipped_at` | the clip came OFF the bag |
+| `clip_returned_at` | the NUMBER is free for the next bag |
+
+`clipsInUse()` reads the second. `handOffBag()` at a laundromat counter set
+both, so the dirty leg was fine. **The doorstep prep tap set only the first**,
+through a generic column write that knew nothing about clips - and
+`unclipOrder()`, the sweep meant to catch the rest, filtered on `unclipped_at is
+null` and therefore **skipped exactly the rows the doorstep had already
+touched**. The clip was in the van and off the pool for good.
+
+**`bags.releaseClip()` is the one operation that decides what returning a clip
+means**, and every door calls it - the counter handoff, the doorstep tap and the
+sweep. A second route stamping a column and hoping is how this happened. It
+never moves `unclipped_at` backwards: if the driver said the clip came off ten
+minutes ago, that is when it came off.
+
+**`unclipOrder()` keys on `clip_returned_at` now**, in two passes so an honest
+timestamp is not overwritten by a blanket update.
+
+**`test/clip-returns-to-pool.test.js` runs the functions against an in-memory
+database** rather than searching the source. Every test that existed passed
+while this was broken, because they asserted that the right columns appeared in
+the right functions - which they did. What nobody had written down is what a
+driver experiences: put clip 1 on a bag, take it off at a door, and see whether
+the next bag can have clip 1.
+
 **Clips are scoped to the driver** — each van has its own set, so Dan's clip 4
 and somebody else's clip 4 never collide. The owner comes from `orders.driver_id`
 rather than being stored twice.
@@ -1017,16 +1049,36 @@ questions, and the one with a box on it wins.
 
 **`fulfilment.announceArrival()` IS THE ONLY THING THAT SENDS IT.** The location
 step and the travel card's I'm here both post to `/ops/run/here`, so both of
-Neil's triggers are one code path rather than two that have to agree. `collect()`
-still calls it as a backstop, because the order page and `POST /ops/collected`
-reach that function directly and a customer whose driver used one of those must
-still be told.
+Neil's triggers are one code path rather than two that have to agree.
 
-**Once is enforced by `orders.here_texted_at`** (migration 0101), read back fresh
-and written with `.is('here_texted_at', null)` so two taps a second apart cannot
-both send. **Stamped after the attempt, not instead of it**: an opted-out number
-is refused at `notify.sendAndLog()`, and that must not strand a driver on a
-screen he cannot get past.
+**AND NOTHING ELSE MAY SEND IT, INCLUDING `collect()`.** Neil's lock, 17
+September: no customer text may originate from binding a tag. A backstop was
+written there on the reasoning that a driver collecting from the order page
+would otherwise tell the customer nothing. That gap is real and it is not that
+function's to fill: a collection recorded at a desk is not evidence that
+anybody is standing outside anybody's house. **The move to `IN_PROCESS` is
+operationally silent.**
+
+**THE CLAIM IS TAKEN BEFORE THE SEND, and the other order round is not
+once-only.** It read `here_texted_at`, saw null, sent, and only then wrote the
+stamp with `.is('here_texted_at', null)`. That made the STAMP once-only; the SMS
+sat in front of it, so two thumbs a moment apart both read null and both sent.
+A conditional update protects the column, and the column was never the thing
+that mattered.
+
+One statement now: stamp where it is still null and ask for the row back.
+Postgres decides which of two concurrent updates matches; exactly one gets a
+row, and only that one sends. **The cost, said out loud:** the claim lands
+before the carrier is called, so a provider that is down loses that text rather
+than retrying it. That is the right way round - the alternative is telling
+somebody twice that a van is outside, and this is the one message with a person
+on the doorstep to make up for it.
+
+**THE AUDIT LINE RECORDS WHAT HAPPENED, NOT WHAT WAS INTENDED.** Told them we
+are here, against a number that opted out, is a record of something that did not
+occur. `notify.sendAndLog()` returns `{ sent, providerMessageId }` now so a
+caller can tell a refusal from a carrier that would not take it; `sent` keeps
+its old meaning, so `card-chase` and `payment-chase` are unaffected.
 
 **The step is done by `here_texted_at` and never by `arrived_at`** - the obvious
 flag and the wrong one. Recording a weight clears `arrived_at`, so the location
@@ -1803,6 +1855,37 @@ never be compared against a full one** — that flags every laundromat as light.
 the order is `AT_PARTNER`, and the route refuses it too. That second check is
 the only real one: this is the page with no login at all, so a hidden form whose
 route still fires is not a guard.
+
+**THE LAUNDROMAT'S WEIGH-IN NEVER TEXTS THE CUSTOMER, AND CANNOT.** Neil's lock,
+17 September: the laundromat entering its weight is an internal accounting
+event. It may record their weight, work out what we owe them, compare the two
+scales, raise an issue and write events. It may not text the customer, move the
+customer-facing price, charge anybody, or tell the customer a new weight or
+total. **The customer's price and payment already happened at Finish Pickup, on
+our scale.**
+
+**`/o/:code/weight` USED TO CALL `settleWeight()`**, which is the customer
+settlement path - it prices, charges and texts. That was right when the
+laundromat's weigh-in WAS the charge point; the charge moved to the door on 12
+September and this call did not. What made it look harmless is that
+`settleWeight()` returns early when `weight_settled_at` is set, which it always
+is by then. **Do not rely on that.** An order that reached a laundromat without
+a settled weight - a repair, a backfill, a path nobody has written yet - would
+have gone straight down the pricing and charging branch, from a page with no
+sign-in on it.
+
+Both halves of that route call `fulfilment.recordPartnerScale()` now: the band,
+what we owe them, the comparison and the event. **It cannot text and cannot
+charge**, and a test refuses `sendAndLog`, `chargeOrder`, `chargeAtTheDoor` and
+`price_cents` by name inside it. `settleWeight()` stays for the order page,
+where a person is deciding.
+
+**One issue for one pair of scales**, raised by the function that compares them.
+The route used to raise its own beside it, saying NOTHING HAS BEEN CHARGED -
+true when this step was the charge point and false since.
+
+**The READY tap still texts the team**, which is the one `sendAndLog` in
+`bag.js` and goes to a staff number with a null customer.
 
 **THE LAUNDROMAT'S WEIGHT IS MANDATORY, and it is half of what bills.** It was
 a voluntary cross-check that the pricing code never read. Neil changed both:

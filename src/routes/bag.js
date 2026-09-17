@@ -1381,25 +1381,43 @@ router.post('/o/:code/weight', async (req, res, next) => {
         by: { actor: 'partner' },
       });
 
-      const settled = await fulfilment
-        .settleWeight({ ...tagged, partner_weight_lb: weight }, { by: { actor: 'partner' } })
+      // THE LAUNDROMAT'S SCALE IS AN ACCOUNTING EVENT AND NOTHING ELSE.
+      //
+      // Neil's lock, 17 September: "The laundromat entering its weight is an
+      // internal operational/accounting event... It must NOT text the customer,
+      // change the customer-facing price, charge the customer, or tell the
+      // customer a new weight or total. The customer price/payment event
+      // already happened at Finish Pickup on our scale."
+      //
+      // IT USED TO CALL settleWeight(), WHICH IS THE CUSTOMER SETTLEMENT PATH.
+      // That function prices the order, charges the card and texts the total -
+      // and it was written when the laundromat's weigh-in WAS the charge point.
+      // The charge moved to the door on 12 September and this call never did.
+      // What made it look harmless is that settleWeight() returns early when
+      // weight_settled_at is set, which it always is by the time a bag reaches
+      // a counter. Neil, in as many words: do not rely on that.
+      //
+      // "Usually harmless" is not a guarantee. An order that reached a
+      // laundromat without a settled weight - a repair, a backfill, a path
+      // nobody has written yet - would have gone straight down the pricing and
+      // charging branch, from a page with no sign-in on it.
+      //
+      // recordPartnerScale() is the half that belongs here: the band, what we
+      // owe them, the comparison and the event. It cannot text and cannot
+      // charge. settleWeight() stays for the order page, where a person is
+      // deciding.
+      const scale = await fulfilment
+        .recordPartnerScale({ ...tagged, partner_weight_lb: weight }, { by: { actor: 'partner' } })
         .catch((err) => {
-          console.error(`Could not settle order ${tagged.id}: ${err.message}`);
-          return { ok: false };
+          console.error(`Could not record the laundromat scale on ${tagged.id}: ${err.message}`);
+          return null;
         });
 
-      if (settled && settled.held && tagged.customers) {
-        await issues
-          .raise({
-            customer: tagged.customers,
-            order: tagged,
-            reason:
-              `Scales disagree: we weighed it ${tagged.weight_lb} lb, the laundromat ` +
-              `${weight.toFixed(1)} lb. NOTHING HAS BEEN CHARGED and the customer has ` +
-              `not been told a price. Settle it on the order page and both happen then.`,
-          })
-          .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
-      }
+      // PAST THE TOLERANCE IS STILL A PERSON'S PROBLEM, AND recordPartnerScale()
+      // ALREADY RAISES IT. This route used to raise its own, because the
+      // function it called returned a `held` flag rather than doing anything
+      // about it - and two issues for one pair of scales is two people opening
+      // the same question. One owner.
 
       await bags.recordScan({ code, orderId: tagged.id, outcome: 'SHOWN', ip, userAgent });
       return res.redirect(303, `${backTo}&weighed=1`);
@@ -1525,39 +1543,38 @@ router.post('/o/:code/weight', async (req, res, next) => {
       reason: check && check.overThreshold ? 'Outside the tolerance, so an issue was raised' : null,
     });
 
-    // BOTH SCALES ARE NOW IN, SO THE PRICE CAN BE SETTLED.
+    // BOTH SCALES ARE IN, AND THAT SETTLES WHAT WE OWE THEM. NOT THE CUSTOMER.
     //
-    // Neil's rule, and settleWeight owns all of it: within tolerance it bills
-    // the HIGHER of the two, charges the card and texts the customer the total;
-    // past the tolerance it holds everything and waits for him. Doing it here
-    // rather than in this route is what stops a second implementation of "what
-    // does this order cost" existing on the page with no login.
-    const settled = await fulfilment
-      .settleWeight({ ...order, partner_weight_lb: weight_ }, { by: { actor: 'partner' } })
+    // See the long note on the whole-order path above. This called
+    // settleWeight() - the path that prices, charges and texts - on a page with
+    // no sign-in on it, and was safe only because weight_settled_at is
+    // populated by the time a bag reaches a counter. Neil's lock is that Step
+    // 15 must be structurally incapable of texting the customer, not usually
+    // harmless.
+    const scale = await fulfilment
+      .recordPartnerScale({ ...order, partner_weight_lb: weight_ }, { by: { actor: 'partner' } })
       .catch((err) => {
-        console.error(`Could not settle order ${order.id}: ${err.message}`);
-        return { ok: false, failed: err.message };
+        console.error(`Could not record the laundromat scale on ${order.id}: ${err.message}`);
+        return null;
       });
 
-    // A SETTLE THAT DOES NOT HAPPEN MUST NOT BE SILENT.
+    // A SCALE THAT WILL NOT RECORD MUST NOT BE SILENT.
     //
-    // This is the step that prices the order, charges the card and texts the
-    // customer, and until now the only trace of it failing was a line in the
-    // server log. An order sat DELIVERED and unpaid three separate times with a
-    // change log that stopped dead at the laundromat's weight, and there was no
-    // way to tell from any screen whether the money had been decided or the
-    // step had simply fallen over. Neil asked "why has this not been charged"
-    // three times and the answer needed a database query every time.
+    // What used to be here watched for a SETTLE failing, because this step used
+    // to price the order and charge the card. It no longer does either - see
+    // the note above - so what is worth an issue is narrower and still real:
+    // the laundromat has weighed it and we could not write down what we owe
+    // them or whether the two scales agree.
     //
-    // A hold is a different thing and has its own issue below - that one is a
-    // decision waiting for a person, not a failure.
-    if (!settled || (!settled.ok && !settled.held)) {
+    // NOTHING HERE MENTIONS THE CUSTOMER'S PRICE, because nothing on this path
+    // can move it. The customer was charged at the door on our scale.
+    if (!scale) {
       await orderEvents.record(order.id, {
-        kind: 'PRICE',
-        summary: 'Could not settle the price after the laundromat weighed it',
-        became: 'still unpriced and unpaid',
+        kind: 'PARTNER_WEIGHT',
+        summary: 'Could not record the laundromat scale after they weighed it',
+        became: 'their bill is not settled',
         by: { actor: 'partner' },
-        reason: (settled && (settled.failed || settled.detail || settled.reason)) || 'unknown',
+        reason: 'the write failed - see the server log',
       });
 
       if (order.customers) {
@@ -1566,28 +1583,18 @@ router.post('/o/:code/weight', async (req, res, next) => {
             customer: order.customers,
             order,
             reason:
-              `Both weights are in - ours ${ours} lb, theirs ${weight_.toFixed(1)} lb - but ` +
-              `the price would not settle, so NOTHING HAS BEEN CHARGED and the customer ` +
-              `has not been told a total. Open the order and settle it there.`,
+              `The laundromat weighed #${order.order_number} at ${weight_.toFixed(1)} lb and we ` +
+              `could not record it. The customer is unaffected - they were charged at the ` +
+              `door on our scale - but what we owe the laundromat is not settled.`,
           })
-          .catch((err) => console.error(`Could not raise a settle failure: ${err.message}`));
+          .catch((err) => console.error(`Could not raise a scale failure: ${err.message}`));
       }
     }
 
-    if (settled && settled.held && order.customers) {
-      await issues
-        .raise({
-          customer: order.customers,
-          order,
-          reason:
-            `Scales disagree: we weighed it ${ours} lb, the laundromat's ${allBags.length} bags ` +
-            `come to ${weight_.toFixed(1)} lb - ` +
-            `${check.absolute.toFixed(1)} lb apart, and we allow ${check.tolerance.toFixed(1)}. ` +
-            `NOTHING HAS BEEN CHARGED and the customer has not been told a price. ` +
-            `Settle it on the order page and both happen then.`,
-        })
-        .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
-    }
+    // PAST THE TOLERANCE IS A PERSON'S PROBLEM, AND recordPartnerScale() ALREADY
+    // RAISES IT - with the right wording, which this route's own copy did not
+    // have: it said NOTHING HAS BEEN CHARGED, true when this step was the charge
+    // point and false since 12 September. One owner, one issue, one sentence.
 
     await bags.recordScan({ code, orderId: order.id, outcome: 'SHOWN', ip, userAgent });
     return res.redirect(303, back);

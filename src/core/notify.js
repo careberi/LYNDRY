@@ -282,6 +282,21 @@ async function sendAndLog(
   });
 
   if (error) console.error('Failed to log outbound message:', error.message);
+
+  // WHAT ACTUALLY HAPPENED, FOR CALLERS THAT HAVE TO SAY SO.
+  //
+  // This returned nothing on the way out, so the only thing a caller could
+  // learn was a refusal - and "the row was written" and "the carrier took it"
+  // are different facts. An audit line reading "told them we are here" when the
+  // provider threw is a record of something that did not happen.
+  //
+  // `sent` KEEPS ITS OLD MEANING, which is what makes this safe to add: it is
+  // true whenever a messages row exists, false only for a refusal. card-chase
+  // reads `sent === false` and payment-chase reads `.refused`, and neither
+  // changes. What is new is providerMessageId, which is null when the carrier
+  // would not take it - the same thing that distinguishes those two rows in the
+  // table.
+  return { sent: true, providerMessageId, text };
 }
 
 module.exports = {

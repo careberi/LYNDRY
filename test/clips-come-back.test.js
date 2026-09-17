@@ -108,20 +108,60 @@ test('the pool is still decided by clip_returned_at and nothing else', () => {
   );
 });
 
-test('handing a bag over at the plant frees the clip the same way', () => {
+// ONE OPERATION DECIDES WHAT RETURNING A CLIP MEANS, AND EVERY DOOR CALLS IT.
+//
+// These used to assert that handOffBag() wrote clip_returned_at itself, which
+// is how the doorstep came to have its own idea of the same thing - and its
+// idea was half of one. releaseClip() owns it now; what is tested is that
+// nothing else writes the column.
+test('handing a bag over at the plant frees the clip through releaseClip', () => {
   const handOff = fn(bagsSrc(), 'handOffBag');
 
-  assert.ok(handOff.includes('clip_returned_at'), handOff);
-  assert.ok(handOff.includes('unclipped_at'), handOff);
+  assert.ok(handOff.includes('releaseClip('), handOff);
+  assert.ok(handOff.includes('unclipped_at'), 'the laundromat does not take custody');
 });
 
-test('the two ways a clip comes off agree with each other', () => {
+test('ONLY releaseClip AND THE SWEEP MAY WRITE clip_returned_at', () => {
+  // A second place stamping it is exactly how the doorstep tap ended up
+  // saying the clip was off and never saying the number was free.
   const src = bagsSrc();
 
-  for (const name of ['unclipOrder', 'handOffBag']) {
-    const body = fn(src, name);
-    assert.ok(body.includes('clip_returned_at'), `${name} leaves the clip out of the pool`);
+  for (const name of ['releaseClip', 'unclipOrder']) {
+    assert.ok(fn(src, name).includes('clip_returned_at'), `${name} does not free the number`);
   }
+
+  const writers = (src.match(/clip_returned_at: /g) || []).length;
+  assert.ok(writers <= 3, `${writers} places write clip_returned_at - it should be one op and one sweep`);
+});
+
+test('THE SWEEP KEYS ON clip_returned_at, NOT ON unclipped_at', () => {
+  // The bug, in one line. unclipOrder() filtered on `unclipped_at is null`,
+  // which asks "has nobody taken this clip off yet" - so the one thing meant
+  // to catch a stranded clip skipped every bag the driver had already
+  // unclipped at a door. The question it has to ask is whether the NUMBER is
+  // free.
+  const sweep = fn(bagsSrc(), 'unclipOrder');
+
+  assert.ok(sweep.includes("is('clip_returned_at', null)"), sweep);
+  assert.ok(
+    sweep.includes("not('unclipped_at', 'is', null)"),
+    'the sweep never looks at a bag that was already unclipped by hand'
+  );
+});
+
+test('and the doorstep tap goes through the same operation', () => {
+  // It stamped unclipped_at through a generic column write that knew nothing
+  // about clips.
+  const admin = fs
+    .readFileSync(path.join(__dirname, '..', 'src', 'routes', 'admin.js'), 'utf8')
+    .split('\r\n')
+    .join('\n');
+
+  const at = admin.indexOf("router.post('/ops/run/door/:id/:step'");
+  assert.ok(at > 0, 'the doorstep prep route has moved');
+
+  const route = admin.slice(at, admin.indexOf('\nrouter.', at + 10));
+  assert.ok(route.includes('bags.releaseClip(label)'), 'the clip tap still writes the column itself');
 });
 
 // --- every caller means the same thing --------------------------------------

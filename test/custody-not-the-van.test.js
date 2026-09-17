@@ -362,7 +362,10 @@ test('AND HANDING A BAG OVER FREES ITS CLIP IN THE SAME TAP', () => {
   const body = src.slice(at, src.indexOf('\n}', at));
 
   assert.match(body, /unclipped_at: now/, 'the laundromat does not take custody');
-  assert.match(body, /clip_returned_at: now/, 'the clip is not freed');
+  // Through releaseClip(), which is the one thing that decides what freeing a
+  // clip means - it used to write the column here as well, and a second
+  // opinion about that is what stranded every doorstep clip.
+  assert.match(body, /releaseClip\(/, 'the clip is not freed');
   assert.match(body, /unloaded_at: label\.unloaded_at \|\| now/, 'unloaded_at stopped being written');
 
   // And it no longer refuses a bag that was never "unloaded".
