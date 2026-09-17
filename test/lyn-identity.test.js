@@ -58,8 +58,12 @@ test('the comeback names her without re-disclosing', () => {
   assert.ok(!lyn.COMEBACK.includes('automated assistant'), lyn.COMEBACK);
 });
 
-test('the escalation line is Neil\'s, and promises only a manager', () => {
-  assert.equal(lyn.ESCALATION, 'One second, let me get a manager.');
+// CHOSEN AND WITHDRAWN ON THE SAME DAY. "One second, let me get a manager."
+// was Neil's own wording that morning; by the evening: "Do not text the
+// customer 'a manager will come back' or 'let me get a manager'. Send them
+// nothing at the moment of handoff." See test/silent-handoff.test.js.
+test('there is no escalation line any more', () => {
+  assert.equal(lyn.ESCALATION, undefined, 'the holding line is back');
 });
 
 // NO DASHES ANYWHERE. Neil's own drafts of two of these carried one. A real em
@@ -77,7 +81,7 @@ test('none of the lines contains a dash of any kind', () => {
 });
 
 test('every line is plain ASCII, so none of them costs a third segment', () => {
-  for (const line of [lyn.INTRODUCTION, lyn.COMEBACK, lyn.ESCALATION]) {
+  for (const line of [lyn.INTRODUCTION, lyn.COMEBACK]) {
     assert.ok(/^[\x20-\x7E]*$/.test(line), `not GSM-safe: ${line}`);
   }
 });
