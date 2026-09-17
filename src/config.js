@@ -86,7 +86,27 @@ const config = Object.freeze({
   // Set SMS_REPLY_WAIT_SECONDS to 0 to switch it off entirely - which is what
   // the tests run with, so they are not ten seconds a message.
   replies: Object.freeze({
-    burstSeconds: Number(process.env.SMS_REPLY_WAIT_SECONDS ?? 10),
+    // HOW LONG LYN WAITS BEFORE ANSWERING, as a RANGE rather than a number.
+    //
+    // Neil, 16 September: 20 to 30 seconds, randomised. It was a flat 10.
+    //
+    // Two reasons for the range over a fixed 25. The stated goal is that the
+    // conversation should not feel instantaneous, and a constant gap is the
+    // opposite - text twice and the second reply lands exactly as far behind
+    // the first, which reads as a machine rather than somebody getting to
+    // their phone. And the wait is also the window a person has to step in,
+    // which is more useful when it is not a number anybody has learned.
+    //
+    // ZERO STILL SWITCHES IT OFF ENTIRELY, which is what the tests run with -
+    // otherwise every one of them waits half a minute per message. A floor of
+    // zero collapses the range, so there is one way to disable it rather than
+    // two knobs that have to agree.
+    burstSeconds: Number(process.env.SMS_REPLY_WAIT_SECONDS ?? 20),
+
+    // The top of the range. Never below the floor: a ceiling somebody has set
+    // lower than the floor is a typo, not an instruction, and the honest
+    // reading is that they wanted a fixed wait.
+    burstUpToSeconds: Number(process.env.SMS_REPLY_WAIT_MAX_SECONDS ?? 30),
 
     // The longest a reply can be put off, measured from the FIRST message of
     // the burst. Without it somebody texting every fifteen seconds resets the

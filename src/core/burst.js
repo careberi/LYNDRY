@@ -35,7 +35,26 @@ const { config } = require('../config');
 // phone -> { timer, messages, firstAt, run }
 const pending = new Map();
 
-const waitMs = () => Math.max(0, config.replies.burstSeconds) * 1000;
+// A FRESH WAIT EACH TIME, somewhere in the configured range.
+//
+// Neil's call, 16 September: 20 to 30 seconds rather than a flat 10, and
+// randomised rather than fixed - a constant gap is recognisably a machine the
+// second somebody texts twice.
+//
+// Rolled per call, so two messages in one conversation do not wait the same
+// length. Zero for a floor means no wait at all, which is how the tests run.
+// A ceiling below the floor is treated as a fixed wait at the floor: that is a
+// typo rather than an instruction, and guessing a range from it would be worse
+// than honouring the one number that was clearly meant.
+function waitMs() {
+  const floor = Math.max(0, config.replies.burstSeconds);
+  if (!floor) return 0;
+
+  const ceiling = Math.max(floor, config.replies.burstUpToSeconds || floor);
+  const seconds = floor + Math.random() * (ceiling - floor);
+
+  return Math.round(seconds * 1000);
+}
 const capMs = () => Math.max(0, config.replies.burstMaxSeconds) * 1000;
 
 // Run one burst now. Taken out of the map FIRST, so a message that arrives
