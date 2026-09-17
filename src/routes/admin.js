@@ -431,10 +431,14 @@ const OPS_MENUS = Object.freeze([
       // matters - everything else is looking something up. Behind orders.drive,
       // so an admin who has not put themselves on the route is not offered one.
       { href: '/ops/run', label: 'Your route', permission: 'orders.drive' },
-      // START OF SHIFT ONLY. It sits in the menu rather than on the route,
-      // because it is a thing you go and look at once before setting off -
-      // putting it on a stop would be the tap Neil ruled out.
-      { href: '/ops/clips', label: 'Clips in the van', permission: 'orders.drive' },
+      // CLIPS IN THE VAN IS NOT LISTED, and it was, unasked. Neil: "why did you
+      // add a clips on the van page to my dashboard drop down". It is the same
+      // rule Load the van already follows two entries down - a menu is where you
+      // go looking for a screen, and a clip inventory is something you glance at
+      // once before setting off, not a destination.
+      //
+      // The page is untouched at /ops/clips and still guarded by orders.drive.
+      // Hiding a page whose route still fires is a menu rule, never a guard.
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
@@ -4319,7 +4323,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       </div>
 
       ${
-        // EVERY FIELD, ABOVE THE HISTORY. Read only - the actions live on the
+        // EVERY FIELD, ABOVE THE HISTORY. Read only - the questions live on the
         // conversation, where the reply lands.
         intakeFields.length
           ? intakeTable({
@@ -4329,6 +4333,27 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
               ago: timeAgo,
               optedOut: person.status === 'UNSUBSCRIBED',
             })
+          : ''
+      }
+
+      ${
+        // THE ONE THING THIS PAGE MAY SEND. Neil's ask, 16 September.
+        //
+        // Read only is still the rule for the questions - he moved those to the
+        // conversation because pressing one here meant writing into a thread you
+        // could not see. This is the exception he asked for, and it is a
+        // different act: it sends no words, so there is no half of a
+        // conversation to be missing. It is the address and nothing else, and
+        // the whole address comes back on screen so it can be copied.
+        canAsk
+          ? `<form method="post" action="/ops/customers/${person.id}/card-link"
+                   style="margin:0 0 18px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+               <button class="btn btn-outline" type="submit">Send card link</button>
+               <span style="font-size:12px;color:var(--c-muted, var(--ink-500));">
+                 Texts the ${escapeHtml(config.baseUrl)}/pay link on its own, with no message
+                 around it, and shows you the address afterwards.
+               </span>
+             </form>`
           : ''
       }
 
@@ -8696,6 +8721,22 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
             ? `<button class="btn btn-ink btn-lg" type="submit" form="send-message">Send it</button>`
             : ''
         }
+        ${
+          // THE BARE LINK, BESIDE THE BOX RATHER THAN IN IT. Neil's ask: the
+          // send area is where you are already standing when you decide
+          // somebody just needs the address, and this sends the link with no
+          // sentence around it. "Ask for a card" on the table above is the one
+          // that sends the words.
+          //
+          // Its own form: it posts somewhere else, and forms cannot be nested.
+          canWrite && customer
+            ? `<form method="post"
+                     action="/ops/customers/${customer.id}/card-link?thread=${encodeURIComponent(digits)}"
+                     style="margin:0;">
+                 <button class="btn btn-outline btn-lg" type="submit">Send card link</button>
+               </form>`
+            : ''
+        }
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-left:auto;">
           <span class="badge" style="background:var(--${pauseState.paused ? 'sunbeam' : 'suds'}-500);">
             AI is ${pauseState.paused ? 'off' : 'on'} for this chat
@@ -9464,6 +9505,106 @@ router.post('/ops/customers/:id/promotion', guard, may('service.manage'), async 
       `${promo.name} is on their account - ${promotions.describe(promo)}.${until} ` +
         'They have not been texted; the AI mentions it next time they are in touch.'
     );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/customers/:id/card-link - text them the link and nothing else
+//
+// Neil's ask, 16 September: a button on the customer page and in the send area
+// of a conversation that texts THE SAME /pay LINK the card row already mints,
+// with no sentence around it, and shows him the whole address afterwards so he
+// can copy it.
+//
+// IT IS THE SAME LINK, NOT A SECOND KIND OF LINK. billing.createSetupLink() is
+// what "Ask for a card" calls and what the AI and the website call. One minting
+// path, one payment_links row, one webhook, one card-saved path. What differs
+// is only how much English is wrapped around it.
+//
+// AND IT IS MINTED HERE, ON THE PRESS. A Stripe session lives about a day, so
+// one made when a page was drawn is a dead page by the time anybody taps it -
+// and drawing the page would leave a trail of sessions behind.
+//
+// THE OLD TEMPLATE IS UNTOUCHED. billing.setupLinkMessage() still owns the
+// sentence the card row sends, the AI sends and the website sends. This is a
+// second door onto the same link, not a replacement for those words, and
+// nothing automatic uses it.
+//
+// SAID OUT LOUD, ONCE, BECAUSE IT IS A REAL COST: a text that is nothing but a
+// URL is the exact shape carriers score hardest in 10DLC filtering, and it is
+// the shape a phishing message takes. Everything else in this system that sends
+// a payment link says what it is for in the same breath - see
+// cardDestination(). Neil asked for this one deliberately, it is a button a
+// person presses rather than anything the system does on its own, and that is
+// the same exception updateCardText() already makes. It must not become the
+// thing any automatic path reaches for.
+//
+// Behind messages.send, like every other button that puts a message on a real
+// phone.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/customers/:id/card-link', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return notFoundPage(res, 'That customer id is not valid.');
+
+    // Back where they came from, and the thread's digits are checked before
+    // they are used - a redirect built out of whatever was posted is an open
+    // redirector on our own domain.
+    const thread = String((req.query || {}).thread || '');
+    const back = /^\d{10,15}$/.test(thread)
+      ? `/ops/messages/${thread}`
+      : `/ops/customers/${req.params.id}`;
+
+    const said = (kind, text) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(text)}`);
+
+    const { data: person } = await db
+      .from('customers')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    // STOP is a legal instruction, not a preference. notify.sendAndLog() is the
+    // last gate and would refuse this anyway; refusing here as well is what
+    // lets the screen say why rather than report a send that did nothing.
+    if (person.status === 'UNSUBSCRIBED') {
+      return said('problem', 'They have opted out of texts, so this has to be a phone call.');
+    }
+
+    // With no payment provider there is no link to mint. Answered plainly
+    // rather than throwing a Stripe error at somebody.
+    if (!billing.paymentsConfigured()) {
+      return said('problem', 'Payments are switched off, so there is no card link to send.');
+    }
+
+    const { url } = await billing.createSetupLink(person);
+
+    // THE MESSAGE IS THE URL AND NOTHING ELSE. Neil's words.
+    //
+    // Through notify like every other outbound, and NOT stamped sent_by: a
+    // person pressed a button, nobody is working the thread by hand, and
+    // sent_by is what puts brain.js into its handover behaviour.
+    //
+    // askedFor 'card' so the intake table's card row can say "Asked - awaiting
+    // reply" - this asked for a card as surely as the sentence does.
+    const sent = await notify
+      .sendAndLog(person.phone, url, person.id, { askedFor: 'card' })
+      .catch((err) => {
+        console.error(`Could not text a card link to ${person.id}: ${err.message}`);
+        return { sent: false, refused: err.message };
+      });
+
+    if (sent && sent.refused) {
+      return said('problem', `That did not send. Nothing has gone to them. The link is ${url}`);
+    }
+
+    // THE WHOLE ADDRESS, NOT "SENT". He asked to be able to copy it, and the
+    // same rule the rest of these buttons follow applies anyway: one that will
+    // not say afterwards what it said is not one anybody should press.
+    return said('done', `Sent them this link, and nothing else:\n\n${url}`);
   } catch (err) {
     return next(err);
   }

@@ -212,11 +212,21 @@ test('the route is the signed-in driver, behind orders.drive, with no ?driver=',
   assert.ok(!route.includes('req.query'), 'this is not a screen for looking at another van');
 });
 
-test('it is in the menu behind the same permission as the route', () => {
+// IT IS NOT IN THE MENU, AND IT WAS, UNASKED. Neil: "why did you add a clips
+// on the van page to my dashboard drop down". Same rule Load the van already
+// follows - a menu is where you go looking for a screen, and a clip count is
+// something you glance at once before setting off.
+//
+// THE PAGE IS UNTOUCHED AND STILL GUARDED, which is the half that matters:
+// hiding a page whose route still fires is a menu rule, never a guard.
+test('it is off the menu, and the route behind it is still guarded', () => {
   const src = withoutComments(SRC('routes', 'admin.js'));
-  const entry = src.slice(src.indexOf("href: '/ops/clips'"), src.indexOf("href: '/ops/clips'") + 120);
 
-  assert.ok(entry.includes("permission: 'orders.drive'"), entry);
+  assert.ok(!/href: '\/ops\/clips'/.test(src), 'Clips in the van is back in the menu');
+
+  const route = src.slice(src.indexOf("router.get('/ops/clips'"));
+  assert.ok(route.startsWith("router.get('/ops/clips', guard,"), route.slice(0, 120));
+  assert.ok(route.slice(0, 200).includes("may('orders.drive')"), route.slice(0, 200));
 });
 
 // --- a driver screen -------------------------------------------------------
