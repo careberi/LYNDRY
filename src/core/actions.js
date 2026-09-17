@@ -1040,23 +1040,33 @@ async function handoffToHuman(customer, input, helpers = {}) {
   // waiting, and often worried. So the follow-up acknowledges the wait and
   // confirms the new message was added, rather than restating a queue
   // position.
-  if (!isNew) {
-    return (
-      `I've passed that straight on as well${about}, so they have everything. ` +
-      `Sorry you're waiting on this, and thank you for bearing with us.`
-    );
-  }
-
-  // NEIL'S WORDING, 16 September, chosen over two alternatives. Short on
-  // purpose: it is said at the moment the customer is already frustrated, and a
-  // long apology reads as a machine buying time. The order number rides along
-  // when they named one, because "about order #2069" is what tells them we
-  // understood which thing is wrong.
+  // AND LYN SAYS NOTHING AT ALL.
   //
-  // IT CAN ONLY GO OUT BECAUSE THE ESCALATION ALREADY HAPPENED. issues.raise()
-  // runs above and throws if it fails, so this sentence can never claim a
-  // manager was contacted when none was - Neil's must-not, stated plainly.
-  return `${lyn.ESCALATION}${about ? ` I'm passing on everything you've told me${about}.` : ''}`;
+  // Neil's rule, 16 September, and it REVERSES a line agreed earlier the same
+  // day. Until now this returned "One second, let me get a manager." - his own
+  // wording, picked over two alternatives that morning. He has taken it back:
+  //
+  //   "Do not text the customer 'a manager will come back' or 'let me get a
+  //    manager'. Send them nothing at the moment of handoff. I talk to them
+  //    when I am ready."
+  //
+  // WHY SILENCE BEATS THE HOLDING LINE. That sentence is a promise with a clock
+  // on it. "They'll come back to you shortly" starts somebody waiting, and if
+  // the reply comes an hour later the message is what turned a delay into a
+  // broken promise. Nothing said is nothing owed, and the first thing they hear
+  // is a person who has actually read the thread.
+  //
+  // EVERYTHING ELSE IS UNCHANGED. The issue is raised above, every admin is
+  // paged, the thread is paused, and anything they text afterwards still shows
+  // in ops. The only thing removed is the text to the customer.
+  //
+  // BOTH BRANCHES, the new escalation and the repeat one. A customer chasing
+  // something already with a manager gets silence too - telling them it has
+  // been "passed on as well" is the same promise in a politer voice.
+  //
+  // NULL IS HOW A SILENT ACTION SAYS SO. run() hands it back to sms.js, which
+  // sends only when there is something to send.
+  return null;
 }
 
 // ---------------------------------------------------------------------------

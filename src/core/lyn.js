@@ -40,11 +40,20 @@ const INTRODUCTION = `Hi, I'm ${NAME}, LYNDRY's automated assistant.`;
 // Short on purpose - it is a prefix to a real answer, not a message of its own.
 const COMEBACK = `Hi, it's ${NAME} again.`;
 
-// NO DASHES, ANYWHERE IN HERE. Neil's own draft of this line read "One second -
-// let me get a manager", and a dash is the one piece of punctuation this system
-// refuses: an em dash forces the whole text out of the GSM alphabet, which cuts
-// a segment from 160 characters to 70 and bills accordingly.
-const ESCALATION = 'One second, let me get a manager.';
+// ESCALATION WAS HERE AND IS GONE. DO NOT PUT IT BACK.
+//
+// It read "One second, let me get a manager." - Neil's own wording, chosen over
+// two alternatives on the morning of 16 September, and withdrawn by him the
+// same evening:
+//
+//   "Do not text the customer 'a manager will come back' or 'let me get a
+//    manager'. Send them nothing at the moment of handoff. I talk to them when
+//    I am ready."
+//
+// The sentence is a promise with a clock on it. It starts somebody waiting, and
+// if the person replies an hour later the message is what turned a delay into a
+// broken promise. handoff_to_human returns null now; everything else about the
+// handoff - the issue, the page, the pause - is unchanged.
 
 // WHEN A THREAD COUNTS AS A NEW ONE. There is no thread object - a phone number
 // has one continuous log - so "a genuinely new conversation later" has to be a
@@ -174,7 +183,6 @@ module.exports = {
   NAME,
   INTRODUCTION,
   COMEBACK,
-  ESCALATION,
   NEW_THREAD_DAYS,
   SAID_IT,
   opener,

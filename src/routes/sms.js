@@ -524,14 +524,18 @@ async function answerWithBrain(customer, text, from) {
       })
       .catch((err) => console.error(`Could not raise an issue for the AI outage: ${err.message}`));
 
-    await say(
-      from,
-      `Sorry, I'm having trouble on my end. Someone here will pick this up shortly.`,
-      customer.id,
-      // An apology is not a question. Chasing somebody about our own outage a
-      // day later would be worse than the outage.
-      { kind: 'SYSTEM' }
-    );
+    // AND NOTHING IS SENT. Neil's rule, 16 September: when Lyn is stuck and
+    // raises an issue, the customer hears nothing at the moment of handoff.
+    //
+    // This used to apologise and promise that "someone here will pick this up
+    // shortly" - the same promise the handoff line used to make, and worse
+    // coming from an outage, because at that point nobody has read the thread
+    // and the sentence is a guess about what happens next.
+    //
+    // The issue above still pages every admin and pauses the thread, and their
+    // own message was logged by the caller, so it is sitting in ops waiting for
+    // a person. Silence here is a person writing first, not nobody writing.
+    console.warn(`QUIET   ${from}: the AI could not be reached. Saying nothing.`);
     return;
   }
 
@@ -570,9 +574,10 @@ async function answerWithBrain(customer, text, from) {
       })
       .catch((err) => console.error(`Could not raise an issue for a failed action: ${err.message}`));
 
-    await say(from, `Sorry, I couldn't do that just now. Someone here will pick this up shortly.`, customer.id, {
-      kind: 'SYSTEM',
-    });
+    // NOTHING IS SENT, same rule as the outage above and the handoff itself.
+    // An action failing is Lyn stuck, and a customer who is told "someone here
+    // will pick this up shortly" is owed a reply on a clock nobody set.
+    console.warn(`QUIET   ${from}: ${decision.name} failed. Saying nothing.`);
     return;
   }
 
@@ -719,6 +724,15 @@ async function answerWithBrain(customer, text, from) {
   // address - and those are exactly the ones people go quiet on. The ones that
   // are conclusions rather than questions are filtered out anyway: a booked
   // customer is never chased.
+  // A SILENT ACTION SENDS NOTHING. handoff_to_human returns null now - Neil's
+  // rule that a handoff texts the customer nothing at all - and anything else
+  // that decides it has nothing to say gets the same treatment rather than an
+  // empty text going out.
+  if (!message || !String(message).trim()) {
+    console.log(`QUIET   ${from}: ${decision.name} had nothing to say. Sending nothing.`);
+    return;
+  }
+
   await say(from, message, customer.id, { kind: 'AI' });
 }
 
