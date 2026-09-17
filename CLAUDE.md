@@ -1136,6 +1136,36 @@ screen would reappear under him half way through the bags.
 a delivery, and neither is somebody waiting for a van outside their house.
 `arrive()` reads the order's own status.
 
+**THE DELIVERY TEXT GOES WHEN THE DRIVER SETS OFF FOR THAT DOOR.** Neil's lock,
+17 September, step 27: tapping **Take me there** for Customer A's delivery texts
+Customer A, and nobody else in the van.
+
+**`run.setOff()` DECIDES WHICH OF THREE JOURNEYS THE BUTTON IS**, off the
+order's own status: `OUT_FOR_DELIVERY` is a delivery, anything collected and not
+yet there is a laundromat run, anything uncollected is the pickup. Until now it
+returned the moment `collected_at` was set, on the reasoning that the delivery
+was *"already covered by the out-for-delivery text"* - and that text has gone
+for the reason above.
+
+**A LAUNDROMAT RUN IS SILENT ON BOTH LEGS.** Dropping the dirty bags off and
+going back for the clean ones is how the business is arranged, not something the
+customer asked about.
+
+**ONCE, AND TO ONE PERSON.** The claim is the same conditional update the
+pickup's on-the-way text already used - `navigating_at` is stamped only where it
+is still null, so **Directions again** is the same link and the same claim and
+cannot send a second one. The phone comes off the claimed order's own customer,
+so the other loads riding in the van are told nothing. `OUT_FOR_DELIVERY` is in
+`LEAVES_THE_STOP`, so the column is clear by the time he taps it.
+
+**`status` HAD TO GO IN THAT UPDATE'S SELECT LIST.** An unselected column reads
+as undefined, which would have made every delivery look like a laundromat run
+and sent nothing at all.
+
+**Step 28, I'm here at a delivery, says nothing** - and always did, because
+`announceArrival()` refuses anything that is not `REQUESTED`. A test pins it,
+because it is now the only thing between a doorstep and a second message.
+
 **A pickup goes: how many bags, then one bag at a time.** The driver is at a
 door with his hands full, so the run asks for the count first and then walks
 each bag — sticker on it, on the scale, photograph the display — before "in the
@@ -1208,12 +1238,52 @@ set.** That fallback is right for a bag that never left the van and wrong the
 moment a laundromat has had it: those stickers are in their bin. It asked a
 driver to scan three codes that no longer physically exist.
 
-**`orders.weight_lb` is the SUM of `bag_labels.weight_lb`, recomputed whenever a
-bag is weighed.** It is still the authoritative figure — it prices the order and
-it is what a laundromat's number is checked against — it is simply added up
-rather than typed once. Written through `fulfilment.recordWeight()` so the
-price, the audit entry and the text to the customer happen the one way they
-already happen.
+**`orders.weight_lb` IS THE SUM OF `bag_labels.weight_lb`, AND IT IS WRITTEN
+ONCE, AT FINISH PICKUP.** That second half reverses what this line said until 17
+September, which was "recomputed whenever a bag is weighed... written through
+`fulfilment.recordWeight()`".
+
+**WHY IT CANNOT BE PER BAG ANY MORE.** The bag-weight route asked
+`bags.totalWeight()` whether the order was `allWeighed`, which is
+`weighed.length === labels.length` — and once the bag-count question was removed
+the database only knows about the bags that have been SCANNED. After bag 1 there
+is one label and one weight, so the test is true. **It was true after every
+bag**, and every bag therefore finalised and priced the whole order.
+
+**ORDER #2069 IS WHAT THAT LOOKS LIKE.** Bag 1 at 8 lb priced the pickup at the
+$25.00 minimum; bag 2 at 11 lb re-priced it at $38.00 and wrote **"Weight
+corrected to 19 lb, was 8 lb"** into the change log. Neil: *"nobody corrected
+anything... That is normal accumulation, not correction."* No money moved
+wrongly — the door charge re-prices from the final total — but the audit trail
+was lying, on every multi-bag pickup there will ever be.
+
+**WEIGHING A BAG IS BAG-LEVEL WORK AND NOTHING ELSE**: save the weight, save the
+photo, assign the clip, show the driver the clip, and show a running total. It
+must not finalise the order weight, price the order, charge anything or text
+anybody.
+
+**FINISH PICKUP IS THE FIRST MOMENT ANYBODY HAS SAID THESE ARE ALL THE BAGS**,
+which is why it is the only place that may do the rest. `finishPickup()` refuses
+a pickup with no bags and one with any bag unweighed, writes `bag_count` from
+what was scanned, and hands over to `loadVan()` — which **sums the labels it has
+already loaded**, prices once, charges once, writes `weight_lb`,
+`billable_weight_lb` and `price_cents` in one statement, and sends the one money
+text. One definition of the final weight, in the one function allowed to write
+it.
+
+**WRITING THE WEIGHT LATE ALSO SETTLES THE CHECK CONSTRAINT.**
+`orders_weight_and_price_together` says `(weight_lb is null) = (price_cents is
+null)`, and `uncollect()` used to violate it on every doorstep decline by
+nulling one and leaving the other. A refused card now leaves neither written,
+because the charge happens before the write.
+
+**A RE-WEIGH OF THE SAME BAG IS STILL A CORRECTION**, and it is logged against
+that BAG by its sticker code. Adding another bag to the pickup is not, and there
+is no longer any way for it to look like one: the order only ever gets one
+weight entry.
+
+**Do not fix any of this by bringing the bag count back.** Neil's rule: the bag
+scans define the count; Finish Pickup declares that scanning is complete.
 
 **`bind()` refuses more stickers than the order has bags.** A fourth sticker on
 a three-bag order leaves the run waiting on a bag that does not exist. Only once
@@ -4456,12 +4526,21 @@ finished and it is waiting to be collected again. A bag we wash ourselves goes
 straight from `IN_PROCESS` to `OUT_FOR_DELIVERY`, so the machine never forces us
 to invent a partner visit that did not happen.
 
-**`AT_PARTNER` and `READY` are the two status changes that do NOT text the
-customer,** and that is deliberate. "Your laundry is at our partner laundromat"
-says something about how the business is run rather than about their order, and
-two more texts per order is real money and a worse complaint profile for
-information nobody asked for. They still get collected, weighed-and-priced, out
-for delivery, and delivered.
+**`AT_PARTNER`, `READY` AND `OUT_FOR_DELIVERY` ARE THE STATUS CHANGES THAT DO
+NOT TEXT THE CUSTOMER.** The first two were always silent - "your laundry is at
+our partner laundromat" says something about how the business is run rather than
+about their order, and two more texts per order is real money and a worse
+complaint profile for information nobody asked for.
+
+**THE THIRD IS NEW, AND IT IS NEIL'S LOCK OF 17 SEPTEMBER, STEP 26.** Moving an
+order to `OUT_FOR_DELIVERY` is an internal operational transition. It used to
+send *"Washed, folded and out for delivery today!"*, and the problem is what
+that sentence promises: **the van is loaded all at once**, so a customer at the
+end of the round is told their laundry is on its way and then waits behind five
+other doors.
+
+**THE MESSAGE MOVED TO THE STOP RATHER THAN BEING DELETED.** See "THE DELIVERY
+TEXT GOES WHEN THE DRIVER SETS OFF FOR THAT DOOR" under the guided run.
 
 **Weighing is an event, not a state** — the same way unlocking a locker is. It
 can happen at any point while we hold the bag, and it is what turns an estimate

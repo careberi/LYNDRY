@@ -15,6 +15,7 @@ const partners = require('./partners');
 const promotions = require('./promotions');
 const settings = require('./settings');
 const tags = require('./tags');
+const weights = require('./weight');
 const issues = require('./issues');
 // THE RATE IN A MESSAGE COMES FROM THE ORDER, and this is what says it in
 // English. Every text below that names a price per pound reads the order's own
@@ -951,9 +952,18 @@ async function outForDelivery(order, { by = {} } = {}) {
     }
   }
 
-  // The one new fact: it is on the van. They already know the price from the
-  // weigh text; repeating it here is what made the thread read like a bill.
-  return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`, by);
+  // NOTHING IS TEXTED HERE. NEIL'S LOCK, 17 SEPTEMBER, STEP 26.
+  //
+  // "Moving the order to OUT_FOR_DELIVERY is an internal operational
+  // transition." It used to send "Washed, folded and out for delivery today!"
+  // and the problem is what that sentence promises: the van loads every
+  // delivery at once, so a customer at the end of the round is told their
+  // laundry is on its way and then waits two hours behind five other doors.
+  //
+  // THE MESSAGE MOVED TO THE STOP, NOT AWAY. run.setOff() sends it when the
+  // driver taps Take me there for THIS customer's delivery - one text, to one
+  // customer, at the moment it is true. See the delivery leg in that function.
+  return step(order, 'OUT_FOR_DELIVERY', null, by);
 }
 
 // --- Delivered, with the photo ----------------------------------------------
@@ -1771,6 +1781,18 @@ async function finishPickup(order, { by = {} } = {}) {
     };
   }
 
+  // THIS TAP IS WHAT DECLARES THE PICKUP COMPLETE, AND IT IS THE ONLY THING
+  // THAT CAN.
+  //
+  // Neil, 17 September: "Finish Pickup is the first point where the driver
+  // explicitly says: these are all the bags I am taking." Nothing before it
+  // knows whether another bag is about to be scanned, so nothing before it may
+  // finalise a weight, price an order, charge a card or text anybody.
+  //
+  // The three refusals above are the preconditions - at least one bag, and
+  // every bag weighed. loadVan() below sums those bags, prices the order,
+  // charges once and sends the one money text.
+
   // THE COUNT IS WHAT HE SCANNED. Written before loadVan() reads it, because
   // loadVan refuses an order whose bag_count does not match what is weighed -
   // that guard is worth keeping and this is what satisfies it honestly.
@@ -1828,7 +1850,30 @@ async function loadVan(order, { by = {} } = {}) {
   if (order.van_confirmed_at) return { ok: true, already: true };
 
   const customer = order.customers || null;
-  const weight = Number(order.weight_lb || 0);
+
+  // THE FINAL PICKUP WEIGHT, WORKED OUT ONCE, HERE.
+  //
+  // IT USED TO BE READ OFF order.weight_lb, WHICH THE BAG-WEIGHT ROUTE WROTE
+  // ON EVERY BAG. That route asked bags.totalWeight() whether the order was
+  // allWeighed - which is `weighed.length === labels.length`, and with the
+  // bag-count question gone there is exactly ONE label in the table at the
+  // moment the first bag comes off the scale. So it was true after every bag,
+  // and every bag finalised and priced the whole order.
+  //
+  // ON #2069 THAT PRODUCED A CORRECTION NOBODY MADE. Bag 1 at 8 lb priced the
+  // order at the $25.00 minimum; bag 2 at 11 lb re-priced it at $38.00 and
+  // wrote "Weight corrected to 19 lb, was 8 lb" into the change log. Neil:
+  // "That is normal accumulation, not correction."
+  //
+  // SUMMED FROM THE LABELS THIS FUNCTION ALREADY HOLDS, rather than passed in,
+  // so there is one definition of the final weight and it lives in the one
+  // function allowed to write it. The guards above have already refused unless
+  // every bag on the order is weighed, so this can never be a partial total.
+  const weight = weights.sum(labels.filter((l) => l.weight_lb != null).map((l) => l.weight_lb));
+
+  if (!(weight > 0)) {
+    return { ok: false, detail: 'Those bags add up to nothing. Re-weigh them before loading.' };
+  }
 
   // --- What it comes to, in memory ----------------------------------------
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
@@ -1894,6 +1939,12 @@ async function loadVan(order, { by = {} } = {}) {
   const { error } = await db
     .from('orders')
     .update({
+      // BOTH WEIGHTS, WRITTEN WITH THE PRICE IN ONE STATEMENT. weight_lb is the
+      // order's own figure and billable_weight_lb is what the money was worked
+      // out from; they are the same number at a doorstep. The database's
+      // orders_weight_and_price_together CHECK refuses one without the other,
+      // which is exactly why nothing earlier in the pickup may write either.
+      weight_lb: weight,
       billable_weight_lb: weight,
       price_cents: priceCents,
       discount_cents: discountCents,
@@ -1916,6 +1967,13 @@ async function loadVan(order, { by = {} } = {}) {
       .catch((err) => console.error(`Could not redeem a promotion on ${order.id}: ${err.message}`));
   }
 
+  // WHAT THIS CUSTOMER'S LAUNDRY ACTUALLY WEIGHS, for planning the next round.
+  // It moved here with the weight itself. Best effort: a planning estimate
+  // failing must never fail a pickup that has already taken somebody's money.
+  updateWeightEstimate(order.customer_id).catch((err) =>
+    console.warn(`could not update the weight estimate for ${order.customer_id}:`, err.message)
+  );
+
   const clips = bags.clipsFor(labels);
 
   await events.record(order.id, {
@@ -1923,6 +1981,18 @@ async function loadVan(order, { by = {} } = {}) {
     summary:
       `${expected} bag${expected === 1 ? '' : 's'} loaded into the van` +
       (clips.length ? ` on clip${clips.length === 1 ? '' : 's'} ${clips.join(', ')}` : ''),
+    by,
+  });
+
+  // THE ONE WEIGHT ENTRY FOR THE PICKUP, and it says what it is made of.
+  //
+  // There is no "was" on it, because nothing was corrected: this is the first
+  // and only time the order has had a weight. A per-bag re-weigh before this
+  // point is logged against the BAG, which is where that correction happened.
+  await events.record(order.id, {
+    kind: 'WEIGHT',
+    summary: `Pickup weighed ${weight} lb across ${expected} bag${expected === 1 ? '' : 's'}`,
+    became: `${weight} lb`,
     by,
   });
 

@@ -1439,7 +1439,15 @@ router.post('/o/:code/weight', async (req, res, next) => {
       // that we had no card for them. A charge that depends on a select list in
       // another file is a charge that stops working when somebody trims it.
       .select(
+        // partner_bill_settled_at IS WHAT STOPS THIS BEING DONE TWICE, and it was
+        // not in this list. recordPartnerScale() returns early when it is set,
+        // because the route runs once per bag the laundromat weighs - and an
+        // unselected column reads as undefined, so that guard never fired. It
+        // would have written the band again and raised a second issue for the
+        // same pair of scales on every bag after the first. Twelfth time this
+        // trap has decided what a screen knows.
         'id, order_number, status, weight_lb, partner_weight_lb, ' +
+          'partner_bill_lb, partner_bill_settled_at, weight_band, ' +
           'customers(id, name, phone, stripe_customer_id, default_payment_method_id, ' +
           'card_brand, card_last4)'
       )

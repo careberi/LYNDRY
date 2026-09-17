@@ -90,11 +90,16 @@ const RUN_FIELDS =
 // number, never the other way round.
 //
 // UNPAID IS DELIBERATELY ZERO, and this is the part that looks wrong and is not.
-// A bag weighed on a doorstep is priced by recordWeight() a minute before
-// loadVan() charges for it, so IN_PROCESS + priced + UNPAID is the NORMAL state
-// of an order with the driver standing in front of it. Treating that as money
-// owed would put his current stop on hold underneath him. Only a charge that
-// was tried and refused creates a balance.
+// An order is IN_PROCESS from the first bag tag and stays UNPAID until the
+// driver taps Finish Pickup, which prices it and charges it in one go - so
+// IN_PROCESS + UNPAID is the NORMAL state of an order with the driver standing
+// in front of it. Treating that as money owed would put his current stop on
+// hold underneath him. Only a charge that was tried and refused creates a
+// balance.
+//
+// (It used to say the order was already PRICED by then, because the bag-weight
+// route called recordWeight() on every bag. It does not - nothing prices an
+// order until Finish Pickup. The conclusion is unchanged.)
 function balance(order) {
   if (!order) return 0;
 

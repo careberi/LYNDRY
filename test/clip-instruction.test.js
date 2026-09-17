@@ -263,17 +263,17 @@ test('AND IT NO LONGER GUARDS ON bag_count, WHICH IS ZERO FOR THE WHOLE PICKUP',
   assert.match(code, /tag_/, 'it should count the bags the task list says there are');
 });
 
-test('both weigh redirects still NAME the clip, for the order page', () => {
+test('the weigh redirect still NAMES the clip, for the order page', () => {
   const at = ADMIN.indexOf("'/ops/orders/:id/bag-weight'");
   assert.ok(at > 0, 'the bag-weight route has moved');
 
   const route = ADMIN.slice(at, ADMIN.indexOf('\nrouter.', at + 10));
   const notes = route.match(/on Van Clip #\$\{clipped\.clip\}/g) || [];
 
-  // One for the bag that completes the load, one for every bag before it. The
-  // delivery leg has its own sentence and is not counted here.
+  // ONE, NOW THAT THERE IS ONE PICKUP PATH. There used to be two, and the
+  // second existed only because the route priced the order on the last bag.
   //
   // THE FLASH IS A RECORD, NOT THE INSTRUCTION - clipCall() is that, and it
   // stays up. This is what the ORDER PAGE has instead, since it draws no block.
-  assert.equal(notes.length, 2, 'a pickup weigh that does not name the clip at all');
+  assert.equal(notes.length, 1, 'a pickup weigh that does not name the clip at all');
 });

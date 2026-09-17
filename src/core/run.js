@@ -1206,7 +1206,10 @@ async function setOff(orderId) {
     .update({ navigating_at: new Date().toISOString() })
     .eq('id', orderId)
     .is('navigating_at', null)
-    .select('id, collected_at, preferences, customers(id, phone, status, preferences)')
+    // status IS IN THE SELECT BECAUSE THE LEG IS DECIDED OFF IT. An unselected
+    // column reads as undefined, which here would make every delivery look
+    // like a laundromat run and send nothing at all.
+    .select('id, status, collected_at, preferences, customers(id, phone, status, preferences)')
     .maybeSingle();
 
   if (error) {
@@ -1216,13 +1219,27 @@ async function setOff(orderId) {
 
   if (!claimed) return;
 
-  // THE PICKUP LEG ONLY. Neil asked for the one at the start of the day: we
-  // are on our way for your laundry, and we will say when we have it. Once
-  // collected_at is set the same button is taking the driver to a laundromat
-  // or back to a door with clean laundry - the second of those is already
-  // covered by the out-for-delivery text, and the first is not the customer's
-  // business.
-  if (claimed.collected_at) return;
+  // WHICH OF THE THREE JOURNEYS THIS BUTTON IS, because the same button does
+  // all three and only two of them are the customer's business.
+  //
+  // NEIL'S LOCK, 17 SEPTEMBER, STEPS 26 AND 27: the delivery text goes when
+  // the driver sets off for THAT customer's door, not when the van is loaded.
+  // Until now this function returned the moment collected_at was set, on the
+  // reasoning that the delivery was "already covered by the out-for-delivery
+  // text" - and that text has gone, because it promised a doorstep to every
+  // customer in the van at once.
+  //
+  // READ OFF THE ORDER'S OWN STATUS rather than a flag about the journey. An
+  // order sitting in OUT_FOR_DELIVERY is in the van on its way back; anything
+  // collected and not yet there is a laundromat run, which is how the business
+  // is arranged rather than anything the customer asked about.
+  const leg = claimed.status === 'OUT_FOR_DELIVERY'
+    ? 'DELIVERY'
+    : claimed.collected_at
+      ? 'PARTNER'
+      : 'PICKUP';
+
+  if (leg === 'PARTNER') return;
 
   const customer = claimed.customers;
   if (!customer || !customer.phone) return;
@@ -1230,7 +1247,13 @@ async function setOff(orderId) {
   // STOP MEANS STOP, and a new message does not get to be the exception.
   if (customer.status === 'UNSUBSCRIBED') return;
 
-  await sendAndLog(customer.phone, onTheWayMessage(claimed), customer.id);
+  // ONE CUSTOMER, THE ONE WHOSE STOP HE TAPPED. The claim is on a single order
+  // row and the phone comes off that order's customer, so the five other
+  // deliveries riding in the same van are told nothing. "Directions again" is
+  // the same link and the same claim, so it cannot send a second one.
+  const text = leg === 'DELIVERY' ? deliveryOnTheWayMessage() : onTheWayMessage(claimed);
+
+  await sendAndLog(customer.phone, text, customer.id);
 }
 
 // One segment of plain ASCII, and the spot in the customer's own words rather
@@ -1241,6 +1264,18 @@ async function setOff(orderId) {
 // A COMMA, NOT A SPACED DASH. notify.toPlainText() rewrites " - " to ", " on
 // its way out - no dashes in a LYNDRY text - so writing the dash here would
 // mean the source said one thing and the customer read another.
+// THE DELIVERY LEG'S OWN SENTENCE, and it takes no arguments on purpose.
+//
+// Nothing about where the bags go belongs in it: the pickup spot is where the
+// driver is heading and he is holding the laundry, so repeating it back to the
+// customer is furniture. One segment of plain ASCII.
+//
+// IT PROMISES THE DELIVERED TEXT, which is the one that actually confirms it
+// with a photograph - so this message is never the last thing they hear.
+function deliveryOnTheWayMessage() {
+  return "We're on our way to deliver your laundry now. We'll let you know once it's back.";
+}
+
 function onTheWayMessage(order) {
   const spot = spotOf(order);
 
@@ -1304,6 +1339,8 @@ module.exports = {
   leave,
   mapLink,
   setOff,
+  onTheWayMessage,
+  deliveryOnTheWayMessage,
   addressOf,
   stopDone,
   tasksForCollect,

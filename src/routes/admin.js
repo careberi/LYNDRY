@@ -7127,10 +7127,16 @@ router.post(
       // Only when it CHANGED. Re-saving the same number is a driver making
       // sure, not a correction, and a log full of "45 lb became 45 lb" is a log
       // nobody reads.
+      //
+      // AND IT IS THE BAG'S CORRECTION, NOT THE ORDER'S. Re-weighing the same
+      // sticker before Finish Pickup is a real correction and belongs in the
+      // log; adding a second bag to the pickup is not, and used to produce an
+      // order-level one. Named by its code rather than its position, because
+      // the sticker is what is physically on the bag.
       if (wasWeight != null && wasWeight !== Number(body.weight_lb)) {
         await orderEvents.record(order.id, {
           kind: 'WEIGHT',
-          summary: `Bag ${before.position || ''} weight corrected`.replace('  ', ' '),
+          summary: `Bag ${before.code || before.position || ''} re-weighed`.replace('  ', ' '),
           was: `${wasWeight.toFixed(1)} lb`,
           became: `${Number(body.weight_lb).toFixed(1)} lb`,
           by: { opsUser: req.opsUser },
@@ -7182,56 +7188,53 @@ router.post(
         );
       }
 
-      // THE ORDER'S WEIGHT IS THE SUM OF ITS BAGS, recomputed here rather than
-      // typed. It stays the authoritative figure - it prices the order and it is
-      // what a laundromat's number is checked against - it is simply added up.
+      // WEIGHING A BAG IS BAG-LEVEL WORK AND NOTHING ELSE.
       //
-      // Written through fulfilment so the price, the audit entry and the text to
-      // the customer all happen the one way they already happen. There is no
-      // second implementation of "this order now weighs X".
+      // NEIL'S LOCK, 17 SEPTEMBER. This route used to ask bags.totalWeight()
+      // whether the order was allWeighed and, when it was, call
+      // fulfilment.recordWeight() - which finalises orders.weight_lb, prices the
+      // order and writes a WEIGHT and a PRICE event.
+      //
+      // allWeighed IS `weighed.length === labels.length`, AND THAT CANNOT MEAN
+      // "the customer has no more bags". With the bag-count question gone the
+      // database only knows about the bags that have been scanned, so after bag 1
+      // there is one label, one weight, and the test is true. It was true after
+      // EVERY bag.
+      //
+      // WHAT IT DID TO #2069: bag 1 at 8 lb priced the order at the $25.00
+      // minimum; bag 2 at 11 lb re-priced it at $38.00 and logged "Weight
+      // corrected to 19 lb, was 8 lb". Nobody corrected anything - a second bag
+      // was picked up. Neil: "That is normal accumulation, not correction."
+      //
+      // SO THIS SAVES THE BAG, CLIPS IT, AND SAYS SO. It does not finalise the
+      // order weight, does not price, does not charge and does not text.
+      // finishPickup() is the first moment anybody has said these are all the
+      // bags, and loadVan() does all four of those things there, once.
+      //
+      // The running total is still read, because a driver at a door wants to know
+      // what he has put in the van so far. It is a display figure and is written
+      // nowhere.
       const totals = await bags.totalWeight(order.id, 'PICKUP');
 
-      if (totals && totals.allWeighed) {
-        const priced = await fulfilment.recordWeight(order, totals.pounds, null, {
-          by: { opsUser: req.opsUser },
-          // Every bag was photographed on the scale individually, which is
-          // better evidence than the single photo recordWeight would otherwise
-          // insist on.
-          photoOnBags: true,
-        });
-
-        if (!priced.ok) {
-          return res.redirect(303, `${back}?problem=${encodeURIComponent(priced.detail)}`);
-        }
-
-        // A RECORD OF THE TAP, AND IT NAMES THE CLIP.
-        //
-        // THE INSTRUCTION ITSELF IS NOT THIS SENTENCE ANY MORE - it is
-        // clipCall() on the run and on the bag's own screen, which stays up
-        // until he finishes the stop. A flash that disappears on the next tap
-        // was the whole of what the driver had, and it was not enough.
-        //
-        // It still says the number, because the ORDER PAGE draws no such block
-        // and a weight recorded from there has nowhere else to learn it.
-        return res.redirect(
-          303,
-          `${back}?note=${encodeURIComponent(
-            `${result.label.code} saved at ${Number(body.weight_lb).toFixed(1)} lb, ` +
-              `on Van Clip #${clipped.clip}. ` +
-              `${totals.bags} bag${totals.bags === 1 ? '' : 's'} weighed, ` +
-              `${totals.pounds.toFixed(1)} lb so far.`
-          )}`
-        );
-      }
-
-      // The same record, for a bag that is not the last one. See above for why
-      // it reports rather than instructs.
+      // A RECORD OF THE TAP, AND IT NAMES THE CLIP.
+      //
+      // THE INSTRUCTION ITSELF IS NOT THIS SENTENCE - it is clipCall() on the run
+      // and on the bag's own screen, which stays up until he finishes the stop. A
+      // flash that disappears on the next tap was the whole of what the driver
+      // had, and it was not enough.
+      //
+      // It still says the number, because the ORDER PAGE draws no such block and a
+      // weight recorded from there has nowhere else to learn it.
+      //
+      // "SO FAR" IS THE HONEST WORD. It is what has been weighed, not what the
+      // pickup comes to - nobody knows that until Finish Pickup.
       return res.redirect(
         303,
         `${back}?note=${encodeURIComponent(
           `${result.label.code} saved at ${Number(body.weight_lb).toFixed(1)} lb, ` +
             `on Van Clip #${clipped.clip}. ` +
-            `${totals ? totals.bags : 0} bag${totals && totals.bags === 1 ? '' : 's'} weighed so far.`
+            `${totals ? totals.bags : 0} bag${totals && totals.bags === 1 ? '' : 's'} weighed, ` +
+            `${totals ? totals.pounds.toFixed(1) : '0.0'} lb so far.`
         )}`
       );
     } catch (err) {
