@@ -459,6 +459,54 @@ function laundromatFoot(stop) {
 }
 
 // The one thing to do, now he is there.
+// PUT THIS CLIP ON THAT BAG.
+//
+// The one instruction the pickup never gave. Neil, 17 September: he weighed a
+// bag and was never told which physical clip to reach for - the number was
+// reserved, recorded, and visible at the laundromat two hours later, and never
+// on the screen in front of him at the door.
+//
+// THE NUMBER IS THE WHOLE CONTENT. It is what he reads off, what he picks out
+// of the bag of clips and what he says out loud at a counter, so it is set at
+// the size of the thing you act on - the same reasoning the old clip card was
+// written with, minus the tap that card demanded.
+//
+// AT THE TOP OF THE CARD, ABOVE THE NEXT STEP. That is the physical order:
+// finish the bag in your hands, then start the next one. Under the task line it
+// would read as a footnote to a step it is not part of.
+//
+// SUNBEAM, NOT STAIN. Nothing has gone wrong - this is the next thing to do
+// with his hands. Stain is for errors only.
+function clipCall(task) {
+  const put = task && task.putClip;
+  if (!put) return '';
+
+  // The others still waiting, named but small. Only ever a line, never a list
+  // to work through - the big number is the job.
+  const rest = (task.clipsOn || []).filter((c) => c.clip !== put.clip);
+
+  return `
+  <div style="margin:0 0 20px;padding:16px 18px;border:2px solid var(--ink-900);border-radius:12px;
+              background:var(--sunbeam-500);color:var(--ink-900);">
+    <p style="margin:0 0 8px;font-family:var(--font-mono);font-weight:700;font-size:12px;
+              letter-spacing:0.08em;text-transform:uppercase;">Put this clip on the bag</p>
+    <p style="margin:0;font-family:var(--font-display);font-weight:900;font-size:34px;line-height:1;">
+      Van Clip #${escapeHtml(put.clip)}
+    </p>
+    <p style="margin:10px 0 0;font-size:15px;line-height:1.45;">
+      on <strong style="font-family:var(--font-mono);">${escapeHtml(put.code || '')}</strong>
+    </p>
+    ${
+      rest.length
+        ? `<p style="margin:10px 0 0;font-size:13px;line-height:1.45;">
+             Already on: ${rest
+               .map((c) => `#${escapeHtml(c.clip)} on ${escapeHtml(c.code || '')}`)
+               .join(', ')}
+           </p>`
+        : ''
+    }
+  </div>`;
+}
 function taskCard(run, user = null) {
   const stop = run.current;
   const task = run.task;
@@ -466,8 +514,14 @@ function taskCard(run, user = null) {
 
   // WHICH ORDER, AND WHICH CLIPS. "Deliver order 1003, clips 4, 6, 7 and 10" is
   // something a driver can act on with his hands full; four sticker codes are
-  // not. Only on a delivery - on a pickup the bags do not have clips yet, the
-  // screen is about to tell him which ones to put on.
+  // not.
+  //
+  // ONLY ON A DELIVERY, AND THE REASON WRITTEN HERE WAS WRONG. It read "on a
+  // pickup the bags do not have clips yet, the screen is about to tell him
+  // which ones to put on" - and no screen ever did. The pickup's clip is
+  // clipCall() above, which is an instruction about ONE bag rather than a list
+  // of what is aboard; this line is the list, and a list is only useful once
+  // the van is loaded.
   const clips = stop.kind === 'deliver' ? stop.clips || [] : [];
 
   // WHERE THE CUSTOMER SAID THE BAGS GO, in the slot the travel card uses for
@@ -585,6 +639,7 @@ function taskCard(run, user = null) {
 
   return `
   <div style="${CARD}">
+    ${clipCall(task)}
     ${header}
     ${task ? taskControl(stop, task, order) : ''}
     ${
@@ -1843,17 +1898,17 @@ function pickupList(stop) {
 // made here. The only difference is where the form comes back to. A second
 // implementation of "weigh a bag" is how the two would drift the first time one
 // of them learned something the other did not.
-function pickupBagBody({ order, position, tasks, problem = null }) {
+function pickupBagBody({ order, position, tasks, problem = null, notice = null }) {
   const mine = (tasks || []).filter((t) => t.position === position);
   const next = mine.find((t) => !t.done) || null;
-  // THE LAST STEP GOES BACK TO THE LIST, the other three stay on the bag.
+  // THE BAG'S OWN STEPS STAY ON THE BAG, because he is still holding it.
   //
-  // Putting it in the van is what finishes this bag, so landing him back on a
-  // screen with nothing left to do on it would make him tap "back to the list"
-  // every single time. The three before it come back here, because he is still
-  // holding the bag.
-  const back =
-    next && next.key.startsWith('load_') ? '?from=run' : `?from=pickup&pos=${position}`;
+  // IT USED TO TEST FOR A load_ KEY AND NOTHING HAS EMITTED ONE SINCE 16
+  // SEPTEMBER, when the four steps per bag became two. A dead branch, so every
+  // control came back here - right for the two steps that are left, and wrong
+  // for Finish Pickup, which is the ORDER's step rather than this bag's and
+  // belongs back on the run.
+  const back = next && next.key === 'finish' ? '?from=run' : `?from=pickup&pos=${position}`;
 
   const head = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
@@ -1867,6 +1922,18 @@ function pickupBagBody({ order, position, tasks, problem = null }) {
         ? `<div style="margin:0 0 18px;padding:14px 16px;border:2px solid var(--ink-900);border-radius:12px;
                        background:var(--stain-500);color:var(--paper-050);font-size:15px;line-height:1.5;">
              ${escapeHtml(problem)}
+           </div>`
+        : ''
+    }
+    ${
+      // WHAT THE STEP BEFORE THIS ONE SAID. This screen never read ?note= at
+      // all, so the weigh route's redirect - the one sentence in the whole
+      // system that named the clip - was thrown away every time a driver
+      // worked through the per-bag list.
+      notice
+        ? `<div style="margin:0 0 18px;padding:14px 16px;border:2px solid var(--ink-900);border-radius:12px;
+                       background:var(--suds-300);font-size:15px;line-height:1.5;">
+             ${escapeHtml(notice)}
            </div>`
         : ''
     }`;
@@ -1885,6 +1952,7 @@ function pickupBagBody({ order, position, tasks, problem = null }) {
 
   return `${head}
     <div style="${CARD}">
+      ${clipCall(next)}
       ${dropTask(title)}
       ${taskControl(null, next, order, back)}
     </div>

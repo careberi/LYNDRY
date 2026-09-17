@@ -980,6 +980,54 @@ the right functions - which they did. What nobody had written down is what a
 driver experiences: put clip 1 on a bag, take it off at a door, and see whether
 the next bag can have clip 1.
 
+**AND NOBODY WAS EVER TOLD WHICH CLIP TO REACH FOR.** Neil, 17 September, on
+the pickup that produced #2069: *"after I weighed the bag, the system never
+told me which physical Van Clip to put on that bag."*
+
+**THE ASSIGNMENT WAS NEVER THE PROBLEM, which is why it survived so long.**
+`assignClip()` runs inside the bag-weight route and always has; #2069's two bags
+came away wearing 1 and 3, and the number was sitting there waiting on the
+laundromat screen two hours later. Everything downstream worked. The only thing
+missing was the sentence at the doorstep, and a missing sentence looks exactly
+like a feature that was never asked for.
+
+**IT WAS REMOVED BY THE 16 SEPTEMBER LOCK AND NOTHING REPLACED IT.** Cutting
+four taps per bag down to two took out the clip card - the one screen whose
+whole content was the number - on the reasoning that the clip would be **shown**
+rather than confirmed. The showing was never built. What existed instead was a
+`?note=` flash on the weigh route's redirect, which is gone by the next tap, and
+the per-bag screen did not read that query string at all.
+
+**`clipCall()` IS THE REPLACEMENT, AND IT IS NOT A STEP.** The lock stands: two
+steps per bag. It is a block at the top of whatever card he is looking at -
+**Put this clip on the bag / Van Clip #3 / on KQKXM8** - sitting above the next
+step because that is the physical order, finish the bag in your hands and then
+start the next one. No tap, nothing to confirm.
+
+**`clipped_at` IS WHAT SAYS IT IS STILL OUTSTANDING, and no column was added.**
+`assignClip()` deliberately leaves it null - *"assigning a clip is the system
+RESERVING a number"* - and `finishPickup()` stamps every one of them as the stop
+ends. So the instruction appears the moment a bag comes off the scale and clears
+itself when he taps Finish Pickup.
+
+**THE LAST ONE OUTSTANDING IS THE ONE IN HIS HANDS.** He works the bags in
+order, so the highest position still unclipped is the bag just off the scale.
+The rest are named under it in small type rather than dropped, because a driver
+who put one down and came back needs to see the whole stop.
+
+**THE FLASH IS A RECORD NOW, NOT THE INSTRUCTION** - *"KQKXM8 saved at 11.0 lb,
+on Van Clip #3"*. It still names the number because the **order page** draws no
+block, and a weight recorded from there has nowhere else to learn it.
+
+**AND THE PER-BAG SCREEN WAS UNREACHABLE THE WHOLE TIME.**
+`/ops/run/pickup/:number/:position` guarded on `position > order.bag_count`, and
+`bag_count` is written by `finishPickup()` at the END of the stop - so for the
+whole of a live pickup it is zero and **every** position redirected straight
+back to the run. It counts `tag_` tasks now, which is the same list the run
+walks. `pickupList()` is still dark for the same reason: `pickupStage` keys on
+`bag_count` too, so it never leaves `'count'` and the linear card is what a
+driver actually gets.
+
 **Clips are scoped to the driver** — each van has its own set, so Dan's clip 4
 and somebody else's clip 4 never collide. The owner comes from `orders.driver_id`
 rather than being stored twice.

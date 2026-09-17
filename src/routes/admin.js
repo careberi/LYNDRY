@@ -5682,12 +5682,23 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
     }
 
     const position = Math.round(Number(req.params.position));
-    const count = Number(order.bag_count || 0);
-    if (!Number.isFinite(position) || position < 1 || position > count) {
-      return res.redirect(303, '/ops/run');
-    }
+    if (!Number.isFinite(position) || position < 1) return res.redirect(303, '/ops/run');
 
     const tasks = await runCore.tasksForCollect(order);
+
+    // HOW MANY BAGS THIS STOP HAS IS THE TASK LIST, NOT bag_count.
+    //
+    // The guard was `position > Number(order.bag_count || 0)`, and bag_count is
+    // written by finishPickup() at the END of the stop - so for the whole of a
+    // pickup it is zero and EVERY position redirected straight back to the run.
+    // The page was unreachable for the one job it exists for, which is also why
+    // nobody noticed it never rendered ?note=.
+    //
+    // It reads the same list the run itself walks: the bags he has scanned, plus
+    // one open slot until the pickup is finished. One answer to how many bags
+    // there are, rather than a column that only becomes true afterwards.
+    const slots = tasks.filter((t) => String(t.key || '').startsWith('tag_')).length;
+    if (position > slots) return res.redirect(303, '/ops/run');
 
     return res.type('html').send(
       adminPage({
@@ -5705,6 +5716,7 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
           position,
           tasks,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
+          notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
         }),
         user: req.opsUser,
         openIssues: req.openIssues,
@@ -7192,20 +7204,34 @@ router.post(
           return res.redirect(303, `${back}?problem=${encodeURIComponent(priced.detail)}`);
         }
 
+        // A RECORD OF THE TAP, AND IT NAMES THE CLIP.
+        //
+        // THE INSTRUCTION ITSELF IS NOT THIS SENTENCE ANY MORE - it is
+        // clipCall() on the run and on the bag's own screen, which stays up
+        // until he finishes the stop. A flash that disappears on the next tap
+        // was the whole of what the driver had, and it was not enough.
+        //
+        // It still says the number, because the ORDER PAGE draws no such block
+        // and a weight recorded from there has nowhere else to learn it.
         return res.redirect(
           303,
           `${back}?note=${encodeURIComponent(
-            `Clip ${clipped.clip} on that one. All ${totals.bags} bags weighed - ` +
-              `${totals.pounds.toFixed(1)} lb altogether.`
+            `${result.label.code} saved at ${Number(body.weight_lb).toFixed(1)} lb, ` +
+              `on Van Clip #${clipped.clip}. ` +
+              `${totals.bags} bag${totals.bags === 1 ? '' : 's'} weighed, ` +
+              `${totals.pounds.toFixed(1)} lb so far.`
           )}`
         );
       }
 
+      // The same record, for a bag that is not the last one. See above for why
+      // it reports rather than instructs.
       return res.redirect(
         303,
         `${back}?note=${encodeURIComponent(
-          `${Number(body.weight_lb).toFixed(1)} lb - put clip ${clipped.clip} on it. ` +
-            `${totals ? totals.bags : 0} of ${totals ? totals.total : 0} bags done.`
+          `${result.label.code} saved at ${Number(body.weight_lb).toFixed(1)} lb, ` +
+            `on Van Clip #${clipped.clip}. ` +
+            `${totals ? totals.bags : 0} bag${totals && totals.bags === 1 ? '' : 's'} weighed so far.`
         )}`
       );
     } catch (err) {

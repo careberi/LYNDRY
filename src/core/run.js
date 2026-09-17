@@ -170,12 +170,23 @@ async function tasksForCollect(order) {
       key: `weigh_${position}`,
       position,
       label,
+      // THE NUMBER THE WEIGH ROUTE RESERVED. assignClip() runs inside
+      // /ops/orders/:id/bag-weight, so by the time this step reads as done
+      // the bag already has a clip against its name - it simply had nowhere
+      // to appear.
+      clip: label && label.clip_number != null ? Number(label.clip_number) : null,
       title:
         label && label.weight_lb != null
           // THE TAG, NOT THE POSITION. Neil: "6ZP4DN - 30 lb". Once a bag has
           // been weighed the useful record of it is the sticker it carries -
           // that is what a laundromat reads back and what the report joins on.
-          ? `${label.code} - ${label.weight_lb} lb`
+          // AND THE CLIP IT CAME AWAY WITH. Once this step is behind him the
+          // record of the bag is its sticker, its weight and the number now
+          // riding on it - that last one is what he shouts across a
+          // laundromat counter, and it was the one part missing.
+          ? label.clip_number != null
+            ? `${label.code} - ${label.weight_lb} lb, Van Clip #${label.clip_number}`
+            : `${label.code} - ${label.weight_lb} lb`
           // NAMED BY ITS TAG, NOT ITS POSITION. Neil: "Weigh Bag with Tag ID
           // 6ZP4DN." The sticker is on the bag in his hands; "#1" is a place
           // in a count he has to keep in his head. The code is in the title so
@@ -250,6 +261,54 @@ async function tasksForCollect(order) {
     // charge that is short by a bag.
     blockedBy: scanned.length && weighed.length === scanned.length ? null : 'bags',
   });
+
+  // WHICH CLIP GOES ON THE BAG IN HIS HANDS.
+  //
+  // NEIL, 17 SEPTEMBER: "after I weighed the bag, the system never told me
+  // which physical Van Clip to put on that bag."
+  //
+  // THE ASSIGNMENT WAS NEVER THE PROBLEM. assignClip() runs in the weigh
+  // route and always has - order #2069's two bags came away wearing clips 1
+  // and 3, which is why the number was there waiting for him at the
+  // laundromat. What was missing is the sentence at the doorstep.
+  //
+  // WHAT HAPPENED TO IT. The clip used to be its own card with a confirming
+  // tap on it. The 16 September lock cut four taps per bag down to two, on
+  // the reasoning that the clip is "shown rather than confirmed" - and the
+  // showing was never built. The only place the number appeared afterwards
+  // was the ?note= flash on the redirect, which is gone by the next tap, and
+  // the per-bag screen did not read that query string at all.
+  //
+  // IT IS NOT A STEP AND ASKS FOR NO TAP. The lock stands: two steps per bag.
+  // This rides on whatever card he is looking at, the same way the spot rides
+  // on the door step.
+  //
+  // clipped_at IS WHAT SAYS IT IS STILL OUTSTANDING, and it is exactly the
+  // column for it. assignClip() deliberately leaves it null - "assigning a
+  // clip is the system RESERVING a number" - and finishPickup() stamps every
+  // one of them as the stop ends. So this appears the moment a bag comes off
+  // the scale and clears itself when he taps Finish Pickup, with no new
+  // column, no flag and nothing to keep in step.
+  const outstanding = done
+    .filter((l) => l.clip_number != null && l.weight_lb != null && !l.clipped_at)
+    .sort((a, b) => Number(a.position || 0) - Number(b.position || 0))
+    .map((l) => ({
+      clip: Number(l.clip_number),
+      code: l.code,
+      position: Number(l.position || 0),
+    }));
+
+  // THE LAST ONE IS THE ONE HE IS HOLDING. He works the bags in order, so the
+  // highest position still outstanding is the bag he has just taken off the
+  // scale - which is what the instruction is about. The rest are listed under
+  // it rather than dropped, because a driver who put one down and came back
+  // needs to see the whole stop.
+  const putClip = outstanding.length ? outstanding[outstanding.length - 1] : null;
+
+  for (const task of tasks) {
+    task.putClip = putClip;
+    task.clipsOn = outstanding;
+  }
 
   return tasks;
 }
