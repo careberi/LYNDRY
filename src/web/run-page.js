@@ -616,31 +616,21 @@ function taskCard(run, user = null) {
 // bag page could only ever bounce him back to the top of the run.
 function taskControl(stop, task, order, back = '?from=run') {
 
-  if (task.key === 'bag_count') {
-    return `
-    <form method="post" action="/ops/orders/${order.order_number}/bag-count${back}" style="margin:0;">
-      <label class="field-label" for="bag_count">Bags</label>
-      <input class="input input-lg" type="number" id="bag_count" name="bag_count" min="1" max="20"
-             inputmode="numeric" required autofocus placeholder="1" style="width:100%;margin-bottom:16px;">
-      <button type="submit" class="btn btn-primary btn-lg btn-full">That's how many</button>
-    </form>`;
-  }
-
-  // ONE BAG, TWO STEPS: the tag, then the scale and a photo of it. Separate
-  // tasks rather than one, because the tag has to exist before there is
-  // anything to hang a weight on - and because a driver who has stuck one on
-  // deserves to see that step tick over rather than the same unfinished line.
-  if (task.key.startsWith('tag_')) {
-    // THE SPOT PHOTO RIDES ON THE FIRST BAG NOW. It used to hang off the
-    // "Collect the bags" step, which no longer exists - scanning the first tag
-    // is the custody event, so this is the first thing on the screen at that
-    // door and the moment he is looking at the doorstep anyway.
-    //
-    // Its own form, so the scan field never starts carrying a file, and
-    // offered rather than demanded: a note for the next driver, not evidence.
-    const spot =
-      task.position === 1
-        ? `
+  // THE DOOR, ON ITS OWN SCREEN. Neil, 17 September: "scanning the pickup
+  // location is its own screen."
+  //
+  // No field on it and nothing to type. The card above has already drawn the
+  // spot, the photo of it and the way in - this is the one button that says he
+  // is standing there, and pressing it is what tells the customer.
+  //
+  // IT POSTS TO /ops/run/here, the same route the travel card's I'm here posts
+  // to. One route, one arrival, one text, whichever of the two he pressed.
+  //
+  // AND THE PHOTO OF THE SPOT MOVED HERE WITH IT. It used to hang off the
+  // first bag's step beside the scan box; this is the screen he is on while
+  // he is actually looking at the doorstep.
+  if (task.key === 'here') {
+    const photo = `
     <form method="post" action="/ops/orders/${order.order_number}/spot-photo${back}"
           enctype="multipart/form-data" style="margin:20px 0 0;">
       <label class="field-label" for="spot_photo">
@@ -656,8 +646,42 @@ function taskControl(stop, task, order, back = '?from=run') {
         Kept on the customer so the next pickup knows the door. Never sent to
         them, and not the delivery photo.
       </p>
-    </form>`
-        : '';
+    </form>`;
+
+    // Already done, so the button has nothing left to say. The photo stays,
+    // because replacing it is useful at any point while he is at the door.
+    if (task.done) return photo;
+
+    return `
+    <form method="post" action="/ops/run/here" style="margin:0;">
+      <input type="hidden" name="order_id" value="${escapeHtml(order.id)}">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">I have found the bags</button>
+      <p class="muted" style="margin:8px 0 0;font-size:13px;line-height:1.45;">
+        Texts them that you are outside. Once, whatever happens next.
+      </p>
+    </form>
+    ${photo}`;
+  }
+
+  if (task.key === 'bag_count') {
+    return `
+    <form method="post" action="/ops/orders/${order.order_number}/bag-count${back}" style="margin:0;">
+      <label class="field-label" for="bag_count">Bags</label>
+      <input class="input input-lg" type="number" id="bag_count" name="bag_count" min="1" max="20"
+             inputmode="numeric" required autofocus placeholder="1" style="width:100%;margin-bottom:16px;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">That's how many</button>
+    </form>`;
+  }
+
+  // ONE BAG, TWO STEPS: the tag, then the scale and a photo of it. Separate
+  // tasks rather than one, because the tag has to exist before there is
+  // anything to hang a weight on - and because a driver who has stuck one on
+  // deserves to see that step tick over rather than the same unfinished line.
+  if (task.key.startsWith('tag_')) {
+    // THE SPOT PHOTO MOVED TO THE LOCATION STEP ABOVE. It hung here, beside the
+    // scan box, which is one screen answering two questions - where are the
+    // bags, and which bag is this. The one with a text box on it wins, and the
+    // other is read past.
 
     // OR THAT WAS THE LAST ONE. Without this the open slot is a dead end: the
     // run shows one task at a time, so Finish Pickup sits behind "Another bag?"
@@ -683,8 +707,7 @@ function taskControl(stop, task, order, back = '?from=run') {
         buttonLabel: `That's bag #${task.position}`,
         autofocus: true,
       })}
-      ${finish}
-      ${spot}`;
+      ${finish}`;
   }
 
   if (task.key.startsWith('weigh_')) {

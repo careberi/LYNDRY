@@ -145,14 +145,19 @@ test('the routes are keyed off the order, so a driver can reach them', () => {
 
 // --- a still photo, and never a gate ----------------------------------------
 
+// IT LIVES ON THE LOCATION STEP NOW, NOT ON THE FIRST BAG. Neil, 17
+// September: the pickup location is its own screen. The photo went with the
+// spot, because that is the screen he is on while he is actually looking at
+// the doorstep - it used to sit beside the scan box, which is one screen
+// answering two questions, and the one with a text box on it wins.
 test('IT IS A STILL PHOTO, THE SAME MECHANISM AS THE BAG SCAN', () => {
   // A file input with capture="environment" opens the phone's own camera -
   // autofocus, exposure, torch - with no live stream to keep alive.
   const page = SRC('web', 'run-page.js');
-  const at = page.indexOf("task.key.startsWith('tag_')");
-  assert.notEqual(at, -1, 'the tag control has moved');
+  const at = page.indexOf("task.key === 'here'");
+  assert.notEqual(at, -1, 'the location control has moved');
 
-  const block = page.slice(at, page.indexOf("task.key.startsWith('weigh_')", at));
+  const block = page.slice(at, page.indexOf("task.key === 'bag_count'", at));
 
   assert.match(block, /capture="environment"/, 'it does not open the camera');
   assert.match(block, /type="file"/, 'it is not a file input');

@@ -182,6 +182,72 @@ async function step(order, to, buildMessage, by = {}) {
 //
 // The rest of it is unchanged, including the rule underneath: a waived order is
 // promised the weight and never a total.
+// WE ARE OUTSIDE. ONE TEXT, AT THE DOOR, WHATEVER HAPPENS NEXT.
+//
+// Neil, 17 September: "After that scan, or after I tap I'm here after
+// directions, send the customer the 'we're here for your laundry' text. One
+// text. Not on every bag."
+//
+// TWO DOORS AND ONE OF THEM IS ALREADY BUILT. The location step and the I'm
+// here button both post to /ops/run/here, so both arrive at run.arrive(), so
+// both arrive here. There was no need for a second route and there must not
+// be one: a second way to tell somebody the van is outside is a second way to
+// tell them twice.
+//
+// ONCE IS ENFORCED BY THE STAMP, NOT BY THE CALLER. Four things can reach this
+// - the location step, I'm here, collect() as a backstop, and the JSON API
+// behind it - and the guarantee cannot depend on each of them remembering.
+// here_texted_at is set the first time and read every time; see migration
+// 0101 for why it is stored rather than derived off the thread.
+//
+// THE STAMP GOES ON AFTER THE ATTEMPT, whether or not the carrier took it. An
+// opted-out number is refused at notify.sendAndLog(), and that refusal must
+// not leave the driver stuck on a screen he cannot get past: the text is for
+// the customer, the step is for him, and one failing is not a reason to stop
+// the other.
+//
+// IT READS THE ROW BACK FIRST. The caller is holding an order it loaded before
+// the driver tapped anything, and on a double tap - which is a thumb on a
+// phone at a door, so it happens - both copies would say the text had not gone.
+async function announceArrival(order, { by = {} } = {}) {
+  if (!order || !order.id) return { ok: false, reason: 'no order' };
+
+  const { data: fresh, error } = await db
+    .from('orders')
+    .select('id, order_number, here_texted_at, payment_status, price_cents, customer_id')
+    .eq('id', order.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!fresh) return { ok: false, reason: 'no order' };
+  if (fresh.here_texted_at) return { ok: true, already: true };
+
+  const customer = order.customers || null;
+
+  if (customer && customer.phone) {
+    await sendAndLog(customer.phone, collectedMessage(fresh), customer.id).catch((err) =>
+      console.error(`Could not text the arrival for ${order.id}: ${err.message}`)
+    );
+  }
+
+  const { error: stampError } = await db
+    .from('orders')
+    .update({ here_texted_at: new Date().toISOString() })
+    .eq('id', order.id)
+    // THE STAMP IS THE LOCK. Two taps a second apart both read a null above;
+    // only one of them writes, because the second no longer matches. Without
+    // it the read-then-write is a race with a thumb on the other side of it.
+    .is('here_texted_at', null);
+
+  if (stampError) throw stampError;
+
+  await events
+    .record(order.id, { kind: 'STATUS', summary: 'At the door - told them we are here', by })
+    .catch(() => {});
+
+  return { ok: true, texted: Boolean(customer && customer.phone) };
+}
+
 function collectedMessage(order) {
   return order && order.payment_status === 'WAIVED'
     ? `We're here for your laundry. We'll text you the weight once it's on the scale.`
@@ -240,9 +306,26 @@ async function collect(order, { bagCount, by = {} } = {}) {
 
   // The one new fact: we have the bag. The turnaround was promised in the
   // confirmation; repeating it in every text is what Neil flagged.
-  const result = await step(order, 'IN_PROCESS', (updated) => collectedMessage(updated), by);
+  // THE TEXT IS NOT SENT HERE ANY MORE, AND THAT IS THE WHOLE OF NEIL'S POINT.
+  //
+  // It used to ride on this transition, and the thing that causes this
+  // transition is the driver binding the FIRST BAG TAG - so "we're here for
+  // your laundry" arrived after he had walked up, found the bags and scanned
+  // one. It goes at the door now, from announceArrival(), which is called by
+  // the location step and by I'm here.
+  //
+  // IT IS STILL CALLED FROM HERE, as a backstop and not as a second door. Not
+  // every collection comes through the run: the order page and POST
+  // /ops/collected reach this function directly, and a customer whose driver
+  // used one of those must still be told. It is stamped, so this cannot be the
+  // second text - it is the only one, on the paths where nothing else fired.
+  const result = await step(order, 'IN_PROCESS', null, by);
 
   if (!result.ok) return result;
+
+  await announceArrival(result.order || order, { by }).catch((err) =>
+    console.error(`Could not text the arrival for ${order.id}: ${err.message}`)
+  );
 
   // THE NEXT ONE IS BOOKED THE MOMENT THIS ONE IS IN THE VAN.
   //
@@ -1822,7 +1905,19 @@ async function loadVan(order, { by = {} } = {}) {
     by,
   });
 
-  if (customer) {
+  // AN ORDER THAT WAS ALREADY PAID SAYS NOTHING ABOUT MONEY, AND SAYS NOTHING
+  // AT ALL.
+  //
+  // This is only reachable on an order rolled back by hand and driven again -
+  // see the PAID guard in billing.chargeAtTheDoor(). The customer was told the
+  // weight and the total the first time the van came, and both are unchanged,
+  // so the only thing a second text could do is repeat them. Worse, the text
+  // below names the card and says it has been charged, which on this path
+  // would be a second charge that did not happen.
+  //
+  // Repeating figures somebody already has is the system talking to itself.
+  // The repair is ours; they did not ask for one and do not need telling.
+  if (customer && !charge.alreadyPaid) {
     // A WAIVED ORDER IS TOLD THE WEIGHT AND NOTHING ELSE, which is the promise
     // the pickup text made it.
     // AN ORDER THAT COMES TO NOTHING IS TOLD THE WEIGHT AND NOTHING ELSE, the
@@ -2230,6 +2325,7 @@ async function reconcileReturn(order, returned, { by = {} } = {}) {
 
 module.exports = {
   collectedMessage,
+  announceArrival,
   waivedWeighInText,
   // Exported so a test can read the sentence a customer actually gets. The
   // first version of that test re-declared this function inside itself, which

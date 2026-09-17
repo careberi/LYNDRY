@@ -887,6 +887,25 @@ function showUpCents() {
 // comparison nobody would get right twice.
 function showUpHold(order) {
   if (!order || !order.authorization_intent_id) return null;
+
+  // A HOLD THAT HAS ALREADY BEEN SPENT IS NOT A HOLD.
+  //
+  // captured_at is stamped the moment the $25 is taken, and the intent id
+  // stays on the order afterwards because it is the record of which
+  // authorization paid for this pickup. So an order that has been through a
+  // door still LOOKS held, and anything that reads this would try to capture
+  // the same authorization a second time.
+  //
+  // It could not happen while the only caller was a door the order reaches
+  // once. It can now: an order rolled back by hand and driven again arrives
+  // here with a spent intent on it, and chargeAtTheDoor() would take the hold
+  // path rather than the ordinary one.
+  //
+  // This file already makes the same argument from the other side, about a
+  // hold Stripe has expired: it must not sit on the order looking capturable,
+  // because the door would then try to take money that is not held.
+  if (order.captured_at) return null;
+
   return {
     intentId: order.authorization_intent_id,
     cents: Math.max(0, Number(order.authorized_cents || 0)),
@@ -1142,6 +1161,33 @@ function doorSplit(totalCents, heldCents) {
 // ---------------------------------------------------------------------------
 async function chargeAtTheDoor(order, customer, { totalCents }) {
   if (order.payment_status === 'WAIVED') return { ok: true, waived: true };
+
+  // AN ORDER THAT IS ALREADY PAID IS NEVER CHARGED AGAIN AT A DOOR.
+  //
+  // Neil, 17 September, having rolled #2070 back by hand so the round could be
+  // driven again: "the code so a paid order that is rolled back cannot be
+  // charged twice."
+  //
+  // THE GUARD EXISTED AND WAS IN THE WRONG PLACE. chargeOrder() has refused a
+  // PAID order since the beginning, and it is what the ordinary path below
+  // calls - so the only reason this was ever safe is that the door usually
+  // ends up there. The HOLD path does not: it captures the authorization and
+  // charges the balance itself, and chargeOrder() never sees the order at all.
+  // That is the path #2070 took, twenty-five dollars off the hold and eight on
+  // the card.
+  //
+  // loadVan()'s own guard is `if (order.van_confirmed_at) return already` -
+  // which catches a double tap and is exactly the column a rollback has to
+  // clear to put the stop back on the route. So the one repair that makes this
+  // reachable is the one that switches that guard off.
+  //
+  // IT IS ANSWERED HERE RATHER THAN LEFT TO STRIPE. A second capture of a spent
+  // intent would be refused by the provider, and that refusal arrives as a
+  // failure the door reads as a decline - bags left on a step and a customer
+  // texted that their card was refused, over an order they have already paid
+  // for. Being right by accident, one layer down, in the failure direction, is
+  // not the same as being right.
+  if (order.payment_status === 'PAID') return { ok: true, alreadyPaid: true };
 
   const hold = showUpHold(order);
   const { total, capture, charge } = doorSplit(totalCents, hold ? hold.cents : 0);

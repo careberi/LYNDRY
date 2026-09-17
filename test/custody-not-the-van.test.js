@@ -77,6 +77,11 @@ const bag = (position, code, weight = null, clip = null) => ({
   loaded_at: null,
 });
 
+// A DRIVER WHO IS SCANNING BAGS HAS ALREADY BEEN TO THE DOOR, which is what
+// here_texted_at says: he pressed the location step, the customer was told we
+// are outside, and the run moved on. Every test below that is about the BAG
+// flow starts from there; the two that are about the start of a stop override
+// it, and say so.
 const order = (extra = {}) => ({
   id: 'o1',
   order_number: 2081,
@@ -84,6 +89,7 @@ const order = (extra = {}) => ({
   bag_count: null,
   collected_at: 'x',
   van_confirmed_at: null,
+  here_texted_at: 'x',
   customers: { preferences: { special_instructions: 'front door' } },
   ...extra,
 });
@@ -111,7 +117,11 @@ test('and no "collect the bags" tap and no bag count question', () => {
   assert.ok(!/key: 'bag_count'/.test(src), 'the bag count question is back');
 });
 
-test('A THREE-BAG PICKUP IS SEVEN TAPS, NOT FIFTEEN', async () => {
+// EIGHT NOW, NOT SEVEN, AND THE EXTRA ONE IS THE DOOR. Neil, 17 September:
+// the pickup location is its own screen. That is one more tap on a stop and it
+// buys two things - the spot and its photo get a screen with no text box on it
+// to be read past, and it is the moment the customer is told we are outside.
+test('A THREE-BAG PICKUP IS EIGHT TAPS, NOT FIFTEEN', async () => {
   const labels = [bag(1, 'AAA111', 13, 1), bag(2, 'BBB222', 14, 2), bag(3, 'CCC333', 11, 3)];
   const tasks = await withLabels(labels, order());
 
@@ -120,15 +130,41 @@ test('A THREE-BAG PICKUP IS SEVEN TAPS, NOT FIFTEEN', async () => {
   assert.equal(perBag.length, 6, 'a weighed bag is not two finished steps');
 
   assert.equal(tasks.filter((t) => t.key === 'finish').length, 1, 'there is not exactly one finish');
+  assert.equal(tasks.filter((t) => t.key === 'here').length, 1, 'the door is not exactly one step');
 
   // Nothing else is a step.
   const kinds = [...new Set(tasks.map((t) => t.key.replace(/_\d+$/, '_N')))].sort();
-  assert.deepEqual(kinds, ['finish', 'tag_N', 'weigh_N']);
+  assert.deepEqual(kinds, ['finish', 'here', 'tag_N', 'weigh_N']);
+});
+
+test('THE DOOR IS THE FIRST STEP, AND IT CARRIES THE SPOT', async () => {
+  const tasks = await withLabels([], order({ status: 'REQUESTED', collected_at: null, here_texted_at: null }));
+  const first = tasks.find((t) => !t.done);
+
+  assert.equal(first.key, 'here', 'the first thing at a stop is not the door');
+  assert.equal(first.spot, 'Front door', 'the location step does not say where the bags are');
+
+  // And the bag steps do not repeat it: by then it is in his hands.
+  const tag = tasks.find((t) => t.key === 'tag_1');
+  assert.equal(tag.spot, null, 'the spot is still bolted to the first bag');
+  assert.equal(tag.spotPhoto, null, 'the photo is still bolted to the first bag');
+});
+
+test('once he has pressed it, the door step stays done', async () => {
+  // here_texted_at is never cleared, which is why it is the flag and arrived_at
+  // is not: recording a weight clears arrived_at, and the screen would reappear
+  // under him half way through the bags.
+  const tasks = await withLabels([bag(1, 'AAA111', 13, 1)], order());
+  assert.equal(tasks.find((t) => t.key === 'here').done, true);
+  assert.notEqual(tasks.find((t) => !t.done).key, 'here');
 });
 
 // --- the flow itself ---------------------------------------------------------
 
 test('SCAN, WEIGH, ANOTHER BAG - AND THE LIST GROWS AS HE GOES', async () => {
+  const atTheDoor = await withLabels([], order({ status: 'REQUESTED', collected_at: null, here_texted_at: null }));
+  assert.equal(atTheDoor.find((t) => !t.done).title, 'Find the bags');
+
   const nothing = await withLabels([], order({ status: 'REQUESTED', collected_at: null }));
   assert.equal(nothing.find((t) => !t.done).title, 'Scan the first bag');
 
@@ -155,7 +191,7 @@ test('AND FINISH PICKUP IS REACHABLE FROM THE OPEN SLOT', async () => {
 
 test('but not before anything has been scanned', async () => {
   const tasks = await withLabels([], order({ status: 'REQUESTED', collected_at: null }));
-  const open = tasks.find((t) => !t.done);
+  const open = tasks.find((t) => !t.done && t.key !== 'here');
   assert.ok(!open.canFinish, 'an empty pickup offers to finish');
 });
 

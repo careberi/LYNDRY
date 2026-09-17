@@ -289,7 +289,19 @@ const config = Object.freeze({
     // at the laundromat, so this is how many exist, not how many to invent.
     // Running out is a real thing that can happen on a heavy day and the run
     // says so rather than making a number up.
-    vanClips: Number(process.env.ROUTING_VAN_CLIPS || 50),
+    //
+    // TEN, NOT FIFTY. Neil, 17 September: "Only clips 1 through 10 are in the
+    // van pool. Do not hand out 11-50." Fifty was the size of the bag of clips
+    // he had bought; ten is how many are actually in the van, and a number the
+    // system hands out that nobody can physically find is worse than running
+    // out - the driver is sent looking for clip 23 and there is no clip 23.
+    //
+    // Clips above ten HAVE been handed out: sixteen is the highest on record.
+    // Nothing is renumbered, because a bag that travelled under clip 16
+    // travelled under clip 16 and a record edited to fit today's rules is not
+    // a record. assignClip() counts 1 to this number, so they simply stop
+    // being offered.
+    vanClips: Number(process.env.ROUTING_VAN_CLIPS || 10),
 
     // THE ONE KNOB THAT DECIDES HOW MUCH THE SYSTEM DECIDES ON ITS OWN.
     //

@@ -68,9 +68,39 @@ async function tasksForCollect(order) {
   // on the way past. "How many bags" asked for a number the driver was about
   // to demonstrate by scanning them - finishPickup() counts what was scanned.
   //
-  // The spot and its photo move onto the first bag's step, because that is now
-  // the first thing on the screen at that door and it is where he is looking.
+  // AND THEY MOVE OFF IT AGAIN. Neil, 17 September: "On the driver's first
+  // stop, scanning the pickup location is its own screen."
+  //
+  // Bolting them to the first bag's step made one screen answer two questions -
+  // where are the bags, and which bag is this - and the second one has a text
+  // box on it, so the first was read past. It is also the screen that told the
+  // customer we were outside, which meant the text went once he had already
+  // found the bags rather than when he got there.
   const tasks = [];
+
+  // WHERE THE BAGS ARE, ON ITS OWN, FIRST.
+  //
+  // It carries no field and asks for nothing: it is the spot, the photo and the
+  // way in, and one button saying he is at the door. That button is the same
+  // /ops/run/here the travel card's I'm here posts to, so the customer is told
+  // once whichever of the two he pressed.
+  //
+  // DONE IS here_texted_at, NOT arrived_at. The obvious flag is the wrong one:
+  // arrived_at is cleared by anything that completes a stop - recording a
+  // weight is one - so the screen would reappear under him half way through the
+  // bags. here_texted_at is written once and never cleared.
+  tasks.push({
+    key: 'here',
+    title: order.here_texted_at ? 'At the door' : 'Find the bags',
+    titleTail: order.here_texted_at ? null : 'and tell them we are here',
+    spot: spotOf(order),
+    spotPhoto: spotPhotoOf(order),
+    access: accessOf(order),
+    spotLabel: 'The bags are here',
+    detail: null,
+    done: Boolean(order.here_texted_at),
+    order,
+  });
 
   // TWO STEPS PER BAG, AND ONLY TWO. Tag it, then weigh it - the clip comes
   // back from the weigh route, so it is shown rather than confirmed.
@@ -100,12 +130,12 @@ async function tasksForCollect(order) {
       key: `tag_${position}`,
       position,
       label,
-      // THE DOOR IS ON THE FIRST STEP NOW. It used to ride on "Collect the
-      // bags", which no longer exists, and this is the first thing on the
-      // screen at that door - which is where he is looking when he needs it.
-      spot: position === 1 ? spotOf(order) : null,
-      spotPhoto: position === 1 ? spotPhotoOf(order) : null,
-      access: position === 1 ? accessOf(order) : null,
+      // THE DOOR IS ITS OWN STEP ABOVE THIS ONE and does not repeat here. By
+      // the time he is scanning a tag the bag is in his hands, and the spot
+      // beside a text box is furniture he reads past.
+      spot: null,
+      spotPhoto: null,
+      access: null,
       spotLabel: 'The bags are here',
       title: label
         ? `Bag #${position} tagged - ${label.code}`
@@ -1160,7 +1190,22 @@ function onTheWayMessage(order) {
     : "We're on our way to pick up your laundry. We'll text you once we have it.";
 }
 
-// "I'm here." Sets the flag on whichever order carries this stop's arrival.
+// "I'm here." Sets the flag on whichever order carries this stop's arrival,
+// and tells the customer we are outside.
+//
+// BOTH OF NEIL'S TRIGGERS ARRIVE HERE, which is why there is no second route.
+// The location step's button and the I'm here button after directions post to
+// the same place, so "after that scan, or after I tap I'm here" is one code
+// path rather than two that have to agree.
+//
+// ONLY ON A DOORSTEP PICKUP. The same button is pressed at a laundromat and on
+// a delivery, and neither of those is somebody waiting for a van outside their
+// house. announceArrival() reads the order rather than being told, so the test
+// is the order's own status: REQUESTED is a pickup that has not happened yet.
+//
+// THE TEXT NEVER BLOCKS THE TAP. He is standing at a door; if the send or the
+// stamp fails he still gets his next screen, and the failure is logged. The
+// arrival flag is written first for the same reason.
 async function arrive(orderId) {
   const { error } = await db
     .from('orders')
@@ -1168,6 +1213,20 @@ async function arrive(orderId) {
     .eq('id', orderId);
 
   if (error) throw error;
+
+  const { data: order } = await db
+    .from('orders')
+    .select('id, order_number, status, here_texted_at, customers(id, phone, name, status)')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (!order || order.status !== 'REQUESTED') return;
+
+  // Lazily required: fulfilment.js reaches run.js, and a top-level require
+  // here would close the loop.
+  await require('./fulfilment')
+    .announceArrival(order)
+    .catch((err) => console.error(`Could not announce the arrival for ${orderId}: ${err.message}`));
 }
 
 // Cleared whenever a step completes, so the next stop starts at "go here"
