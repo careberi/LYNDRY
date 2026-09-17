@@ -10,6 +10,7 @@ const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE, ICON_LINKS } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
 const notify = require('../core/notify');
+const burst = require('../core/burst');
 const throttle = require('../core/throttle');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
@@ -9174,6 +9175,25 @@ router.post('/ops/messages/:phone/send', guard, may('messages.send'), async (req
     // is somebody typing into a conversation, and it is what lets the AI tell
     // a colleague's words from its own when it picks the thread back up. The
     // machine key has no person attached, so it writes nothing.
+    // A PERSON WRITING CANCELS WHATEVER LYN WAS ABOUT TO SAY.
+    //
+    // Neil's rule, 16 September: "Manager replies during the delay: cancel
+    // Lyn's pending response." Every AI reply is held for 20 to 30 seconds, and
+    // that window is exactly when somebody reads the thread and steps in. A
+    // manager typing at second twelve used to have Lyn fire at second twenty-
+    // five anyway - two of us answering the same message, which is the thing
+    // the wait was meant to make impossible.
+    //
+    // BEFORE THE SEND, not after: the point is that the customer never sees
+    // both. burst.cancel() drops the held messages unanswered and says so in
+    // the log, and it is a no-op when nothing is waiting, which is most of the
+    // time.
+    //
+    // It does NOT pause the AI. Sending has never done that - see the note
+    // below - and this only throws away one reply that a person has just made
+    // redundant.
+    burst.cancel(phone);
+
     await notify.sendAndLog(phone, body, customer ? customer.id : null, {
       sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
       kind: 'PERSON',
