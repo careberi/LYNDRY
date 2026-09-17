@@ -1041,3 +1041,165 @@ a.ops-note:hover { text-decoration: none; color: var(--c-ink, #111827); }
 .ops-note.card-xl.ops-note--warn { border-left-color: #b45309; }
 .ops-note.card.ops-note--good,
 .ops-note.card-xl.ops-note--good { border-left-color: #15803d; }
+
+/* ===========================================================================
+   THE INTAKE TABLE.
+
+   Neil's brief, 16 September: the "what is still missing" cards are replaced
+   by a table of every field, its value, whether that value is EXPLICIT,
+   DEFAULT, MISSING or N/A, and a way to ask for it.
+
+   TWO THINGS THE OLD CARDS GOT WRONG AND THIS MUST NOT.
+
+   A DEFAULT IS NOT A WARNING. Anything unanswered used to be a gap with a
+   button on it, so "cold water" and "no address" looked the same. Only a
+   MISSING row that is genuinely holding something up is loud here; a default
+   is plain grey text.
+
+   AND IT IS ALWAYS THERE. The cards appeared only when something was missing,
+   so a fully set up customer's screen said nothing at all about what we knew.
+   Completed rows stay, and each offers an update.
+
+   IT OPENS WITH :target AND NOTHING ELSE. The action is a link to the row's
+   own id; this shows that row. No script, like every other ops screen - and
+   one composer at a time for free, so there is never a second half-typed
+   message on screen that somebody thinks they sent.
+
+   TOKENS RATHER THAN THE DESIGN SYSTEM'S, because this renders on both skins:
+   the conversation and the order page are terminal, the customer page is not.
+   The --c-* tokens are declared on body above, so they resolve on either.
+   =========================================================================== */
+
+.intake { margin: 0 0 18px; }
+
+.intake-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin: 0 0 6px;
+}
+
+.intake-summary { color: var(--c-muted); font-size: 12px; }
+
+.intake-tbl th[scope="row"] {
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: left;
+  border-bottom: 1px solid var(--c-line);
+  padding: 6px 10px 6px 0;
+}
+
+.intake-tbl td { vertical-align: top; }
+
+.intake-none { color: var(--c-muted); }
+
+/* --- the state word ------------------------------------------------------- */
+
+/* COMPACT TEXTUAL INDICATORS, his rule 36. A pill per row in four colours
+   would make the table a traffic light, which is the thing it replaces. */
+.intake-state {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  background: var(--c-head);
+  color: var(--c-muted);
+}
+
+.intake-state--ok { background: var(--c-green-bg); color: var(--c-green); }
+.intake-state--warn { background: var(--c-amber-bg); color: var(--c-amber); }
+.intake-state--bad { background: var(--c-red-bg); color: var(--c-red); }
+
+.intake-asked {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--c-muted);
+  line-height: 1.35;
+}
+
+/* --- the action ----------------------------------------------------------- */
+
+.intake-act { white-space: nowrap; }
+
+/* Its own button rather than .cbtn, which is scoped to .console and therefore
+   invisible on the customer page. */
+.intake .cbtn {
+  display: inline-block;
+  padding: 3px 9px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 4px;
+  background: var(--c-row);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.intake .cbtn:hover { background: var(--c-head); text-decoration: none; }
+.intake .cbtn.primary { background: #111827; border-color: #111827; color: #fff; }
+.intake .cbtn.primary:hover { background: #000; }
+
+/* --- the composer --------------------------------------------------------- */
+
+/* Hidden until its own link is followed. display:none on a <tr> and back to
+   table-row is the whole mechanism. */
+.intake-ask { display: none; }
+.intake-ask:target { display: table-row; }
+
+.intake-ask > td { background: var(--c-row-alt) !important; padding: 10px !important; }
+
+.intake-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin: 0 0 5px;
+}
+
+.intake-text {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 7px 9px;
+  border: 1px solid var(--c-line-strong);
+  border-radius: 4px;
+  background: var(--c-row);
+  color: var(--c-ink);
+  box-shadow: none;
+}
+
+.intake-send {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.intake-cost {
+  color: var(--c-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* A phone. The table scrolls sideways in .ops-table-wrap, which is right for
+   four short columns and wrong for a textarea - so the composer row stops
+   being part of that width and the value column is allowed to wrap. */
+@media (max-width: 560px) {
+  .intake-tbl th[scope="row"] { white-space: normal; }
+  .intake-act { white-space: normal; }
+}

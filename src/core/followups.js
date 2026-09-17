@@ -8,7 +8,7 @@ const issues = require('./issues');
 const notify = require('./notify');
 const aiPause = require('./ai-pause');
 const settings = require('./settings');
-const nudges = require('./nudges');
+const intake = require('./intake');
 const reactions = require('./reactions');
 
 // ---------------------------------------------------------------------------
@@ -50,11 +50,11 @@ const reactions = require('./reactions');
 // answered it, so reactions are looked straight past when deciding what the
 // last thing said was. See src/core/reactions.js.
 //
-// WHY THE AI WRITES THIS ONE, when the nudge buttons in src/core/nudges.js are
-// fixed sentences. Those ask for one of five known-missing things and can be
-// written out in advance. This has to refer to a conversation that could have
-// been about anything, so a fixed sentence would be "just following up!" - which
-// is worse than nothing and reads like a machine. The model gets the thread and
+// WHY THE AI WRITES THIS ONE, when the intake table's questions in
+// src/core/intake.js are fixed sentences. Those ask for one named field and can
+// be written out in advance. This has to refer to a conversation that could
+// have been about anything, so a fixed sentence would be "just following up!" -
+// which is worse than nothing and reads like a machine. The model gets the thread and
 // one job: write the shortest possible nudge back to your own last question.
 //
 // It is still not trusted blindly. The reply goes through notify like every
@@ -178,15 +178,29 @@ function assess(thread, { midSetup = false } = {}) {
 
 // MID-SETUP: they have started and not finished.
 //
-// Derived from the same gaps the nudge buttons show - no name, no address, no
-// wash preferences, no card - because those are the things bookPickup() will
-// refuse without, and a customer stuck on one of them is exactly who the early
-// nudge is for. A customer with all of it and nothing booked is not stuck, they
-// are deciding, and gets the day-later chase only.
+// Derived from the same rows the intake table shows - no name, no address, no
+// card - because those are the things standing between this person and a
+// pickup, and a customer stuck on one of them is exactly who the early nudge is
+// for. A customer with all of it and nothing booked is not stuck, they are
+// deciding, and gets the day-later chase only.
+//
+// WASH PREFERENCES USED TO BE IN THIS LIST AND ARE NOT ANY MORE.
+//
+// They were, because bookPickup() refused a first booking without them. It
+// stopped refusing on 16 September - "wash prefs after the pickup is booked,
+// not before" - and this was the last place still treating an unanswered wash
+// question as somebody stuck half way through signing up. They are not: a
+// customer with a name, an address and a card is ready to book, and cold water
+// with softener is a perfectly good default to book them on.
+//
+// intake.blocking() draws the distinction the old `blocks` flag could not. A
+// missing pickup date is not in it either, and must not be: "nothing booked" is
+// the resting state of everybody between orders, and counting it would pull
+// every settled customer into the early nudge.
 async function midSetupFor(customer) {
   if (!customer || !customer.id) return false;
-  const gaps = await nudges.gapsFor(customer).catch(() => []);
-  return gaps.some((g) => g.blocks);
+  const fields = await intake.fieldsFor(customer, { asked: false }).catch(() => []);
+  return intake.blocking(fields).length > 0;
 }
 
 // Every thread in the recent window, oldest message first, keyed by phone.
