@@ -934,8 +934,19 @@ stock.** A sticker code like `7MQ5Y2` identifies a bag perfectly and is useless
 shouted across a laundromat counter; "four, six and ten" is what a driver and a
 counter assistant can actually say. Neil owns a real bag of clips, so the pool
 is finite (`config.routing.vanClips`) and the system hands out the **lowest
-free** one rather than inventing clip 51 that nobody owns. Running out is a real
+free** one rather than inventing a clip nobody owns. Running out is a real
 thing on a heavy day and the run says so.
+
+**THE POOL IS TEN, NOT FIFTY.** Neil, 17 September: *"Only clips 1 through 10
+are in the van pool. Do not hand out 11-50."* Fifty was the size of the bag he
+bought; ten is how many are in the van. A number handed out that the driver
+cannot physically find is worse than running out - he is sent looking for clip
+23 and there is no clip 23.
+
+**Clips above ten have been issued and are left alone** - sixteen is the highest
+on record. A bag that travelled under clip 16 travelled under clip 16, and a
+record edited to fit today's rules is not a record. `assignClip()` counts 1 to
+the pool and stops, so they simply stop being offered.
 
 **Clips are scoped to the driver** — each van has its own set, so Dan's clip 4
 and somebody else's clip 4 never collide. The owner comes from `orders.driver_id`
@@ -985,6 +996,45 @@ look impossible.
 bags across two would mean their wash finishes at different times, so they
 either wait for the slowest bag or get delivered twice. The routing decision is
 per order; the clip is per bag.
+
+**THE PICKUP LOCATION IS ITS OWN SCREEN, AND IT IS WHAT TEXTS THEM.** Neil, 17
+September: *"On the driver's first stop, scanning the pickup location is its own
+screen. After that scan, or after I tap I'm here after directions, send the
+customer the 'we're here for your laundry' text. One text. Not on every bag."*
+
+**WHERE THAT TEXT USED TO COME FROM.** `collect()` sent it as part of moving the
+order to `IN_PROCESS`, and the thing that causes that move is binding the FIRST
+BAG TAG - so "we're here for your laundry" arrived after the driver had walked
+up, found the bags and scanned one. On #2070 that was 11:46:19, a minute after
+"we're on our way", with him already at the door. It only ever went once,
+because the state machine refuses a second move to `IN_PROCESS`. What was wrong
+was WHEN.
+
+**The first step of a pickup carries the spot, the photo of it and the way in,
+and nothing else** - one button, no text box to read past. They used to hang off
+the first bag's step beside a scan field, which is one screen answering two
+questions, and the one with a box on it wins.
+
+**`fulfilment.announceArrival()` IS THE ONLY THING THAT SENDS IT.** The location
+step and the travel card's I'm here both post to `/ops/run/here`, so both of
+Neil's triggers are one code path rather than two that have to agree. `collect()`
+still calls it as a backstop, because the order page and `POST /ops/collected`
+reach that function directly and a customer whose driver used one of those must
+still be told.
+
+**Once is enforced by `orders.here_texted_at`** (migration 0101), read back fresh
+and written with `.is('here_texted_at', null)` so two taps a second apart cannot
+both send. **Stamped after the attempt, not instead of it**: an opted-out number
+is refused at `notify.sendAndLog()`, and that must not strand a driver on a
+screen he cannot get past.
+
+**The step is done by `here_texted_at` and never by `arrived_at`** - the obvious
+flag and the wrong one. Recording a weight clears `arrived_at`, so the location
+screen would reappear under him half way through the bags.
+
+**Only on a doorstep pickup.** The same button is pressed at a laundromat and on
+a delivery, and neither is somebody waiting for a van outside their house.
+`arrive()` reads the order's own status.
 
 **A pickup goes: how many bags, then one bag at a time.** The driver is at a
 door with his hands full, so the run asks for the count first and then walks
@@ -4205,6 +4255,38 @@ happening reads as the board losing one.
 **The payment chase below still waits for `DELIVERED`** and is therefore
 unreachable for a held order. That is correct rather than an oversight: a chase
 is for laundry already returned, and a held order has not been.
+
+**A PAID ORDER THAT IS ROLLED BACK IS NEVER CHARGED AGAIN AT A DOOR.** Neil, 17
+September, having rolled #2070 back by hand so the round could be driven again.
+
+**THE GUARD EXISTED AND WAS IN THE WRONG PLACE.** `chargeOrder()` has refused a
+`PAID` order since the beginning, and the ordinary door path calls it - so the
+only reason this was ever safe is that the door usually ends up there. **The
+HOLD path does not**: it captures the authorization and charges the balance
+itself, and `chargeOrder()` never sees the order. That is the path #2070 took,
+$25.00 off the hold and $8.00 on the card.
+
+`chargeAtTheDoor()` refuses a `PAID` order up front now, beside the `WAIVED`
+guard it already had and **before the hold is read**.
+
+**A SPENT AUTHORIZATION IS NOT A HOLD.** `showUpHold()` answered off
+`authorization_intent_id` alone, and `captured_at` is stamped when the $25 is
+taken - so an order that has been through a door still looked capturable. This
+file already makes the same argument about a hold Stripe has expired.
+
+**And `loadVan()` sends no money text when the order was already paid.** The
+customer was told the weight and the total when the van first came, both are
+unchanged, and that text names the card and says it has been charged.
+
+**What makes this reachable is the rollback itself.** `loadVan()`'s own guard is
+`if (order.van_confirmed_at) return already`, which is exactly the column a
+rollback has to clear to put the stop back on the route.
+
+**WHAT A ROLLBACK STILL DOES NOT SETTLE:** if the bags are re-weighed to a
+different figure, `loadVan()` writes the new `price_cents` against the old
+`amount_paid_cents`, which leaves a balance and therefore a payment hold. Same
+weight, no change. It is a decision for whoever rolls one back, not something
+the code should guess at.
 
 **The idempotency key must include the attempt number.** Stripe caches the
 result of a key — including a decline — so a key of just order + amount would
