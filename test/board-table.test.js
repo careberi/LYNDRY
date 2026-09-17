@@ -171,8 +171,13 @@ test('and the money columns still never reach a driver', () => {
 test('THE CUSTOMER PAGE LISTS ORDERS THE SAME WAY', () => {
   // It ended in a generic "Open" link and carried one Pickup column, so the
   // two screens a click apart described the same order two different ways.
+  // TO THE NEXT ROUTE, NOT TO A ROUND NUMBER. This read `at + 20000`, and the
+  // handler grew past it the moment the intake table went in - so the test
+  // failed on a screen that was perfectly correct, and had it been a little
+  // shorter it would instead have passed while looking at half the handler.
+  // Every window in this file is cut to a real boundary now.
   const at = SRC.indexOf("router.get('/ops/customers/:id'");
-  const route = SRC.slice(at, at + 20000);
+  const route = SRC.slice(at, SRC.indexOf('\nrouter.', at + 10));
 
   const headings = route.indexOf("['Order', 'Pickup date', 'Pickup time', 'Status', 'Weight'");
   assert.notEqual(headings, -1, 'the order history table does not match the board');

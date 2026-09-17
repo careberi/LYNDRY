@@ -4063,6 +4063,20 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
     // nothing rendered it.
     const intakeFields = await intake.fieldsFor(person).catch(() => []);
 
+    // WHETHER THIS PAGE MAY TEXT THEM AT ALL, which is exactly one button:
+    // Send card link. Behind messages.send, because pressing it puts a message
+    // on a real phone, and absent entirely for a number that has opted out -
+    // STOP is a legal instruction, and a button that offers to text them
+    // anyway is worse than no button.
+    //
+    // IT WAS DECLARED AND THEN LOST. The old line defined this beside the gap
+    // list, and when the gaps became the intake table both went out together -
+    // leaving `canAsk` referenced in the markup below and declared nowhere,
+    // which is a ReferenceError thrown while rendering, which is a 500 on every
+    // customer page. No test caught it because nothing renders this page without
+    // a database; the grep that found it is in test/customer-page-scope.test.js.
+    const canAsk = roles.can(req.opsUser, 'messages.send') && person.status !== 'UNSUBSCRIBED';
+
     // WHAT THEY HOLD, AND WHAT YOU COULD GIVE THEM.
     //
     // Giving money away is service.manage, the same permission that closes the
