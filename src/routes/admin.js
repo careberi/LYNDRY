@@ -3797,6 +3797,27 @@ router.post('/ops/customers/new', guard, may('customers.view'), async (req, res,
 // it ever starts deciding anything itself, that is the drift CLAUDE.md warns
 // about between the front doors.
 // ---------------------------------------------------------------------------
+// A BACKTICK IN A COMMENT IN HERE ENDS THE PAGE. It happened, on 16
+// September, and it cost this form entirely.
+//
+// Everything below the return is one template literal, so an HTML comment
+// inside it is not a comment as far as JavaScript is concerned - it is string
+// content, and a ` in it closes the string. What was written was:
+//
+//     <!-- ... when nothing is set, so `|| 'not set'` could never fire ... -->
+//
+// which JavaScript read as `the page so far` || 'not set' `the rest of it`.
+// The left side is a non-empty string, so it is truthy, so the whole
+// expression short-circuited and returned it - and the tagged template on the
+// right was never evaluated, so it never threw either.
+//
+// The function returned 605 characters instead of 2596. The page answered 200,
+// drew its nav, its heading and half of one card, and stopped: no date field,
+// no time field, no submit button, no </form>. Nothing logged and every test
+// passed, because every string they looked for was still in the source.
+//
+// test/order-page-renders.test.js runs the route and reads what comes back
+// over the wire, and refuses a backtick inside any HTML comment in src/.
 function phoneOrderForm({ customer, values = {}, problem = null }) {
   const v = (k) => escapeHtml(String(values[k] || ''));
   const prefs = customer.preferences || {};
@@ -3818,10 +3839,14 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
         }${customer.city ? `, ${escapeHtml(customer.city)}` : ''}<br>
         Bag goes: ${spot ? escapeHtml(spot) : '<strong>not recorded</strong>'}<br>
         <!-- CHOSEN OR DEFAULTED, SAID OUT LOUD. describeSaved() falls back to
-             cold and softener when nothing is set, so `|| 'not set'` could never
-             fire and this panel read a default back as though the customer had
-             picked it. That is the distinction the intake table exists to draw,
-             and it belongs here too. -->
+             cold and softener when nothing is set, so the old fallback here
+             could never fire and this panel read a default back as though the
+             customer had picked it. That is the distinction the intake table
+             exists to draw, and it belongs here too.
+
+             NO BACKTICKS IN THIS COMMENT, AND THAT IS NOT A STYLE NOTE. It is
+             inside a template literal, so a backtick here ENDS THE STRING. See
+             the note above phoneOrderForm(). -->
         Wash: ${escapeHtml(wash.describeSaved(prefs))}${
           booking.hasPreferences(customer) ? '' : ' <strong>(default, they have not said)</strong>'
         }<br>
