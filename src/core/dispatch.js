@@ -204,6 +204,58 @@ function collectable(order) {
   return !billing.needsCardOnFile(order.customers || {});
 }
 
+// ---------------------------------------------------------------------------
+// WHICH ROUTE IS BEING DRIVEN, AND IT IS NOT SIMPLY THE CLOCK.
+//
+// Neil: "a time slot appears until it's fully completed". A route with two
+// uncollected bags in it at half past two is still the route he is on - the
+// clock moving does not collect anybody's laundry. So the active route is the
+// earliest one that has STARTED and still has work in it, and only when
+// everything behind is clear does it follow the clock.
+//
+// A WINDOW IS A PROMISE, NOT A SORTING HINT. Neil's decision lock, 16
+// September: "Customer pickup windows are constraints. Route optimization
+// happens inside those constraints. The system should never optimize a route
+// as though all of the day's pickups are available at the same time."
+//
+// THERE USED TO BE A THIRD FALLBACK AND IT IS WHAT WENT WRONG. After the two
+// rules below came `routes.find((r) => !r.complete)` - look FORWARD to the next
+// route with any work in it. On 15 September order #2062 was promised 2 to 4pm;
+// the driver finished the 8 to 10am round at 08:54, the 10 to 12 and 12 to 2
+// routes were empty, and the only route left with anything in it was hers. She
+// was collected at 09:46, four hours and fourteen minutes early.
+//
+// THE OLD REASONING IS KEPT HERE BECAUSE IT IS NOT WRONG, ONLY OUTWEIGHED:
+// landing on an empty clock route told a driver "nothing on today" at half past
+// twelve when the day's two pickups were at 2pm. That is a real failure. It is
+// a smaller one than turning up at somebody's door four hours early, and it has
+// a better answer than driving there - the route cards and `laterToday` both
+// already say what is coming, so he is told about the 2pm work without being
+// sent to it.
+//
+// A ROUTE THAT HAS NOT BEGUN IS NEVER ACTIVE. That is the whole rule.
+// ---------------------------------------------------------------------------
+function activeRoute(routes, { start, fromTime = null } = {}) {
+  if (!routes || !routes.length) return null;
+
+  // The route the clock is in. Falling back to the last one is for after the
+  // day closes: at 6:30pm there is no window containing now, and the 4 to 6pm
+  // route is the honest answer - it has begun, so anything outstanding in it is
+  // caught by the rule below anyway.
+  const clockRound =
+    routes.find((r) => start >= r.start && start < r.end) || routes[routes.length - 1];
+
+  // AN EXPLICIT PICK WINS, and always has. The routing board asks for a route
+  // by name, and answering a direct question with "actually you are on this
+  // other one" would make the picker a suggestion. Somebody reading the 4pm
+  // round over breakfast is reading, not driving.
+  if (fromTime) return clockRound;
+
+  // Catching up beats the clock: a route that started and still has bags in it
+  // is somebody waiting right now.
+  return routes.find((r) => r.begun && !r.complete) || clockRound;
+}
+
 // CAN THIS PICKUP ACTUALLY BE DRIVEN TODAY - BOTH RULES, ONE OWNER.
 //
 // There are two reasons a booked pickup is not a stop, and they are asked at
@@ -1245,31 +1297,10 @@ async function board(dateIso, fromTime, driverId = null) {
     };
   });
 
-  // WHICH ROUTE IS BEING DRIVEN, AND IT IS NOT SIMPLY THE CLOCK.
-  //
-  // Neil: "a time slot appears until it's fully completed". A route with two
-  // uncollected bags in it at half past two is still the route he is on - the
-  // clock moving does not collect anybody's laundry. So the active route is the
-  // earliest one that has started and still has work in it, and only when
-  // everything behind is clear does it follow the clock forward.
-  //
-  // An explicit route wins over both. The routing board asks for one by name,
-  // and answering a direct question with "actually you are on this other one"
-  // would make the picker a suggestion.
-  const clockRound =
-    routes.find((r) => start >= r.start && start < r.end) || routes[routes.length - 1];
-
-  const activeRound = fromTime
-    ? clockRound
-    : // Catching up: a route that started and still has bags in it. This wins
-      // over everything, because that is somebody waiting right now.
-      routes.find((r) => r.begun && !r.complete) ||
-      // Nothing outstanding behind him, so look FORWARD to the next route that
-      // actually has work. Landing on the clock's route when it is empty and
-      // the day's two pickups are at 2pm told a driver "nothing on today" at
-      // half past twelve, which was simply untrue.
-      routes.find((r) => !r.complete) ||
-      clockRound;
+  // WHICH ROUTE IS BEING DRIVEN. Extracted so it can be tested without a
+  // database - it is the rule that decides where a van goes, and it was wrong
+  // for two weeks without anything failing.
+  const activeRound = activeRoute(routes, { start, fromTime });
 
   for (const r of routes) {
     r.state = r === activeRound ? 'now' : r.begun ? 'past' : 'ahead';
@@ -1983,6 +2014,10 @@ module.exports = {
   // rule. Two copies of this predicate is exactly how the board and the
   // button came to disagree.
   collectRefusal,
+  // Exported for the same reason, one rule along: which route a van is on
+  // is the decision that sent somebody four hours early, and it had no test
+  // of its own because it could only be reached through a database.
+  activeRoute,
   chooseLaundromat,
   dropoffGroups,
   orderDropStops,
