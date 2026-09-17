@@ -51,6 +51,36 @@ async function alertRecipients(permission = 'issues.manage') {
 // check: three angry texts in three minutes is one problem, not three, and
 // creating three flags means three identical replies to the customer.
 async function raise({ customer, order, reason, customerSaid, aiHold = false }) {
+  // AN ESCALATION SWITCHES LYN OFF, AND ONLY A PERSON SWITCHES HER BACK ON.
+  //
+  // Neil's rule, 16 September: "If the AI assistant is turned on, then she can
+  // reply right away when the customer responds. But if the AI assistant is
+  // turned off, she should not reply at all." One state decides it, so there is
+  // one thing to look at and one thing to flip.
+  //
+  // THIS COLLAPSES A DISTINCTION THIS FILE USED TO DEFEND. The note on the
+  // pause says the hold and the pause are different things - the hold being the
+  // AI admitting it ran out of road and lifting ITSELF once the customer came
+  // back. That self-lifting is exactly what Neil has ruled out: a manager who
+  // sorts the problem out and deliberately leaves Lyn off must keep her off.
+  //
+  // FIRST, BEFORE THE BRANCHING, so it covers both ways in - a brand new
+  // holding issue, and an existing one that becomes a hold because the AI was
+  // coping and then stopped. Doing it after the insert covered only the first,
+  // and the second is a thread already going wrong.
+  //
+  // HERE RATHER THAN AT EACH CALLER, because there are four of them: the
+  // handoff, an unreachable AI, a failed action and the repeat detector.
+  //
+  // Lazy require - ai-pause.js reaches this file, so a top-level one would
+  // close the loop. Best effort: an issue must still be raised if the pause
+  // write fails, because the alternative is nobody being told at all.
+  if (aiHold && customer && customer.phone) {
+    await require('./ai-pause')
+      .pause(customer.phone, null, 'Lyn handed this to a person.')
+      .catch((err) => console.error(`Raised an issue but could not pause Lyn: ${err.message}`));
+  }
+
   const { data: existing, error: findError } = await db
     .from('issues')
     .select('*')
@@ -434,36 +464,18 @@ async function holdFor(customerId) {
   return (data || [])[0] || null;
 }
 
-// MAY THE AI SAY ANYTHING ON THIS THREAD?
+// aiMustStayQuiet() WAS HERE AND IS GONE TOO, 16 September.
 //
-// One owner for the whole question, because it used to be three calls inlined
-// in the webhook and the middle one was wrong. Extracted 16 September so it can
-// be replayed against a real conversation in a test rather than only reasoned
-// about.
+// It asked two questions - is there a hold, and has a person written since -
+// and answered whether the AI could speak. Neil replaced both with one:
+// "If the AI assistant is turned on, then she can reply right away when the
+// customer responds. But if the AI assistant is turned off, she should not
+// reply at all."
 //
-// It answers with BOTH halves of the rule:
-//
-//   quiet: true    a person has taken this over and has not written yet. Say
-//                  nothing at all - not a holding line, not an apology
-//   quiet: false   either there is no hold, or a person has written since it
-//                  went on. The caller lifts it when the customer comes back
-//
-// FAILS QUIET. If the lookup itself breaks we stay silent, because talking over
-// a person handling a complaint is worse than a late reply - and a failure here
-// means the database is down, in which case the reply was going nowhere anyway.
-// This is the same direction aiPause.isPaused() fails in, for the same reason.
-async function aiMustStayQuiet(customerId) {
-  try {
-    const hold = await holdFor(customerId);
-    if (!hold) return { quiet: false, hold: null };
-
-    const written = await personHasWritten(customerId, hold.created_at);
-    return { quiet: !written, hold };
-  } catch (err) {
-    console.error(`Could not read the AI hold for ${customerId}: ${err.message}`);
-    return { quiet: true, hold: null, unknown: true };
-  }
-}
+// So the gate is aiPause.isPaused() and nothing else, raise() pauses the thread
+// on any holding issue, and no code anywhere hands the thread back to Lyn - a
+// person does that with the toggle. personHasWritten() survives because the
+// re-page sweep still needs it.
 
 // personHasReplied() WAS HERE AND IS GONE. DO NOT PUT IT BACK.
 //
@@ -493,7 +505,6 @@ module.exports = {
   listForDay,
   holdFor,
   personHasWritten,
-  aiMustStayQuiet,
   repageStale,
   REPAGE_AFTER_MINUTES,
 };

@@ -1,34 +1,27 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// AFTER A HANDOFF, THE AI SAYS NOTHING.
+// AFTER A HANDOFF, LYN SAYS NOTHING UNTIL A PERSON SWITCHES HER BACK ON.
 //
-// Neil's rule, 16 September, off one real conversation. Manpreet Singh, 201
-// 954 5473, 09:54 to 12:17 on 16 September:
+// Neil's rule, 16 September, given as the answer to "when may she speak again":
 //
-//   09:59:10  handoff_to_human fires. An issue is raised.
-//   09:59:11  "I've passed it to a manager... they'll come back to you shortly."
-//   09:59:40  ...and then twenty more AI messages, including an apology for not
-//             understanding, the wash question, "when would you like it picked
-//             up?" three times, a "Welcome back" nobody asked for, and a
-//             follow-up nudge two hours later.
-//   10:03:04  A person rang him. No answer. The machine had been talking over
-//             that call for four minutes.
+//   "If the AI assistant is turned on, then she can reply right away when the
+//    customer responds. But if the AI assistant is turned off, then she should
+//    not reply at all."
 //
-// TWO FAULTS, STACKED, AND BOTH ARE PINNED BELOW.
+// ONE STATE. This replaces a two-state arrangement that was live for one day
+// and was wrong in a specific way: an issue raised with ai_hold silenced the
+// AI, and then LIFTED ITSELF as soon as a person had written and the customer
+// had come back. Under that rule a manager who sorted a problem out and
+// deliberately left Lyn off had her switched straight back on by the customer's
+// next message, over the top of the person who owned the thread.
 //
-//   1. handoffToHuman() raised the issue WITHOUT aiHold, which defaults to
-//      false - so holdFor() found nothing and the gate never engaged at all.
-//      The issue row for Manpreet has ai_hold = false on it.
+// So: raising a holding issue PAUSES the thread, the pause is the only gate,
+// and nothing in the codebase un-pauses it. A person does that with the toggle.
 //
-//   2. The gate, when it did engage, released itself. It asked
-//      personHasReplied(), which counted ANY outbound since the hold - and the
-//      first outbound after a handoff is always the AI's own "a manager will
-//      come back to you shortly". So the handoff line lifted the hold it had
-//      just created, on the customer's very next message.
-//
-// The replay at the bottom drives the REAL gate over the REAL sequence of that
-// thread and asserts zero further AI texts until a person writes.
+// The conversation this all came from is Manpreet Singh, 16 September: handoff
+// at 09:59:10, "they'll come back to you shortly" at 09:59:11, and then twenty
+// more AI messages over the top of a manager who was ringing him.
 //
 // Nothing here touches the database or the network: db is stubbed.
 // ---------------------------------------------------------------------------
@@ -48,17 +41,15 @@ const withoutComments = (src) =>
     .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
     .join('\n');
 
-// --- a stub database that answers the two queries the gate makes ------------
-//
-// Deliberately NOT a re-implementation of the gate. It stands in for Postgres
-// and nothing else; every decision below is made by the real issues.js.
-function stubDb({ issues = [], messages = [] }) {
-  const build = (rows) => {
-    const state = { rows: [...rows], limit: null };
+const PHONE = '+12019545473';
+
+// --- a stub database, standing in for Postgres and nothing else ------------
+
+function stubDb(rows) {
+  const build = (table) => {
+    const state = { rows: [...(rows[table] || [])], limit: null };
     const api = {
-      select() {
-        return api;
-      },
+      select: () => api,
       eq(col, value) {
         state.rows = state.rows.filter((r) => r[col] === value);
         return api;
@@ -71,287 +62,250 @@ function stubDb({ issues = [], messages = [] }) {
         state.rows = state.rows.filter((r) => String(r[col]) > String(value));
         return api;
       },
-      order() {
-        return api;
-      },
+      order: () => api,
       limit(n) {
         state.limit = n;
         return api;
       },
+      maybeSingle: () => Promise.resolve({ data: state.rows[0] || null, error: null }),
+      single: () => Promise.resolve({ data: state.rows[0] || null, error: null }),
       then(resolve) {
-        const rows = state.limit == null ? state.rows : state.rows.slice(0, state.limit);
-        return Promise.resolve({ data: rows, error: null }).then(resolve);
+        const out = state.limit == null ? state.rows : state.rows.slice(0, state.limit);
+        return Promise.resolve({ data: out, error: null }).then(resolve);
       },
     };
     return api;
   };
-
-  return {
-    from(table) {
-      if (table === 'issues') return build(issues);
-      if (table === 'messages') return build(messages);
-      return build([]);
-    },
-  };
+  return { from: (table) => build(table) };
 }
 
-// Load a fresh copy of issues.js against a stub database.
-function issuesWith(db) {
+function pauseModuleWith(db) {
   const dbPath = require.resolve(path.join(__dirname, '..', 'src', 'db.js'));
-  const issuesPath = require.resolve(path.join(__dirname, '..', 'src', 'core', 'issues.js'));
-
+  const target = require.resolve(path.join(__dirname, '..', 'src', 'core', 'ai-pause.js'));
   const savedDb = require.cache[dbPath];
-  const savedIssues = require.cache[issuesPath];
+  const savedTarget = require.cache[target];
 
   require.cache[dbPath] = new Module(dbPath, null);
   require.cache[dbPath].filename = dbPath;
   require.cache[dbPath].loaded = true;
   require.cache[dbPath].exports = db;
-  delete require.cache[issuesPath];
+  delete require.cache[target];
 
-  const mod = require(issuesPath);
-
+  const mod = require(target);
   return {
     mod,
     restore() {
-      delete require.cache[issuesPath];
+      delete require.cache[target];
       if (savedDb) require.cache[dbPath] = savedDb;
       else delete require.cache[dbPath];
-      if (savedIssues) require.cache[issuesPath] = savedIssues;
+      if (savedTarget) require.cache[target] = savedTarget;
     },
   };
 }
 
-const CUSTOMER = '97fe8b70-8809-4bbb-9682-e4b494ad8f30';
-const HANDOFF_AT = '2026-09-16T13:59:10.179Z';
-
-const held = [{ id: 'i1', customer_id: CUSTOMER, status: 'OPEN', ai_hold: true, created_at: HANDOFF_AT, reason: 'stuck' }];
-
-// Manpreet's thread from the handoff onwards, outbound only, in order. Every
-// one of these is a message the AI actually sent after promising a manager.
-const AFTER_HANDOFF = [
-  ["2026-09-16T13:59:11.964Z", 'AI', "I'm sorry about this. I've passed it to a manager..."],
-  ["2026-09-16T13:59:40.248Z", 'AI', 'Thanks for bearing with us, Manpreet...'],
-  ["2026-09-16T14:00:09.625Z", 'AI', "Sorry, I'm not quite sure what you mean by that..."],
-  ["2026-09-16T14:00:41.763Z", 'AI', "We're out from 8 in the morning right through to 6..."],
-  ["2026-09-16T14:01:46.491Z", 'AI', 'Understood, nothing today... How would you like your laundry washed?'],
-  ["2026-09-16T14:09:16.254Z", null, "Welcome back. Say when you'd like a pickup and I'll book it."],
-  ["2026-09-16T16:14:52.876Z", 'FOLLOW_UP', 'Just checking back in, no rush at all...'],
-];
-
-const asMessage = ([at, kind, body]) => ({
-  id: at,
-  customer_id: CUSTOMER,
-  direction: 'OUTBOUND',
-  sent_by: null, // none of them was typed by a person - that is the whole point
-  kind,
-  body,
-  created_at: at,
-});
-
 // --- the replay -------------------------------------------------------------
 
-test('REPLAY: after the handoff, the AI is silent at every single step', async () => {
-  const log = [];
+// Every outbound the AI actually sent after promising Manpreet a manager. Under
+// the new rule NONE of them is reachable, because the thread is paused and no
+// message of any kind can lift it.
+const AFTER_HANDOFF = [
+  'I am sorry about this. I have passed it to a manager...',
+  'Thanks for bearing with us, Manpreet...',
+  "Sorry, I'm not quite sure what you mean by that...",
+  "We're out from 8 in the morning right through to 6...",
+  'Understood, nothing today... How would you like your laundry washed?',
+  "Welcome back. Say when you'd like a pickup and I'll book it.",
+  'Just checking back in, no rush at all...',
+];
 
-  // Walk the thread forward one outbound at a time, asking the real gate at
-  // each point whether the AI may speak. Every answer must be "no".
+test('REPLAY: once escalation pauses the thread, Lyn is silent at every step', async () => {
+  const spoke = [];
+
+  // Walk the thread forward. At each point the gate must still say paused, no
+  // matter how many messages have gone since.
   for (let i = 0; i <= AFTER_HANDOFF.length; i += 1) {
-    const soFar = AFTER_HANDOFF.slice(0, i).map(asMessage);
-    const { mod, restore } = issuesWith(stubDb({ issues: held, messages: soFar }));
+    const messages = AFTER_HANDOFF.slice(0, i).map((body, n) => ({
+      phone: PHONE,
+      direction: 'OUTBOUND',
+      body,
+      sent_by: null,
+      created_at: `2026-09-16T14:0${n}:00.000Z`,
+    }));
+
+    const { mod, restore } = pauseModuleWith(
+      stubDb({ ai_pauses: [{ phone: PHONE, paused: true }], messages })
+    );
 
     try {
-      const { quiet } = await mod.aiMustStayQuiet(CUSTOMER);
-      log.push({ after: i, quiet });
+      if (!(await mod.isPaused(PHONE))) spoke.push(i);
     } finally {
       restore();
     }
   }
 
-  const spoke = log.filter((entry) => !entry.quiet);
+  assert.deepEqual(spoke, [], `Lyn was allowed to speak after ${spoke} messages`);
+});
 
-  assert.deepEqual(
-    spoke,
-    [],
-    `the AI was allowed to speak after the handoff at these points: ${JSON.stringify(spoke)}`
+test("a person's own message does not switch her back on", async () => {
+  // The old rule lifted here. Under Neil's rule a manager writing changes
+  // nothing: they are handling it, which is the whole point of the pause.
+  const { mod, restore } = pauseModuleWith(
+    stubDb({
+      ai_pauses: [{ phone: PHONE, paused: true }],
+      messages: [
+        {
+          phone: PHONE,
+          direction: 'OUTBOUND',
+          body: 'Hi, I am Neil. How can I help?',
+          sent_by: 'aaf2eae9-f0c7-4e11-bf77-80901526c4f9',
+          created_at: '2026-09-16T17:00:00.000Z',
+        },
+      ],
+    })
   );
-  assert.equal(log.length, AFTER_HANDOFF.length + 1);
-});
-
-test("REPLAY: the AI's own handoff line does not release the hold", async () => {
-  // Exactly the bug. One outbound since the hold, and it is the AI's own.
-  const justTheHandoffLine = [asMessage(AFTER_HANDOFF[0])];
-  const { mod, restore } = issuesWith(stubDb({ issues: held, messages: justTheHandoffLine }));
 
   try {
-    const { quiet } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, true, "the AI's own message lifted its own hold");
+    assert.equal(await mod.isPaused(PHONE), true);
   } finally {
     restore();
   }
 });
 
-test('REPLAY: a follow-up nudge two hours later is still refused', async () => {
-  const everything = AFTER_HANDOFF.map(asMessage);
-  const { mod, restore } = issuesWith(stubDb({ issues: held, messages: everything }));
+test('the toggle on means she answers the next message', async () => {
+  const { mod, restore } = pauseModuleWith(
+    stubDb({ ai_pauses: [{ phone: PHONE, paused: false }], messages: [] })
+  );
 
   try {
-    const { quiet } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, true, 'a chase went out on a thread a person owns');
+    assert.equal(await mod.isPaused(PHONE), false);
   } finally {
     restore();
   }
 });
 
-test('a message a PERSON typed lifts it, and only that', async () => {
-  const withAPerson = [
-    ...AFTER_HANDOFF.map(asMessage),
-    {
-      id: 'human',
-      customer_id: CUSTOMER,
-      direction: 'OUTBOUND',
-      sent_by: 'aaf2eae9-f0c7-4e11-bf77-80901526c4f9',
-      kind: 'PERSON',
-      body: 'Hi Manpreet, this is Neil - sorry about the confusion.',
-      created_at: '2026-09-16T17:00:00.000Z',
-    },
-  ];
-
-  const { mod, restore } = issuesWith(stubDb({ issues: held, messages: withAPerson }));
+test('a number with no row at all is not paused', async () => {
+  const { mod, restore } = pauseModuleWith(stubDb({ ai_pauses: [], messages: [] }));
 
   try {
-    const { quiet, hold } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, false, 'a person wrote and the AI is still muted');
-    assert.ok(hold, 'the caller needs the hold in order to resolve it');
+    assert.equal(await mod.isPaused(PHONE), false, 'a brand new number must not be silenced');
   } finally {
     restore();
   }
 });
 
-test('a person who wrote BEFORE the handoff does not count', async () => {
-  const earlier = [
-    {
-      id: 'old',
-      customer_id: CUSTOMER,
-      direction: 'OUTBOUND',
-      sent_by: 'aaf2eae9-f0c7-4e11-bf77-80901526c4f9',
-      kind: 'PERSON',
-      body: 'Morning!',
-      created_at: '2026-09-16T13:00:00.000Z',
-    },
-    ...AFTER_HANDOFF.map(asMessage),
-  ];
-
-  const { mod, restore } = issuesWith(stubDb({ issues: held, messages: earlier }));
-
-  try {
-    const { quiet } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, true, 'a message from before the handoff lifted it');
-  } finally {
-    restore();
-  }
-});
-
-test('with no hold at all the AI speaks normally', async () => {
-  const { mod, restore } = issuesWith(stubDb({ issues: [], messages: [] }));
-
-  try {
-    const { quiet, hold } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, false);
-    assert.equal(hold, null);
-  } finally {
-    restore();
-  }
-});
-
-test('an issue that is not a hold does not silence the AI', async () => {
-  const notAHold = [{ ...held[0], ai_hold: false }];
-  const { mod, restore } = issuesWith(stubDb({ issues: notAHold, messages: [] }));
-
-  try {
-    const { quiet } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, false, 'a plain issue is a question for a person, not a mute');
-  } finally {
-    restore();
-  }
-});
-
-test('a resolved hold does not silence the AI for ever', async () => {
-  const closed = [{ ...held[0], status: 'RESOLVED' }];
-  const { mod, restore } = issuesWith(stubDb({ issues: closed, messages: [] }));
-
-  try {
-    const { quiet } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, false);
-  } finally {
-    restore();
-  }
-});
-
-test('it fails QUIET when the lookup itself breaks', async () => {
+test('it still fails CLOSED when the lookup breaks', async () => {
   const broken = {
     from() {
       throw new Error('database is down');
     },
   };
-  const { mod, restore } = issuesWith(broken);
+  const { mod, restore } = pauseModuleWith(broken);
 
   try {
-    const { quiet, unknown } = await mod.aiMustStayQuiet(CUSTOMER);
-    assert.equal(quiet, true, 'talking over a person is worse than a late reply');
-    assert.equal(unknown, true);
+    assert.equal(await mod.isPaused(PHONE), true, 'talking over a person is worse than a late reply');
   } finally {
     restore();
   }
 });
 
-// --- the two faults, at the source -----------------------------------------
+// --- escalation is what sets it --------------------------------------------
 
-test('a handoff arms the hold', () => {
-  const src = withoutComments(SRC('core', 'actions.js'));
-  const at = src.indexOf('async function handoffToHuman');
-  assert.ok(at > 0, 'handoffToHuman is missing');
-  const fn = src.slice(at, src.indexOf('\nasync function ', at + 10));
+test('raising a holding issue pauses the thread', () => {
+  const src = withoutComments(SRC('core', 'issues.js'));
+  const fn = src.slice(src.indexOf('async function raise('), src.indexOf('async function ensurePaymentHold'));
 
-  assert.ok(fn.includes('issues.raise('), fn);
-  assert.ok(fn.includes('aiHold: true'), 'the handoff raises an issue that does not mute the AI');
+  assert.ok(fn.includes("require('./ai-pause')"), 'an escalation no longer pauses Lyn');
+  assert.ok(fn.includes('.pause('), fn);
+
+  // The WHOLE guard, not just "aiHold &&" - that substring also appears in the
+  // existing-issue branch below, so a looser check passes on the wrong line and
+  // would miss the pause being switched off entirely.
+  assert.ok(
+    fn.includes('if (aiHold && customer && customer.phone) {'),
+    'the pause is not guarded by a holding issue with a reachable phone'
+  );
 });
 
-test('personHasReplied is gone and cannot come back', () => {
-  const src = SRC('core', 'issues.js');
+// BOTH WAYS IN. A brand new holding issue, and an existing issue that becomes
+// one because the AI was coping and then stopped. The first version of this
+// paused only after the insert, which missed the second - and the second is a
+// thread that is already going wrong.
+test('it pauses before the branching, so both kinds of escalation are covered', () => {
+  const src = withoutComments(SRC('core', 'issues.js'));
+  const fn = src.slice(src.indexOf('async function raise('), src.indexOf('async function ensurePaymentHold'));
 
-  assert.ok(!/async function personHasReplied/.test(src), 'the self-releasing check is back');
-  assert.ok(!/^\s*personHasReplied,$/m.test(src), 'it is exported again');
+  const pausesAt = fn.indexOf('.pause(');
+  const branchesAt = fn.indexOf('if (existing)');
+  const insertsAt = fn.indexOf('.insert(');
 
-  // And nothing CALLS it. Comments are stripped first: sms.js explains the bug
-  // at the point it was fixed, and a sweep that reads its own warning is a test
-  // passing for the wrong reason.
-  for (const bits of [['routes', 'sms.js'], ['core', 'actions.js'], ['core', 'followups.js']]) {
+  assert.ok(pausesAt > 0 && branchesAt > 0 && insertsAt > 0, fn.slice(0, 200));
+  assert.ok(pausesAt < branchesAt, 'an existing issue that becomes a hold would not pause');
+  assert.ok(pausesAt < insertsAt, fn.slice(0, 200));
+});
+
+test('a handoff arms it', () => {
+  const src = withoutComments(SRC('core', 'actions.js'));
+  const at = src.indexOf('async function handoffToHuman');
+  const fn = src.slice(at, src.indexOf('\nasync function ', at + 10));
+
+  assert.ok(fn.includes('aiHold: true'), 'the handoff raises an issue that does not pause Lyn');
+});
+
+// --- nothing hands the thread back on its own ------------------------------
+
+test('nothing in the codebase un-pauses a thread except an ops route', () => {
+  const files = [
+    ['routes', 'sms.js'],
+    ['core', 'actions.js'],
+    ['core', 'issues.js'],
+    ['core', 'followups.js'],
+    ['core', 'brain.js'],
+    ['core', 'lyn.js'],
+  ];
+
+  for (const bits of files) {
+    const src = withoutComments(SRC(...bits));
     assert.ok(
-      !withoutComments(SRC(...bits)).includes('personHasReplied'),
-      `${bits.join('/')} still calls it`
+      !/aiPause\.resume\(|\.resume\(/.test(src),
+      `${bits.join('/')} switches Lyn back on by itself - only a person may`
     );
   }
 });
 
-test('the release test requires a person, by sent_by', () => {
-  const src = withoutComments(SRC('core', 'issues.js'));
-  const at = src.indexOf('async function personHasWritten');
-  const fn = src.slice(at, src.indexOf('\nasync function ', at + 10));
+test('both self-lifting gates are gone and cannot come back', () => {
+  const src = SRC('core', 'issues.js');
 
-  assert.ok(fn.includes("not('sent_by', 'is', null)"), fn);
-  assert.ok(fn.includes("eq('direction', 'OUTBOUND')"), fn);
+  assert.ok(!/async function personHasReplied/.test(src), 'the self-releasing check is back');
+  assert.ok(!/async function aiMustStayQuiet/.test(src), 'the two-state gate is back');
+
+  const code = withoutComments(src);
+  assert.ok(!code.includes('aiMustStayQuiet,'), 'still exported');
+
+  for (const bits of [['routes', 'sms.js'], ['core', 'actions.js']]) {
+    const caller = withoutComments(SRC(...bits));
+    assert.ok(!caller.includes('aiMustStayQuiet'), `${bits.join('/')} still calls it`);
+    assert.ok(!caller.includes('personHasReplied'), `${bits.join('/')} still calls it`);
+  }
 });
 
-test('the webhook asks the one owner, and checks quiet before the hold', () => {
+test('the webhook gates on the pause and returns before composing anything', () => {
   const src = withoutComments(SRC('routes', 'sms.js'));
-  const at = src.indexOf('issues.aiMustStayQuiet');
-  assert.ok(at > 0, 'the webhook no longer uses the shared gate');
+  const at = src.indexOf('aiPause.isPaused(from)');
+  assert.ok(at > 0, 'the webhook no longer checks the pause');
 
-  const after = src.slice(at, at + 600);
-  const quietAt = after.indexOf('if (quiet)');
-  const holdAt = after.indexOf('if (hold)');
+  // The gate has to come before the AI is asked to decide anything.
+  const decides = src.indexOf('brain.decide(');
+  assert.ok(decides > at, 'the AI is consulted before the pause is checked');
 
-  assert.ok(quietAt > 0 && holdAt > 0, after);
-  assert.ok(quietAt < holdAt, 'a failed lookup returns no hold, so quiet has to be tested first');
+  const after = src.slice(at, at + 900);
+  assert.ok(/return;/.test(after), 'it does not return early');
+});
+
+test('the re-page sweep keeps the predicate it always needed', () => {
+  const src = withoutComments(SRC('core', 'issues.js'));
+  const at = src.indexOf('async function personHasWritten');
+  assert.ok(at > 0, 'personHasWritten was removed - the re-page sweep needs it');
+
+  const fn = src.slice(at, src.indexOf('\nasync function ', at + 10));
+  assert.ok(fn.includes("not('sent_by', 'is', null)"), fn);
 });

@@ -14,6 +14,7 @@ const promocodes = require('../core/promocodes');
 const adConversions = require('../core/ad-conversions');
 const orders = require('../core/orders');
 const issues = require('../core/issues');
+const lyn = require('../core/lyn');
 const aiPause = require('../core/ai-pause');
 const pausedAlerts = require('../core/paused-alerts');
 const burst = require('../core/burst');
@@ -443,49 +444,38 @@ async function answerWithBrain(customer, text, from) {
 
   // --- IS A PERSON HANDLING THIS CONVERSATION? -----------------------------
   //
-  // NEIL'S CALL. When the AI repeats itself it has run out of road, and
-  // everything it says after that makes things worse: it says the same thing a
-  // third time, or it apologises, and either way the customer now knows
-  // something is broken. So it says NOTHING and a person writes the next
-  // message. To the customer that is a pause and then a reply from LYNDRY,
-  // which is what happens at any small business when somebody goes to check.
+  // THE ANSWER IS THE TOGGLE, AND ONLY THE TOGGLE. Neil, 16 September: "If the
+  // AI assistant is turned on, then she can reply right away when the customer
+  // responds. But if the AI assistant is turned off, she should not reply at
+  // all." That is checked above, in the aiPause gate, and there is nothing else
+  // to ask here.
   //
-  // The hold lifts on both halves and neither alone: a person has actually
-  // sent something, AND the customer has answered it - which is this message.
-  // A draft nobody sent is not a reply, and a reply nobody responded to is not
-  // a conversation that has resumed.
+  // WHAT USED TO BE HERE, AND WHY IT HAD TO GO. A second mechanism lived at
+  // this point: an issue raised with ai_hold, which lifted ITSELF as soon as a
+  // person had written and the customer had come back. Two states, and this one
+  // could hand the thread back to the AI without anybody deciding to.
   //
-  // A PERSON MEANS A PERSON: an outbound with sent_by on it, typed by somebody
-  // on the ops screen. This used to ask personHasReplied(), which counted ANY
-  // outbound since the hold - and the first outbound after a handoff is always
-  // the AI's own "a manager will come back to you shortly". So the handoff line
-  // released the hold it had just created, on the customer's very next message.
+  // Neil's case against it is a manager who sorts the problem out and
+  // deliberately leaves Lyn off: under the old rule the customer's next message
+  // switched her straight back on, over the top of the person who owned it. So
+  // an escalation now PAUSES the thread - issues.raise() does it, for every
+  // caller at once - and only somebody pressing the button starts her again.
   //
-  // The re-page sweep has always drawn the line in the right place, and its
-  // comment says why: "A status text or the AI's own reply does not count,
-  // because neither is the manager the customer was promised." Both halves ask
-  // the same question now, through the same function.
-  const { quiet, hold } = await issues.aiMustStayQuiet(customer.id);
+  // The issue row is still raised and still says why. It just no longer decides
+  // who is talking.
 
-  // QUIET IS CHECKED BEFORE THE HOLD, not inside it. aiMustStayQuiet() fails
-  // quiet, and a failure returns no hold to inspect - so testing `hold` first
-  // would walk straight past the silence it just asked for.
-  if (quiet) {
-    // Their message is already logged by the caller. Silence is the whole
-    // point - an auto-reply here would tell them a machine is still on it.
-    console.warn(`HOLD    ${from}: a person owes them the next message. Saying nothing.`);
-    return;
-  }
-
-  if (hold) {
-    // A person spoke and the customer has come back. Pick the thread up.
-    // Resolved by nobody in particular - no ops user did this, the customer
-    // coming back did. The resolution line says so.
-    await issues
-      .resolve(hold.id, null, 'The customer replied after a person did, so the AI picked it back up.')
-      .catch((err) => console.error(`Could not lift the AI hold: ${err.message}`));
-    console.log(`HOLD    ${from}: lifted, the customer replied after a person did.`);
-  }
+  // --- DOES LYN OWE THEM AN INTRODUCTION? ----------------------------------
+  //
+  // Worked out ONCE, here, before anything is composed, and put in front of
+  // whichever reply actually goes out. There are five places below that can
+  // send - a plain answer, an action's sentence, the follow-on pass, and two
+  // failure paths - and prepending at each of them is five chances to forget.
+  //
+  // Once per burst, too. Somebody who fires off three messages in fifteen
+  // seconds is one person starting a conversation and gets one introduction,
+  // which falls out of the burst window having already collapsed them.
+  const openingLine = await lyn.opener(customer);
+  const say = (to, body, id, opts) => reply(to, lyn.lead(openingLine, body), id, opts);
 
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
@@ -534,7 +524,7 @@ async function answerWithBrain(customer, text, from) {
       })
       .catch((err) => console.error(`Could not raise an issue for the AI outage: ${err.message}`));
 
-    await reply(
+    await say(
       from,
       `Sorry, I'm having trouble on my end. Someone here will pick this up shortly.`,
       customer.id,
@@ -550,7 +540,7 @@ async function answerWithBrain(customer, text, from) {
     console.log(`ASK     ${from}: ${decision.text}`);
     // THE ONE THAT EARNS A FOLLOW-UP. This is the AI needing one more detail
     // before it can act, which is exactly the message somebody goes quiet on.
-    await reply(from, decision.text, customer.id, { kind: 'AI' });
+    await say(from, decision.text, customer.id, { kind: 'AI' });
     return;
   }
 
@@ -580,7 +570,7 @@ async function answerWithBrain(customer, text, from) {
       })
       .catch((err) => console.error(`Could not raise an issue for a failed action: ${err.message}`));
 
-    await reply(from, `Sorry, I couldn't do that just now. Someone here will pick this up shortly.`, customer.id, {
+    await say(from, `Sorry, I couldn't do that just now. Someone here will pick this up shortly.`, customer.id, {
       kind: 'SYSTEM',
     });
     return;
@@ -729,7 +719,7 @@ async function answerWithBrain(customer, text, from) {
   // address - and those are exactly the ones people go quiet on. The ones that
   // are conclusions rather than questions are filtered out anyway: a booked
   // customer is never chased.
-  await reply(from, message, customer.id, { kind: 'AI' });
+  await say(from, message, customer.id, { kind: 'AI' });
 }
 
 // Whatever is already with a manager for this customer, or null.

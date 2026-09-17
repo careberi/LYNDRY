@@ -6,6 +6,7 @@ const billing = require('./billing');
 const cardChase = require('./card-chase');
 const booking = require('./booking');
 const issues = require('./issues');
+const lyn = require('./lyn');
 const recurring = require('./recurring');
 const subscription = require('./subscription');
 const settings = require('./settings');
@@ -1046,10 +1047,16 @@ async function handoffToHuman(customer, input, helpers = {}) {
     );
   }
 
-  return (
-    `I'm sorry about this. I've passed it to a manager${about} with everything ` +
-    `you've told me, and they'll come back to you shortly.`
-  );
+  // NEIL'S WORDING, 16 September, chosen over two alternatives. Short on
+  // purpose: it is said at the moment the customer is already frustrated, and a
+  // long apology reads as a machine buying time. The order number rides along
+  // when they named one, because "about order #2069" is what tells them we
+  // understood which thing is wrong.
+  //
+  // IT CAN ONLY GO OUT BECAUSE THE ESCALATION ALREADY HAPPENED. issues.raise()
+  // runs above and throws if it fails, so this sentence can never claim a
+  // manager was contacted when none was - Neil's must-not, stated plainly.
+  return `${lyn.ESCALATION}${about ? ` I'm passing on everything you've told me${about}.` : ''}`;
 }
 
 // ---------------------------------------------------------------------------
