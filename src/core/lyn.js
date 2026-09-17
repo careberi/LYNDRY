@@ -55,18 +55,29 @@ const COMEBACK = `Hi, it's ${NAME} again.`;
 // broken promise. handoff_to_human returns null now; everything else about the
 // handoff - the issue, the page, the pause - is unchanged.
 
-// WHEN A THREAD COUNTS AS A NEW ONE. There is no thread object - a phone number
-// has one continuous log - so "a genuinely new conversation later" has to be a
-// gap. Two weeks of silence is somebody coming back rather than continuing, and
-// being told once more who they are talking to costs a clause.
-const NEW_THREAD_DAYS = 14;
+// NEW_THREAD_DAYS WAS HERE AND IS GONE. DO NOT PUT IT BACK.
+//
+// It was 14, and it meant: two weeks of silence is somebody coming back rather
+// than continuing, so introduce her again. Neil, 17 September, reversing it in
+// one line - the introduction goes "only on the first AI reply to a brand-new
+// customer", and somebody returning after a fortnight is not brand new. They
+// have a whole thread behind them.
+//
+// The old reasoning is not wrong about people, it is wrong about this product:
+// a customer who booked a wash last month and texts again knows perfectly well
+// what they are texting. Re-announcing is the machine behaviour, not the
+// courtesy.
 
 // Has Lyn ever told THIS customer what she is?
 //
 // Matched on the sentence rather than on a flag, which reads as crude and is
 // the honest test: the question is whether the words ever reached their phone.
-// It also gets Neil's hardest edge case right for free - a thread that predates
-// all of this has no introduction in it, so the next AI message carries one.
+//
+// IT IS NO LONGER WHAT DECIDES. It used to be the whole rule - never said it,
+// so say it - and that is exactly what put it in front of Pamela, Shamar and
+// every other customer who has been on the books since before Lyn had a name.
+// brandNew() decides now, and this is kept as the second half of a belt and
+// braces: whatever else is true, she never says it twice.
 const SAID_IT = `I'm ${NAME},`;
 
 async function everIntroduced(customerId) {
@@ -80,6 +91,84 @@ async function everIntroduced(customerId) {
 
   if (error) throw error;
   return (data || []).length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// IS THIS SOMEBODY WE HAVE NEVER REALLY SPOKEN TO?
+//
+// Neil's rule, 17 September, and it is the whole of who hears the disclosure:
+//
+//   "must go only on the first AI reply to a brand-new customer (no earlier
+//    outbound from us except the canned website welcome). Do not put it on an
+//    existing customer mid-thread. Do not put it on Demo, Pamela, Shamar, or
+//    anyone who already has a message history."
+//
+// WHAT IT REPLACED, because the old rule is the reason he had to say this. It
+// was "has she ever said it on this thread", which is a fair question and the
+// wrong one: nobody had heard it, because the words were three days old - so
+// every customer on the books was owed an introduction on their very next
+// message. A person who has been texting us for a fortnight being told what she
+// is reads as the system forgetting them, which is the opposite of the point.
+//
+// SO IT COUNTS WHAT WE HAVE SENT, NOT WHAT WE HAVE SAID. One outbound at most,
+// and that one has to be the canned first-contact welcome. Anything else - a
+// nudge, a chase, a status text, a reminder, a message somebody typed by hand -
+// means there is a relationship here already and she introduces nothing.
+//
+// THE COST, SAID OUT LOUD: somebody who got the welcome, never replied, got a
+// chase a day later, and THEN texts back never hears the disclosure. That is
+// two outbound, so they are not brand new by this rule. It is the direction
+// Neil chose and it is the safe one - a missed disclosure on one thread against
+// announcing herself to people who have known us for weeks.
+//
+// TWO ROWS IS ALL IT READS. The question is "is there more than one", so there
+// is nothing to gain from fetching a whole thread.
+// ---------------------------------------------------------------------------
+async function brandNew(customerId) {
+  const { data, error } = await db
+    .from('messages')
+    .select('body, sent_by')
+    .eq('customer_id', customerId)
+    .eq('direction', 'OUTBOUND')
+    .order('created_at', { ascending: true })
+    .limit(2);
+
+  if (error) throw error;
+
+  const sent = data || [];
+  if (!sent.length) return true;
+  if (sent.length > 1) return false;
+
+  return isFirstContact(sent[0]);
+}
+
+// Was that one outbound the canned welcome, or was it a person starting a
+// conversation?
+//
+// TWO TESTS, AND THE FIRST IS THE RELIABLE ONE. `sent_by` is set by exactly one
+// thing - a person typing into the conversation screen - so a message carrying
+// it is never a canned anything. That covers POST /ops/messages/new, which is
+// Neil texting somebody he met at a laundromat: they reply, and they are not a
+// brand-new customer being onboarded, they are somebody he is already talking
+// to.
+//
+// The second matches the sentence every first-contact message carries, from
+// onboarding.FIRST_CONTACT. That covers all four doors at once - the website
+// form, the Facebook lead, the door hanger, and the AI's own opener - because
+// every one of them is built out of introduction(). A text blast, a reminder or
+// a nudge does not contain it and so does not qualify.
+//
+// REQUIRED LAZILY, like ai-pause below: onboarding reaches booking, which
+// reaches a good deal of the rest of the system, and a top-level require here
+// is a loop waiting to be closed.
+function isFirstContact(message) {
+  if (!message) return false;
+
+  // Somebody typed it. Not a welcome, whatever it says.
+  if (message.sent_by) return false;
+
+  const { FIRST_CONTACT } = require('./onboarding');
+  return String(message.body || '').includes(FIRST_CONTACT);
 }
 
 // The last thing anybody said on this thread, either direction.
@@ -119,11 +208,10 @@ async function aiSpokeSince(customerId, since) {
 //
 // Three answers, in this order, and the order is the point:
 //
-//   INTRODUCTION  she has never said what she is on this thread, or the thread
-//                 has been silent long enough to be a new conversation.
-//                 DISCLOSURE WINS over the comeback: somebody who does not know
-//                 what they are talking to needs telling more than somebody who
-//                 knows and has been away
+//   INTRODUCTION  this is her first reply to somebody we have never really
+//                 spoken to - see brandNew(). DISCLOSURE WINS over the
+//                 comeback: somebody who does not know what they are talking to
+//                 needs telling more than somebody who knows and has been away
 //   COMEBACK      a person took the thread over, somebody switched Lyn back on,
 //                 and she has not spoken since. Said once
 //   ''            the ordinary case, which is almost every message. Announcing
@@ -137,11 +225,15 @@ async function opener(customer) {
   if (!customer || !customer.id) return '';
 
   try {
-    if (!(await everIntroduced(customer.id))) return INTRODUCTION;
-
-    const spokeAt = await lastSpokeAt(customer.id);
-    if (spokeAt && Date.now() - spokeAt.getTime() > NEW_THREAD_DAYS * 86_400_000) {
-      return INTRODUCTION;
+    // BRAND NEW FIRST, AND IT IS THE ONLY WAY IN. An existing customer never
+    // reaches the introduction however long the thread has been quiet and
+    // whether or not the words have ever been said to them.
+    if (await brandNew(customer.id)) {
+      // Belt and braces. brandNew() already implies she cannot have said it -
+      // the one outbound allowed is the welcome, which does not carry the
+      // sentence - so this only fires if something changes upstream. It costs
+      // one indexed lookup on the rarest path there is.
+      if (!(await everIntroduced(customer.id))) return INTRODUCTION;
     }
 
     // Lazy, because ai-pause.js already reaches issues.js and a top-level
@@ -183,9 +275,10 @@ module.exports = {
   NAME,
   INTRODUCTION,
   COMEBACK,
-  NEW_THREAD_DAYS,
   SAID_IT,
   opener,
   lead,
   everIntroduced,
+  brandNew,
+  isFirstContact,
 };

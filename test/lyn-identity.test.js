@@ -26,6 +26,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const lyn = require('../src/core/lyn');
+const onboarding = require('../src/core/onboarding');
 
 const SRC = (...bits) =>
   fs.readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8').split('\r\n').join('\n');
@@ -119,10 +120,20 @@ test('a thread with no customer is never owed an opener', async () => {
   assert.equal(await lyn.opener({}), '');
 });
 
-test('the introduction is matched on the sentence, so old threads get one', () => {
-  // Neil's hardest edge case: a thread that predates all of this has no
-  // introduction in it, so the next AI message must carry one. Testing a flag
-  // would miss that; testing the words cannot.
+// THIS REVERSES WHAT THIS FILE PROMISED UNTIL 17 SEPTEMBER, and the old test
+// name is worth keeping in the diff: "the introduction is matched on the
+// sentence, so old threads get one".
+//
+// That was the rule and it was wrong in the direction that matters. The words
+// were three days old, so NOBODY had heard them - which meant every customer on
+// the books was owed an introduction on their very next message. Neil, 17
+// September: "Do not put it on an existing customer mid-thread. Do not put it
+// on Demo, Pamela, Shamar, or anyone who already has a message history."
+//
+// everIntroduced() survives and still matches on the sentence. It is no longer
+// what DECIDES - brandNew() is - it is the second half of a belt and braces,
+// so that whatever else changes she never says it twice.
+test('the introduction is still matched on the sentence, not on a flag', () => {
   assert.ok(lyn.INTRODUCTION.includes(lyn.SAID_IT), 'SAID_IT is not actually in the introduction');
 
   const src = withoutComments(SRC('core', 'lyn.js'));
@@ -131,16 +142,96 @@ test('the introduction is matched on the sentence, so old threads get one', () =
   assert.ok(fn.includes("eq('direction', 'OUTBOUND')"), fn);
 });
 
-test('a long silence counts as a new conversation', () => {
-  assert.ok(lyn.NEW_THREAD_DAYS >= 7, 'too short - a customer mid-booking would be re-introduced');
-  assert.ok(lyn.NEW_THREAD_DAYS <= 60, 'too long - somebody returning months later gets no disclosure');
+// A LONG SILENCE USED TO COUNT AS A NEW CONVERSATION, AT FOURTEEN DAYS, AND IT
+// DOES NOT ANY MORE. Somebody coming back after a fortnight has a whole thread
+// behind them, which is the definition of not brand new. Neil's line settles
+// it: only the first AI reply to a brand-new customer.
+test('there is no silence long enough to earn a second introduction', () => {
+  assert.equal(lyn.NEW_THREAD_DAYS, undefined, 'the fortnight rule is back');
+
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  assert.ok(!/lastSpokeAt\(/.test(src.slice(src.indexOf('async function opener'))),
+    'the opener is still measuring how long they have been quiet');
+});
+
+// --- who is brand new -------------------------------------------------------
+
+test('nobody we have ever sent a second message to is brand new', () => {
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  const fn = src.slice(src.indexOf('async function brandNew'), src.indexOf('function isFirstContact'));
+
+  assert.ok(fn.includes("eq('direction', 'OUTBOUND')"), fn);
+  assert.ok(fn.includes('sent.length > 1'), 'two outbound messages does not disqualify them');
+  assert.ok(fn.includes('return false'), fn);
+});
+
+test('no outbound at all is brand new - somebody who texted us out of the blue', () => {
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  const fn = src.slice(src.indexOf('async function brandNew'), src.indexOf('function isFirstContact'));
+
+  assert.ok(/if \(!sent\.length\) return true;/.test(fn), fn);
+});
+
+test('the one outbound allowed is the canned welcome, and only that', () => {
+  // All four first-contact doors are built out of onboarding.introduction(), so
+  // one sentence covers the website form, the Facebook lead, the door hanger
+  // and the AI's own opener.
+  const welcome = onboarding.welcomeMessage({ open: true });
+  assert.ok(lyn.isFirstContact({ sent_by: null, body: welcome }), welcome);
+
+  const lead = onboarding.introduction('Hey, you left this number on our Facebook laundry form.');
+  assert.ok(lyn.isFirstContact({ sent_by: null, body: lead }), lead);
+});
+
+test('anything else we might have sent them is not a welcome', () => {
+  for (const body of [
+    'Reminder: we are collecting tomorrow between 8 and 10am. Leave the bag at the front porch.',
+    'Your laundry weighed 14.68 lb, that is $29.36. Thanks!',
+    'Before your first pickup we need a card on file.',
+    'Hi Pamela, just following up on that.',
+  ]) {
+    assert.equal(lyn.isFirstContact({ sent_by: null, body }), false, body);
+  }
+});
+
+test('a message a person typed is never a welcome, whatever it says', () => {
+  // POST /ops/messages/new is Neil texting somebody he met at a laundromat. They
+  // reply, and they are not a stranger being onboarded - he is already talking
+  // to them. sent_by is the only thing that says so, and it is stored.
+  const welcome = onboarding.welcomeMessage({ open: true });
+
+  assert.equal(lyn.isFirstContact({ sent_by: 'a-real-person', body: welcome }), false);
+});
+
+test('the sentence it matches is onboarding\'s, not a copy of it', () => {
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  const fn = src.slice(src.indexOf('function isFirstContact'));
+
+  assert.ok(fn.includes("require('./onboarding')"), fn.slice(0, 400));
+  assert.ok(fn.includes('FIRST_CONTACT'), fn.slice(0, 400));
+
+  // And onboarding builds its welcome out of that constant rather than holding
+  // a second copy of the words.
+  const ob = withoutComments(SRC('core', 'onboarding.js'));
+  assert.ok(/\$\{opening\} \$\{FIRST_CONTACT\}/.test(ob), 'introduction() no longer uses the constant');
+});
+
+test('brandNew is what the opener asks, and it asks it first', () => {
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  const fn = src.slice(src.indexOf('async function opener'), src.indexOf('function lead'));
+
+  const brand = fn.indexOf('brandNew');
+  const intro = fn.indexOf('INTRODUCTION');
+
+  assert.ok(brand > 0, 'the opener does not ask whether they are brand new');
+  assert.ok(brand < intro, 'it introduces her before it checks');
 });
 
 test('disclosure beats the comeback when both could apply', () => {
   const src = withoutComments(SRC('core', 'lyn.js'));
   const fn = src.slice(src.indexOf('async function opener'), src.indexOf('function lead'));
 
-  const introAt = fn.indexOf('everIntroduced');
+  const introAt = fn.indexOf('brandNew');
   const comebackAt = fn.indexOf('COMEBACK');
 
   assert.ok(introAt > 0 && comebackAt > 0, fn.slice(0, 200));
@@ -225,7 +316,27 @@ test('the prompt tells her to say it once, not every message', () => {
   const brain = SRC('core', 'brain.js');
 
   assert.ok(/SAY IT ONCE PER CONVERSATION/.test(brain), brain.slice(0, 0));
-  assert.ok(/never announce that you are automated again/.test(brain), brain.slice(0, 0));
+  assert.ok(/A machine that reintroduces itself/.test(brain), brain.slice(0, 0));
+});
+
+// THE MODEL MUST NEVER WRITE IT ITSELF, AND THE PROMPT USED TO LET IT.
+//
+// It read: do not write it "unless this is genuinely your first message to
+// somebody". That hands the model the judgement, off a thread it can only see
+// ten messages of - and the whole point of Neil's rule is that the judgement is
+// made in code, against what we have actually sent. A short history reads as a
+// first message from inside the window.
+test('the prompt does not let the model decide it is a first message', () => {
+  const brain = SRC('core', 'brain.js');
+
+  assert.ok(
+    !/unless this is genuinely your first message/.test(brain),
+    'the model is still allowed to introduce her on its own judgement'
+  );
+  assert.ok(
+    /handled for you/.test(brain),
+    'the prompt no longer says the opening line is not the model' + String.fromCharCode(39) + 's to write'
+  );
 });
 
 test('the voice rules survive the reversal', () => {

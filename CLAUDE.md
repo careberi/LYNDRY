@@ -4338,6 +4338,46 @@ their defaults and are changed by texting.
 | `DOOR_HANGER` | They scanned a card on their front door. Their own message again - what this records is WHICH door, the same reason `WEB_BERGEN` is not folded into `WEB_HERO` |
 | `WEB_POPUP` | The offer box over the marketing pages. Same ticked box and same evidence as the hero form; its own value because what this column answers is WHICH box they typed into |
 
+**LYN INTRODUCES HERSELF TO A BRAND-NEW CUSTOMER AND TO NOBODY ELSE.** Neil, 17
+September: *"must go only on the first AI reply to a brand-new customer (no
+earlier outbound from us except the canned website welcome). Do not put it on an
+existing customer mid-thread. Do not put it on Demo, Pamela, Shamar, or anyone
+who already has a message history."*
+
+**IT REVERSES THE RULE THAT SHIPPED WITH HER.** That one was "has she ever said
+it on this thread" - a fair question and the wrong one, because the words were
+three days old, so nobody had heard them and every customer on the books was owed
+an introduction on their very next message. A person who has been texting us for
+a fortnight being told what she is reads as the system forgetting them.
+
+**`lyn.brandNew()` COUNTS WHAT WE HAVE SENT, NOT WHAT SHE HAS SAID.** At most one
+outbound, and that one has to be the canned first-contact welcome. Anything else
+- a nudge, a chase, a status text, a reminder, a message somebody typed by hand -
+means there is a relationship here already.
+
+**`onboarding.FIRST_CONTACT` IS WHAT MAKES "WAS THAT THE WELCOME" ANSWERABLE**, and
+`introduction()` is built out of it, so the words checked for and the words sent
+are one string rather than two. That covers all four doors at once. A message
+carrying `sent_by` is refused outright whatever it says: somebody typed it, which
+is `POST /ops/messages/new`, which is not onboarding anybody.
+
+**THE FOURTEEN-DAY RULE IS GONE.** Two weeks of silence used to earn a second
+introduction. Somebody returning after a fortnight has a whole thread behind them,
+which is the definition of not brand new.
+
+**AND THE PROMPT NO LONGER LETS THE MODEL DECIDE.** It read "do not write it
+unless this is genuinely your first message to somebody", which hands the
+judgement to a model that can see ten messages of a thread - and ten messages of
+a month-old customer reads exactly like a new one. The code decides; the model
+never writes the sentence.
+
+**What it costs, so nobody is surprised:** somebody who got the welcome, never
+replied, got a chase a day later and then texts back never hears the disclosure.
+Two outbound is not brand new. That is the safe direction.
+
+**"Hi, it's Lyn again" is unchanged** - only after a person hands the thread back,
+and only until she has used it.
+
 **THERE ARE THREE DOORS ONTO THE SAME INTRODUCTION, AND ALL THREE HAVE TO KNOW.**
 Somebody hears from us first in one of three ways. Each passes its own opening
 clause to `onboarding.introduction()`, which writes everything after it:

@@ -156,6 +156,22 @@ function expiryNote(grant) {
 // "Hey, thanks for reaching out. It's LYNDRY, wash-and-fold pickup..." - and a
 // caller joining an array with blank lines cannot produce that.
 // ---------------------------------------------------------------------------
+// THE CLAUSE EVERY FIRST-CONTACT MESSAGE CARRIES, WHICHEVER DOOR IT CAME
+// THROUGH. It is the second sentence of introduction() below, pulled out so it
+// exists once rather than twice.
+//
+// It is here because something else has to be able to ask "was this outbound
+// the canned welcome, or was it a real conversation". Lyn's introduction is
+// allowed in front of exactly one message now - her first reply to somebody we
+// have never really spoken to - and the welcome is the one earlier outbound
+// that does not disqualify them. See src/core/lyn.js.
+//
+// MATCHED ON THE SENTENCE RATHER THAN ON A COLUMN, and the usual warning about
+// that does not bite here: what it warns against is a COPY going stale, and
+// there is no copy. introduction() is built out of this constant, so the words
+// checked for and the words sent are the same string.
+const FIRST_CONTACT = `It's ${site.name}, wash-and-fold pickup and delivery in ${site.serviceArea}.`;
+
 function introduction(opening, { promo = null, opensOn = null } = {}) {
   // THE OFFER IS THE PROMOTION'S OR IT IS NOT MADE. freeOfferLine() returns
   // null unless something genuinely free is live, so a 30% offer can never be
@@ -181,8 +197,7 @@ function introduction(opening, { promo = null, opensOn = null } = {}) {
     : `Want us to grab your laundry this week?`;
 
   return [
-    `${opening} It's ${site.name}, wash-and-fold pickup and delivery in ` +
-      `${site.serviceArea}. Picked up at your door, back the ${site.turnaround}.`,
+    `${opening} ${FIRST_CONTACT} Picked up at your door, back the ${site.turnaround}.`,
     offer,
     ask,
   ].join('\n\n');
@@ -543,6 +558,7 @@ async function startConversation({
 }
 
 module.exports = {
+  FIRST_CONTACT,
   startConversation,
   welcomeMessage,
   welcomeBackMessage,
