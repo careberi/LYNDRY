@@ -119,10 +119,12 @@ test('and a plan without a frequency is not a choice yet', () => {
 
 // --- the three frequencies --------------------------------------------------
 
-test('THREE FREQUENCIES, AND MONTHLY IS EVERY FOUR WEEKS ON THE SAME WEEKDAY', () => {
+test('FOUR FREQUENCIES, AND MONTHLY IS EVERY FOUR WEEKS ON THE SAME WEEKDAY', () => {
   assert.deepEqual(
     subscription.FREQUENCIES.map((f) => f.label),
-    ['every week', 'every 2 weeks', 'every month']
+    // Three until 17 September. Every 3 weeks was added off a customer who
+    // asked for it by name and was told, correctly, that we could not.
+    ['every week', 'every 2 weeks', 'every 3 weeks', 'every month']
   );
 
   // The route is weekday-based, so a calendar month would walk a customer's
@@ -324,11 +326,19 @@ test('THE SITE SHOWS BOTH RATES, and it used to show one', () => {
 
   assert.equal(site.pricePerLb, '$2.00');
   assert.equal(site.subscriptionPricePerLb, '$1.80');
-  assert.equal(site.subscriptionFrequencies, 'weekly, every 2 weeks, or every month');
+  assert.equal(
+    site.subscriptionFrequencies,
+    'weekly, every 2 weeks, every 3 weeks, or every month'
+  );
 
   // Rendered through the token map the pages actually use.
   assert.equal(tokens.SUBSCRIPTION_PRICE_PER_LB, '$1.80');
-  assert.equal(tokens.SUBSCRIPTION_FREQUENCIES, 'weekly, every 2 weeks, or every month');
+  // Derived from subscription.FREQUENCIES, so adding a cadence updates the
+  // marketing pages with it. That is the point of one owner.
+  assert.equal(
+    tokens.SUBSCRIPTION_FREQUENCIES,
+    'weekly, every 2 weeks, every 3 weeks, or every month'
+  );
 });
 
 test('and both figures come off the one owner, never typed into a page', () => {

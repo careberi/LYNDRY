@@ -1223,6 +1223,42 @@ whichever came first would cancel the wrong laundry, and there is no undo.
 only be one; now it would skip a standing order for ever the moment somebody
 booked a different day by hand.
 
+**FOUR CADENCES, AND EVERY ONE IS A WHOLE NUMBER OF WEEKS ON A FIXED WEEKDAY** —
+weekly, every 2 weeks, **every 3 weeks**, every month. `MONTHLY` IS 28 DAYS, not
+a calendar month: the van drives a weekday route, and a date-based month walks a
+customer's pickup through all seven weekdays over a year. 13 pickups a year,
+not 12.
+
+**EVERY 3 WEEKS WAS ADDED 17 SEPTEMBER, off a customer who asked for it by name
+and was told no.** Sahrish Khan: *"Can we do a monthly subscription starting on
+Monday 10/5 and then every 3 weeks?"* Lyn's refusal was correct and came
+straight off the tool enum. Three weeks is the gap between "every other week is
+too often" and "once a month is too long", which for somebody who travels for
+work is exactly where the laundry piles up.
+
+**ADDING A CADENCE IS THREE PLACES AND A TEST PINS ALL THREE.**
+`subscription.FREQUENCIES` is the one list every customer-facing surface reads -
+the website's radio buttons, its summary, and the marketing pages' "weekly,
+every 2 weeks, every 3 weeks, or every month" sentence, which is **derived, not
+typed**. Beside it: the interval in `recurring.CADENCES`, the enum on the AI's
+booking tool, and the database CHECK. A cadence the website offers that the AI
+cannot book is the same failure as Sahrish's, pointing the other way.
+
+**THE DATE ARITHMETIC NEEDED NOTHING.** `nextDate()` counts whole weeks from
+`started_on` and snaps to the cadence - written out for FORTNIGHTLY alone once,
+generalised when MONTHLY arrived. Three weeks is one line.
+
+**AN UNKNOWN CADENCE FALLS BACK TO WEEKLY**, which is the hazard to know about
+before setting one by hand: a row carrying a value the running code predates is
+collected **every week**. Apply the migration, deploy the code, then change the
+row - in that order.
+
+**`started_on` IS THE ANCHOR, NOT A CREATION DATE.** Everything wider than a
+week counts its off-weeks from it, so it decides both the first pickup and the
+phase of every one after. Writing today's date into it instead of the date the
+customer asked for is what put Sahrish's first pickup on 21 September when she
+had been recapped 5 October and agreed to it.
+
 **A customer may have several standing orders.** `recurring_schedules`, one row
 per arrangement, so Tuesday mornings and Saturday lunchtimes can both exist —
 that was impossible while the schedule lived in four columns on the customer

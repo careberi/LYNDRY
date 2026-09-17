@@ -33,9 +33,16 @@ const { sendAndLog } = require('./notify');
 // a weekday route, and the anchor arithmetic below counts in whole weeks. A
 // date-based month would walk a customer's pickup through all seven weekdays
 // over a year, which is not a round anybody drives. 13 pickups a year, not 12.
+//
+// EVERY_3_WEEKS NEEDED NO NEW ARITHMETIC, which is the whole reason it is one
+// line. nextDate() below counts whole weeks from the anchor and snaps to the
+// cadence - it was written out for FORTNIGHTLY alone once and generalised when
+// MONTHLY arrived, precisely so a third interval would not be a third copy of
+// the same off-week calculation.
 const CADENCES = Object.freeze({
   WEEKLY: { label: 'every week', days: 7 },
   FORTNIGHTLY: { label: 'every other week', days: 14 },
+  EVERY_3_WEEKS: { label: 'every 3 weeks', days: 21 },
   MONTHLY: { label: 'every month', days: 28 },
 });
 

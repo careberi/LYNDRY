@@ -53,9 +53,21 @@ const PLANS = Object.freeze({
 // MONTHLY IS EVERY FOUR WEEKS ON THE SAME WEEKDAY, not the same date each
 // month: the route is weekday-based, and a date-based month walks a pickup
 // through all seven weekdays over a year. That is 13 pickups a year, not 12.
+//
+// EVERY THREE WEEKS IS THE FOURTH, added 17 September off a customer who asked
+// for it by name and was told we could not. It sits between fortnightly and
+// monthly because this list is the order the website draws its radio buttons
+// in, and a frequency picker that does not run shortest to longest reads as a
+// mistake.
+//
+// ADDING ONE HERE IS THE WHOLE JOB on every customer-facing surface: the
+// website's picker and its summary are rendered from this array, and the AI's
+// tool enum and the database CHECK are the only two other places that have to
+// be told. A test pins that those three agree.
 const FREQUENCIES = Object.freeze([
   Object.freeze({ cadence: 'WEEKLY', label: 'every week' }),
   Object.freeze({ cadence: 'FORTNIGHTLY', label: 'every 2 weeks' }),
+  Object.freeze({ cadence: 'EVERY_3_WEEKS', label: 'every 3 weeks' }),
   Object.freeze({ cadence: 'MONTHLY', label: 'every month' }),
 ]);
 

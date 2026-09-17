@@ -104,10 +104,17 @@ const TOOLS = [
 
         frequency: {
           type: 'string',
-          enum: ['WEEKLY', 'FORTNIGHTLY', 'MONTHLY'],
+          // EVERY_3_WEEKS IS HERE BECAUSE A REAL CUSTOMER ASKED FOR IT AND WAS
+          // TOLD NO. Sahrish Khan, 17 September: "Can we do a monthly
+          // subscription starting on Monday 10/5 and then every 3 weeks?" The
+          // model answered correctly off this enum - every 3 weeks was not one
+          // it could set up - and she settled for something she had not asked
+          // for. The refusal was honest; the list was short.
+          enum: ['WEEKLY', 'FORTNIGHTLY', 'EVERY_3_WEEKS', 'MONTHLY'],
           description:
             'How often a SUBSCRIPTION collects: WEEKLY is every week, ' +
-            'FORTNIGHTLY every 2 weeks, MONTHLY every month. Required when plan ' +
+            'FORTNIGHTLY every 2 weeks, EVERY_3_WEEKS every 3 weeks, MONTHLY ' +
+            'every month. Required when plan ' +
             'is SUBSCRIPTION — ask for it as the very next thing after they ' +
             'choose. Leave it out entirely for a one-time pickup.',
         },
