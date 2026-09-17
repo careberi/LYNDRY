@@ -74,6 +74,9 @@ const {
   AUDIENCES,
 } = require('../web/prelaunch-page');
 const wash = require('../core/wash');
+// Only for clearPinIfMoved() on an address edit - a move that keeps its old
+// coordinates is every routing decision made about the wrong house.
+const geocode = require('../core/geocode');
 const onboarding = require('../core/onboarding');
 const leads = require('../core/leads');
 const leadOutreach = require('../core/lead-outreach');
@@ -2412,56 +2415,158 @@ function bagRow(order, l, total, canAct, done, parents = []) {
 //
 // Behind messages.send: the people who may cause a text to reach somebody are
 // the people who may stop one. A driver has neither.
+// THE WASH, AS A FORM. Neil, 17 September: temperature, detergent, softener,
+// usual pickup, instructions.
+//
+// EVERY LIST IS READ FROM wash.js AND booking.js, NEVER TYPED. An option that
+// exists on this form and nowhere else is an option the laundromat never hears
+// about, and one that exists everywhere but here is one nobody can set. The
+// same constants build the question the AI sends and the ticket a laundromat
+// reads, so all three cannot disagree.
+//
+// "NOT SET" IS AN OPTION ON PURPOSE, AND IT IS THE FIRST ONE. A customer who
+// has chosen nothing is a real state - it is the state every new customer is in
+// - and it is the whole of EXPLICIT against DEFAULT on the intake table.
+// Writing COLD into the column for somebody who never said cold would make that
+// table start lying, so blank clears the key rather than storing a default.
+//
+// DETERGENT IS HERE AND IS STILL NOT A CUSTOMER'S CHOICE. It is not in
+// wash.OPTIONS, so the AI never offers it and the signup form never asks; it is
+// settable here because Neil wants to be able to tell one laundromat to use
+// something different for one customer. See the note in src/core/wash.js.
+function washForm(person, prefs) {
+  const id = escapeHtml(person.id);
+
+  const options = (choices, current) =>
+    [`<option value=""${current ? '' : ' selected'}>Not set - they have not said</option>`]
+      .concat(
+        choices.map(
+          (c) =>
+            `<option value="${escapeHtml(c.value)}"${
+              c.value === current ? ' selected' : ''
+            }>${escapeHtml(c.label)}</option>`
+        )
+      )
+      .join('');
+
+  const field = (name, label, choices, current) => `
+    <label class="field-label" for="${name}">${escapeHtml(label)}</label>
+    <select class="field" id="${name}" name="${name}" style="width:100%;margin-bottom:12px;">
+      ${options(choices, current)}
+    </select>`;
+
+  // Only a value we still offer counts as chosen. Anything else - an option
+  // that was withdrawn, a softener stored as the boolean it used to be - reads
+  // as not set, which is the honest answer and is what wash.js does with it.
+  const chosen = (key) =>
+    wash.isValid(key, prefs[key]) ? String(prefs[key]).toUpperCase() : '';
+
+  return `
+    <form method="post" action="/ops/customers/${id}/wash" style="margin:14px 0 0;">
+      ${field(
+        'water_temp',
+        'Water temperature',
+        wash.OPTIONS.water_temp.choices.map((c) => ({ value: c.value, label: c.label })),
+        chosen('water_temp')
+      )}
+
+      ${field(
+        'detergent',
+        'Detergent',
+        wash.DETERGENTS.map((d) => ({ value: d.value, label: d.label })),
+        wash.isValidDetergent(prefs.detergent) ? String(prefs.detergent).toUpperCase() : ''
+      )}
+
+      ${field(
+        'fabric_softener',
+        'Fabric softener',
+        wash.OPTIONS.fabric_softener.choices.map((c) => ({
+          value: c.value,
+          label: c.short ? `${c.short} - ${c.label}` : c.label,
+        })),
+        chosen('fabric_softener')
+      )}
+
+      ${field(
+        'default_pickup_method',
+        'Usual pickup',
+        booking.PICKUP_METHODS.map((m) => ({
+          value: m,
+          label: m.replace(/_/g, ' ').toLowerCase(),
+        })),
+        booking.PICKUP_METHODS.includes(String(prefs.default_pickup_method || '').toUpperCase())
+          ? String(prefs.default_pickup_method).toUpperCase()
+          : ''
+      )}
+
+      <label class="field-label" for="special_instructions">Where the driver finds the bag</label>
+      <textarea class="field" id="special_instructions" name="special_instructions" rows="2"
+                maxlength="300" style="width:100%;resize:vertical;"
+                placeholder="front porch, behind the gate, with the doorman"
+                >${escapeHtml(prefs.special_instructions || '')}</textarea>
+
+      <p class="field-hint" style="margin:10px 0 14px;">
+        This is what the laundromat is told. A bag already on their shelf is
+        washed to whatever this says when they read the ticket, so a change now
+        can reach an order that is already with them.
+      </p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;">
+        <button class="btn btn-ink" type="submit">Save</button>
+        <a class="btn btn-outline" href="/ops/customers/${id}">Cancel</a>
+      </div>
+    </form>`;
+}
+
+// ONE BUTTON, AND THE OTHER ONE WHEN IT APPLIES.
+//
+// Neil, 17 September: "If they can be texted: one button, Opt out of texts. If
+// they are opted out: Opted out of texts, plus Opt back in. No essay. No 'how
+// they told you' box."
+//
+// WHAT WENT, AND IT WAS ALL MINE. A card with a heading, a four-line paragraph
+// explaining what opting out stops, a required free-text box asking how they
+// told you, and a sentence in bold saying it could not be undone. Every line of
+// it was true and the whole thing was in the way: this control gets reached for
+// with somebody on the phone asking to be left alone, and the last thing that
+// moment needs is a form to fill in.
+//
+// THE NOTE WENT WITH IT. `unsubscribed_note` still exists and old rows keep
+// theirs - a record is not edited to fit today's rules - it is simply not asked
+// for any more. What is still written on every opt-out is the thing that
+// matters: when, by whom, and BY_HAND rather than STOP.
+//
+// AND OPT BACK IN IS NEW, WHICH REVERSES A RULE. This read "you cannot undo
+// this from here", on the reasoning that consent is theirs to give and they
+// give it by texting START. Neil has taken the opposite view in writing - "Opt
+// back in from ops is allowed when I press the button" - and it is his decision
+// to take. What it does NOT do is write a consent record: see the route.
 function optOutControl(person, mayDo) {
   if (!mayDo) return '';
 
+  const id = escapeHtml(person.id);
+
   if (person.status === 'UNSUBSCRIBED') {
     return `
-    <div class="ops-note ops-note--bad">
-      <span class="ops-note__label">Texting</span>
-      <h2 class="ops-note__title">
-        This number is opted out
-      </h2>
-      <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-800);max-width:62ch;">
-        Nothing will text them - not a reminder, not an offer, not a status
-        update, not the AI. Every send is refused before it reaches the carrier.
-        Only they can undo it, by texting START from their own phone.
-        ${
-          person.unsubscribed_note
-            ? `<br><br><strong>What was recorded:</strong> ${escapeHtml(person.unsubscribed_note)}`
-            : ''
-        }
-      </p>
+    <div class="ops-note ops-note--bad ops-note__row">
+      <div>
+        <span class="ops-note__label">Texting</span>
+        <strong style="font-size:16px;">Opted out of texts</strong>
+      </div>
+      <form method="post" action="/ops/customers/${id}/opt-in" style="margin:0;">
+        <button class="btn btn-outline" type="submit">Opt back in</button>
+      </form>
     </div>`;
   }
 
-  // A CARD, NOT A COLLAPSED TOGGLE. It was a <details> at the foot of the
-  // details card and Neil looked for it, could not find it, and reasonably
-  // concluded it had not been built. A control nobody can find is a control
-  // that does not exist - and this one gets reached for at an awkward moment,
-  // with somebody on the phone asking to be left alone.
   return `
-  <div class="card card-xl" style="padding:26px;margin-bottom:24px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Texting</p>
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:22px;margin:0 0 12px;">
-      They asked not to be texted
-    </h2>
-    <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;">
-      For somebody who told you another way - on the phone, at their door, by
-      email. It stops everything: reminders, offers, status texts, the AI, the
-      lot. <strong>You cannot undo this from here.</strong> Only they can, by
-      texting START from their own phone.
-    </p>
-    <form method="post" action="/ops/customers/${escapeHtml(person.id)}/opt-out"
-          style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
-      <div style="flex:1 1 320px;min-width:260px;">
-        <label class="field-label" for="optout_note">How they told you</label>
-        <input class="input input-lg" type="text" id="optout_note" name="note" maxlength="200" required
-               style="width:100%;" placeholder="Called and asked to be taken off the list">
-      </div>
-      <div>
-        <button class="btn btn-ink btn-lg" type="submit">Mark them opted out</button>
-      </div>
+  <div class="ops-note ops-note__row">
+    <div>
+      <span class="ops-note__label">Texting</span>
+      <strong style="font-size:16px;">They can be texted</strong>
+    </div>
+    <form method="post" action="/ops/customers/${id}/opt-out" style="margin:0;">
+      <button class="btn btn-outline" type="submit">Opt out of texts</button>
     </form>
   </div>`;
 }
@@ -3235,11 +3340,27 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             (() => {
               const p = c.preferences || {};
               if (!seeCustomer || !p.water_temp) return '';
-              const wash =
-                `${String(p.water_temp).toLowerCase()} water, ` +
-                `${p.detergent === 'HYPOALLERGENIC' ? 'hypoallergenic' : 'standard'} detergent, ` +
-                `${p.fabric_softener ? 'softener' : 'no softener'}`;
-              return detail('Wash', escapeHtml(wash));
+
+              // THROUGH wash.washLines(), WHICH IS WHAT THE LAUNDROMAT READS.
+              //
+              // This built its own sentence and got two things wrong. The
+              // softener is stored as STANDARD or NONE - both truthy - so
+              // `p.fabric_softener ? 'softener' : 'no softener'` told everybody
+              // a customer who asked for NO softener wanted some. And the
+              // detergent was compared against HYPOALLERGENIC, a value withdrawn
+              // long ago, so the one that can be set today would have read
+              // "standard detergent" here while the ticket in the laundromat's
+              // hand said Free and clear.
+              //
+              // Two screens describing one bag two different ways is the thing
+              // the shared function exists to stop, and a wash is the worst
+              // place to find it.
+              const summary = wash
+                .washLines(p)
+                .map(([label, value]) => `${label.toLowerCase()} ${value.toLowerCase()}`)
+                .join(', ');
+
+              return detail('Wash', escapeHtml(summary));
             })()
           }
           ${detail('Bags', order.bag_count || '—')}
@@ -4063,6 +4184,22 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
     // nothing rendered it.
     const intakeFields = await intake.fieldsFor(person).catch(() => []);
 
+    // WHICH CARD IS OPEN FOR EDITING, AND IT IS A QUERY STRING.
+    //
+    // Neil's ask: Edit on Details and on Wash Preferences, Save writes the row,
+    // Cancel leaves it as it was. No JavaScript, like every other ops screen -
+    // Edit is a link to ?edit=details, which draws that one card as a form, and
+    // Cancel is a link back to the page without it. Nothing is held anywhere in
+    // between, so Cancel cannot half-save and a refresh cannot re-submit.
+    //
+    // Read off a fixed list rather than trusted: ?edit=<anything> is a visitor's
+    // to type, and it decides which markup renders.
+    const editing = ['details', 'wash'].includes(String((req.query || {}).edit || ''))
+      ? String(req.query.edit)
+      : null;
+
+    const mayEdit = roles.can(req.opsUser, 'customers.view');
+
     // WHETHER THIS PAGE MAY TEXT THEM AT ALL, which is exactly one button:
     // Send card link. Behind messages.send, because pressing it puts a message
     // on a real phone, and absent entirely for a number that has opted out -
@@ -4241,11 +4378,65 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
 
       <div class="grid-2" style="align-items:start;margin-bottom:44px;">
 
-        <div class="card card-xl" style="padding:28px;">
+        <div class="card card-xl" style="padding:28px;" id="details">
           ${sectionHeading('Contact', 'Details')}
+          ${
+            mayEdit && editing !== 'details'
+              ? `<p style="margin:-6px 0 4px;"><a href="/ops/customers/${escapeHtml(person.id)}?edit=details#details">Edit</a></p>`
+              : ''
+          }
           ${detail('Phone', `<a href="tel:${escapeHtml(person.phone)}">${escapeHtml(format.displayPhone(person.phone))}</a>`)}
           ${detail('Email', `<a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email || '—')}</a>`)}
-          ${detail('Address', escapeHtml(addressOf(person)) || '—')}
+          ${
+            // THE ADDRESS IS THE ONE THING EDITABLE HERE, which is what Neil
+            // asked for. The phone is deliberately not: it is the identity on
+            // this system - the thread is keyed on it, the carrier sends to it,
+            // and every inbound is matched against it - so changing it here
+            // would silently orphan a conversation rather than move it.
+            editing === 'details'
+              ? `<form method="post" action="/ops/customers/${escapeHtml(person.id)}/details"
+                       style="margin:14px 0 0;">
+                   <label class="field-label" for="address_line1">Street address</label>
+                   <input class="field" id="address_line1" name="address_line1" type="text" maxlength="120"
+                          style="width:100%;margin-bottom:12px;"
+                          value="${escapeHtml(person.address_line1 || '')}">
+
+                   <label class="field-label" for="address_line2">Flat, unit, floor</label>
+                   <input class="field" id="address_line2" name="address_line2" type="text" maxlength="120"
+                          style="width:100%;margin-bottom:12px;"
+                          value="${escapeHtml(person.address_line2 || '')}">
+
+                   <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                     <div style="flex:2 1 160px;min-width:0;">
+                       <label class="field-label" for="city">Town</label>
+                       <input class="field" id="city" name="city" type="text" maxlength="80"
+                              style="width:100%;" value="${escapeHtml(person.city || '')}">
+                     </div>
+                     <div style="flex:0 1 80px;min-width:0;">
+                       <label class="field-label" for="state">State</label>
+                       <input class="field" id="state" name="state" type="text" maxlength="2"
+                              style="width:100%;text-transform:uppercase;" value="${escapeHtml(person.state || '')}">
+                     </div>
+                     <div style="flex:1 1 110px;min-width:0;">
+                       <label class="field-label" for="postal_code">ZIP</label>
+                       <input class="field" id="postal_code" name="postal_code" type="text" maxlength="10"
+                              inputmode="numeric" style="width:100%;" value="${escapeHtml(person.postal_code || '')}">
+                     </div>
+                   </div>
+
+                   <p class="field-hint" style="margin:0 0 14px;">
+                     Saving a different address throws the map pin away and looks
+                     it up again, so the next round is planned to the new house.
+                     A pickup already booked keeps its date and window.
+                   </p>
+
+                   <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                     <button class="btn btn-ink" type="submit">Save</button>
+                     <a class="btn btn-outline" href="/ops/customers/${escapeHtml(person.id)}">Cancel</a>
+                   </div>
+                 </form>`
+              : detail('Address', escapeHtml(addressOf(person)) || '—')
+          }
           ${detail('Signed up', dateTime(person.created_at))}
           ${detail('How they found us', signedUpVia(person))}
           ${detail('Texting consent', person.sms_consent_at ? dateTime(person.sms_consent_at) : 'not recorded')}
@@ -4321,16 +4512,47 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           mayBook: roles.can(req.opsUser, 'orders.override'),
         })}
 
-        <div class="card card-xl" style="padding:28px;">
+        <div class="card card-xl" style="padding:28px;" id="wash">
           ${sectionHeading('Wash', 'Preferences')}
-          ${detail('Temperature', escapeHtml(prefs.water_temp || 'COLD'))}
-          ${detail('Detergent', escapeHtml((prefs.detergent || 'STANDARD').replace(/_/g, ' ')))}
-          ${detail('Fabric softener', prefs.fabric_softener ? 'yes' : 'no')}
-          ${detail('Usual pickup', escapeHtml((prefs.default_pickup_method || 'LEAVE_OUTSIDE').replace(/_/g, ' ').toLowerCase()))}
           ${
-            prefs.special_instructions
-              ? detail('Instructions', escapeHtml(prefs.special_instructions))
+            mayEdit && editing !== 'wash'
+              ? `<p style="margin:-6px 0 4px;"><a href="/ops/customers/${escapeHtml(person.id)}?edit=wash#wash">Edit</a></p>`
               : ''
+          }
+          ${
+            editing === 'wash'
+              ? washForm(person, prefs)
+              : // READ BACK THROUGH wash.js, NOT OFF THE RAW COLUMN.
+                //
+                // Softener read `prefs.fabric_softener ? 'yes' : 'no'`, and the
+                // stored values are STANDARD and NONE - both truthy - so a
+                // customer who asked for NO softener had this page telling
+                // everybody they wanted some. It is the same fault the intake
+                // table exists to avoid, one card along, and washLines() is
+                // what the laundromat's own ticket reads, so the two now say
+                // the same words.
+                wash
+                  .washLines(prefs)
+                  .map(([label, value]) => detail(label, escapeHtml(value)))
+                  .join('') +
+                detail(
+                  'Usual pickup',
+                  escapeHtml(
+                    (prefs.default_pickup_method || booking.PICKUP_METHODS[0])
+                      .replace(/_/g, ' ')
+                      .toLowerCase()
+                  )
+                ) +
+                (prefs.special_instructions
+                  ? detail('Instructions', escapeHtml(prefs.special_instructions))
+                  : '') +
+                (booking.hasPreferences(person)
+                  ? ''
+                  : `<p class="field-hint" style="margin:12px 0 0;">
+                       Nobody has chosen these. That is what we do when they have
+                       not said, and it is never read back to them as their
+                       choice.
+                     </p>`)
           }
         </div>
 
@@ -4814,19 +5036,246 @@ router.post(
   }
 );
 
+// ---------------------------------------------------------------------------
+// POST /ops/customers/:id/opt-in - put them back on the list
+//
+// Neil, 17 September: "Opt back in from ops is allowed when I press the
+// button."
+//
+// THIS REVERSES A RULE, AND THE REVERSAL IS HIS TO MAKE. It read: nothing here
+// opts anybody back IN, because consent is theirs to give and they give it by
+// texting START from their own handset. He has asked for the button in writing,
+// twice, having been told STOP still works.
+//
+// IT DOES NOT WRITE A CONSENT RECORD, AND MUST NEVER LEARN TO.
+// sms_consent_at, sms_consent_source and sms_consent_ip are the evidence that
+// THEY agreed - a carrier asks for it during 10DLC registration and a TCPA
+// complaint turns on it - and pressing a button in ops is not the customer
+// agreeing to anything. They are untouched here. What is written is narrower
+// and is true: a named person decided, on this date, to start texting them
+// again. That is resubscribed_at and resubscribed_by, migration 0100.
+//
+// STOP IS UNTOUCHED EITHER WAY. compliance.js answers it before the AI sees a
+// message, on every number, and notify.sendAndLog() refuses an opted-out number
+// at the last gate. Whatever anybody presses here, the customer can always take
+// themselves back off from their own phone - and if they do, this button will
+// be sitting there again. Pressing it twice at somebody who keeps texting STOP
+// is the thing nobody should do, and no code can stop it.
+//
+// Behind messages.send, the same line the opt-out draws: the people who may
+// cause a text are the people who may stop one, and a driver is neither.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/customers/:id/opt-in', guard, may('messages.send'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = `/ops/customers/${req.params.id}`;
+
+    const { data: person } = await db
+      .from('customers')
+      .select('id, name, status, unsubscribed_via')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    if (person.status !== 'UNSUBSCRIBED') {
+      return res.redirect(303, `${back}?done=${encodeURIComponent('They were not opted out.')}`);
+    }
+
+    const { error } = await db
+      .from('customers')
+      .update({
+        status: 'ACTIVE',
+        // CLEARED, NOT KEPT. These three answer "is this number opted out and
+        // how did that happen", and it is not opted out any more. Leaving them
+        // set would leave every screen that reads them describing a state the
+        // customer is no longer in. What happened is recorded below.
+        unsubscribed_at: null,
+        unsubscribed_via: null,
+        unsubscribed_by: null,
+        resubscribed_at: new Date().toISOString(),
+        resubscribed_by: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+      })
+      .eq('id', person.id);
+
+    if (error) throw error;
+
+    console.log(
+      `${person.name || person.id} opted back IN by ` +
+        `${req.opsUser ? req.opsUser.name : 'a machine key'} ` +
+        `(they had opted out via ${person.unsubscribed_via || 'an unrecorded route'})`
+    );
+
+    // IT SENDS THEM NOTHING. The opt-out does not text to say we have stopped,
+    // and this must not text to say we have started: an unprompted message the
+    // instant somebody flips a switch is a message nobody asked for, and this
+    // one would land at a person who had asked us to stop.
+    return res.redirect(
+      303,
+      `${back}?done=${encodeURIComponent(
+        'They can be texted again. Nothing has been sent to them.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/customers/:id/details - save the address
+// POST /ops/customers/:id/wash    - save the wash preferences
+//
+// Neil, 17 September: "On Details and Wash Preferences, add Edit. I can change
+// address and wash: temperature, detergent, softener, usual pickup,
+// instructions. Save writes the customer row. Cancel leaves it as it was."
+//
+// NO JAVASCRIPT, like every other ops screen. Edit is a link to ?edit=details
+// on the same page, which draws that one card as a form; Cancel is a link back
+// to the page without it, so it cannot half-save anything. Save is a POST and
+// answers with a redirect, so a refresh repeats the message and never the
+// write.
+//
+// Behind customers.view, which is the permission that lets somebody see this
+// page at all. It is not messages.send: correcting a street number is not
+// causing a text, and a driver cannot reach either.
+// ---------------------------------------------------------------------------
+
+router.post('/ops/customers/:id/details', guard, may('customers.view'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = `/ops/customers/${req.params.id}`;
+    const body = req.body || {};
+
+    const { data: person } = await db
+      .from('customers')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    const text = (name, max) => String(body[name] || '').trim().slice(0, max);
+
+    const changes = {
+      address_line1: text('address_line1', 120) || null,
+      address_line2: text('address_line2', 120) || null,
+      city: text('city', 80) || null,
+      state: text('state', 2).toUpperCase() || null,
+      postal_code: text('postal_code', 10) || null,
+    };
+
+    // A MOVE THROWS THE MAP PIN AWAY, and this is the same call the AI's own
+    // save goes through. Without it the address changes and the coordinates do
+    // not, so every routing decision after it is made about the old house -
+    // which is exactly what happened when a customer moved to Glen Rock and the
+    // map kept them in Fair Lawn. Correcting a typo in a town name moves them
+    // as surely as a house move does.
+    const { data: saved, error } = await db
+      .from('customers')
+      .update(geocode.clearPinIfMoved(person, changes))
+      .eq('id', person.id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    // Looked up in the background, like every other address save: it is a free
+    // rate-limited service and nobody should wait on it. If it fails, locate()
+    // tries again the next time a route is built.
+    if (saved.lat == null && saved.address_line1) {
+      geocode.locate(saved).catch((err) => {
+        console.warn(`Could not place ${saved.id} after an edit: ${err.message}`);
+      });
+    }
+
+    return res.redirect(303, `${back}?done=${encodeURIComponent('Address saved.')}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/ops/customers/:id/wash', guard, may('customers.view'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = `/ops/customers/${req.params.id}`;
+    const body = req.body || {};
+
+    const { data: person } = await db
+      .from('customers')
+      .select('id, preferences')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return notFoundPage(res, 'No customer with that id.');
+
+    // MERGED, NEVER REPLACED. `preferences` is one JSON column holding more
+    // than this form shows - the pickup spot the AI saved, a dropoff spot, a
+    // note somebody put there by hand - and writing the form's five keys as the
+    // whole object would silently delete every one of them.
+    const prefs = { ...(person.preferences || {}) };
+
+    // ANYTHING WE DO NOT OFFER IS REFUSED, NOT STORED. A value outside the list
+    // satisfies a "is it set" check and then falls back at wash time, which is
+    // somebody's clothes washed a way nobody chose with the screen saying
+    // otherwise. Blank means "they have not said", which is a real state and
+    // the one every new customer is in - so it clears the key rather than
+    // writing a default in, which is what keeps EXPLICIT and DEFAULT apart on
+    // the intake table.
+    for (const key of wash.KEYS) {
+      const value = String(body[key] || '').toUpperCase();
+      if (!value) delete prefs[key];
+      else if (wash.isValid(key, value)) prefs[key] = value;
+    }
+
+    const detergent = String(body.detergent || '').toUpperCase();
+    if (!detergent) delete prefs.detergent;
+    else if (wash.isValidDetergent(detergent)) prefs.detergent = detergent;
+
+    const method = String(body.default_pickup_method || '').toUpperCase();
+    if (!method) delete prefs.default_pickup_method;
+    else if (booking.PICKUP_METHODS.includes(method)) prefs.default_pickup_method = method;
+
+    // WHERE THE DRIVER FINDS THE BAG. Free text, and it is the one field here
+    // that is - which is why /o/<code> lists what it allows rather than trying
+    // to redact what it does not: this never crosses to a laundromat.
+    const instructions = String(body.special_instructions || '').trim().slice(0, 300);
+    if (!instructions) delete prefs.special_instructions;
+    else prefs.special_instructions = instructions;
+
+    const { error } = await db
+      .from('customers')
+      .update({ preferences: prefs })
+      .eq('id', person.id);
+
+    if (error) throw error;
+
+    return res.redirect(303, `${back}?done=${encodeURIComponent('Wash preferences saved.')}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /ops/customers/:id/opt-out - they asked not to be texted
+//
+// One way. See the note on opt-in above for the half that is not.
+// ---------------------------------------------------------------------------
+
 router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return next();
 
     const back = `/ops/customers/${req.params.id}`;
-    const note = String((req.body || {}).note || '').trim().slice(0, 200);
 
-    if (!note) {
-      return res.redirect(
-        303,
-        `${back}?problem=${encodeURIComponent('Say how they told you. It is the record that this was their decision.')}`
-      );
-    }
+    // NOTHING IS ASKED FOR ANY MORE. Neil, 17 September: no essay, no "how they
+    // told you" box. The column survives and old rows keep what is in it - a
+    // record is not edited to fit today's rules - but nothing writes one now.
+    // What is still recorded on every opt-out is when, by whom, and BY_HAND
+    // rather than STOP, which is the part an audit actually asks about.
 
     const { data: person } = await db
       .from('customers')
@@ -4847,14 +5296,13 @@ router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (re
         unsubscribed_at: new Date().toISOString(),
         unsubscribed_via: 'BY_HAND',
         unsubscribed_by: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
-        unsubscribed_note: note,
       })
       .eq('id', person.id);
 
     if (error) throw error;
 
     console.log(
-      `${person.name || person.id} marked opted out by ${req.opsUser ? req.opsUser.name : 'a machine key'}: ${note}`
+      `${person.name || person.id} marked opted out by ${req.opsUser ? req.opsUser.name : 'a machine key'}`
     );
 
     return res.redirect(

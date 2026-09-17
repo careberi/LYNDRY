@@ -70,7 +70,55 @@ const OPTIONS = Object.freeze({
 // - but a customer is never offered them, exactly like the sorting standard
 // below. Detergent moved here from OPTIONS; drying has always been here in
 // spirit and is stated in the prompt.
-const STANDARDS = Object.freeze([Object.freeze(['Detergent', 'Standard'])]);
+//
+// DETERGENT IS NO LONGER IN THIS LIST, AND IT IS STILL NOT A CUSTOMER'S
+// CHOICE. See DETERGENTS below - it is set by an admin on the customer page
+// and nowhere else, so the ticket can say something other than Standard
+// without the signup form, the AI or the website ever offering it.
+const STANDARDS = Object.freeze([]);
+
+// ---------------------------------------------------------------------------
+// DETERGENT: SETTABLE BY US, NEVER ASKED OF THEM.
+//
+// Neil, 17 September, listing what he wants to be able to change on the
+// customer page: "temperature, detergent, softener, usual pickup,
+// instructions".
+//
+// IT IS DELIBERATELY NOT IN OPTIONS, AND THAT IS THE WHOLE DESIGN. OPTIONS is
+// the customer-facing question - it builds the wash question the AI sends, the
+// signup form and the account page. Detergent left it on Neil's own call:
+// "detergent is just gonna be standard across the board, there's not gonna be
+// an upcharge, we're not gonna ask about that." That decision was about ASKING,
+// and it stands. Every new customer is still never asked.
+//
+// What he is asking for here is the other thing: being able to tell ONE
+// laundromat to use something different for ONE customer. That needs a value on
+// the customer and a line on the ticket, and neither of those is a question.
+//
+// NOTHING COSTS ANYTHING. The old detergent choice was +$2 and was never
+// actually billed, which the reconciliation report found. There is no surcharge
+// here and surchargeFor() cannot see this field.
+//
+// TWO VALUES, AND THEY ARE THE TWO THIS SYSTEM ALREADY KNEW. Nobody on the
+// books has a detergent stored - all 58 rows read null - so nothing is being
+// migrated and nothing already set is being renamed. If the right list is a
+// different list, it is this constant and nothing else.
+// ---------------------------------------------------------------------------
+const DETERGENTS = Object.freeze([
+  Object.freeze({ value: 'STANDARD', label: 'Standard' }),
+  Object.freeze({ value: 'FREE_AND_CLEAR', label: 'Free and clear' }),
+]);
+
+const DETERGENT_DEFAULT = 'STANDARD';
+
+function detergentFor(preferences) {
+  const wanted = String(((preferences || {}).detergent) || '').toUpperCase();
+  return DETERGENTS.find((d) => d.value === wanted) || DETERGENTS[0];
+}
+
+function isValidDetergent(value) {
+  return DETERGENTS.some((d) => d.value === String(value || '').toUpperCase());
+}
 
 // HOW EVERY ORDER IS SORTED. Neil's words, and it is a standard rather than a
 // preference: it is printed on the laundromat's ticket and never asked of a
@@ -136,10 +184,15 @@ function washLines(preferences) {
     return [option.label, choice.label];
   });
 
-  // STANDARDS ARE PRINTED, NOT ASKED. A laundromat needs to know the detergent
-  // even though nobody chose it - leaving it off the ticket would leave them
-  // guessing at the one thing we have decided for them.
-  return chosen.concat(STANDARDS.map((pair) => [...pair]));
+  // THE DETERGENT IS PRINTED WHETHER OR NOT ANYBODY CHOSE IT. A laundromat
+  // needs to know it - leaving it off the ticket would leave them guessing at
+  // the one thing we have decided for them - and it says Standard unless an
+  // admin has set something else on this customer. It reads through
+  // detergentFor(), so an unknown value stored by hand falls back rather than
+  // printing itself at somebody standing over a machine.
+  const detergent = [['Detergent', detergentFor(p).label]];
+
+  return chosen.concat(detergent, STANDARDS.map((pair) => [...pair]));
 }
 
 // The same thing said to a customer, with the prices in it.
@@ -249,6 +302,10 @@ const QUESTION = (() => {
 })();
 
 module.exports = {
+  DETERGENTS,
+  DETERGENT_DEFAULT,
+  detergentFor,
+  isValidDetergent,
   OPTIONS,
   KEYS,
   SORTING,

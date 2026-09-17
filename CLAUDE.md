@@ -880,17 +880,86 @@ weigh-in keeps that promise with `waivedWeighInText()` - "Your laundry weighed
 delivery and delivered already say nothing about money on a waived order. A
 test pins both halves.
 
+**THE ADDRESS AND THE WASH ARE EDITABLE ON THE CUSTOMER PAGE.** Neil, 17
+September. **Edit** on Details and on Wash Preferences, Save writes the customer
+row, Cancel leaves it as it was.
+
+**NO JAVASCRIPT, LIKE EVERY OTHER OPS SCREEN.** Edit is a link to
+`?edit=details`, which draws that one card as a form; Cancel is a link back to
+the page without it. Nothing is held anywhere in between, so Cancel cannot
+half-save and a refresh cannot re-submit. The flag is read off a fixed list -
+`?edit=` is a visitor's to type and it decides which markup renders.
+
+**THE PHONE IS NOT EDITABLE AND SHOULD NOT BECOME SO.** It is the identity on
+this system: the thread is keyed on it, the carrier sends to it, and every
+inbound is matched against it. Changing it here would orphan a conversation
+rather than move it.
+
+**A MOVE THROWS THE MAP PIN AWAY**, through the same `geocode.clearPinIfMoved()`
+the AI's own save uses. Without it every routing decision after the edit is made
+about the old house - which is exactly what happened when a customer moved to
+Glen Rock and the map kept them in Fair Lawn.
+
+**PREFERENCES ARE MERGED, NEVER REPLACED.** That one JSON column holds more than
+the form shows - the pickup spot the AI saved, a dropoff spot, a note somebody
+left by hand - and writing the form's five keys as the whole object would
+silently delete every one of them.
+
+**BLANK CLEARS THE KEY RATHER THAN WRITING A DEFAULT IN.** "Not set" is the
+first option on every select and is the state every new customer is in. Storing
+`COLD` for somebody who never said cold is what would make the intake table
+start calling a default a choice.
+
+**DETERGENT IS SETTABLE HERE AND IS STILL NEVER ASKED.** `wash.DETERGENTS` is
+deliberately NOT in `wash.OPTIONS`, so the AI does not offer it, `update_profile`
+cannot set it and the signup form never mentions it - Neil's "we're not gonna
+ask about that" stands, because that was about ASKING. What he wanted was to
+tell one laundromat to use something different for one customer, which needs a
+value and a line on the ticket rather than a question. It costs nothing and
+`surchargeFor()` cannot see it.
+
+**AND IT FOUND A DISPLAY BUG IN TWO PLACES.** The customer card read
+`prefs.fabric_softener ? 'yes' : 'no'` and the order page built its own sentence
+the same way - the stored values are `STANDARD` and `NONE`, both truthy, so a
+customer who asked for NO softener had both screens saying they wanted some.
+Both read through `wash.washLines()` now, which is what the laundromat's own
+ticket reads, so two screens cannot describe one bag two different ways.
+
 **SOMEBODY CAN BE MARKED OPTED OUT BY HAND, AND IT IS ONE WAY.** Neil's ask: a
 customer who asks to come off the list on the phone or at a door left no trace,
 and kept getting reminders. `POST /ops/customers/:id/opt-out`, behind
 `messages.send` — the people who may cause a text are the people who may stop
 one, and a driver is neither.
 
-**Nothing here opts anybody back IN.** Consent is theirs to give and they give
-it by texting START from their own handset, which is the rule every other door
-already follows. The button says so before it is pressed rather than after.
-**Nobody is texted to confirm** — they asked us to stop, and one more message
-saying we have stopped is the joke that writes itself.
+**IT IS ONE BUTTON NOW, AND THERE IS A SECOND ONE GOING THE OTHER WAY.** Neil,
+17 September: *"If they can be texted: one button, Opt out of texts. If they
+are opted out: Opted out of texts, plus Opt back in. No essay. No 'how they
+told you' box."* What went was a heading, a four-line paragraph and a required
+free-text field - all true, all in the way, on a control reached for with
+somebody on the phone asking to be left alone. `unsubscribed_note` survives and
+old rows keep theirs; nothing writes one. When, by whom, and `BY_HAND` rather
+than `STOP` are still recorded, which is what an audit asks.
+
+**AND THAT REVERSES "NOTHING HERE OPTS ANYBODY BACK IN".** That rule read:
+consent is theirs to give and they give it by texting START from their own
+handset. Neil has taken the opposite view in writing, having been told STOP
+still works: *"Opt back in from ops is allowed when I press the button."*
+
+**`POST /ops/customers/:id/opt-in` NEVER WRITES A CONSENT RECORD, AND MUST NEVER
+LEARN TO.** `sms_consent_at`, `sms_consent_source` and `sms_consent_ip` are the
+evidence that THEY agreed - what a carrier asks for at 10DLC registration and
+what a TCPA complaint turns on - and pressing a button in ops is not the
+customer agreeing to anything. They are untouched. What is written is narrower
+and true: `resubscribed_at` and `resubscribed_by` (migration 0100), a named
+person deciding on a date to start texting them again. A test refuses all three
+consent columns by name.
+
+**STOP is untouched either way.** `compliance.js` answers it before the AI sees
+a message, and `notify.sendAndLog()` refuses an opted-out number at the last
+gate, so a customer can always take themselves back off whatever anybody here
+pressed. **Neither button texts anybody** — they asked us to stop, and one more
+message saying we have stopped is the joke that writes itself; a message saying
+we have started again would land on somebody who had asked us not to.
 
 **How somebody came to be opted out is recorded, not just that they are**
 (migration 0076). `customers` already held how consent was GIVEN and nothing at
