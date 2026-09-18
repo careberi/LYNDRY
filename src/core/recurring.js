@@ -399,6 +399,24 @@ async function bookNext(customer, { after = null } = {}) {
       pickupTime:
         schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
       fromSchedule: true,
+      // THE PLAN IT IS BOOKED UNDER, exactly as bookDue() passes it above - and
+      // this line was missing until 17 September, which made it the expensive
+      // half of a rule that only one of the two doors was keeping.
+      //
+      // THIS IS THE DOOR THAT BOOKS ALMOST EVERY STANDING PICKUP. It fires from
+      // fulfilment.collect() the moment the previous one goes in the van, days
+      // before the nightly pass looks at that date - and dueOn() then skips the
+      // day because a pickup already exists. So bookDue() passing the plan was
+      // never reached for anybody's second, third or fourth pickup, and every
+      // one of them was written with subscription_id null and the one-time
+      // rate.
+      //
+      // NOTHING FAILED WHEN IT WAS WRONG, which is why it survived: the row is
+      // created, the board is happy, the driver's round is unchanged, and the
+      // 10% only goes missing when the card is charged at the door. Found on
+      // Shamar Allen's fortnightly Saturdays, whose #2061 had to be corrected
+      // by hand because orders.price_per_lb_cents is snapshotted at booking.
+      subscriptionId: schedule.id,
       placedVia: schedule.placed_via || null,
     });
 

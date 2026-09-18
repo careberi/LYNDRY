@@ -138,7 +138,17 @@ test('and the nightly pass hands the plan down to the order it books', () => {
   const booking = withoutComments(SRC('core', 'booking.js'));
   const orders = withoutComments(SRC('core', 'orders.js'));
 
-  assert.match(recurring, /subscriptionId: schedule\.id/, 'the nightly pass stopped passing the plan');
+  // SCOPED TO bookDue's OWN BODY, not to the file. Matching the whole of
+  // recurring.js is what let this test stay green while recurring.bookNext() -
+  // the other door, and the one that actually books most standing pickups -
+  // passed no plan at all. See test/standing-pickup-keeps-the-plan.test.js,
+  // which is where the rule about BOTH doors lives.
+  const nightly = recurring.slice(
+    recurring.indexOf('async function bookDue('),
+    recurring.indexOf('async function addSchedule(')
+  );
+
+  assert.match(nightly, /subscriptionId: schedule\.id/, 'the nightly pass stopped passing the plan');
   assert.match(booking, /subscriptionId: subscriptionId \|\| null/, 'bookPickup stopped forwarding it');
   assert.match(orders, /subscription_id: subscriptionId \|\| null/, 'create stopped writing it');
   assert.match(

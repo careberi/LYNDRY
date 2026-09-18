@@ -1223,6 +1223,41 @@ whichever came first would cancel the wrong laundry, and there is no undo.
 only be one; now it would skip a standing order for ever the moment somebody
 booked a different day by hand.
 
+**EVERY DOOR THAT BOOKS OFF A SCHEDULE PASSES THE SCHEDULE'S ID, AND THERE ARE
+TWO OF THEM.** A subscription IS a standing order — there is no `subscriptions`
+table — so the only thing making a pickup cost $1.80 rather than $2.00 is
+`orders.subscription_id`, which `orders.create()` turns into the rate through
+`subscription.rateForCents()`.
+
+| | |
+|---|---|
+| `recurring.bookDue()` | the nightly pass, the evening before |
+| `recurring.bookNext()` | fired by `fulfilment.collect()` the moment the previous pickup goes in the van, days earlier |
+
+**`bookNext()` did not pass it until 17 September, and it is the door that
+almost always runs.** It books the next pickup at collection; by the time the
+nightly pass reaches that date `dueOn()` skips the day because a pickup already
+exists — so the door that DID pass the plan was the one that hardly ever fired,
+and every second, third and fourth pickup a subscriber had was written as a
+one-time.
+
+**Nothing failed while it was wrong**, which is why it lasted: null is a
+perfectly good answer meaning $2.00, the row is created, the board is happy, and
+the 10% only goes missing when the card is charged at the door. And
+`price_per_lb_cents` is snapshotted at booking, so a pickup already created
+keeps the wrong rate — which is why Shamar Allen's #2061 needed a row edited by
+hand as well as a line of code. `test/standing-pickup-keeps-the-plan.test.js`
+drives its assertion off a LIST of the doors, so a third one cannot ride on the
+first one's line.
+
+**The test that should have caught it matched the whole file.**
+`subscription-rate-in-texts` asserted `subscriptionId: schedule.id` against all
+of `recurring.js`, which `bookDue()` satisfied on its own — green on the day
+`bookNext()` was written and every day since. Same shape as the `CARD_FIELDS`
+test recorded above, which asserted a constant EQUALLED one column name and
+passed on the day the rule changed. **Assert against the thing the rule is
+about** — here a function body, not a file.
+
 **A customer may have several standing orders.** `recurring_schedules`, one row
 per arrangement, so Tuesday mornings and Saturday lunchtimes can both exist —
 that was impossible while the schedule lived in four columns on the customer
