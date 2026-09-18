@@ -1127,6 +1127,74 @@ function declinedCard(order, mayCharge, mayText) {
   </section>`;
 }
 
+// THE $25 HOLD WAS REFUSED, AND UNTIL NOW NOTHING COULD ASK THE CARD AGAIN.
+//
+// Neil, 18 September, on order #2073: "uncancel order 2073 and retry the hold".
+// The order was reinstated in seconds and the hold could not be retried at all,
+// because only three things in the system have ever placed one - bookPickup(),
+// card-saved.js, and the nightly pass - and all three fire on their own. There
+// was no screen, no button and no endpoint. A customer who rings up to say "try
+// it now, I have moved some money across" could not be helped.
+//
+// IT IS NOT declinedCard(). That one settles a WASH: it returns early unless
+// there is a price_cents, which a pickup that has never been weighed does not
+// have. #2073 is exactly that shape - refused hold, no weight, no price - so it
+// rendered nothing at all and the page was silent about the one thing stopping
+// the van.
+//
+// ONLY WHILE IT IS AWAITING COLLECTION. Past that the van has been, the money
+// is decided at the door, and a hold is a question about a trip nobody is
+// making any more.
+function refusedHoldCard(order, mayRetry) {
+  if (!orders.AWAITING_COLLECTION.includes(order.status)) return '';
+  if (billing.showUpState(order) !== 'REFUSED') return '';
+
+  const customer = order.customers || {};
+  const hasMethod = Boolean(customer.stripe_customer_id && customer.default_payment_method_id);
+  const card = billing.describeCard(customer) || 'their card';
+
+  const line = (label, value) => `
+    <p class="ops-note__body" style="margin:2px 0;">
+      <span style="color:var(--ink-500);">${escapeHtml(label)}</span> ${value}
+    </p>`;
+
+  return `
+  <section class="card card-xl" id="hold" style="padding:24px;margin-top:20px;">
+    ${sectionHeading('Not confirmed', 'The hold was refused')}
+
+    <p class="ops-note__body" style="margin:6px 0 14px;">
+      ${escapeHtml(card)} would not accept the
+      ${escapeHtml(billing.money(billing.showUpCents()))} we hold to confirm a pickup, so this
+      stop is off the round. Nothing has been taken.
+    </p>
+
+    ${order.authorization_refused_reason ? line('What the bank said', escapeHtml(order.authorization_refused_reason)) : ''}
+    ${line('Attempts', String(order.authorization_attempts || 0))}
+
+    ${
+      !hasMethod
+        ? `<p class="ops-note__body"><strong>
+             There is nothing on file to hold against. They have to add a payment
+             method before this pickup can go anywhere.
+           </strong></p>`
+        : mayRetry
+          ? `<form method="post" action="/ops/orders/${escapeHtml(order.order_number)}/authorize"
+                   style="margin:14px 0 0;">
+               <button class="btn btn-primary btn-lg btn-full" type="submit">
+                 Try the hold again
+               </button>
+             </form>
+             <p class="ops-note__body" style="margin:10px 0 0;font-size:13px;color:var(--ink-500);">
+               Nothing is said to the customer either way - you are the one who
+               knows why you pressed it.
+             </p>`
+          : `<p class="ops-note__body" style="margin-top:12px;"><strong>
+               An admin has to try this one again.
+             </strong></p>`
+    }
+  </section>`;
+}
+
 function heldWeightCard(order, maySettle) {
   if (order.weight_settled_at) return '';
 
@@ -3005,6 +3073,10 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       order.weight_held_at && showMoney ? `<div id="settle">${heldWeightCard(order, can.override)}</div>` : '',
       `<div id="release">${returnCheckCard(order, can.override)}</div>`,
       showMoney && order.payment_status === 'FAILED' ? `<div id="declined">${declinedCard(order, can.override, roles.can(req.opsUser, 'messages.send'))}</div>` : '',
+      // The refused $25 hold. Not folded into declinedCard() above: that one
+      // settles a wash and returns early without a price, which a pickup that
+      // has never been weighed does not have. Its own section carries id="hold".
+      showMoney ? refusedHoldCard(order, can.override) : '',
       stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override)}</div>` : '',
       orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
       can.customers && stillRunning
@@ -3109,6 +3181,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       ${returnCheckCard(order, roles.can(req.opsUser, 'orders.override'))}
       ${roles.can(req.opsUser, 'money.view') ? heldWeightCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
       ${roles.can(req.opsUser, 'money.view') ? declinedCard(order, roles.can(req.opsUser, 'orders.override'), roles.can(req.opsUser, 'messages.send')) : ''}
+      ${roles.can(req.opsUser, 'money.view') ? refusedHoldCard(order, roles.can(req.opsUser, 'orders.override')) : ''}
       ${progressCard(order, pickupTasks)}
       ${correctionsCard(order, labels, roles.can(req.opsUser, 'orders.override'))}
       ${cancelCard(order, roles.can(req.opsUser, 'orders.override'))}
@@ -4904,6 +4977,99 @@ router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (re
 // ADMIN ONLY, through orders.override. Taking money off somebody is a decision
 // about the customer rather than a step in the round, the same line cancelling
 // a pickup and reassigning a driver already draw.
+// POST /ops/orders/:id/authorize - ask the card for the $25 hold again
+//
+// Neil, 18 September, on #2073: "uncancel order 2073 and retry the hold". The
+// uncancel took seconds and the retry was impossible - three things place a
+// hold (bookPickup, card-saved.js, the nightly pass) and every one of them
+// fires on its own. Nothing a person could press.
+//
+// IT IS THE SAME billing.authorizeShowUp() THE OTHER THREE CALL, so this button
+// cannot hold an amount the automatic paths would not have, and a second
+// implementation cannot drift from the first. Same rule as the charge button
+// directly above.
+//
+// ADMIN ONLY, behind orders.override, for the reason the charge button draws
+// that line: putting a pending charge on somebody's card is a decision about
+// the customer rather than a step in the round.
+//
+// IT SAYS NOTHING TO THE CUSTOMER, and that is deliberate rather than an
+// omission. Every other hold is placed while nobody is watching - at booking,
+// or on the nightly pass - so a refusal there has to reach the customer or
+// nobody finds out. This one is pressed by a person who already knows, usually
+// with the customer on the phone, which is exactly the argument
+// billing.settledMessage() records for the charge retry going quiet.
+router.post('/ops/orders/:id/authorize', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const said = (kind, message) => res.redirect(303, `${back}?${kind}=${encodeURIComponent(message)}`);
+
+    // Refused here as well as hidden on the page, because a screen that hides a
+    // control while the route behind it still fires is not a guard.
+    if (!orders.AWAITING_COLLECTION.includes(order.status)) {
+      return said(
+        'problem',
+        'The van has already been for that one. A hold only confirms a pickup that has not happened yet.'
+      );
+    }
+    if (order.payment_status === 'WAIVED') {
+      return said('problem', 'This order is waived. Nothing is held against it.');
+    }
+    if (order.payment_status === 'PAID') return said('done', 'That one is already paid.');
+
+    const customer = order.customers;
+    const held = await billing.authorizeShowUp(order, customer).catch((err) => {
+      console.error(`Could not retry the hold on ${order.id}: ${err.message}`);
+      return { ok: false, threw: err.message };
+    });
+
+    const amount = billing.money(held.amountCents || billing.showUpCents());
+
+    // A THROWN ERROR IS NOT A REFUSAL, which is the lesson #2068 left in
+    // CLAUDE.md. Stripe being unreachable, or a sandbox key that cannot see a
+    // live customer, is our problem and not the customer's card saying no - so
+    // it is logged as what it was and the card is not blamed on the screen.
+    if (held.threw) {
+      await orderEvents.record(order.id, {
+        kind: 'PAYMENT',
+        summary: 'Hold retried by hand and could not be completed',
+        became: 'unchanged',
+        by: { opsUser: req.opsUser },
+        reason: held.threw,
+      });
+      return said('problem', `That did not complete: ${held.threw}. Nothing has changed.`);
+    }
+
+    if (held.needsCard) {
+      return said('problem', 'There is no payment method on file to hold against.');
+    }
+
+    if (held.skipped) {
+      return said('problem', `Nothing to hold (${held.skipped}).`);
+    }
+
+    if (held.alreadyHeld) return said('done', 'There is already a live hold on that one.');
+
+    await orderEvents.record(order.id, {
+      kind: 'PAYMENT',
+      summary: held.ok ? `Hold of ${amount} accepted on a retry by hand` : 'Hold refused again on a retry by hand',
+      was: 'refused',
+      became: held.ok ? `held ${amount}` : 'still refused',
+      by: { opsUser: req.opsUser },
+      reason: held.ok ? null : held.reason || 'That card would not accept the hold.',
+    });
+
+    return held.ok
+      ? said('done', `${amount} held. The pickup is confirmed and back on the round.`)
+      : said('problem', `Refused again: ${held.reason || 'that card would not accept the hold.'}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // POST /ops/orders/:id/card-link - text them a way to replace the card
 //
 // Neil, 13 September: "I should have a button in the order page - to send a
