@@ -1115,6 +1115,7 @@ POST /ops/customers/:id/ask  text them for one thing we still need
 POST /ops/customers/:id/opt-out  they asked not to be texted (one way)
 POST /ops/orders/:id/cancel  call a pickup off, and tell them
 POST /ops/orders/:id/charge  try a refused card again (Admin only)
+POST /ops/orders/:id/authorize  try a refused $25 hold again (Admin only)
 GET  /ops/messages           every conversation, one row per phone number
 GET  /ops/messages/:phone    one thread, oldest first, with delivery receipts
 POST /ops/messages/:phone/ai who answers this number: the AI, or a person
@@ -1222,6 +1223,41 @@ whichever came first would cancel the wrong laundry, and there is no undo.
 `findAwaitingOn()`. Checking for any open pickup was right while there could
 only be one; now it would skip a standing order for ever the moment somebody
 booked a different day by hand.
+
+**EVERY DOOR THAT BOOKS OFF A SCHEDULE PASSES THE SCHEDULE'S ID, AND THERE ARE
+TWO OF THEM.** A subscription IS a standing order — there is no `subscriptions`
+table — so the only thing making a pickup cost $1.80 rather than $2.00 is
+`orders.subscription_id`, which `orders.create()` turns into the rate through
+`subscription.rateForCents()`.
+
+| | |
+|---|---|
+| `recurring.bookDue()` | the nightly pass, the evening before |
+| `recurring.bookNext()` | fired by `fulfilment.collect()` the moment the previous pickup goes in the van, days earlier |
+
+**`bookNext()` did not pass it until 17 September, and it is the door that
+almost always runs.** It books the next pickup at collection; by the time the
+nightly pass reaches that date `dueOn()` skips the day because a pickup already
+exists — so the door that DID pass the plan was the one that hardly ever fired,
+and every second, third and fourth pickup a subscriber had was written as a
+one-time.
+
+**Nothing failed while it was wrong**, which is why it lasted: null is a
+perfectly good answer meaning $2.00, the row is created, the board is happy, and
+the 10% only goes missing when the card is charged at the door. And
+`price_per_lb_cents` is snapshotted at booking, so a pickup already created
+keeps the wrong rate — which is why Shamar Allen's #2061 needed a row edited by
+hand as well as a line of code. `test/standing-pickup-keeps-the-plan.test.js`
+drives its assertion off a LIST of the doors, so a third one cannot ride on the
+first one's line.
+
+**The test that should have caught it matched the whole file.**
+`subscription-rate-in-texts` asserted `subscriptionId: schedule.id` against all
+of `recurring.js`, which `bookDue()` satisfied on its own — green on the day
+`bookNext()` was written and every day since. Same shape as the `CARD_FIELDS`
+test recorded above, which asserted a constant EQUALLED one column name and
+passed on the day the rule changed. **Assert against the thing the rule is
+about** — here a function body, not a file.
 
 **A customer may have several standing orders.** `recurring_schedules`, one row
 per arrangement, so Tuesday mornings and Saturday lunchtimes can both exist —
@@ -3956,6 +3992,51 @@ pickup is a trip and three waiting pickups are three trips. Same lead-time rule,
 because one door holding what the other would not is how they drift. The soonest
 one decides what the customer reads; any others whose hold was refused sit on
 the routing board in red like every other uncollectable stop.
+
+**A REFUSED HOLD CAN BE RETRIED BY A PERSON, AND UNTIL 18 SEPTEMBER IT COULD
+NOT BE.** Neil, on order #2073: *"uncancel order 2073 and retry the hold."* The
+uncancel took seconds. The retry was impossible - the three things that place a
+hold (`bookPickup()`, `card-saved.js`, the nightly pass) all fire on their own,
+so there was no button, no ops route and nothing a person could press. A
+customer who rings to say "try it now, I have moved some money across" could not
+be helped at all.
+
+`POST /ops/orders/:id/authorize`, behind `orders.override` - Admin only, the
+line the charge button already draws, because putting a pending charge on
+somebody's card is a decision about the customer rather than a step in the
+round. It calls the same `billing.authorizeShowUp()` the automatic paths call,
+so it cannot hold an amount they would not have.
+
+**IT IS NOT `declinedCard()`, WHICH IS WHY THE PAGE WAS SILENT.** That card
+offers the charge retry and returns early without a `price_cents` - which a
+pickup that has never been weighed does not have. #2073 was exactly that shape:
+hold refused, never collected, never weighed, no price. So the one thing keeping
+the van away was the one thing the order page would not mention.
+`refusedHoldCard()` draws only while the order is awaiting collection and only
+when `showUpState()` is `REFUSED`, and **the route refuses on both counts too** -
+a screen that hides a control while the route behind it still fires is not a
+guard.
+
+**IT SAYS NOTHING TO THE CUSTOMER.** Every other hold is placed while nobody is
+watching, so a refusal there has to reach them or nobody finds out. This one is
+pressed by a person who already knows, usually with the customer on the phone -
+the same argument `settledMessage()` records for the charge retry going quiet.
+
+**A THROWN ERROR IS NOT THE CARD SAYING NO**, which is #2068's lesson biting a
+second time. The first retry of #2073 was run from a terminal whose `.env`
+carries `STRIPE_SECRET_KEY=sk_test_`, against a customer and card that exist
+only in live mode; Stripe answered *"No such PaymentMethod"* and
+`authorizeShowUp()` recorded it as a refusal, because it cannot tell a sandbox
+from a dead card and must not try. That put a reason on a live order that was a
+fact about a laptop. The route separates the two and the exception branch comes
+first.
+
+**AND THAT IS WHY THIS IS A BUTTON RATHER THAN A SCRIPT.** The dev environment
+shares the production database and carries a TEST Stripe key, so anything to do
+with money that is run locally writes real rows while talking to a sandbox. It
+is the same trap CLAUDE.md already records for the nightly pass and the leads
+sweep, one vendor along. **Anything that must reach a real card has to run in
+production**, which means it needs a control on a page.
 
 ### The night before, so a far-out booking still has one
 
