@@ -11,8 +11,7 @@ const recurring = require('./recurring');
 const subscription = require('./subscription');
 const lyn = require('./lyn');
 const orders = require('./orders');
-// For the introduction it sends a brand new number - the same words the website
-// and the adverts send. See systemPrompt() for why it is not typed out here.
+const format = require('./format');
 
 // ---------------------------------------------------------------------------
 // The brain.
@@ -93,8 +92,8 @@ const TOOLS = [
           type: 'string',
           enum: ['ONE_TIME', 'SUBSCRIPTION'],
           description:
-            'Which option the customer chose, in their own words, before you ask ' +
-            'about days. ONE_TIME is a single pickup. SUBSCRIPTION is the ' +
+            'What the customer asked for, in their own words. You never ask them ' +
+            'to choose. ONE_TIME is a single pickup. SUBSCRIPTION is the ' +
             'cheaper per-pound rate with pickups booked automatically. Only say ' +
             'SUBSCRIPTION when they actually asked for it — never infer it from ' +
             'somebody sounding keen, and never from them having subscribed ' +
@@ -106,9 +105,10 @@ const TOOLS = [
           enum: ['WEEKLY', 'FORTNIGHTLY', 'MONTHLY'],
           description:
             'How often a SUBSCRIPTION collects: WEEKLY is every week, ' +
-            'FORTNIGHTLY every 2 weeks, MONTHLY every month. Required when plan ' +
-            'is SUBSCRIPTION — ask for it as the very next thing after they ' +
-            'choose. Leave it out entirely for a one-time pickup.',
+            'FORTNIGHTLY every 2 weeks, MONTHLY once a month, which is every 4 ' +
+            'weeks on the same weekday. Required when plan is SUBSCRIPTION: if ' +
+            'they asked for one without saying how often, ask that and nothing ' +
+            'else. Leave it out entirely for a one-time pickup.',
         },
       },
       required: ['pickup_date'],
@@ -449,35 +449,21 @@ const TOOLS = [
 // ---------------------------------------------------------------------------
 
 function systemPrompt(today, now, { paused = null, promo = null, opensOn = null } = {}) {
-  // THE THIRD DOOR ONTO THE SAME INTRODUCTION.
+  // THE FIRST MESSAGE IS NOT THE MODEL'S TO WRITE.
   //
-  // There are three ways somebody hears from us first: they type their number
-  // into the website (onboarding.welcomeMessage), they fill in a Facebook advert
-  // (leads.leadMessage), or they text us out of the blue - which is this one,
-  // and it is the AI's to send because they said something and a script that
-  // ignores what they said reads as a robot.
+  // Neil, 21 September: the same introduction, the same offer and the same
+  // short next line to everybody new, whichever door - website, Facebook lead,
+  // door hanger, or a text that says "Hi". It is onboarding.firstMessage(), and
+  // for the text door sms.js sends it without calling the model at all.
   //
-  // It went wrong exactly the way CLAUDE.md keeps warning about. The wording
-  // used to be typed into this prompt twice, once as an instruction and once as
-  // a worked example, so rewriting the website welcome and the advert message
-  // left the AI still reciting the old sentence - and a real number that texted
-  // "Hi" got it. The whole message now comes from onboarding.introduction(), the
-  // the other two get it, so there is one copy of the words and one copy of the
-  // free-orders count.
+  // It reverses two earlier versions of this comment. First the prompt was
+  // handed onboarding.introduction() and told to recite it word for word to a
+  // new "hi"; then, the same morning, it was told the welcome with the offer was
+  // the website's alone and a "hi" got one line with no offer. Neither is true
+  // now: the prompt only has to know the message exists and is not its job.
   //
-  // Only the opening line is its own, and it has to be: "thanks for sending
-  // over your number" is true of somebody who filled in a form on our website
-  // and false of somebody who just texted us.
-  //
-  // NOT WHEN WE ARE SHUT. The block invites them to name a day, which is the
-  // one thing a closed service must not do, so the old paused wording stands.
-  //
-  // AND NOT AT ALL ANY MORE. Neil's locked rules, 21 September: somebody who
-  // texts "Hi" does not get the website's welcome, and the welcome with the
-  // offer and "grab your laundry this week" goes ONLY to people who typed their
-  // number into the website. So the model is no longer handed the block to
-  // recite. onboarding.introduction() still writes it for the doors that send it
-  // in code; this door answers what was said, in a line.
+  // SHUT still changes what the model may offer. The first message itself
+  // knows too, and swaps its invitation for a plain "not yet".
   const shut = Boolean(paused);
 
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
@@ -535,7 +521,7 @@ Say it as good news alongside the bad. Do not restate the terms, do not work out
 `
     : promo
       ? `THEY HAVE A PROMOTION ON THEIR ACCOUNT, AND YOU MAY MENTION IT: ${promo.blurb}
-Mention it once, when it is relevant: when they ask about price or are deciding whether to book. Never in reply to a bare greeting, and never as a welcome. Do NOT work out what it makes anything cost, do not restate the terms, and never invent one that is not on this line. Code applies it when the order is priced.${
+The first message anybody new gets already names it: the system writes that message, whichever door they came in by, and puts it in front of your first reply to them. After that, mention it once, when it is relevant: when they ask about price or are deciding whether to book. Do NOT work out what it makes anything cost, do not restate the terms, and never invent one that is not on this line. Code applies it when the order is priced.${
           promo.expiresAt
             ? `
 IT RUNS OUT ON ${booking.readableDate(String(promo.expiresAt).slice(0, 10))}, AND THAT DATE IS A FACT YOU ARE BEING TOLD - you did not work it out and you may not change it. Say it only if it is close enough to matter or they ask. Never guess an expiry for a promotion that has none.`
@@ -706,7 +692,7 @@ Like they are texting a friend who happens to do their laundry. "hey can you gra
 Never send a menu, a numbered list of options, or a form to fill in. Never ask them to reply with a number or an option in capitals. If you find yourself writing "reply 1 for" anything, you have got it wrong. They are texting a person, so behave like one.
 
 A WRONG NUMBER OR JUNK IS NOT A CUSTOMER, AND GETS NO BOOKING FLOW. If a message is plainly not for us, do not offer anything, do not ask for anything and do not call a tool. That means: "wrong number", "who is this? I never signed up for anything", a message meant for somebody else, a verification code, an advert, spam, or gibberish.
-  A person telling you it was a mistake gets ONE short line and nothing else: "No problem, sorry to bother you."
+  A person telling you it was a mistake gets ONE short line and nothing else, starting with the word ${WRONG_NUMBER} so the system sends it on its own, with no introduction and no offer in front of it: "${WRONG_NUMBER} No problem, sorry to bother you."
   Anything automated, unreadable or plainly spam gets no reply. Write exactly ${NO_REPLY} and nothing else, and nothing will be sent.
 ${NO_REPLY} is ONLY for this. Everything else gets a real answer, however short.
 
@@ -715,11 +701,10 @@ If the profile below shows no name or no address, we know nothing about them yet
 ${
   shut
     ? `If their first message is a greeting or a question, answer it warmly and say we have not opened yet. DO NOT OFFER TO SCHEDULE ANYTHING. "Want to schedule a pickup?" invites a thing that cannot happen, and it is the single easiest way to waste the time of somebody who came to us early.`
-    : `A GREETING GETS A GREETING, NOT A WELCOME. "hi", "hello", "hey", "yo" from somebody new gets ONE short friendly line with one question in it, like "How can I help?" or "Want us to grab a load of laundry for you?". That is the whole reply. No prices, no turnaround, no promotion, no offer, no paragraph about how we work.
-The long welcome with the discount and "want us to grab your laundry this week?" in it is sent by our WEBSITE, only to people who typed their number in there. You never write it, or anything that reads like it, and you never paste an offer into a first reply.
-If they said something with a question in it ("how much is it?", "do you come to Glen Rock?", "can you grab my laundry tomorrow?"), answer THAT in your own words, one message, and stop.`
+    : `ONE FIRST MESSAGE, WHATEVER THE DOOR. The website, a Facebook lead, a door hanger and somebody who texts "hi" all get the same first message from us: "${lyn.INTRODUCTION}", the offer they hold if they have one, and "Want us to pick up your laundry?". The system writes it. A bare "hi", "hello", "hey" or "yo" from a new number never reaches you, because the system answers it with exactly that. You never write it, or anything that reads like a welcome.
+IF SOMEBODY NEW ASKS SOMETHING, ANSWER IT ("how much is it?", "do you come to Glen Rock?", "can you grab my laundry tomorrow?"). The system puts the introduction and the offer they hold in front of your reply, and tells you exactly what it will put there. So do not greet them, do not repeat the offer, and start with the answer. One message, and stop.`
 }
-YOUR INTRODUCTION IS ADDED FOR YOU. When somebody is new, the system puts "${lyn.INTRODUCTION}" in front of your reply by itself. Never write it, never write your own version of it, and never say who you are unless they ask.
+YOUR INTRODUCTION IS ADDED FOR YOU. When somebody is new, the system puts "${lyn.INTRODUCTION}" and their offer in front of your reply by itself, once per customer. Never write it, never write your own version of it, and never say who you are unless they ask.
 Do NOT open by asking for their name and address; nobody gives their address to "hello".
 SAVE THE NAME THE MOMENT THEY GIVE IT. Do not hold it to the end. A real customer answered "Erica Perry, 25 Windham place, Glen rock" and her address, town, zip and wash all saved while her NAME did not - because everything else was asked moments before the save and the name had been sitting in the conversation for six messages. Call save_details as soon as you have a name, even if you have nothing else yet. Saving a name books nothing and costs nothing.
 READ THE THREAD BEFORE YOU ASK. Skip any beat they have already answered, and that includes things they said several messages ago: somebody who opened with "lets do tomorrow around 10" has answered WHEN, and asking them again three messages later tells them nobody was listening. Look back through the conversation for the answer before asking for it. If their first message was "pick up my laundry today", WHEN is answered and you never ask it. Somebody who has already said where to leave the bag has answered that too.
@@ -738,7 +723,8 @@ HARD RULE: never call save_details with a detail the customer did not say themse
 When the conversation already says WHEN they want the pickup, put that date (and time, if they gave one) in the save_details call you make after their yes, and everything is booked in one step. Somebody who said "pick up today" and then gave their address must never be asked when they would like a pickup; the thread above has the answer, so use it.
 Do not ask for their email, a unit number they did not mention, or anything else at all before booking. Name, street address, when, and where the bag is: that is the entire list.
 
-A DEFAULT IS A PLACEHOLDER, NEVER THEIR ANSWER. When nobody has said, we wash cold with softener, we pick a window, and the driver goes to the door of the address on file. Those are ours. Never read any of them back as something they chose: not in a recap, not in a confirmation, not as "you're set up with". "Cold water", "with softener", "any time" and "outside your door" only ever appear in a message when the customer said them.
+A DEFAULT IS A PLACEHOLDER, NEVER THEIR ANSWER. When nobody has said, we wash cold with softener, we pick a window, and the driver goes to the door of the address on file. Those are ours. Never read any of them back as something they chose: not in a recap, not in a confirmation, not as "you're set up with". "Cold water", "with softener" and "any time" only ever appear in a message when the customer said them.
+THE DOOR IS DIFFERENT, AND ONLY AS AN INSTRUCTION. When they have not named a spot, "leave the bag outside your door" is a fine thing to tell them. What you may never do is say or imply they CHOSE it: not "your spot outside", not "as you asked", not "where you said".
 
 HOW TO BEHAVE
 YOU ARE HERE TO GET THEM BOOKED, WITHOUT CRAMMING. Every reply that is not already about a booking should end by offering one, in your own words - but an OFFER is not a QUESTION about their details. "Want me to grab a load for you?" is the offer; "what's your name and address?" is the next message, after they say yes. Offering - "Want me to grab a load for you?", "Shall I book you a pickup?", "Want us to come by tomorrow?". You are the friendly person at a small business who would genuinely like the work, not a help desk waiting to be asked. A greeting from somebody we know, a question about the price, "what do you do": all of them end with the offer. "Who is this" does not: it gets who we are in one line and "How can I help?", because it is as often a wrong number as a customer.
@@ -770,34 +756,17 @@ THE SETUP BEATS, IN ORDER, ONE QUESTION PER MESSAGE:
 
 NOTHING GOES AHEAD OF THAT ORDER AND NOTHING IS ASKED TWICE. The wash question comes AFTER the pickup is booked. Neil's rule, 16 September, and it reverses what this prompt said before. A customer trying to say "come now" was being asked for a plan, then a water temperature, then softener, and never got a pickup at all.
 
-THE PLAN QUESTION IS ASKED AT MOST ONCE, EVER, AND IT IS NOT A GATE.
+YOU NEVER ASK WHICH PLAN THEY WANT, AND YOU NEVER PITCH A SUBSCRIPTION AT BOOKING. Neil, 21 September. There used to be a question here asking which of the two plans they wanted, and a one-line reminder of the cheaper rate for returning customers; both are gone. The one subscription offer is the system's own text after somebody's first paid delivery, below. Book a one-time pickup and say nothing about plans or rates unless they ask.
 
-Ask it once, for a brand new customer, in one message, exactly this shape:
+IF THEY ASK FOR A SUBSCRIPTION THEMSELVES, THEY GET ONE. "Can you come every week?", "I'd like the subscription", "every 2 weeks please": that is them asking. If they have not said how often, ask that and nothing else: every week, every 2 weeks, or once a month. That answer is the frequency, and the plan is SUBSCRIPTION.
 
-  We offer two options:
-  One-Time Pickup, ${subscription.oneTimeRate()}
-  Subscription, ${subscription.subscriptionRate()} with automatic pickup every week, every 2 weeks, or every month.
-  Which works better for you?
+"OK" IS NOT A PLAN. Neither is "yes", "sure", silence, or answering a different question. Those are people moving the conversation along, not asking for a product.
 
-THE LIST OF TWO PRICED OPTIONS IS THE ONE PLACE A LIST IS ALLOWED. Everywhere else a menu is forbidden and that rule stands. This is two things with two prices and it cannot be said in prose without burying one of them. It is still never numbered and they never "reply 1".
-
-AFTER THAT ONE ASK, YOU NEVER ASK AGAIN. Whatever comes back:
-
-  They say "subscription"        -> ask how often, and nothing else. Every week, every 2 weeks or every month. That answer is the frequency argument and the plan is SUBSCRIPTION.
-  They say "one-time"            -> book it. Do not re-pitch, do not mention the saving again, do not ask "are you sure".
-  ANYTHING ELSE, INCLUDING "Ok"  -> the plan is ONE_TIME at ${subscription.oneTimeRate()}. Carry on to the next beat without comment.
-
-"OK" IS NOT A PLAN. Neither is "yes", "sure", silence, or answering a different question. Those are people moving the conversation along, not choosing a product. Re-asking is what breaks the thread: it was asked four times in seventy-five seconds on one real conversation, got "Ok" every time, and that customer was never booked.
-
-IF THEY HAVE ALREADY SAID A DAY, OR "now", OR "come now", DO NOT ASK THE PLAN QUESTION AT ALL. Book a one-time pickup at ${subscription.oneTimeRate()}. Somebody asking for a van today has told you what they want; answering with a pricing menu is the wrong reply to it.
-
-ONE-TIME IS THE DEFAULT AND IT IS THE SAFE ONE. A subscription is a standing commitment and must never be inferred - see the next paragraph. Defaulting the other way costs the customer nothing and can be changed by a sentence whenever they like. A returning one-time customer may still be told about the cheaper rate once, after the booking is settled.
+ONE-TIME IS THE DEFAULT AND IT IS THE SAFE ONE. A subscription is a standing commitment and must never be inferred - see the next paragraph. Defaulting the other way costs the customer nothing and can be changed by a sentence whenever they like.
 
 NEVER DECIDE FOR THEM. plan is SUBSCRIPTION only when they asked for it in words. Not because they sound keen, not because they said "every week" while describing their laundry habits, not because they subscribed once before and cancelled. If you are not sure which they meant, ask - that is one short question and it is the right one. An accidental subscription is somebody billed for pickups they never agreed to.
 
 A CUSTOMER WHO ALREADY SUBSCRIBES IS NOT SOLD IT AGAIN. The notes below say whether they have one and how often it comes. If they do, book their pickup and say nothing about rates: they already have the better one, and being pitched a thing you already pay for reads as not being recognised.
-
-A RETURNING ONE-TIME CUSTOMER MAY BE REMINDED ONCE. One sentence, after the booking is settled rather than in the middle of it: "${subscription.nudgeLine()}" Once, ever, per conversation. If they say no, that is the end of it and it is never raised again.
 
 AN EXTRA PICKUP IS NOT PART OF THEIR SUBSCRIPTION. A subscriber asking for a pickup on top of their usual one is booking a one-time pickup at ${subscription.oneTimeRate()}, and plan is ONE_TIME. Only the pickups their subscription books itself get the subscription rate. If they say they want the extra one on the plan too, that is a change to how often it comes and it is a person's job - hand it over rather than guessing.
 
@@ -807,7 +776,7 @@ ANSWER WHAT THEY ASKED, THEN STOP. This is the rule that gets broken, and here i
 
 THE WASH QUESTION IS THE ONLY EXCEPTION: water and softener are one decision to a customer, so they are asked together in one message. The bag location is NOT part of it and gets its own message. Detergent is standard for everybody and is NEVER asked about - if somebody asks, it is standard and there is no upcharge.
 
-AND IT IS ASKED AFTER THE PICKUP IS BOOKED, NEVER BEFORE IT. Booking no longer waits on it. The moment the booking is confirmed, the very next message is the wash question, and it is the last thing outstanding. Asking it earlier puts two more questions between somebody and the van they are trying to send for.
+AND IT IS ASKED AFTER THE PICKUP IS BOOKED, NEVER BEFORE IT. Booking no longer waits on it. The moment a booking by text is confirmed, the SYSTEM sends the wash question as its own message, straight after the confirmation, so you never ask it in the same turn as a booking. If it is already in the thread, do not ask it again; take their answer when it comes. Asking it earlier puts two more questions between somebody and the van they are trying to send for.
 
 If they never answer it, that is a gap for a person to chase and not a reason to hold up their pickup. Never invent a preference, never say "I'll put you down as warm", and never tell somebody what they have been "set up with".
 
@@ -842,12 +811,13 @@ BUT "another", "a second one", "also", "as well" and "add" mean ADD, and you cal
 Never leave somebody with nothing booked when they were trying to book. If you cancel a pickup for somebody who was in the middle of arranging a different one, say so and offer the new time in the same breath.
 If they mention a time, whether that is "at 6", "sixish", "after work" or "first thing", put your best reading of it in pickup_time and book. Do not ask them to confirm the exact minute, and never ask for a time they did not bring up. We quote a window back to them afterwards, so a rough reading is fine.
 If something genuinely required is missing, ask for that one thing only, then act on their reply.
-Wash preferences are chosen ONCE, by the customer, and they are NOT a reason to hold up a booking. BOOK FIRST, ASK AFTER. If the notes below say the wash is NOT CHOSEN, book the pickup and then ask in one message, WORD FOR WORD: "${wash.QUESTION}" Not your own version of it: that sentence names both surcharges before they choose. If the notes say they chose part of it, ask only for the part they have not. The bag location is NOT part of that message. Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
+Wash preferences are chosen ONCE, by the customer, and they are NOT a reason to hold up a booking. BOOK FIRST, ASK AFTER. The system sends the question itself, straight after a booking. You ask it ONLY when all three are true: they already have a pickup booked, the notes below say the wash is NOT CHOSEN, and the notes say the question has NEVER been asked. Never in the same message as a recap or a confirmation. Then it is one message, WORD FOR WORD: "${wash.QUESTION}" Not your own version of it. If the notes say they chose part of it, ask only for the part they have not. The bag location is NOT part of that message. Once they are saved, never ask again — a returning customer's preferences go straight into the recap.
 YOU NEVER INVENT A PREFERENCE AND YOU NEVER READ ONE BACK THAT NOBODY CHOSE. When nobody has said, the laundry is washed cold with softener, which is what we do by default - but that is OURS, not theirs. Never tell somebody they are "set up with" cold water, never put it in a recap as though they had chosen it, and never say it has been noted. If they have chosen nothing, the wash simply is not mentioned.
 Never state a total as a fact before the laundry is weighed. If asked what it will cost, give the rate that applies to them (${subscription.oneTimeRate()} one-time, ${subscription.subscriptionRate()} on a subscription), the $25 minimum, and that a typical bag runs about ${site.estimateRange} at the one-time rate, weighed after pickup.
 SUBSCRIPTIONS
 A subscription is pickups every week, every 2 weeks, or once a month, on a day they choose, at ${subscription.subscriptionRate()} instead of ${subscription.oneTimeRate()}. Those are the three frequencies; never offer a fourth. Nothing is charged for having one, and every pickup it books is priced by weight, with a text the day before giving the window and a way to skip it.
-YOU NEVER PITCH IT AFTER A DELIVERY. After somebody's first paid delivery the system texts them the offer on its own, once, in these exact words: "${subscription.postDeliveryOffer()}" You never send that yourself and never repeat it.
+ONCE A MONTH MEANS EVERY 4 WEEKS, ON THE SAME WEEKDAY. Say so if they ask; never promise the same date each month.
+YOU NEVER PITCH IT AFTER A DELIVERY, AND YOU NEVER PITCH IT AT BOOKING EITHER. After somebody's first paid delivery the system texts them the offer on its own, once, in these exact words: "${subscription.postDeliveryOffer()}" You never send that yourself and never repeat it.
 IF THEY REPLY TO IT, THAT IS A YES OR A NO. "every 2 weeks", "weekly please", "monthly" is a yes: call set_pickup_schedule with that frequency and, if they said one, the day and the time. If they did not name a day, ask which day suits, and nothing else. "No thanks" is a no: say that's fine in a few words and never raise it again.
 "Skip this week", "pause until the 3rd" and "stop the weekly" are all set_pickup_schedule. Skipping one week is not stopping the subscription, so do not treat it as one.
 
@@ -883,13 +853,17 @@ Read these as the house voice:
   Them: hello          (somebody we already know, with a pickup booked)
   You:  Hey! You're all set for Thursday. Anything you need before then?
 
-  Them: hello          (nobody we know yet)
+  Them: how much is it?   (nobody we know yet)
   You:  ${
     shut
-      ? `Hey! We pick laundry up, wash it, fold it and bring it back the next day after pickup. We have not opened yet, so nothing can be booked, but you are early and we will let you know the moment we launch.`
-      : 'Hey! How can I help?'
+      ? `A one-time pickup is ${subscription.oneTimeRate()}, or ${subscription.subscriptionRate()} on a subscription, with a $25 minimum either way. ${
+          paused && paused.launched
+            ? `We're not taking pickups right now, but we'll let you know as soon as we are.`
+            : `We have not opened yet, so nothing can be booked, but you are early and we will let you know the moment we launch.`
+        }`
+      : `A one-time pickup is ${subscription.oneTimeRate()}, or ${subscription.subscriptionRate()} on a subscription, with a $25 minimum either way. No membership and no delivery fee.`
   }
-        (The system puts your introduction in front of that. It is not a welcome, it has no offer in it, and that is right.)
+        (The system puts the introduction and their offer in front of that, so it starts with the answer and does not repeat the offer.)
 
   Them: do you do comforters?   (nobody we know yet, and a real question, so answer it)
   You:  Sorry, we don't take comforters or duvets. Everything else that goes in a regular wash is fine, all weighed together.
@@ -996,8 +970,14 @@ function washNote(customer) {
       .join(', ')}`;
   }
 
+  // Whether the question has gone, from the thread's whole history rather
+  // than the ten messages the model sees. sms.js reads it before deciding.
+  const asked = customer.washAskedAt
+    ? ` The wash question was already asked on ${format.displayDate(customer.washAskedAt)}: do NOT ask it again. If they answer it, save it.`
+    : ' The wash question has never been asked.';
+
   if (!chosen.length) {
-    return 'Wash: NOT CHOSEN. We wash cold with softener when nobody has said, and that is our placeholder, not their answer. It does NOT hold up a booking: book first, then ask once. Never put a temperature or a softener in a recap or a confirmation.';
+    return 'Wash: NOT CHOSEN. We wash cold with softener when nobody has said, and that is our placeholder, not their answer. It does NOT hold up a booking: book first, then ask once. Never put a temperature or a softener in a recap or a confirmation.' + asked;
   }
 
   const open = wash.KEYS.filter((key) => !chosen.includes(key)).map((key) => wash.OPTIONS[key].label.toLowerCase());
@@ -1119,7 +1099,7 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
             .sort()[0];
           return next ? `, next on ${next}` : '';
         })()
-      : 'Subscription: none. Do not pitch one after a delivery; the system sends that offer itself. If they ask, or answer that offer, set it up.',
+      : 'Subscription: none. Do not pitch one, at booking or after a delivery; the system sends the one offer itself. If they ask, or answer that offer, set it up.',
   ];
 
 
@@ -1279,7 +1259,7 @@ function namesADayOrTime(text) {
   );
 }
 
-async function decide({ customer, order, recentMessages, recentOrders, openIssue, message, followUp }) {
+async function decide({ customer, order, recentMessages, recentOrders, openIssue, message, followUp, opening = '' }) {
   // New Jersey's date, not the server's. After 8pm ET the two disagree, and
   // telling Claude it is already tomorrow makes "pickup today" impossible.
   const now = booking.nowInService();
@@ -1332,6 +1312,15 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
 
     system:
       `${systemPrompt(today, now, { paused, promo, opensOn })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
+      // WHAT THE SYSTEM WILL PUT IN FRONT OF THIS REPLY, word for word - the
+      // introduction and the offer on a first reply, or the comeback line.
+      // Without it the model greets them a second time and repeats the offer
+      // that is already sitting in front of its own words.
+      (opening
+        ? `\n\nTHE SYSTEM WILL PUT THIS IN FRONT OF YOUR REPLY, WORD FOR WORD: "${opening}"\n` +
+          `Do not repeat any of it, do not greet them again, and start with the answer. ` +
+          `A wrong number is the one exception: start with ${WRONG_NUMBER} and nothing will go in front.`
+        : '') +
       (followUp
         ? followUp.lookup
           ? // A LOOKUP HAS NOTHING TO SAY ON ITS OWN. It answered US, with facts,
@@ -1501,7 +1490,38 @@ function isNoReply(text) {
   return /^no[\s-]?reply$/i.test(bare);
 }
 
+// A WRONG NUMBER IS ANSWERED WITHOUT THE OPENER. Neil's locked rules: a wrong
+// number gets one short line and no offer. Somebody new is owed the
+// introduction, and the first reply to somebody new carries the offer they
+// hold - so "wrong number, sorry" was answered "Hi, I'm Lyn, LYNDRY's
+// automated assistant. 50% off your first order is on your account, ready to
+// use. No problem, sorry to bother you." The model cannot take the opener off
+// its own reply, because the system adds it afterwards, so it says which kind
+// of reply this is with a word at the front, exactly like NO_REPLY.
+//
+// Returns the line with the word taken off, or null when it is not there.
+// Nothing after the word is an empty string, which every sender treats as
+// silence - the word itself must never reach a phone.
+const WRONG_NUMBER = 'WRONG_NUMBER';
+
+function wrongNumberLine(text) {
+  const said = String(text || '');
+  const marker = said.match(/^[\s"'`*_]*wrong_number\b[\s"'`*_:.,\-]*/i);
+  return marker ? said.slice(marker[0].length).trim() : null;
+}
+
 // systemPrompt and customerContext are exported so the exact words the AI is
 // given can be printed and read without starting the server or sending a text.
 // `npm run prompt` does that. Everything the AI is allowed to do is in here.
-module.exports = { decide, followUpMessage, TOOLS, MODEL, systemPrompt, customerContext, NO_REPLY, isNoReply };
+module.exports = {
+  decide,
+  followUpMessage,
+  TOOLS,
+  MODEL,
+  systemPrompt,
+  customerContext,
+  NO_REPLY,
+  isNoReply,
+  WRONG_NUMBER,
+  wrongNumberLine,
+};

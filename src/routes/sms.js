@@ -19,6 +19,7 @@ const aiPause = require('../core/ai-pause');
 const pausedAlerts = require('../core/paused-alerts');
 const burst = require('../core/burst');
 const recurring = require('../core/recurring');
+const washAsk = require('../core/wash-ask');
 const { site } = require('../web/site');
 
 const router = express.Router();
@@ -302,18 +303,11 @@ async function handleInbound(inbound) {
       // No IP to record — this did not come through a browser. The evidence is
       // their own inbound message, not a form submission.
       consentIp: null,
+      // The canned reply is onboarding.firstMessage(), the same text every door
+      // sends. It used to open "Hey, thanks for scanning" or "thanks for
+      // texting in"; Neil, 21 September: the same intro everywhere.
       sendWelcome: canned,
       claimed: scanned ? scanned.promo : null,
-      // "Thanks for scanning" is the door hanger's sentence, and only true of it:
-      // the QR types the message for them. Somebody who typed CLEAN50 off a
-      // flyer did not scan anything, so they are thanked for the code instead.
-      // Same test as the consent source just above, so the two cannot disagree
-      // about whether this person was standing at a front door.
-      opening: canned
-        ? scanned.promo.audience === 'CODE'
-          ? `Hey, thanks for scanning.`
-          : `Hey, thanks for texting in.`
-        : null,
       // A TAP ON A GOOGLE AD'S MESSAGE BUTTON, WHICH LEAVES NO OTHER TRACE.
       //
       // That button opens the phone's SMS app with our number and a starter
@@ -498,14 +492,71 @@ async function answerWithBrain(customer, text, from) {
   // opener is dealt with is the same thing. Checked here, in the one wrapper
   // every AI reply passes through, so no path below can send the literal word
   // or an introduction with nothing after it.
+  //
+  // THE OPENER GOES ON ONE MESSAGE, THE FIRST ONE. A booking can now send two
+  // texts in one turn - the confirmation, then the wash question - and the
+  // introduction on both would be Lyn introducing herself twice in a minute.
+  //
+  // A WRONG NUMBER GOES WITH NOTHING IN FRONT OF IT. The model marks one with
+  // brain.WRONG_NUMBER, because the introduction and the offer are added
+  // here, after it has written its line, and "sorry to bother you" under a
+  // 50%-off pitch is the booking flow a wrong number must not get.
+  //
+  // Silence is an EMPTY BODY, not a body that happens to come out as the
+  // opener: "who is this?" answered with nothing but Lyn's introduction is
+  // a real answer, and lyn.lead() hands back the opener alone for it.
+  let opening = openingLine;
   const say = (to, body, id, opts) => {
-    const out = brain.isNoReply(body) ? '' : lyn.lead(openingLine, body);
-    if (!out.trim() || out.trim() === openingLine) {
+    const dismissal = brain.wrongNumberLine(body);
+    const said = dismissal !== null ? dismissal : brain.isNoReply(body) ? '' : String(body || '').trim();
+    const out = !said ? '' : dismissal !== null ? lyn.lead('', said) : lyn.lead(opening, said);
+    if (!out.trim() || brain.isNoReply(out)) {
       console.log(`QUIET   ${to}: nothing worth sending. Saying nothing.`);
       return null;
     }
+    if (dismissal !== null) console.log(`WRONG   ${to}: a wrong number. One line, no introduction.`);
+    opening = '';
     return reply(to, out, id, opts);
   };
+
+  // --- THE FIRST REPLY TO SOMEBODY NEW IS THE FIRST MESSAGE -----------------
+  //
+  // Neil, 21 September: same intro everywhere, and if they have 50% off, say it
+  // in that first reply whatever the door. The code doors send
+  // onboarding.firstMessage(); this is the Lyn door, and it has to read the
+  // same.
+  //
+  // A BARE "HI" GETS IT WORD FOR WORD, WITHOUT THE MODEL. Asking a model to
+  // write "the same short next line" is asking it to write a slightly
+  // different one some of the time. The burst window has already run, so
+  // "hi" followed by a question is not a bare hi and goes to Lyn below.
+  //
+  // ANYTHING ELSE GETS THE INTRODUCTION AND THE OFFER IN FRONT OF LYN'S ANSWER.
+  // They asked something, so the answer is the rest of the message - and the
+  // offer is still in their first reply, which is what Neil asked for.
+  // brain.decide() is told what will sit in front of its words so it neither
+  // repeats the offer nor greets them a second time.
+  //
+  // Only for somebody Lyn owes the introduction to. Anybody who got the first
+  // message from a code door has "I'm Lyn," in their thread already, so
+  // lyn.opener() returns nothing for them and none of this runs.
+  const firstParts =
+    openingLine === lyn.INTRODUCTION
+      ? await onboarding.firstMessagePartsFor(customer).catch((err) => {
+          console.error(`Could not build the first message for ${from}: ${err.message}`);
+          return null;
+        })
+      : null;
+
+  if (firstParts && onboarding.isJustAGreeting(text)) {
+    console.log(`FIRST   ${from}: a bare greeting. Sending the first message.`);
+    await say(from, [firstParts.offer, firstParts.next].filter(Boolean).join(' '), customer.id, {
+      kind: 'SYSTEM',
+    });
+    return;
+  }
+
+  if (firstParts && firstParts.offer) opening = `${openingLine} ${firstParts.offer}`;
 
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
@@ -532,7 +583,13 @@ async function answerWithBrain(customer, text, from) {
     // days.
     customer.openPickups = await orders.findAllAwaitingCollection(customer.id);
 
-    decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text });
+    // WHETHER THE WASH QUESTION HAS BEEN ASKED, AS A FACT. The model sees ten
+    // messages; the question may be twenty back, under a pickup text, a
+    // weigh-in and a delivery. The same query the system asks before it sends
+    // one, so the two cannot disagree about whether it went.
+    customer.washAskedAt = await washAsk.askedAt(customer.phone).catch(() => null);
+
+    decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text, opening });
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.
     console.error('Claude call failed:', err.message);
@@ -587,6 +644,10 @@ async function answerWithBrain(customer, text, from) {
     // What they actually said, kept on an issue alongside the AI's summary,
     // because their own words matter when somebody is upset.
     customerSaid: text,
+    // Set by actions.createOrder() to the order it booked, on the success path
+    // only - not the card ask, not a refused hold. It is what tells this turn
+    // to ask the wash question once the confirmation has gone.
+    booked: null,
   };
 
   let message;
@@ -658,6 +719,7 @@ async function answerWithBrain(customer, text, from) {
         order: freshOrder,
         recentMessages: await recentConversation(customer.id),
         message: text,
+        opening,
         followUp: {
           name: decision.name,
           reply: typeof message === 'string' ? message : JSON.stringify(message),
@@ -703,6 +765,7 @@ async function answerWithBrain(customer, text, from) {
           order: freshOrder,
           recentMessages: await recentConversation(customer.id),
           message: text,
+          opening,
           followUp: {
             name: followOn.name,
             reply: typeof facts === 'string' ? facts : JSON.stringify(facts),
@@ -800,6 +863,25 @@ async function answerWithBrain(customer, text, from) {
   }
 
   await say(from, message, customer.id, { kind: 'AI' });
+
+  // BOOK FIRST, ASK WASH AFTER. Neil, 21 September, and the rule he set on 16
+  // September finally made true in code: the pickup is booked, THEN we ask how
+  // they want it washed. Before this the prompt said "the very next message is
+  // the wash question", and nothing could send it - the tool's reply is what
+  // goes to the phone and a booking gets no second pass - so most first
+  // bookings simply washed on the defaults and nobody was asked.
+  //
+  // Its own message, straight after the confirmation, rather than a line on
+  // the end of it: the confirmation is already three segments and shared by
+  // every door, and a question stacked on a confirmation is the one thing the
+  // prompt says never to do.
+  //
+  // src/core/wash-ask.js decides - once, ever, and only with nothing chosen -
+  // and card-saved.js asks through it too, for the booking that needed a card.
+  // Sent through say() so the introduction goes on one message only.
+  if (helpers.booked) {
+    await washAsk.askAfterBooking(customer, { send: (body, options) => say(from, body, customer.id, options) });
+  }
 }
 
 // Whatever is already with a manager for this customer, or null.

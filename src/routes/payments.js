@@ -12,6 +12,7 @@ const payments = require('../providers/payments');
 const { sendAndLog } = require('../core/notify');
 const { renderPage } = require('../web/layout');
 const { site } = require('../web/site');
+const format = require('../core/format');
 
 const router = express.Router();
 
@@ -164,12 +165,26 @@ router.get('/pay/:token/done', async (req, res, next) => {
       });
     }
 
+    // WHAT THE CARD JUST DID, READ OFF THE ORDERS. Saving it confirms a
+    // pickup booked by text, or turns a website checkout into one, and texts
+    // them "Order #N is booked" - so a page underneath saying "Text us to book
+    // your pickup" contradicted the text in their other hand. Read rather than
+    // taken from cardWasSaved(), because the webhook often got there first and
+    // this visit did nothing.
+    const waiting = await orders.findAllAwaitingCollection(customer.id).catch(() => []);
+    const soonest = waiting[0] || null;
+    const next = !soonest
+      ? `<p>Text us whenever you want a pickup. That's the whole thing.</p>`
+      : billing.showUpState(soonest) === 'REFUSED'
+        ? `<p>Your card would not accept the hold for order #${soonest.order_number}, so that pickup is not confirmed yet. We've texted you about it.</p>`
+        : `<p>Order #${soonest.order_number} is booked for ${format.displayDate(soonest.pickup_date)}. We've texted you the details.</p>`;
+
     return simplePage(res, {
       status: 200,
       title: "You're all set",
       heading: "Card saved.",
-      body: `<p>${billing.describeCard(customer)} is on your LYNDRY account. We'll charge it after we weigh each bag — never before, and never without telling you the figure.</p>
-             <p>Text us to book your pickup. That's the whole thing.</p>`,
+      body: `<p>${billing.describeCard(customer)} is on your LYNDRY account. We'll charge it after we weigh your laundry at your door, and text you the weight and the total.</p>
+             ${next}`,
     });
   } catch (err) {
     return next(err);

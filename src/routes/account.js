@@ -912,8 +912,9 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
     </h2>
     <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 18px;">
       We have kept everything you chose. A payment method is required to confirm
-      the pickup - {{PRICE_PER_LB}} a pound, {{MINIMUM}} minimum, and nothing is charged
-      until we have weighed your laundry.
+      the pickup: {{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} on a
+      subscription, {{MINIMUM}} minimum, and nothing is charged until we have
+      weighed your laundry at your door.
     </p>
     <form method="post" action="/account/card" style="margin:0;">
       <button type="submit" class="btn btn-primary btn-lg">
@@ -1104,9 +1105,9 @@ router.get('/account/payment', auth.requireCustomer, async (req, res, next) => {
         blurb: booked
           ? `Order #${booked} needs a card.${held ? ` We are holding ${held} for you.` : ''} ` +
             `It is confirmed the moment a card is saved, and nothing is taken until we ` +
-            `weigh your laundry.`
+            `weigh your laundry at your door.`
           : req.customer.card_last4
-            ? 'The card we charge after we weigh your laundry.'
+            ? 'The card we charge after we weigh your laundry at your door.'
             : 'We need a card before the driver comes out.',
         form: setup.cardForm(req.customer),
         error: req.query.error ? String(req.query.error) : '',
@@ -1611,6 +1612,10 @@ async function saveAddress(customer, form) {
   const { error } = await db.from('customers').update(changes).eq('id', customer.id);
   if (error) throw error;
 
+  // A pickup already booked carries its own copy of the spot, and the run and
+  // the reminder read that first. See booking.refreshBookedOrders().
+  if (customer.id) await booking.refreshBookedOrders(customer.id, preferences);
+
   return { ok: true, customer: { ...customer, ...changes } };
 }
 
@@ -1639,6 +1644,11 @@ async function saveWash(customer, form) {
 
   const { error } = await db.from('customers').update({ preferences }).eq('id', customer.id);
   if (error) throw error;
+
+  // The same as an answer by text: a pickup already booked has its own copy of
+  // the wash, and without this the laundromat was told the old one while this
+  // page said "Saved how you like it washed". Nothing waiting, nothing to do.
+  if (customer.id) await booking.refreshBookedOrders(customer.id, preferences);
 
   return { ok: true, customer: { ...customer, preferences } };
 }
@@ -2136,8 +2146,9 @@ function cardStep({ customer, intent }) {
       A payment method is required to confirm your pickup.
     </p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      {{PRICE_PER_LB}} a pound, {{MINIMUM}} minimum. Nothing is charged now. We keep
-      this on file and charge it once, after we weigh your laundry.
+      {{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a
+      subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on
+      file and charge it after we weigh your laundry at your door.
     </p>
 
     <form method="post" action="/account/card" style="margin:0;">

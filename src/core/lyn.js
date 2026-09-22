@@ -272,6 +272,12 @@ function lead(openingLine, body) {
   if (!(openingLine && text.startsWith(openingLine))) {
     const stripped = text.replace(MODEL_INTRO, '').trim();
     if (stripped) text = stripped;
+
+    // ...unless our opener is already that introduction. On a first reply the
+    // opener is the introduction AND the offer, so "who is this?" answered with
+    // nothing but "I'm Lyn" would otherwise read "Hi, I'm Lyn... 50% off...
+    // I'm Lyn, LYNDRY's automated assistant." The opener answers it on its own.
+    else if (openingLine && openingLine.startsWith(INTRODUCTION)) return openingLine;
   }
 
   if (!openingLine) return text;

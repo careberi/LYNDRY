@@ -1,7 +1,8 @@
 'use strict';
 
 const db = require('../db');
-const booking = require('./booking');
+// booking.js is NOT required here: it is part of a require loop through this
+// file, and at the top it arrives empty. See listForDay().
 const roles = require('./roles');
 const { config } = require('../config');
 const { sendAndLog } = require('./notify');
@@ -415,8 +416,13 @@ async function listForDay(dateIso) {
 
   if (error) throw error;
 
+  // READ HERE, NOT AT THE TOP. booking.js requires order-alerts, which
+  // requires this file, so at boot this module is handed booking's exports
+  // before booking.js has finished - an empty object for good. SERVICE_TZ read
+  // off it was undefined, Intl fell back to the server's zone (UTC on Railway),
+  // and anything raised between 8pm and midnight was filed under tomorrow.
   const localDate = new Intl.DateTimeFormat('en-CA', {
-    timeZone: booking.SERVICE_TZ,
+    timeZone: require('./booking').SERVICE_TZ,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

@@ -3,6 +3,9 @@
 const db = require('../db');
 const booking = require('./booking');
 const brain = require('./brain');
+// To take a model-written introduction off a chase. No loop: lyn.js requires
+// only the database at load.
+const lyn = require('./lyn');
 const orders = require('./orders');
 const issues = require('./issues');
 const notify = require('./notify');
@@ -328,10 +331,14 @@ async function compose(customer, thread, { early = false } = {}) {
 
   const text = await brain.followUpMessage({ customer, order, recentMessages, recentOrders, early });
 
-  const clean = String(text || '').trim();
+  // A CHASE NEVER RE-INTRODUCES HER. Intro once per customer, Neil, 21
+  // September - and a chase goes nowhere near the say() wrapper in sms.js
+  // that strips one, so it goes through the same lyn.lead() here, with no
+  // opener of its own.
+  const clean = lyn.lead('', String(text || '').trim());
   // The chase is written under the same system prompt as every reply, which
   // tells the model how to say "send nothing". Here that means no chase.
-  if (!clean || brain.isNoReply(clean)) return null;
+  if (!clean || brain.isNoReply(clean) || brain.wrongNumberLine(clean) !== null) return null;
 
   // A chase is a nudge, not a second conversation. Anything long enough to be
   // three segments is the model starting again rather than following up, and

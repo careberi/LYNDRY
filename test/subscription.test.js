@@ -229,10 +229,9 @@ test('NOBODY IS EVER TOLD "RECURRING ORDER"', () => {
   // The table keeps its name and the code keeps saying cadence. What may never
   // happen is a customer reading either phrase.
   const everything = [
-    ...subscription.choiceLines(),
+    subscription.postDeliveryOffer(),
     ...subscription.cancellationLines({ lastPickup: '09/22/2026' }),
     ...subscription.cancellationLines({}),
-    subscription.nudgeLine(),
     subscription.orderRateLine({ subscription_id: 'x', price_per_lb_cents: 180 }),
     subscription.orderRateLine({ price_per_lb_cents: 200 }),
     subscription.planLabel({ subscription_id: 'x' }),
@@ -248,9 +247,8 @@ test('and no sentence carries its unit twice', () => {
   // "$1.80/lb a pound" - the compact form and the prose form are different
   // functions for a reason, and mixing them produced exactly that.
   const everything = [
-    ...subscription.choiceLines(),
+    subscription.postDeliveryOffer(),
     ...subscription.cancellationLines({ lastPickup: '09/22/2026' }),
-    subscription.nudgeLine(),
     subscription.orderRateLine({ subscription_id: 'x', price_per_lb_cents: 180 }),
   ];
 

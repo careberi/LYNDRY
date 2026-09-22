@@ -6,6 +6,7 @@ const nightly = require('./nightly');
 const followups = require('./followups');
 const cardChase = require('./card-chase');
 const paymentChase = require('./payment-chase');
+const subscriptionOffer = require('./subscription-offer');
 const leads = require('./leads');
 const issues = require('./issues');
 
@@ -24,7 +25,10 @@ const issues = require('./issues');
 //                      card on it at all. See card-chase.js.
 //   the payment chase  all day: an order whose card was REFUSED, a day after
 //                      the laundry went back. See payment-chase.js.
-//   the re-page        all day: an open issue a quarter of an hour old that no
+//   the subscription   the first tick after 8am: the subscription question a
+//   question           late first paid delivery deferred. It DEFERS, like a
+//                      follow-up. See subscription-offer.js.
+//   the re-page       all day: an open issue a quarter of an hour old that no
 //                      person has written to the customer about gets every
 //                      admin texted once more. See issues.repageStale().
 //   Facebook leads     every few minutes: text anybody new off the advert form.
@@ -117,6 +121,16 @@ async function tick({ now = null } = {}) {
       .catch((err) => ({ ran: false, reason: err.message }));
 
     done.followups = await followups
+      .sendDue()
+      .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
+
+    // THE SUBSCRIPTION QUESTION A LATE DELIVERY DEFERRED. Neil, 21 September:
+    // "Do not skip the subscription ask after 9pm. Send it with delivery or
+    // first thing next morning." It DEFERS like a follow-up rather than
+    // skipping like the nightly pass - "would you like a subscription" is as
+    // true at 8am as it was at 10pm. The quiet check above is what makes this
+    // "first thing": it is the first tick after 8am that reaches here.
+    done.subscriptionOffers = await subscriptionOffer
       .sendDue()
       .catch((err) => ({ sent: [], skipped: [{ reason: err.message }] }));
 

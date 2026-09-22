@@ -95,11 +95,19 @@ test('the prompt says the wash question comes after booking in as many words', (
 
 // --- 2. the plan question --------------------------------------------------
 
-test('the plan question is asked at most once', () => {
+// NEIL, 21 SEPTEMBER: "No subscription pitch at booking. Only the exact $1.80
+// sentence after the first paid delivery." This section used to pin a plan
+// question asked once to every new customer; it now pins that there is none.
+test('the plan question is never asked at booking', () => {
   const src = prompt();
 
-  assert.ok(/ASKED AT MOST ONCE/.test(src), 'nothing limits how often it is asked');
-  assert.ok(/AFTER THAT ONE ASK, YOU NEVER ASK AGAIN/.test(src), src.slice(0, 0));
+  assert.ok(/YOU NEVER ASK WHICH PLAN THEY WANT/.test(src), 'nothing says not to ask');
+  assert.ok(!/We offer two options/.test(src), 'the two-options pitch is back');
+  assert.ok(!/Which works better for you\?/.test(src), 'the two-options pitch is back');
+  assert.ok(!/THE PLAN QUESTION IS ASKED AT MOST ONCE/.test(src), 'the old rule is back');
+  assert.ok(!/REMINDED ONCE/.test(src), 'the booking-time nudge is back');
+  assert.ok(!/You can also subscribe for/.test(src), 'the booking-time nudge is back');
+  assert.ok(!/may still be told about the cheaper rate/.test(src), 'the booking-time nudge is back');
 });
 
 test('"Ok" is explicitly not a plan', () => {
@@ -107,16 +115,25 @@ test('"Ok" is explicitly not a plan', () => {
 
   assert.ok(/"OK" IS NOT A PLAN/.test(src), 'the exact failure is not named');
   // And the fall-through is stated, not left to judgement.
-  assert.ok(/ANYTHING ELSE, INCLUDING "Ok"\s+-> the plan is ONE_TIME/.test(src), 'no default is given');
+  assert.ok(/ONE-TIME IS THE DEFAULT/.test(src), 'no default is given');
 });
 
-test('somebody who already said a day or "now" is not asked at all', () => {
+test('a customer who asks for a subscription still gets one', () => {
+  // Neil banned the pitch, not the product.
   const src = prompt();
+  assert.ok(/IF THEY ASK FOR A SUBSCRIPTION THEMSELVES, THEY GET ONE/.test(src));
 
-  assert.ok(
-    /ALREADY SAID A DAY, OR "now", OR "come now", DO NOT ASK THE PLAN QUESTION AT ALL/.test(src),
-    'a customer asking for a van today still gets a pricing menu'
-  );
+  const brain = require('../src/core/brain');
+  const tool = brain.TOOLS.find((t) => t.name === 'create_order');
+  assert.deepEqual(tool.input_schema.properties.plan.enum, ['ONE_TIME', 'SUBSCRIPTION']);
+  assert.ok(tool.input_schema.properties.frequency.enum.includes('MONTHLY'));
+  assert.ok(!/before you ask about days/.test(tool.input_schema.properties.plan.description), 'the tool still puts a plan choice before the date');
+});
+
+test('the one list exception went with the plan question', () => {
+  // "THE LIST OF TWO PRICED OPTIONS IS THE ONE PLACE A LIST IS ALLOWED" only
+  // existed for the pitch. The no-menu rule has no exceptions left.
+  assert.ok(!/THE LIST OF TWO PRICED OPTIONS/.test(prompt()));
 });
 
 test('the old rule that the plan gates the pickup date is gone', () => {

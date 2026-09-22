@@ -206,7 +206,11 @@ test('somebody who already has a card is not sent round again', () => {
   const start = src.indexOf("router.post('/start/card'");
   const route = src.slice(start, src.indexOf('catch (err)', start));
 
-  assert.ok(route.includes('customer.payment_method_id'), route);
+  // default_payment_method_id is the real column; payment_method_id does not
+  // exist, and asking for it errored the query for everybody.
+  assert.ok(route.includes('billing.hasPaymentMethod(customer)'), route);
+  assert.ok(route.includes('default_payment_method_id'), route);
+  assert.ok(!/[^_]payment_method_id/.test(route.replace(/default_payment_method_id/g, '')), route);
 });
 
 test('the Stripe session is minted on the press, never on a page view', () => {

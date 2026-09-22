@@ -146,20 +146,12 @@ function planLabel(order) {
 // A test holds every customer-facing string in this file to that.
 const CUSTOMER_WORD = 'Subscription';
 
-// The sentence that has to come BEFORE anybody is asked when they want
-// collecting. Neil: otherwise the subscription discount is effectively hidden.
-//
-// Written here rather than in the prompt so the AI, the website and a person on
-// the phone all quote the same two rates. The AI is told to use these words;
-// the website renders them.
-function choiceLines() {
-  return [
-    `One-Time Pickup, ${oneTimeRate()}`,
-    `${CUSTOMER_WORD}, ${subscriptionRate()} with automatic pickup ${FREQUENCIES.map(
-      (f) => f.label
-    ).join(', ')}`,
-  ];
-}
+// choiceLines() AND nudgeLine() ARE GONE. Neil, 21 September: "No subscription
+// pitch at booking. Only the exact $1.80 sentence after the first paid
+// delivery." The first was the "We offer two options" question the AI put
+// before asking when to collect; the second was a one-line reminder of the
+// cheaper rate for a returning one-time customer. postDeliveryOffer() below is
+// the only offer the system makes now.
 
 // HOW MUCH CHEAPER, AS A PERCENTAGE, DERIVED RATHER THAN TYPED.
 //
@@ -180,12 +172,6 @@ function savingPercent() {
 
   const pct = ((full - ours) / full) * 100;
   return Number.isInteger(pct) ? pct : null;
-}
-
-// The one-line nudge for a returning one-time customer. Offered ONCE - the
-// caller decides that, because only it knows the thread.
-function nudgeLine() {
-  return `You can also subscribe for ${subscriptionRate()} instead of ${oneTimeRate()}.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,9 +216,14 @@ function postDeliveryOffer() {
 //   planOrder      this pickup was sold on a plan. Somebody who subscribed and
 //                  cancelled before it came back has no schedule left but is
 //                  not somebody to pitch a subscription to minutes later
-//   quiet          New Jersey quiet hours. The delivered text is a status and
-//                  goes whenever the van arrives; this is a sales question
-//                  nobody asked, which is what the 8am to 9pm floor exists for
+//   quiet          New Jersey quiet hours, judged at the moment of delivery.
+//                  The delivered text is a status and goes whenever the van
+//                  arrives; this is a sales question nobody asked, so it waits
+//                  for 8am. DEFERRED, NOT DROPPED: Neil, 21 September, "Do not
+//                  skip the subscription ask after 9pm. Send it with delivery
+//                  or first thing next morning." It is the morning, not the
+//                  delivery text, because the 8am to 9pm floor is the law -
+//                  see src/core/subscription-offer.js
 //
 // Returns the reason it did not go, because "why did she not get the offer" is
 // exactly the question somebody will ask of a log line.
@@ -241,7 +232,7 @@ function offerAfterDelivery({ paid, paidDeliveries, hasPlan, planOrder, quiet } 
   if (hasPlan) return { send: false, reason: 'already has a plan' };
   if (planOrder) return { send: false, reason: 'this pickup was on a plan' };
   if (paidDeliveries !== 1) return { send: false, reason: `not the first paid delivery (${paidDeliveries})` };
-  if (quiet) return { send: false, reason: 'quiet hours' };
+  if (quiet) return { send: false, defer: true, reason: 'quiet hours: it goes first thing in the morning' };
   return { send: true, text: postDeliveryOffer() };
 }
 
@@ -337,9 +328,7 @@ module.exports = {
   subscriptionRate,
   planLabel,
   CUSTOMER_WORD,
-  choiceLines,
   savingPercent,
-  nudgeLine,
   postDeliveryOffer,
   offerAfterDelivery,
   orderRateLine,

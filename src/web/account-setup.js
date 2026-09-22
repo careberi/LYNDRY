@@ -297,9 +297,9 @@ function cardForm(customer) {
       <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 16px;">
         ${
           saved
-            ? `Nothing is taken until we weigh your laundry. We never see the number.`
+            ? `Nothing is taken until we weigh your laundry at your door. We never see the number.`
             : `<strong>Nothing is taken now.</strong> You are charged after we weigh your
-               laundry, and we never see the number.`
+               laundry at your door, and we never see the number.`
         }
       </p>
       <button type="submit" class="btn ${saved ? 'btn-outline' : 'btn-primary btn-full'} btn-lg">

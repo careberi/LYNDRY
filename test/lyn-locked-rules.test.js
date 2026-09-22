@@ -83,11 +83,14 @@ test('the price answer names both rates, the minimum, and no fees', () => {
 
 // --- greetings and the welcome -----------------------------------------------
 
-test('"Hi" gets a line, not the website welcome', () => {
-  assert.ok(/A GREETING GETS A GREETING, NOT A WELCOME/.test(PROMPT));
+test('the model is told the first message is not its job', () => {
+  // Neil, 21 September: one first message for every door, written in code.
+  // test/first-message.test.js pins the message itself.
+  assert.ok(/ONE FIRST MESSAGE, WHATEVER THE DOOR/.test(PROMPT));
+  assert.ok(!/A GREETING GETS A GREETING, NOT A WELCOME/.test(PROMPT), 'the reversed rule is back');
+  assert.ok(!/sent by our WEBSITE, only to people who typed their number/.test(PROMPT), 'the website-only welcome rule is back');
   assert.ok(!/INTRODUCTION WORD FOR WORD/.test(PROMPT), 'the model is still told to recite the welcome');
-  assert.ok(!/grab your laundry this week\?/i.test(PROMPT.replace(/"want us to grab your laundry this week\?"/i, '')),
-    'the website welcome\'s ask is in the prompt as something to say');
+  assert.ok(!/grab your laundry this week/i.test(PROMPT), 'the old welcome ask is in the prompt');
 });
 
 test('the prompt no longer builds the welcome block at all', () => {

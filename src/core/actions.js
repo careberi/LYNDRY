@@ -39,7 +39,7 @@ const { readableDate, dateProblem, timeProblem, normaliseTime, hasAddress } = bo
 
 // --- create_order -----------------------------------------------------------
 
-async function createOrder(customer, input) {
+async function createOrder(customer, input, helpers = null) {
   // DID THEY ACTUALLY CHOOSE A SUBSCRIPTION?
   //
   // Both halves are required and the check is deliberately strict: the plan has
@@ -114,10 +114,6 @@ async function createOrder(customer, input) {
         return (
           `We don't reach ${customer.city || 'your area'} just yet, sorry. We cover ` +
           `${site.serviceArea} right now, and we'll text you the moment that changes.`
-        );
-      case 'no_preferences':
-        return (
-          `Almost there! ${wash.QUESTION}`
         );
       case 'bad_date':
       case 'bad_time':
@@ -219,6 +215,12 @@ async function createOrder(customer, input) {
 
     return booking.holdRefusedMessage(customer, result.order, { setupUrl: url });
   }
+
+  // BOOKED. Said to sms.js through helpers, which is what makes it ask the
+  // wash question once the confirmation has gone - Neil, 21 September: "Book
+  // first. Ask wash after." Only here, on the success path: the card ask and
+  // a refused hold are not bookings the customer can act on yet.
+  if (helpers) helpers.booked = result.order;
 
   // The wording lives in src/core/booking.js so that booking by text and
   // booking on the website produce the identical confirmation.
@@ -509,9 +511,14 @@ async function openLocker(customer) {
 //   ADDRESS        locked. A bag already on the van does not get redirected to
 //                  a different building, and "send it somewhere else" on an
 //                  order in flight is also the shape most delivery fraud takes.
-//   WASH SETTINGS  locked. It may already be washed. Promising warm water to
-//                  somebody whose clothes went through cold an hour ago is a
-//                  promise we cannot keep.
+//   WASH SETTINGS  SAVED, NEVER REFUSED - and not promised for the bag we
+//                  hold. It may already be washed, so that order keeps the
+//                  wash it was booked with and the reply says so; the answer
+//                  is saved for the pickup waiting and every one after.
+//                  This was a refusal until 21 September, and the system's
+//                  own after-booking wash question then had its answer thrown
+//                  away whenever the van had already been: nothing saved,
+//                  and never asked again.
 //   WHERE TO LEAVE IT   open right up until delivery. "Actually put it in the
 //                  garage" is the same address and the same driver, so there
 //                  is no reason to refuse it.
@@ -525,28 +532,32 @@ const ADDRESS_FIELDS = ['address_line1', 'address_line2', 'city', 'state', 'post
 // nothing to change and nothing to lock while we hold their laundry.
 const WASH_FIELDS = ['water_temp', 'fabric_softener'];
 
-// Returns a sentence if this change is not allowed right now, or null.
+// Returns a sentence if this change is not allowed right now, or null. Only an
+// address is ever refused.
 async function lockedWhileWithUs(customer, fields) {
   const wantsAddress = fields.some((f) => ADDRESS_FIELDS.includes(f));
-  const wantsWash = fields.some((f) => WASH_FIELDS.includes(f));
-
-  if (!wantsAddress && !wantsWash) return null;
+  if (!wantsAddress) return null;
 
   const held = await orders.findInOurHands(customer.id);
   if (!held) return null;
 
-  if (wantsAddress) {
-    return (
-      `We've already got order #${held.order_number}, so I can't change the address it ` +
-      `goes back to. It'll come back to ${customer.address_line1}. I can change where ` +
-      `at the property we leave it, though, so tell me if you'd like that somewhere else.`
-    );
-  }
-
   return (
-    `Order #${held.order_number} is already with us and may well be washed by now, so ` +
-    `I can't change how it's done this time. I've kept your usual settings and I'll ` +
-    `apply any change from your next pickup, just say the word.`
+    `We've already got order #${held.order_number}, so I can't change the address it ` +
+    `goes back to. It'll come back to ${customer.address_line1}. I can change where ` +
+    `at the property we leave it, though, so tell me if you'd like that somewhere else.`
+  );
+}
+
+// What to say once an answer has been copied onto the orders already booked.
+// Only the one thing that is not what they might assume: a bag we already hold
+// keeps the wash it was booked with.
+function heldBackLine(done) {
+  const held = (done && done.washHeldBack) || [];
+  if (!held.length) return '';
+  const which = held.map((n) => `#${n}`).join(' and ');
+  return (
+    ` Order ${which} is already with us and may be washed by now, so it goes through as booked. ` +
+    `Your next pickup will be done this way.`
   );
 }
 
@@ -615,12 +626,18 @@ async function updateProfile(customer, input) {
 
     const { error } = await db.from('customers').update({ preferences }).eq('id', customer.id);
     if (error) throw error;
+
+    // Book first, ask wash after: the answer usually arrives for a pickup that
+    // is already booked, and the order carries its own copy of the wash and
+    // the spot. See booking.refreshBookedOrders().
+    const done = await booking.refreshBookedOrders(customer.id, preferences);
+
     // Deliberately not "I'll use that from your next pickup" — this often runs
     // one step before a booking, and a real customer who had just approved a
     // recap was told exactly that instead of getting their order booked. The
     // chaining in sms.js finishes the booking; this reply only survives when
     // there genuinely was nothing else to do.
-    return `Done, that's saved.`;
+    return `Done, that's saved.${WASH_FIELDS.includes(field) ? heldBackLine(done) : ''}`;
   }
 
   // Claude asked to change something we don't store. Hand over rather than
@@ -634,7 +651,7 @@ async function updateProfile(customer, input) {
 // so making a new customer spell it out is a question with one possible answer.
 const DEFAULT_STATE = 'NJ';
 
-async function saveDetails(customer, input) {
+async function saveDetails(customer, input, helpers = null) {
   const clean = (value, max) => String(value || '').trim().slice(0, max);
 
   // The same locks as update_profile. This tool can set an address and a wash
@@ -659,8 +676,9 @@ async function saveDetails(customer, input) {
   if (state) changes.state = state;
 
   // Wash preferences and the handover spot, exactly as they chose them.
-  // These only ever come from the customer's own words — there are no
-  // defaults, and a booking is refused until they exist.
+  // These only ever come from the customer's own words. Nothing writes a
+  // default here - wash.choiceFor() falls back at read time - and a booking no
+  // longer waits for them.
   const prefs = { ...(customer.preferences || {}) };
   let prefsChanged = false;
 
@@ -680,10 +698,12 @@ async function saveDetails(customer, input) {
   //
   // wash.isValid is the only thing that decides now, so an option cannot exist
   // in the tool schema and be unwritable here ever again.
+  let washChanged = false;
   for (const key of wash.KEYS) {
     if (wash.isValid(key, input[key])) {
       prefs[key] = input[key];
       prefsChanged = true;
+      washChanged = true;
     }
   }
   // pickup_method is no longer a tool parameter, so nothing can arrive here.
@@ -763,6 +783,13 @@ async function saveDetails(customer, input) {
 
   if (error) throw error;
 
+  // The wash is asked AFTER booking now, so an answer here usually lands on a
+  // pickup already booked - and has to reach it, and so does a new spot. See
+  // booking.refreshBookedOrders().
+  const refreshed = prefsChanged
+    ? await booking.refreshBookedOrders(customer.id, updated.preferences)
+    : { changed: [], washHeldBack: [] };
+
   // Look the new address up in the background. It is a free rate-limited
   // service and a customer is waiting on a text, so nothing waits on it - and
   // if it fails, locate() will simply try again the next time a route is built.
@@ -836,24 +863,22 @@ async function saveDetails(customer, input) {
       (await orders.findInOurHands(customer.id)) ||
       (await orders.findAwaitingCollection(customer.id));
 
-    if (busy) return `Done, that's updated on order #${busy.order_number}.`;
+    // THE REPLY SAYS WHAT HAPPENED. It said "updated on order #N" whatever
+    // was changed, including a wash the bag we hold will not get.
+    if (busy) {
+      const heldBack = washChanged ? heldBackLine(refreshed) : '';
+      return heldBack ? `Done, that's saved.${heldBack}` : `Done, that's updated on order #${busy.order_number}.`;
+    }
 
     return `Thanks ${first}! When would you like it picked up?`;
   }
 
-  // When is settled, so now the wash. Ask, never invent — this is the backstop
-  // behind the prompt's instruction to ask, and it is what stops "we've set
-  // you up with cold water" going to somebody who chose nothing.
-  if (!booking.hasPreferences(updated)) {
-    return (
-      // ONE WORDING, FROM wash.js. This sentence is written in CODE and shipped
-      // as the tool's own reply, so the prompt could never have corrected it -
-      // which is exactly how "regular or hypoallergenic detergent" kept
-      // reaching customers, naming an option that does not exist and quoting
-      // neither $2 charge. The bag location is asked separately.
-      wash.QUESTION
-    );
-  }
+  // NO WASH GATE HERE ANY MORE. Neil, 21 September: "Book first. Ask wash
+  // after." This returned wash.QUESTION in place of the booking whenever no
+  // wash was saved - so a new customer who approved the recap got a question
+  // and no pickup, the exact shape of the Manpreet thread that made the rule
+  // on 16 September. The booking goes ahead on the defaults, and sms.js asks
+  // the wash question straight after the confirmation.
 
   // The address is complete. If the van doesn't go there, say so NOW — not at
   // their first booking attempt, which would waste the whole conversation.
@@ -870,10 +895,14 @@ async function saveDetails(customer, input) {
   // "when would you like your first pickup?" at somebody who told us "today"
   // four messages ago. That exact reply went to a real tester.
   if (input.pickup_date) {
-    return createOrder(updated, {
-      pickup_date: input.pickup_date,
-      pickup_time: input.pickup_time,
-    });
+    return createOrder(
+      updated,
+      {
+        pickup_date: input.pickup_date,
+        pickup_time: input.pickup_time,
+      },
+      helpers
+    );
   }
 
   return (
@@ -1078,7 +1107,7 @@ async function handoffToHuman(customer, input, helpers = {}) {
 async function run(name, input, customer, helpers = {}) {
   switch (name) {
     case 'create_order':
-      return createOrder(customer, input);
+      return createOrder(customer, input, helpers);
     case 'check_slot':
       return checkSlot(customer, input);
     case 'get_order_status':
@@ -1092,7 +1121,7 @@ async function run(name, input, customer, helpers = {}) {
     case 'update_profile':
       return updateProfile(customer, input);
     case 'save_details':
-      return saveDetails(customer, input);
+      return saveDetails(customer, input, helpers);
     case 'set_pickup_schedule':
       return setPickupSchedule(customer, input);
     case 'handoff_to_human':

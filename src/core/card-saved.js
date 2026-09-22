@@ -32,6 +32,7 @@ const promotions = require('./promotions');
 const bookingIntents = require('./booking-intents');
 const { site } = require('../web/site');
 const { sendAndLog } = require('./notify');
+const washAsk = require('./wash-ask');
 
 // The link, unless somebody has already dealt with it.
 async function linkFor(match) {
@@ -280,6 +281,16 @@ async function cardWasSaved(link) {
           }) + alsoLine,
       customer.id
     );
+
+    // BOOK FIRST, ASK WASH AFTER - and for a booking made by text without a
+    // card, THIS is "after". The card link went out where the confirmation
+    // would have, so sms.js asked nothing; the confirmation above is the
+    // booking, and the question follows it here. src/core/wash-ask.js keeps it
+    // to once, ever, and only with nothing chosen. A website order chose the
+    // wash as a step of the form, so it is never asked twice; nor is a pickup
+    // whose hold was just refused, which is not booked yet.
+    if (!refused && pending.placed_via !== 'WEB') await washAsk.askAfterBooking(customer);
+
     return { customer, order: pending };
   }
 

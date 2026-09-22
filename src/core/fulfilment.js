@@ -21,11 +21,10 @@ const issues = require('./issues');
 // rate through it rather than site.pricePerLb, which is the one-time rate and
 // is the wrong number for a subscriber. See the note on `perPoundOf`.
 const subscription = require('./subscription');
-// Both for the subscription offer after a delivery: the quiet-hours floor, and
-// whether a person has the thread. Neither reaches back here, and requiring the
-// scheduler starts nothing - its timers begin only when start() is called.
-const scheduler = require('./scheduler');
-const aiPause = require('./ai-pause');
+// The subscription question after a first paid delivery: when it goes, and
+// the morning send for a late one. A leaf module - it requires neither this
+// file nor the scheduler, so neither can close a loop through it.
+const subscriptionOffer = require('./subscription-offer');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -834,83 +833,18 @@ async function outForDelivery(order, { by = {} } = {}) {
 //
 // Neil's locked rules, 21 September. After somebody's FIRST PAID delivery, if
 // they have no plan, one text in his exact words asking whether they want one.
-// The wording and the decision both live in subscription.js
-// (postDeliveryOffer / offerAfterDelivery) so they can be tested without a
-// database; this function only gathers the facts and sends.
+// The wording and the decision live in subscription.js; the facts, the send
+// and the morning send for a late delivery live in subscription-offer.js,
+// which the scheduler calls too. This is only the daytime door onto it.
 //
 // ITS OWN MESSAGE, NOT A LINE ON THE DELIVERY TEXT. "Here is your laundry" and
-// "would you like this regularly" are two different things, and the offer used
-// to ride on the end of the delivery text, where it went to every customer
-// without a schedule on every delivery.
+// "would you like this regularly" are two different things. A delivery in quiet
+// hours is NOT dropped any more - Neil: "do not skip the subscription ask after
+// 9pm" - it waits for the first tick after 8am.
 //
-// "FIRST PAID" IS COUNTED, NOT STORED. The orders table already says which
-// deliveries were paid: DELIVERED, PAID and over $0. A free or waived order is
-// $0 or WAIVED and does not count, so somebody whose first two orders were free
-// gets the offer after their third - the first one they paid for - which is
-// what Neil asked for. Counting is also what makes "sent once" hold: the second
-// paid delivery counts two and is refused. Anybody who had a paid delivery
-// before this shipped is already past one, so nothing goes out retroactively.
-//
-// THREE MORE REASONS TO SAY NOTHING, each the rule some other text already
-// follows:
-//   - quiet hours. This is the one unprompted SALES message in the system, and
-//     the 8am to 9pm floor is the law, not a preference. A late delivery skips
-//     the offer rather than deferring it: deferring needs a stored stamp and a
-//     sweep, for a question they can still ask us any time.
-//   - a person has the thread. An admin handling somebody by hand does not want
-//     a machine selling them a plan in the middle of it - the same reason a
-//     follow-up chase is skipped on a paused thread. isPaused() fails closed,
-//     which here means no offer.
-//   - STOP. sendAndLog() refuses an opted-out number on its own.
-//
-// NEVER THROWS. The delivery has already happened and been texted; an offer
-// that fails is a line in the log.
+// NEVER THROWS. The delivery has already happened and been texted.
 async function offerSubscription(delivered, customer) {
-  if (!delivered || !customer || !customer.id || !customer.phone) {
-    return { sent: false, reason: 'no customer' };
-  }
-
-  try {
-    const paid = delivered.payment_status === 'PAID' && Number(delivered.price_cents) > 0;
-
-    let paidDeliveries = 0;
-    let hasPlan = false;
-    if (paid) {
-      const { data: rows, error } = await db
-        .from('orders')
-        .select('id')
-        .eq('customer_id', customer.id)
-        .eq('status', 'DELIVERED')
-        .eq('payment_status', 'PAID')
-        .gt('price_cents', 0);
-      if (error) throw error;
-      paidDeliveries = (rows || []).length;
-
-      // Anything not ENDED is a plan, paused ones included: somebody who has
-      // paused a weekly pickup has a plan and knows it.
-      hasPlan = (await recurring.forCustomer(customer.id)).length > 0;
-    }
-
-    const verdict = subscription.offerAfterDelivery({
-      paid,
-      paidDeliveries,
-      hasPlan,
-      planOrder: subscription.isSubscriptionOrder(delivered),
-      quiet: scheduler.inQuietHours(booking.nowInService()),
-    });
-    if (!verdict.send) return { sent: false, reason: verdict.reason };
-
-    if (await aiPause.isPaused(customer.phone)) return { sent: false, reason: 'a person has this thread' };
-
-    // sendAndLog() answers nothing on a send and { sent: false } on a refusal.
-    const refused = await sendAndLog(customer.phone, verdict.text, customer.id, { kind: 'SYSTEM' });
-    return refused && refused.sent === false
-      ? { sent: false, reason: `refused: ${refused.refused}` }
-      : { sent: true, text: verdict.text };
-  } catch (err) {
-    console.error(`Subscription offer for order ${delivered.id} failed: ${err.message}`);
-    return { sent: false, reason: 'error' };
-  }
+  return subscriptionOffer.afterDelivery(delivered, customer);
 }
 
 // --- Delivered, with the photo ----------------------------------------------

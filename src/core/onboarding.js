@@ -4,6 +4,9 @@ const db = require('../db');
 const promotions = require('./promotions');
 const settings = require('./settings');
 const booking = require('./booking');
+// The introduction's words live in lyn.js and nowhere else. No loop: lyn.js
+// requires only the database at load.
+const lyn = require('./lyn');
 const { sendAndLog } = require('./notify');
 const { site } = require('../web/site');
 
@@ -20,10 +23,9 @@ const { site } = require('../web/site');
 // message cannot drift apart. The difference between them is only where the
 // consent came from, which is recorded rather than assumed.
 //
-// Everything after this message happens in the thread: the AI collects a name
-// and an address, and nothing else. Wash preferences keep their defaults and
-// are changed by texting, because asking about detergent over SMS is the phone
-// tree this product exists to avoid.
+// Whichever door it is, the first thing they hear from us is firstMessage()
+// below - one introduction, one offer if they hold one, one short line. After
+// that everything happens in the thread with Lyn.
 // ---------------------------------------------------------------------------
 
 // WEB_BERGEN is the advert landing page. It is its own source rather than
@@ -122,131 +124,179 @@ function expiryNote(grant) {
   return ` It is good until ${parts.weekday} ${parts.day} ${parts.month}.`;
 }
 
-// What we say to somebody we have never spoken to.
-//
-// It offers the thing rather than demanding details for it. Asking a stranger
-// for their name and home address in the first sentence is too forward; "tell
-// us a day that works" makes the next step obvious and is still something they
-// can ignore in favour of asking what we cost. The AI collects the rest in the
-// thread when they answer.
-//
-// CLOSED IS A DIFFERENT MESSAGE and it must NOT offer a pickup. This goes out
-// before the AI ever sees the conversation, so it is the one reply that cannot
-// work out for itself that we are shut - and inviting somebody to book
-// something that will then be refused is a worse first impression than saying
-// so plainly.
 // ---------------------------------------------------------------------------
-// THE WHOLE OF ALL THREE FIRST MESSAGES, GIVEN ONE OPENING CLAUSE.
+// THE ONE FIRST MESSAGE, WHATEVER THE DOOR.
 //
-// Somebody hears from us first in one of three ways, and the only thing that
-// differs between them is where we got their number:
+// Neil, 21 September: "Same intro everywhere. Website, Facebook lead, door
+// hanger, or they text Hi: first AI reply is 'Hi, I'm Lyn, LYNDRY's automated
+// assistant.' Then the same short next line. Do not send a longer website-only
+// welcome to one source and a short Hi to another. If they have 50% off, say
+// that in that same first reply for every source."
 //
-//   the website form   "Hey, thanks for sending over your number."
-//   a Facebook advert  "Hey, you left this number on our Facebook laundry form."
-//   they texted first  "Hey, thanks for reaching out."      (sent by the AI)
+// IT REVERSES TWO THINGS AT ONCE, and both are recorded in CLAUDE.md:
 //
-// Everything after that clause is identical, so it is written once here. Three
-// copies would disagree the first time one was edited and the one that
-// disagreed would be the one nobody noticed - which is how the price ended up
-// in two places once already, and how the AI was still reciting the old
-// introduction an hour after the other two were rewritten.
+//   - each door had its own opening clause - "thanks for sending over your
+//     number", "you left this number on our Facebook laundry form", "thanks for
+//     scanning" - in front of three paragraphs about who we are
+//   - the same morning, somebody who texted "Hi" had been given a short line
+//     and NO offer, on the rule that the offer was the website's alone
 //
-// It returns the finished message rather than paragraphs to assemble, because
-// the opening clause and the first paragraph are now the SAME sentence -
-// "Hey, thanks for reaching out. It's LYNDRY, wash-and-fold pickup..." - and a
-// caller joining an array with blank lines cannot produce that.
+// Now every door sends exactly this, built here and nowhere else:
+//
+//   Hi, I'm Lyn, LYNDRY's automated assistant.   lyn.INTRODUCTION
+//   50% off your first order is on your ...      the offer they hold, if any
+//   Want us to pick up your laundry?             the one short next line
+//
+// THE INTRODUCTION IS lyn.INTRODUCTION, NEVER A RETYPED COPY, and that is load
+// bearing: lyn.everIntroduced() looks for "I'm Lyn," in what we sent, so a
+// code-sent first message carrying it is what stops Lyn introducing herself a
+// second time on their first reply. Intro once per customer, whichever door.
+//
+// THE OFFER IS THE PROMOTION'S OR IT IS NOT MADE. freeOfferLine() for a
+// genuinely free one, otherwise offerLine(), which is the blurb a person wrote.
+// A door-hanger claimant holds $10 off, not the 50% - a claim replaces the
+// automatic grant - so "say the 50%" means "say what they hold". No blurb, no
+// sentence, exactly as everywhere else.
+//
+// NO PRICE AND NO TURNAROUND IN IT. Neil asked for a short line, and the same
+// prices and next-day rule on every channel; Lyn gives both from the locked
+// facts the moment anybody asks, on every door alike.
+//
+// SHUT, IT STILL INTRODUCES AND STILL NAMES THE OFFER, but it never invites a
+// booking: the next line becomes a plain "not yet". Before the first van day it
+// names that day, so "want us to pick up" is not answered with a refusal.
 // ---------------------------------------------------------------------------
-function introduction(opening, { promo = null, opensOn = null } = {}) {
-  // THE OFFER IS THE PROMOTION'S OR IT IS NOT MADE. freeOfferLine() returns
-  // null unless something genuinely free is live, so a 30% offer can never be
-  // announced as free and a promise with a count in it can never carry a count
-  // the code is not enforcing.
-  // Three sentences in falling order of how good the news is: genuinely free,
-  // then whatever a person wrote on the promotion's blurb, then the plain
-  // price. The middle one is what a door-hanger scanner gets - freeOfferLine()
-  // returns null for $10 off, and without offerLine() they were introduced to
-  // LYNDRY without their discount being mentioned at all.
-  const offer =
-    promotions.freeOfferLine(promo) ||
-    promotions.offerLine(promo) ||
-    `It is ${site.pricePerLb} a pound, weighed after we pick it up.`;
+const NEXT_LINE = 'Want us to pick up your laundry?';
 
-  // THE ASK KNOWS WHEN A VAN CAN ACTUALLY COME. These messages go out before
-  // the AI ever sees the conversation, so they are the ones that cannot work
-  // out for themselves that we do not start until next week - and "this week"
-  // to somebody who cannot be collected until Tuesday sets up a refusal on
-  // their very next text. It disappears on its own once the date passes.
-  const ask = opensOn
-    ? `Want us to grab your laundry? First pickups are ${booking.readableDate(opensOn)}.`
-    : `Want us to grab your laundry this week?`;
+function firstMessageParts({ promo = null, open = true, opensOn = null } = {}) {
+  // NO BLURB, NO SENTENCE, EVEN FOR A FREE ONE. freeOfferLine() does not look
+  // at the blurb, so a hand-given 100% promotion - #1975's one-order waiver -
+  // would have been announced as "the first 1 orders are completely free".
+  // CLAUDE.md: a promotion with no blurb is silent, everywhere.
+  const speaks = Boolean(promo && String(promo.blurb || '').trim());
+  const offer = speaks ? promotions.freeOfferLine(promo) || promotions.offerLine(promo) || null : null;
 
-  return [
-    `${opening} It's ${site.name}, wash-and-fold pickup and delivery in ` +
-      `${site.serviceArea}. Picked up at your door, back the ${site.turnaround}.`,
-    offer,
-    ask,
-  ].join('\n\n');
+  const next = !open
+    ? `We're not booking pickups just yet, but we'll text you as soon as we are.`
+    : opensOn
+      ? `${NEXT_LINE} First pickups are ${booking.readableDate(opensOn)}.`
+      : NEXT_LINE;
+
+  return { intro: lyn.INTRODUCTION, offer, next };
 }
 
-function welcomeMessage({
-  open = true,
-  promo = null,
-  promoBlurb = null,
-  opensOn = null,
-  opening = null,
-} = {}) {
-  // TWO SEGMENTS NOW, DOWN FROM FOUR, AND NEIL WROTE BOTH.
-  //
-  // The four-segment version was itself a deliberate rewrite - it went long
-  // once there was paid traffic behind the number, on the grounds that this is
-  // the only thing a stranger reads before deciding whether to reply. What
-  // changed is what it spends the length on. It now leads with the promotion
-  // and ends on a question, because 34 people read the long one and one of
-  // them ordered.
-  //
-  // What went: "no app to download", which costs a segment on every door and
-  // answers itself the moment they reply, and the standalone "we pick your
-  // laundry up at your door" paragraph, folded into the opening sentence.
-  // The turnaround stayed - it is the strongest single fact we have and it is
-  // now the only place a stranger hears it before booking.
-  if (open) {
-    // A door hanger passes its own opening clause - "thanks for scanning" is
-    // true of somebody standing at their front door and false of somebody who
-    // typed a number into the website.
-    return introduction(opening || `Hey, thanks for sending over your number.`, {
-      promo,
-      opensOn,
-    });
+function firstMessage(options = {}) {
+  const { intro, offer, next } = firstMessageParts(options);
+  return [intro, offer, next].filter(Boolean).join(' ');
+}
+
+// Have we texted this number before, or does this customer have any order at
+// all? Read by phone for messages - a person's first text to a stranger is
+// logged with no customer id - and by customer for orders. Fails to "yes": a
+// lookup that breaks must not hand the consumer pitch to somebody mid-thread.
+async function weHaveHistoryWith(customer) {
+  try {
+    const spoke = await db
+      .from('messages')
+      .select('id')
+      .eq('phone', customer.phone)
+      .eq('direction', 'OUTBOUND')
+      .limit(1);
+    if (spoke.error) throw spoke.error;
+    if ((spoke.data || []).length) return true;
+
+    const booked = await db
+      .from('orders')
+      .select('id')
+      .eq('customer_id', customer.id)
+      .limit(1);
+    if (booked.error) throw booked.error;
+    return (booked.data || []).length > 0;
+  } catch (err) {
+    console.error(`Could not read ${customer.phone}'s history for the first message: ${err.message}`);
+    return true;
   }
+}
 
-  const what =
-    `Hey, it's ${site.name}! We pick your laundry up, wash it, fold it and have ` +
-    `it back to you the ${site.turnaround}, at ${site.pricePerLb} a pound. `;
+// The same parts, for somebody already in the database - the Lyn door, where a
+// brand-new texter's customer row and grant were made a moment ago.
+//
+// THE OFFER IS WHAT THEY HOLD NOW, read through heldBy(), so an expired grant
+// or a spent one is not announced. The first one with any sentence to say
+// wins, which is the rule brain.decide() already uses for the blurb.
+//
+// NULL FOR ANYBODY WE HAVE ALREADY SPOKEN TO OR ALREADY BOOKED, and the review
+// that found it was right twice over. A customer who booked on the website or
+// by phone has only our own texts in their thread - the confirmation, the
+// reminder - so lyn.opener() still owes them the introduction; texting
+// "hello?" while they wait for the van got them "Want us to pick up your
+// laundry?". And a laundromat owner replying "Hi" to Neil's pitch link got the
+// 50%-off consumer offer over the top of his conversation. The code doors
+// already carry the introduction, so the only person who genuinely needs this
+// from the Lyn door is somebody we have never texted and who has booked nothing.
+// Everybody else gets the introduction alone and a real answer from Lyn.
+async function firstMessagePartsFor(customer) {
+  if (await weHaveHistoryWith(customer)) return null;
 
-  // CLOSED. Neil's words, and longer than the open version on purpose: this is
-  // the only message somebody gets after handing over their number to an
-  // advert, and it has three jobs at once - say what we do, say we cannot book
-  // them yet without sounding like a dead end, and hand them the reason it was
-  // worth signing up anyway.
-  //
-  // It runs to three segments. That is a real cost per signup and it is the
-  // right trade here: the alternative is a terse message to somebody who just
-  // cost money to acquire.
-  //
-  // The discount sentence comes from the promotion's own blurb rather than
-  // being written in, so it stays true if the offer changes and disappears
-  // entirely if there is no offer at all.
-  const cannot =
-    `I should mention we're not booking pickups at the moment, so I can't get ` +
-    `one on the calendar just yet, but we'll let you know the second that changes.`;
+  const held = await promotions.heldBy(customer.id).catch(() => []);
+  const promo = held.find((h) => String(h.blurb || '').trim()) || null;
 
-  const good = promoBlurb ? ` Good news is ${promoBlurb} waiting for you.` : '';
+  const owner = booking.alwaysAllowed(customer);
+  const open = owner || (await settings.takingOrders());
+  const opensOn = owner ? null : await settings.opensOn();
 
-  // trimmed: `what` ends with the space that separates it from the open
-  // version's question, and left in it shows as a trailing space on the line.
-  return `${what.trim()}
+  return firstMessageParts({ promo, open, opensOn });
+}
 
-${cannot}${good} Happy to answer anything about how it all works in the meantime.`;
+// IS THIS FIRST TEXT NOTHING BUT A HELLO?
+//
+// A bare greeting from a brand-new number gets the first message above, word
+// for word, rather than something the model writes - that is what makes the
+// "Hi" door identical to the website one. Anything more than a greeting goes
+// to Lyn, who answers it with the introduction and the offer in front.
+//
+// A LIST, NOT THE PROMO-CODE FILLER. promocodes' filler counts "thanks" and
+// "please" as nothing, which is right for a code and wrong here. JOIN is in it
+// deliberately: the /bergen advert page tells people to text JOIN, and under
+// the junk rule a bare "JOIN" reaching the model could be read as spam.
+const GREETING_WORDS = new Set([
+  'hi', 'hii', 'hiii', 'hello', 'hey', 'heyy', 'heyyy', 'hiya', 'heya', 'yo',
+  'howdy', 'join', 'good', 'morning', 'afternoon', 'evening', 'there', 'lyndry',
+  'lyn',
+]);
+const CORE_GREETINGS = new Set([
+  'hi', 'hii', 'hiii', 'hello', 'hey', 'heyy', 'heyyy', 'hiya', 'heya', 'yo',
+  'howdy', 'join', 'morning', 'afternoon', 'evening',
+]);
+
+// People stretch a greeting - "heyyy", "hellooo", "hiiii" - so a word is also
+// tried with its repeated letters folded ("hellooo" to "helo"). Both forms are
+// tried rather than only the folded one, because folding turns "good" into
+// "god" and "afternoon" into "afternon".
+const fold = (w) => w.replace(/(.)\1+/g, (run) => run[0]);
+const FOLDED_GREETINGS = new Set(['hi', 'hey', 'helo', 'hiya', 'heya', 'yo', 'howdy', 'sup', 'wasup', 'whatsup']);
+
+function isJustAGreeting(text) {
+  const raw = String(text || '').trim();
+
+  // A wave on its own, with no letters at all, is a hello.
+  if (raw && !/[a-z]/i.test(raw) && /\p{Extended_Pictographic}/u.test(raw)) return true;
+
+  const words = raw
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const greeting = (w) => GREETING_WORDS.has(w) || FOLDED_GREETINGS.has(fold(w));
+  const core = (w) => CORE_GREETINGS.has(w) || FOLDED_GREETINGS.has(fold(w));
+  return words.length > 0 && words.every(greeting) && words.some(core);
+}
+
+// The first text a new number gets from a code door: the website form, the
+// popup, /bergen, a door-hanger scan. It is firstMessage() and nothing else.
+function welcomeMessage({ open = true, promo = null, opensOn = null } = {}) {
+  return firstMessage({ promo, open, opensOn });
 }
 
 // HOW RECENTLY COUNTS AS "STILL TALKING". Long enough to cover a thread that
@@ -324,7 +374,6 @@ async function startConversation({
   consentIp = null,
   sendWelcome = true,
   claimed = null,
-  opening = null,
   // WHICH MARKETING BROUGHT THEM, when the caller can name it. Today that is
   // only a tap on a Google search ad's message button, which types a fixed
   // starter text and never loads the website - so those clicks carry no gclid
@@ -406,11 +455,10 @@ async function startConversation({
         await sendAndLog(
           phone,
           eligible
-            ? `Got it! ${promotions.offerLine(claimed)}${expiryNote(held)} ` +
-                `Want us to grab your laundry this week?`
+            ? `Got it! ${promotions.offerLine(claimed)}${expiryNote(held)} ${NEXT_LINE}`
             : `Hey, good to hear from you again. That one is for a first order, ` +
-                `and you have already had yours with us - so it would not come off ` +
-                `anything. Want us to grab your laundry this week?`,
+                `and you have already had yours with us, so it would not come off ` +
+                `anything. ${NEXT_LINE}`,
           existing.id
         );
       }
@@ -512,29 +560,22 @@ async function startConversation({
     console.error(`Could not grant a promotion to ${phone}: ${err.message}`);
   }
 
-  // Only the web hero sends the canned welcome, because there the person
-  // typed a number into a box and there is nothing to reply TO.
+  // The code doors send the first message here: the website forms, and a
+  // door-hanger or promo code with nothing else typed around it. There is
+  // nothing to reply TO.
   //
-  // Somebody who texted us first said something, and a canned welcome ignores
-  // it. "Can you grab my laundry tomorrow?" answered with a script that asks
-  // no question about laundry reads as a robot. Their message goes to the AI
-  // instead, which knows they are brand new and answers what they said.
+  // Somebody who texted us something real goes to Lyn instead, who answers it
+  // with the same introduction and offer in front (sms.js). A bare "Hi" gets
+  // exactly this message from sms.js too, so every door reads the same.
   if (sendWelcome) {
     const open = booking.alwaysAllowed(customer) || (await settings.takingOrders());
     const opensOn = booking.alwaysAllowed(customer) ? null : await settings.opensOn();
 
     await sendAndLog(
       phone,
-      welcomeMessage({
-        open,
-        opensOn,
-        opening,
-        // Open: the message makes the offer itself, in Neil's words, and only
-        // when it is genuinely free. Closed: it cannot offer a pickup at all,
-        // so the most it can do is repeat the blurb somebody wrote.
-        promo: open ? granted : null,
-        promoBlurb: open ? null : granted && granted.blurb,
-      }),
+      // The one first message, open or shut: the offer they now hold rides in
+      // it either way. See firstMessage().
+      welcomeMessage({ open, opensOn, promo: granted }),
       customer.id
     );
   }
@@ -548,7 +589,11 @@ module.exports = {
   welcomeBackMessage,
   threadIsLive,
   THREAD_LIVE_MINUTES,
-  introduction,
+  firstMessage,
+  firstMessageParts,
+  firstMessagePartsFor,
+  isJustAGreeting,
+  NEXT_LINE,
   CONSENT_SOURCES,
   expiryNote,
   firstOrderStillAhead,

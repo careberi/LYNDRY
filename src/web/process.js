@@ -34,7 +34,7 @@ const partners = require('../core/partners');
 // ---------------------------------------------------------------------------
 
 // Bumped by hand whenever the prose here is checked against the code.
-const REVIEWED = '09/06/2026';  // a person can take a conversation over from the AI
+const REVIEWED = '09/21/2026';  // a person can take a conversation over from the AI
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -83,6 +83,7 @@ function processBody(user) {
   const sees = (allowed) => !allowed || allowed.includes(role);
 
   const minimum = money(config.pricing.minimumCents);
+  const hold = money(config.pricing.authorizationCents);
   const perLb = site.pricePerLb;
   const minimumLb = config.pricing.minimumCents / config.pricing.perPoundCents;
 
@@ -323,12 +324,14 @@ function processBody(user) {
       ${step(
         1,
         'They text the number, or fill in the form',
-        `A stranger texts <strong>${esc(site.publicPhoneDisplay)}</strong> and gets a reply.
-         If we do not recognise the number, the whole of signing up happens in
-         that thread: we ask their name and where to collect from, and how they
-         like it washed - water temperature and whether they want softener, and where the
-         driver finds the bag. Those four are asked once and never again. They
-         can also start from the website, which just texts them first.`
+        `A stranger texts <strong>${esc(site.publicPhoneDisplay)}</strong>, fills in the
+         website form, leaves a number on a Facebook advert or scans a door hanger,
+         and gets the same first message whichever it was: Lyn introduces herself,
+         names the offer they hold if they have one, and asks if we can pick up
+         their laundry. Signing up then happens in that thread: their name, where
+         to collect from, when, and where the driver finds the bag, one question
+         at a time. How they like it washed is asked straight after the pickup is
+         booked, never before it, and once they answer it is never asked again.`
       )}
       ${step(
         2,
@@ -346,7 +349,7 @@ function processBody(user) {
          order with no follow-up questions. They can name a time and get a
          window back - we do not offer a list of slots to pick from. Before
          anything is booked they get one recap: when, the address, where the
-         bag is, how it gets washed. They say yes, it is booked, and they get
+         bag is, and how it gets washed if they have chosen. They say yes, it is booked, and they get
          an order number. That is the only confirmation step there is; nothing
          is ever confirmed twice.`
       )}
@@ -548,8 +551,9 @@ function processBody(user) {
         `One number per bag, on the same page, and it is
          <strong>required</strong> - an order cannot be marked finished while a
          bag has no weight on it, and the wash instructions do not appear until
-         it does. Their figure is <strong>half of what bills</strong>: the
-         customer pays on the higher of the two scales. Two scales are
+         it does. Their figure decides <strong>what we pay them</strong>, and is
+         checked against ours - the customer was already charged on our scale,
+         at their door, before the bags came here. Two scales are
          allowed to differ by <strong>${partners.TOLERANCE_LB} lb or
          ${(partners.TOLERANCE_PCT * 100).toFixed(0)}% of the bag, whichever is
          larger</strong>; past that an issue is raised and they are told so
@@ -654,9 +658,10 @@ function processBody(user) {
   ${sees(['ADMIN', 'SALES']) ? section(
     'money',
     'The money',
-    'One charge, when both scales agree',
-    `The card is touched exactly once in an order's life, and it is not when they
-     book.`,
+    'Charged at the door, before the bags go in the van',
+    `Booking takes nothing but a ${esc(hold)} hold. The wash is charged at the
+     customer's door, off our own scale, and the laundry only comes with us once
+     it is paid for.`,
     `
     <p style="margin-bottom:18px;">
       <span class="pr-pill ${stripeState.tone}">Stripe: ${esc(stripeState.label)}</span>
@@ -665,49 +670,56 @@ function processBody(user) {
     <ol class="pr-steps">
       ${step(
         1,
-        'Booking takes nothing',
-        `A card has to be on file before a driver comes out, but saving it is
-         not a payment and is never described as one. An order booked without a
-         card still exists - it is simply not confirmed, and stays off the run
-         sheet until a card is saved, at which point it confirms itself.`
+        'A card first, then a hold',
+        `A card has to be on file before a driver comes out, and saving it is
+         not a payment. <strong>An online order does not exist until the card is
+         saved</strong> - everything they typed is kept while they do it, so they
+         come back to their answers rather than to nothing. A pickup booked by
+         text waits for a card too, and stays off the round until there is one.
+         <br><br>
+         A day before the pickup we <strong>hold ${esc(hold)}</strong> on the card.
+         It shows as pending and is not a charge; the pickup is confirmed by the
+         card accepting it. A card that refuses keeps the stop off the round, and
+         the board says <strong>CARD REFUSED</strong>. A free order gets no hold.`
       )}
       ${step(
         2,
-        `Two scales settle the price, and that is when the card is charged`,
-`Our driver weighs it at the door and the laundromat weighs the same load
-         when they take it in. <strong>Nothing is texted and nothing is charged
-         until both are in.</strong>
+        'The driver weighs the bags, and the card is charged at the door',
+        `Every bag goes on our scale at the door, and the card is charged
+         <strong>before the bags go in the van</strong>: the ${esc(hold)} hold is
+         taken first and anything over it is charged to the same card. They are
+         texted the weight and the total. They are billed on our scale - the one
+         they watched the driver use.
          <br><br>
-         Within tolerance the customer is billed on the <strong>higher</strong> of
-         the two, the card is charged and they are texted the total - one message,
-         once, saying what was actually taken. Past the tolerance everything stops:
-         no charge, no text, and it waits for a person. A customer told a figure we
-         are still arguing about internally has been told the wrong thing.
-         <br><br>
-         The driver's number alone is provisional, which is why it is not texted:
-         quoting ours and then billing theirs would be quoting a price we do not
-         honour. <strong>A laundromat has to enter a weight</strong> - they
-         cannot mark an order finished without one.
-         <br><br>
-         An order that never goes to a laundromat at all - anything we wash
-         ourselves - has only our scale, so <strong>delivery settles and charges
-         it instead</strong>. That is the backstop, not the normal route.`
+         If the card will not take the rest, <strong>the ${esc(hold)} is kept for
+         the trip</strong>, the bags stay where they were found with their tags
+         still on, nothing is washed, and the pickup moves to the same time
+         tomorrow. The kept ${esc(hold)} never comes off a wash.`
       )}
       ${step(
         3,
-        'A declined card never holds up a delivery',
-        `The clothes are already on the step. Holding somebody's laundry over
-         a card is a bad look and legally murky, and the exposure is one order,
-         so we deliver and chase by text. An unpaid order stays visible until
-         it is settled or deliberately waived.`
+        "The laundromat's scale decides what we pay them, not what they pay",
+        `Their weight is still required on every bag and still checked against
+         ours, and past the tolerance an issue is raised. It no longer moves the
+         customer's price: a total they were told on their own doorstep is not
+         changed afterwards.`
+      )}
+      ${step(
+        4,
+        'An unpaid order does not go out for delivery',
+        `If a charge fails while we are holding somebody's laundry, the office is
+         paged straight away and the delivery is held until it is paid; their
+         other pickups wait behind it. Collecting the bags back off the
+         laundromat is still allowed. An unpaid order stays visible until it is
+         settled or deliberately waived.`
       )}
     </ol>
     <p style="margin-top:22px;">
       The ${esc(minimum)} minimum is a <strong>floor on the price</strong>, not
       a payment. A ${esc(String(Math.round(minimumLb / 2)))} lb load still costs
       ${esc(minimum)}; it is billed in one go with everything else, and nothing
-      is refunded for being light. Cancelling before collection costs nothing
-      because nothing has been taken.
+      is refunded for being light. Cancelling before collection costs nothing:
+      the hold is released and nothing has been taken.
     </p>
     <p>
       <strong>No card number is ever stored, logged or received by this
