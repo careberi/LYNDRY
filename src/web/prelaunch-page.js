@@ -682,11 +682,21 @@ function promotionCard(p, counts, popupOn = false) {
                  : ''
              }
              ${
-               p.audience === 'SPECIFIC'
+               // A CODE IS A SECOND WAY IN, AND IT OUTRANKS THE AUDIENCE HERE.
+               // "Hand this one out from a customer's own page" is what
+               // SPECIFIC means and is false the moment the promotion also has
+               // a live code - which is exactly the state a stood-down offer
+               // ends up in. The code is the instruction somebody would act on,
+               // so it is the one on the card.
+               p.code && !ended
                  ? `<span style="align-self:center;font-size:15px;color:var(--ink-700);">
-                      Hand this one out from a customer's own page.
+                      Anybody can claim this by texting <strong>${escapeHtml(p.code)}</strong>.
                     </span>`
-                 : ''
+                 : p.audience === 'SPECIFIC'
+                   ? `<span style="align-self:center;font-size:15px;color:var(--ink-700);">
+                        Hand this one out from a customer's own page.
+                      </span>`
+                   : ''
              }
              <a class="btn btn-outline btn-sm" href="/ops/promotions/${p.id}">See who has it</a>
              <form method="post" action="/ops/promotions/${p.id}/end" style="margin:0 0 0 auto;">
@@ -731,6 +741,23 @@ function websiteCard({ promo, popupOn, popupOffer, isAutomatic }) {
       cannot go on the website without somebody being promised an offer they
       would not get.
     </p>
+    ${
+      // AND THE WAY OFF IS ALWAYS ON THE PAGE. The switch used to render only
+      // for the automatic promotion, so a popup left on while an offer was
+      // stood down was stuck on with no screen able to clear it - and the next
+      // automatic promotion anybody created would have been advertised before
+      // they pressed a thing. standDown() clears it; this is the second door.
+      popupOn
+        ? `<form method="post" action="/ops/promotions/${promo.id}/popup" style="margin:18px 0 0;">
+             <input type="hidden" name="on" value="no">
+             <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+               The website switch is still on, though, so whatever becomes the
+               automatic promotion next would go straight onto the front page.
+             </p>
+             <button class="btn btn-outline" type="submit">Take the popup off the website</button>
+           </form>`
+        : ''
+    }
   </div>`;
   }
 
@@ -784,6 +811,42 @@ function websiteCard({ promo, popupOn, popupOffer, isAutomatic }) {
       <button class="btn ${popupOn ? 'btn-outline' : 'btn-primary'}" type="submit">
         ${popupOn ? 'Take it off the website' : 'Show it on the website'}
       </button>
+    </form>
+  </div>`;
+}
+
+// STOP GIVING IT TO EVERY NEW NUMBER - and say what that does before it is
+// pressed, which is the rule the popup switch and the nudge panel already
+// follow. A button that changes what customers are offered without saying what
+// it changes is not one anybody should press.
+//
+// Only on the automatic promotion, because it is the only one being given to
+// anybody unprompted. There is deliberately no button here to make one
+// automatic again: that is what creating a promotion does, and a second way in
+// would be a second copy of the rule.
+function standDownCard({ promo, isAutomatic }) {
+  if (!isAutomatic || promo.status === 'ENDED') return '';
+
+  return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
+    <p class="eyebrow" style="margin:0 0 12px;">Who gets it</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+      Every number that texts in for the first time is given this, before they
+      have booked anything, and it is what the website popup advertises.
+    </p>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
+      Stop that and nobody new is given it, and it comes off the website in the
+      same move. <strong>Everybody already holding it keeps it</strong>, every
+      order that has used it is untouched${
+        promo.code
+          ? `, and anybody who texts <strong>${escapeHtml(promo.code)}</strong> still gets it`
+          : ''
+      }. It is not the same as stopping the promotion${
+        promo.code ? ` - that would take the code with it` : ''
+      }.
+    </p>
+    <form method="post" action="/ops/promotions/${promo.id}/stand-down" style="margin:0;">
+      <button class="btn btn-outline" type="submit">Stop giving this to every new number</button>
     </form>
   </div>`;
 }
@@ -866,11 +929,22 @@ function promotionDetailBody({ promo, holders, notice, problem, popupOn = false,
 </div>
 
 <p style="font-size:18px;font-weight:700;margin:0 0 4px;">${escapeHtml(promotionsCore.describe(promo))}</p>
-<p style="font-size:15px;color:var(--ink-700);margin:0 0 24px;">For ${escapeHtml(aud.label.toLowerCase())}.</p>
+<p style="font-size:15px;color:var(--ink-700);margin:0 0 24px;">
+  For ${escapeHtml(aud.label.toLowerCase())}.${
+    // A CODE IS A SECOND WAY IN, WHATEVER THE AUDIENCE SAYS. claimableByCode()
+    // deliberately does not look at the audience, so "only people you pick" is
+    // half the truth on a promotion anybody can text. Said here rather than
+    // left for somebody to find out.
+    promo.code && promo.status === 'ACTIVE'
+      ? ` Anybody who texts <strong>${escapeHtml(promo.code)}</strong> can claim it too.`
+      : ''
+  }
+</p>
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
 ${websiteCard({ promo, popupOn, popupOffer, isAutomatic })}
+${standDownCard({ promo, isAutomatic })}
 
 <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
   <div style="display:flex;flex-wrap:wrap;gap:40px;">

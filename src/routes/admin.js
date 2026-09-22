@@ -10465,12 +10465,29 @@ router.post('/ops/promotions', guard, may('service.manage'), async (req, res, ne
     // ONLY ONE AUTOMATIC PROMOTION AT A TIME. The unique index refuses a
     // second, so the old one is stood down first rather than the save failing
     // with a database error nobody can act on.
+    //
+    // THROUGH THE SAME FUNCTION THE BUTTON USES, so there is one copy of what
+    // standing a promotion down means. keepPopup, because replacing the
+    // automatic offer is not taking the website down: the popup has never
+    // named a promotion - it always shows whatever a new number is given, and
+    // that is the point of it.
+    //
+    // READ THE WAY THE INDEX READS, not the way autoGrant() does. The unique
+    // index covers ACTIVE + NEW_NUMBERS and says nothing about dates, while
+    // autoGrant() also refuses one that has not started yet - so a promotion
+    // scheduled for next week is in the index, invisible to autoGrant(), and
+    // would have made this insert fail on a database error nobody can act on.
     if (audience === 'NEW_NUMBERS') {
-      await db
+      const { data: previous } = await db
         .from('promotions')
-        .update({ audience: 'SPECIFIC' })
+        .select('id')
         .eq('audience', 'NEW_NUMBERS')
-        .eq('status', 'ACTIVE');
+        .eq('status', 'ACTIVE')
+        .maybeSingle();
+
+      if (previous) {
+        await promotions.standDown(previous.id, { by: req.opsUser && req.opsUser.id, keepPopup: true });
+      }
     }
 
     const { error } = await db.from('promotions').insert({
@@ -10561,6 +10578,37 @@ router.post('/ops/promotions/:id/issue', guard, may('service.manage'), async (re
           `${result.short ? `, ${result.short} missed out - it has run out` : ''}. ` +
           'Nobody has been texted - the AI mentions it when they next get in touch.'
       )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// POST /ops/promotions/:id/stand-down - stop giving it to every new number
+//
+// Neil, 22 September: the 50% comes off the website and off every new
+// customer, and CLEAN50 stays valid for anybody who asks for it by name.
+//
+// There was no way to do this. An audience was written once, when the
+// promotion was created, and the only other writer was the stand-down that
+// fires as a side effect of creating a REPLACEMENT automatic promotion - so
+// the only route to "stop giving this out" was to invent a second offer, or
+// to press End, which also kills the code. See promotions.standDown().
+router.post('/ops/promotions/:id/stand-down', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = (kind, message) =>
+      res.redirect(303, `/ops/promotions/${req.params.id}?${kind}=${encodeURIComponent(message)}`);
+
+    const done = await promotions.standDown(req.params.id, { by: req.opsUser && req.opsUser.id });
+    if (!done.ok) return back('problem', done.detail);
+
+    return back(
+      'note',
+      `Nobody new is given this now, and it is off the website. Everybody already holding it keeps it${
+        done.code ? `, and anybody who texts ${done.code} still gets it` : ''
+      }.`
     );
   } catch (err) {
     return next(err);

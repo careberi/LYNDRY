@@ -560,10 +560,15 @@ router.get('/p/:orderId', async (req, res, next) => {
 // the form in.
 // ---------------------------------------------------------------------------
 
+// NO OFFER IN IT. This is the snippet a link preview and a search result
+// show, and it carried "20% off your first order" - false before 22 September
+// and impossible after it, since no new customer is given a first-order
+// discount at all. The page itself says the same thing; both were changed
+// together, because a description that promises what the page does not is the
+// worse half of the pair.
 const BERGEN_DESCRIPTION =
-  'Laundry picked up tomorrow in Bergen County. 20% off your first order. ' +
-  'Leave the bag at your door and it comes back the next day washed, dried ' +
-  'and folded.';
+  'Laundry picked up tomorrow in Bergen County. Leave the bag at your door ' +
+  'and it comes back the next day washed, dried and folded.';
 
 // ---------------------------------------------------------------------------
 // /for-laundromats/<token> - the pitch we SEND a laundromat owner.
