@@ -329,7 +329,9 @@ async function compose(customer, thread, { early = false } = {}) {
   const text = await brain.followUpMessage({ customer, order, recentMessages, recentOrders, early });
 
   const clean = String(text || '').trim();
-  if (!clean) return null;
+  // The chase is written under the same system prompt as every reply, which
+  // tells the model how to say "send nothing". Here that means no chase.
+  if (!clean || brain.isNoReply(clean)) return null;
 
   // A chase is a nudge, not a second conversation. Anything long enough to be
   // three segments is the model starting again rather than following up, and

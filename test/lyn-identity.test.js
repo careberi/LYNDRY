@@ -119,21 +119,128 @@ test('a thread with no customer is never owed an opener', async () => {
   assert.equal(await lyn.opener({}), '');
 });
 
-test('the introduction is matched on the sentence, so old threads get one', () => {
-  // Neil's hardest edge case: a thread that predates all of this has no
-  // introduction in it, so the next AI message must carry one. Testing a flag
-  // would miss that; testing the words cannot.
+test('the introduction is matched on the sentence that reached their phone', () => {
+  // Testing a flag would go stale the first time a thread was edited by hand;
+  // testing the words cannot.
   assert.ok(lyn.INTRODUCTION.includes(lyn.SAID_IT), 'SAID_IT is not actually in the introduction');
 
   const src = withoutComments(SRC('core', 'lyn.js'));
-  const fn = src.slice(src.indexOf('async function everIntroduced'), src.indexOf('async function lastSpokeAt'));
+  const fn = src.slice(src.indexOf('async function everIntroduced'), src.indexOf('async function recentThread'));
   assert.ok(fn.includes('SAID_IT'), fn);
   assert.ok(fn.includes("eq('direction', 'OUTBOUND')"), fn);
 });
 
 test('a long silence counts as a new conversation', () => {
   assert.ok(lyn.NEW_THREAD_DAYS >= 7, 'too short - a customer mid-booking would be re-introduced');
-  assert.ok(lyn.NEW_THREAD_DAYS <= 60, 'too long - somebody returning months later gets no disclosure');
+  // Only for somebody never introduced: somebody who has been told is never
+  // told again, gap or no gap.
+  assert.ok(lyn.NEW_THREAD_DAYS <= 60, 'too long - a never-introduced customer returning months later is not told');
+});
+
+// --- once, at the start, never mid-conversation ----------------------------
+//
+// Neil's locked rule, 21 September. This REVERSES "old threads get one": every
+// customer who talked to us before Lyn had a name had never been told, so the
+// next reply to them - in the middle of a booking - opened with the
+// introduction. That is exactly the mid-conversation introduction he ruled out.
+
+const hoursAgo = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+const thread = (rows) => rows.map(([direction, h]) => ({ direction, created_at: hoursAgo(h) }));
+
+test('a brand-new number saying hi is a new conversation', () => {
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0]])), true);
+});
+
+test('a burst of three from a new number is one new conversation', () => {
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0], ['INBOUND', 0.01], ['INBOUND', 0.02]])), true);
+});
+
+test('answering our website welcome is still somebody new', () => {
+  // Only our own message before theirs - the welcome, a lead text, a person
+  // texting them first. We spoke; they have not, until now.
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0], ['OUTBOUND', 2]])), true);
+});
+
+test('mid-conversation is never new, however the thread began', () => {
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0], ['OUTBOUND', 0.05], ['INBOUND', 0.1]])), false);
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0], ['OUTBOUND', 72], ['INBOUND', 73]])), false);
+});
+
+test('coming back after the gap is a new thread', () => {
+  const back = lyn.NEW_THREAD_DAYS * 24 + 1;
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0], ['OUTBOUND', back], ['INBOUND', back + 1]])), true);
+});
+
+test('the gap is measured BEFORE what they just sent, not from it', () => {
+  // The old rule measured from the newest message, which is always the inbound
+  // being answered, seconds old - so it never once fired.
+  const back = lyn.NEW_THREAD_DAYS * 24 + 1;
+  const rows = thread([['INBOUND', 0], ['INBOUND', 0.01], ['OUTBOUND', back], ['INBOUND', back + 1]]);
+  assert.equal(lyn.isNewConversation(rows), true);
+});
+
+test('what it cannot see clearly is not new - it fails to silence', () => {
+  assert.equal(lyn.isNewConversation([]), false);
+  assert.equal(lyn.isNewConversation(thread([['OUTBOUND', 0], ['INBOUND', 1]])), false);
+  // A page of nothing but their messages, with more thread beyond it.
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0]]), { complete: false }), false);
+  assert.equal(lyn.isNewConversation(thread([['INBOUND', 0], ['OUTBOUND', 1]]), { complete: false }), false);
+});
+
+test('the thread is read by phone number, so a newcomer\'s first text counts', () => {
+  // A stranger's first message is logged before their customer row exists and
+  // carries no customer_id. Read by customer, a brand-new "hi" found an empty
+  // thread and got no introduction - and their SECOND message was introduced.
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  const fn = src.slice(src.indexOf('async function recentThread'), src.indexOf('function isNewConversation'));
+  assert.ok(fn.includes("eq('phone', customer.phone)"), fn);
+});
+
+test('only a thread she has never introduced herself on is checked at all', () => {
+  const src = withoutComments(SRC('core', 'lyn.js'));
+  const fn = src.slice(src.indexOf('async function opener'), src.indexOf('function lead'));
+  const intro = fn.slice(fn.indexOf('everIntroduced'), fn.indexOf('COMEBACK'));
+  assert.ok(intro.includes('isNewConversation'), 'she is introduced without asking whether this is the start');
+  assert.ok(!/lastSpokeAt/.test(fn), 'the gap that never fired is back');
+});
+
+// --- the model's own introduction comes off ---------------------------------
+
+test('an introduction the model wrote is taken off when none is owed', () => {
+  assert.equal(lyn.lead('', `${lyn.INTRODUCTION} When suits you?`), 'When suits you?');
+  assert.equal(lyn.lead('', "Hi, I’m Lyn, LYNDRY’s automated assistant. When suits you?"), 'When suits you?');
+  assert.equal(lyn.lead('', 'This is Lyn from LYNDRY! What day works?'), 'What day works?');
+  assert.equal(lyn.lead('', "Hi, it's Lyn again. Sure thing."), 'Sure thing.');
+});
+
+test('and replaced with ours when one is owed, never stacked', () => {
+  assert.equal(lyn.lead(lyn.INTRODUCTION, "Hi, I'm Lyn from LYNDRY. When suits you?"), `${lyn.INTRODUCTION} When suits you?`);
+});
+
+test('a reply that is nothing but who she is, is kept', () => {
+  // The answer to "who is this?" or "am I talking to a person?". Stripping it
+  // would send nothing at all to somebody who asked a direct question.
+  assert.equal(lyn.lead('', `${lyn.INTRODUCTION}`), lyn.INTRODUCTION);
+});
+
+test('an answer in the same sentence as her name is never cut', () => {
+  const body = "Hi, I'm Lyn, and I can grab it tomorrow at 6.";
+  assert.equal(lyn.lead('', body), body);
+});
+
+test('the opener and the model do not both say hello', () => {
+  assert.equal(lyn.lead(lyn.INTRODUCTION, 'Hey! How can I help?'), `${lyn.INTRODUCTION} How can I help?`);
+  assert.equal(lyn.lead(lyn.COMEBACK, 'Hi there, sure thing.'), `${lyn.COMEBACK} Sure thing.`);
+  // A reply that is nothing but a greeting keeps it rather than sending the
+  // opener alone.
+  assert.equal(lyn.lead(lyn.INTRODUCTION, 'Hey!'), `${lyn.INTRODUCTION} Hey!`);
+  // A name after the greeting is not a bare greeting.
+  assert.equal(lyn.lead(lyn.INTRODUCTION, 'Hey Maria, what day works?'), `${lyn.INTRODUCTION} Hey Maria, what day works?`);
+});
+
+test('ordinary replies are untouched', () => {
+  assert.equal(lyn.lead('', 'Hey! How can I help?'), 'Hey! How can I help?');
+  assert.equal(lyn.lead('', "Lynn's order is fine."), "Lynn's order is fine.");
 });
 
 test('disclosure beats the comeback when both could apply', () => {
@@ -221,11 +328,16 @@ test('the prompt names her and reverses the old never-say-you-are-an-AI rule', (
   assert.ok(/NEVER PRESENT YOURSELF AS A PERSON/.test(brain), 'the must-not is missing');
 });
 
-test('the prompt tells her to say it once, not every message', () => {
+// Neil's locked rules, 21 September: the introduction is the CODE's, once, at
+// the start of a conversation. The prompt used to let the model write it "if
+// this is genuinely your first message", which is a judgement it could get
+// wrong in the middle of a thread.
+test('the prompt tells her never to introduce herself - the code does it', () => {
   const brain = SRC('core', 'brain.js');
 
-  assert.ok(/SAY IT ONCE PER CONVERSATION/.test(brain), brain.slice(0, 0));
-  assert.ok(/never announce that you are automated again/.test(brain), brain.slice(0, 0));
+  assert.ok(/YOU NEVER INTRODUCE YOURSELF/.test(brain), 'the prompt still lets her write it');
+  assert.ok(/never announce that you are automated in the middle of a conversation/.test(brain), brain.slice(0, 0));
+  assert.ok(!/unless this is genuinely your first message/.test(brain), 'the old permission is back');
 });
 
 test('the voice rules survive the reversal', () => {

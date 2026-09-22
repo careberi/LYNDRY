@@ -146,7 +146,8 @@ function cardDestination(order, setupUrl) {
     // No scheme and no token. A phone will probably still turn this into a
     // link, and that is fine: what matters is that it names a place they
     // recognise and can check, rather than characters only we can read.
-    return `at ${site.domain}/account - sign in with this number.`;
+    // A comma, not a dash: no dashes in anything a customer reads.
+    return `at ${site.domain}/account, and sign in with this number.`;
   }
 
   return `here: ${setupUrl}`;
@@ -388,7 +389,7 @@ function updateCardText({ orderNumber, priceCents, url, holding = false }) {
 
   const where = url
     ? ` Update it here: ${url} or at ${site.domain}/account.`
-    : ` Update it at ${site.domain}/account - sign in with this number.`;
+    : ` Update it at ${site.domain}/account, and sign in with this number.`;
 
   return `${opening}${why}${where}`;
 }

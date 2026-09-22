@@ -760,7 +760,166 @@ is one the people doing the washing never see.
   first page still goes the moment it is raised, whatever the hour; the
   re-page rides the tick and so sits out quiet hours.
 - Replies sound like a competent human at a small business. Short. No emoji.
-  Never "I'm an AI".
+  **She is Lyn, LYNDRY's automated assistant, and says so** - the old "never
+  say I'm an AI" was reversed on 16 September. The introduction is written by
+  code, once; see Lyn's locked rules below.
+
+## Lyn's locked rules, 21 September
+
+Neil's list, handed over as one spec. Each item says where it is enforced,
+because most of them are a sentence in a prompt and a few are code that does
+not depend on the model reading it.
+
+**THE FACTS, IN ONE BLOCK IN THE PROMPT** (`THE FACTS, LOCKED` in
+`brain.systemPrompt()`): back the next day after pickup, $2.00/lb one-time,
+$1.80/lb on a subscription, a $25 minimum, charged after the weigh-in, no
+membership, no delivery fee. The rates are read from `subscription.js` and the
+minimum from config, never typed. "All replies must say" means these are the
+answer whenever the subject comes up, not a list recited at everybody. The
+prompt also explains the $25 show-up hold as pending and not a charge - it
+said "booking takes nothing" and never mentioned the hold the confirmation
+names.
+
+**NEVER "SAME DAY".** Not "same day, no extra charge", not "within 24 hours".
+The delivery text used to open "Delivered same day, no extra charge!" when the
+bag was collected that morning; it came out, and the prompt forbids the words.
+What we promise is the next day after pickup, and announcing the times we beat
+it teaches people to expect it.
+
+**A "HI" GETS A LINE, NOT A WELCOME. THIS REVERSES "THE BLOCK WORD FOR WORD".**
+The prompt used to hand the model `onboarding.introduction()` and tell it to
+recite it to any new number that said only "hi". Neil: the welcome with the 50%
+and "want us to grab your laundry this week?" goes ONLY to people who typed
+their number into the website. So `systemPrompt()` no longer builds the block at
+all, and a new "hi" gets one friendly line with one question in it. The website
+door (`onboarding.welcomeMessage()`) is unchanged. **The Facebook lead text and
+the door-hanger reply still send `introduction()`** - they are code, not Lyn,
+and whether they fall under "only the website" is Neil's call, not taken yet.
+
+**SHE INTRODUCES HERSELF ONCE, AT THE START, NEVER MID-CONVERSATION. THIS
+REVERSES "OLD THREADS GET ONE".** `lyn.opener()` used to introduce her to anybody
+she had never introduced herself to, and every customer who talked to us before
+Lyn had a name had never been told - so the next reply to them, in the middle of
+a booking, opened "Hi, I'm Lyn, LYNDRY's automated assistant." Now she needs
+BOTH: never introduced, and `lyn.isNewConversation()` - nothing from them before
+what they have just sent (a brand-new customer; our own welcome before it does
+not count), or a silence of `NEW_THREAD_DAYS` before it.
+
+**The 14-day gap never fired until this change.** It was measured from the
+newest message on the thread, which is always the inbound being answered,
+seconds old. It is measured before the current burst now. Somebody already
+introduced is never introduced again, gap or no gap.
+
+**THE THREAD IS READ BY PHONE NUMBER, NOT BY CUSTOMER.** A stranger's first
+text is logged before their customer row exists, so it has no `customer_id`
+and nothing links it afterwards. The first version read by customer, and a
+brand-new "hi" found an empty thread - no introduction - while their SECOND
+message found only our reply before it and was introduced mid-conversation.
+Caught in review, not on a phone.
+
+**The code is the only thing that introduces her.** The prompt says never to,
+and `lyn.lead()` takes a model-written introduction off the front of a reply
+either way - only a sentence that is nothing but an introduction, so "Hi, I'm
+Lyn, and I can grab it tomorrow" keeps its answer, and a reply that is
+NOTHING but "I'm Lyn, LYNDRY's automated assistant" is kept, because that is
+the answer to "am I talking to a person?" (which the prompt now has her open
+with "No,"). When our opener goes on, a bare "Hey!" at the front of the
+model's reply comes off, so nobody is greeted twice.
+
+**ONE QUESTION AT A TIME.** The prompt carried two setup lists that disagreed:
+an older five-beat one (name AND address in one message, the wash BEFORE
+booking, "there are NO default wash settings") and the 16 September one. The
+older one is gone. A pickup request now asks for the name alone.
+
+**NAME, ADDRESS AND "24 HOURS" IN ONE MESSAGE** gets one reply: the address
+read back, the next day after pickup, and the soonest window `check_slot`
+gives. **Neither existing pass could produce it.** `checkSlot()` refuses a
+customer with no name or address saved (the service area is decided off the
+saved address), and `save_details`' own reply is "When would you like it
+picked up?" - asked of somebody who has just said "24 hours".
+
+**So `sms.js` lets ONE lookup follow a save**: save the details, the setup
+follow-up offers `check_slot` for today, it runs, and one more pass turns its
+facts into the reply. Bounded - save, one lookup, one sentence, and a tool at
+that last step is ignored; if anything there comes back unusable, the save's
+own sentence stands. A test pins the branch and that nothing past it can run.
+
+**A WRONG NUMBER OR JUNK GETS ONE LINE OR NOTHING, AND NO BOOKING FLOW.** Two
+halves:
+
+| | |
+|---|---|
+| a sender that is not `+1` and ten digits | `sms.js` logs it and stops: no customer row, no promotion, no AI. A short code (29283) had been given a customer row and a reply |
+| a real number texting junk | the prompt says one short line, or `NO_REPLY` |
+
+**`NO_REPLY` IS HOW THE MODEL SAYS "SEND NOTHING"**, and `brain.isNoReply()` is
+checked by every sender before anything reaches a phone: the `say()` wrapper in
+`sms.js`, the last check before an action's sentence goes, the lookup follow-on,
+and the follow-up sweep, which is written under the same prompt. Loose on
+purpose - the word itself reaching somebody's phone is the failure that matters:
+`NO_REPLY` at the front counts ("NO_REPLY (wrong number)", "**NO_REPLY**"),
+while the spelled-out "no reply" counts only as the whole message. A silence
+chosen after a slot check stays silent rather than falling through to the
+"something went wrong" holding line.
+
+**A DEFAULT IS A PLACEHOLDER, NEVER THE CUSTOMER'S ANSWER** - cold, softener,
+the window we pick, the door of the address on file. The customer notes now use
+`booking.hasPreferences()` for the wash (the same EXPLICIT/DEFAULT test as the
+intake table), with a third state for a wash chosen in part - "cold" and
+nothing about softener used to read as NOT CHOSEN and get the temperature asked
+again. The spot is read from `special_instructions` (pickup) and `dropoff_spot`
+(only when the clean laundry goes somewhere else), the way the confirmation
+reads them, rather than `default_pickup_method`, which falls back to outside
+for everybody and read as though every customer had told us. The booking
+confirmation's wash clause is gated on `hasPreferences()` too. The recap
+example no longer reads "washed cold with softener", and the wash question is
+back in the prompt word for word - it had lived only in the stale beat list.
+
+**NO DASHES IN ANYTHING A CUSTOMER READS, AND THE GUARD HAD A HOLE.**
+`notify.toPlainText()` only caught a dash with a space on both sides, so the
+model's "Hi—we" went out as "Hi-we". An em dash or horizontal bar in any spacing
+is now a comma, and a spaced hyphen on either side is too; a hyphen inside a
+word, a phone number, a URL, "16-50 Chandler Dr" or "8-10am" is left alone. A
+spaced dash between two numbers is a range and becomes "to" ("2 - 4pm" is "2 to
+4pm", not "2, 4pm"), a dash opening a line just goes, and "-5" stays a number. The
+prompt's example replies were full of dashes for the model to copy and are
+clean now; a test holds them to it. Web pages are unaffected - em dashes there
+are still the house style.
+
+**THE SUBSCRIPTION OFFER IS ITS OWN TEXT, AFTER THE FIRST PAID DELIVERY, ONCE.**
+Neil's exact words, in `subscription.postDeliveryOffer()`:
+
+> Would you like to set up a subscription for every week, every 2 weeks, or
+> once a month? Subscription orders are $1.80/lb instead of $2.00/lb.
+
+`subscription.offerAfterDelivery()` is the rule, pure and tested;
+`fulfilment.offerSubscription()` gathers the facts and sends, after the delivery
+text, and never throws.
+
+| Sent only when | |
+|---|---|
+| this delivery was paid | `PAID` and over $0, so a free or waived one never is |
+| it is their first paid one | COUNTED off `orders`, not stored. A paid order after free ones is still the first. The second counts two and is refused, which is what makes it once. Anybody with a paid delivery before this shipped is already past one, so nothing goes out retroactively |
+| they have no plan | any schedule not `ENDED`, paused ones included |
+| this pickup was not on a plan | `subscription_id` |
+| not quiet hours | it is the one unprompted sales text. **Skipped, not deferred** - deferring needs a stamp and a sweep |
+| nobody has the thread | `aiPause.isPaused()`, fails closed |
+
+It replaced a line on the end of the delivery text that went to every customer
+without a schedule on every delivery, free ones included, and offered two
+frequencies where there are three. **The prompt no longer pitches a
+subscription after a delivery** and tells the model the system does; a reply to
+the offer is `set_pickup_schedule`, **which could not make MONTHLY until this
+change** - the enum only had WEEKLY and FORTNIGHTLY.
+
+**The delivery text is the door and the photo**: "Delivered! Your laundry is at
+your door. Photo: <link>", with anything about money in its own block after a
+blank line so the link never runs into a sentence.
+
+**Untouched on purpose**: the pickup text and "We're here for your laundry",
+per Neil. So is the booking-time subscription nudge for a returning one-time
+customer (`subscription.nudgeLine()`) - a second pitch at a different moment,
+left for Neil to decide.
 
 ## Ops endpoints
 
@@ -3629,7 +3788,7 @@ careful person ignores it, which may be what happened here.
 
 | Door | What they read |
 |---|---|
-| `WEB` | "at lyndry.com/account - sign in with this number." |
+| `WEB` | "at lyndry.com/account, and sign in with this number." (a dash until 21 September) |
 | `THREAD`, `PHONE`, unknown | "here: lyndry.com/pay/<token>" |
 
 **The link stays for everyone else and that is not a hedge.** Somebody who
@@ -4427,7 +4586,7 @@ clause to `onboarding.introduction()`, which writes everything after it:
 |---|---|---|
 | The website form | `onboarding.welcomeMessage()` | "Hey, thanks for sending over your number." |
 | A Facebook advert | `leads.leadMessage()` | "Hey, you left this number on our Facebook laundry form." |
-| **They text us out of the blue** | **the AI**, from `systemPrompt()` | "Hey, thanks for reaching out." |
+| ~~They text us out of the blue~~ | **nobody, since 21 September** - Lyn answers what they said in a line | - |
 | A door hanger, scanned | `onboarding.startConversation()` | "Hey, thanks for scanning." |
 
 **The fourth one carries a different offer, and it renders itself.** A
@@ -4450,12 +4609,11 @@ number that texted "Hi" got it, an hour after the new copy went live. All three
 now call `introduction()`, so there is one copy of the words and one copy of the
 free-orders count.
 
-**It is the AI's to send because they said something.** A brand-new number that
-says only "hi" gets the block word for word, the same way the wash question is
-sent word for word; a brand-new number that asks a real question gets that
-answered, because a script that ignores what somebody said is the robot
-behaviour this system exists to avoid. **With the shop shut none of it applies** —
-the block invites them to name a day, so the closed wording stands instead.
+**THE AI ROW IN THAT TABLE IS GONE, 21 SEPTEMBER.** It read: *"A brand-new
+number that says only "hi" gets the block word for word."* Neil's locked rules
+reversed it: the welcome with the offer goes only to people who typed their
+number into the website, and a "hi" gets one line. `systemPrompt()` no longer
+builds the block. See Lyn's locked rules above.
 
 **THE FIRST MESSAGE IS TWO SEGMENTS, DOWN FROM FOUR, AND NEIL WROTE BOTH.**
 It was one segment for a long time, on the grounds that it goes to everybody and

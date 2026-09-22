@@ -97,7 +97,9 @@ test('an action with nothing to say sends nothing, rather than an empty text', (
   assert.ok(at > 0, 'the action reply is missing');
 
   const before = src.slice(Math.max(0, at - 400), at);
-  assert.ok(/if \(!message \|\| !String\(message\)\.trim\(\)\)/.test(before), before);
+  // And NO_REPLY is nothing too - the model's way of saying "send nothing" to
+  // a wrong number must never reach a phone as the word itself.
+  assert.ok(/if \(!message \|\| !String\(message\)\.trim\(\) \|\| brain\.isNoReply\(message\)\)/.test(before), before);
   assert.ok(/return;/.test(before), 'it falls through to sending an empty message');
 });
 

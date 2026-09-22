@@ -188,6 +188,63 @@ function nudgeLine() {
   return `You can also subscribe for ${subscriptionRate()} instead of ${oneTimeRate()}.`;
 }
 
+// ---------------------------------------------------------------------------
+// THE QUESTION ASKED AFTER A FIRST PAID DELIVERY. Neil's locked wording, 21
+// September, sent exactly:
+//
+//   "Would you like to set up a subscription for every week, every 2 weeks, or
+//    once a month? Subscription orders are $1.80/lb instead of $2.00/lb."
+//
+// THE RATES ARE BUILT, THE FREQUENCIES ARE NOT, and the split is deliberate.
+// A rate is a figure that moves with config, and a text quoting a price the
+// code no longer charges is the one mistake a subscription offer must never
+// make - so the two figures come from the functions that price the order.
+// The frequency phrase is Neil's own sentence: he wrote "once a month" where
+// FREQUENCIES says "every month", and building it from the labels would send a
+// sentence he did not write. Changing the label to match would reach the
+// website's radio buttons, its summary and the intake question, which is a
+// decision about all of those rather than about this one message.
+//
+// test/post-delivery-offer.test.js holds the exact string at today's prices.
+// ---------------------------------------------------------------------------
+function postDeliveryOffer() {
+  return (
+    'Would you like to set up a subscription for every week, every 2 weeks, or once a month? ' +
+    `Subscription orders are ${subscriptionRate()} instead of ${oneTimeRate()}.`
+  );
+}
+
+// WHETHER THAT QUESTION GOES, and a pure function so every rule can be tested
+// without a database. The caller does the lookups and hands in the answers.
+//
+//   paid           this order was actually charged: PAID and over $0. A waived
+//                  order is WAIVED, and a free one is never charged at all -
+//                  billing.chargeAtTheDoor() writes nothing for a $0 total, so
+//                  it stays UNPAID. Neither is "paid", with no special case
+//   paidDeliveries this customer's delivered, paid, over-$0 orders, COUNTING
+//                  THIS ONE. Exactly 1 is the first. Earlier free orders do not
+//                  count, which is Neil's edge case: a first paid delivery
+//                  after promo orders still earns the question, once
+//   hasPlan        an ACTIVE standing order. A paused one still counts - pausing
+//                  leaves status ACTIVE - and nobody is sold what they have
+//   planOrder      this pickup was sold on a plan. Somebody who subscribed and
+//                  cancelled before it came back has no schedule left but is
+//                  not somebody to pitch a subscription to minutes later
+//   quiet          New Jersey quiet hours. The delivered text is a status and
+//                  goes whenever the van arrives; this is a sales question
+//                  nobody asked, which is what the 8am to 9pm floor exists for
+//
+// Returns the reason it did not go, because "why did she not get the offer" is
+// exactly the question somebody will ask of a log line.
+function offerAfterDelivery({ paid, paidDeliveries, hasPlan, planOrder, quiet } = {}) {
+  if (!paid) return { send: false, reason: 'not a paid delivery' };
+  if (hasPlan) return { send: false, reason: 'already has a plan' };
+  if (planOrder) return { send: false, reason: 'this pickup was on a plan' };
+  if (paidDeliveries !== 1) return { send: false, reason: `not the first paid delivery (${paidDeliveries})` };
+  if (quiet) return { send: false, reason: 'quiet hours' };
+  return { send: true, text: postDeliveryOffer() };
+}
+
 // What a subscriber is told their pickup costs, on a confirmation or a
 // reminder. Names the plan, because Neil's rule is that a subscription order is
 // identifiable everywhere - and because a customer seeing $1.80 should be able
@@ -283,6 +340,8 @@ module.exports = {
   choiceLines,
   savingPercent,
   nudgeLine,
+  postDeliveryOffer,
+  offerAfterDelivery,
   orderRateLine,
   cancellationLines,
   cancellationFeeCents,

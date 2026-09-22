@@ -929,7 +929,9 @@ async function setPickupSchedule(customer, input) {
   }
 
   if (!recurring.CADENCES[input.cadence]) {
-    return `Would you like us every week, or every other week?`;
+    // The three frequencies, in the words of the offer they were sent after
+    // their first delivery. This asked about two long after there were three.
+    return `Would you like us every week, every 2 weeks, or once a month?`;
   }
 
   const weekday = Number(input.weekday);

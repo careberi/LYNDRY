@@ -1374,7 +1374,14 @@ function confirmationMessage(
   // - and only for those customers, because the ternary short-circuits when
   // water_temp is unset. The people who got a confirmation were the ones who
   // had not chosen anything.
-  const washLine = prefs.water_temp ? ` ${wash.describeSaved(prefs)}.` : '';
+  //
+  // ONLY WHAT THEY CHOSE. This read `prefs.water_temp`, so a customer with a
+  // temperature and nothing else - or a value we no longer offer - had the
+  // rest filled in from our defaults and read back to them as their order.
+  // Neil's locked rule, 21 September: a default is a placeholder, never the
+  // customer's answer. hasPreferences() is the test the intake table uses to
+  // draw EXPLICIT against DEFAULT, so this and that screen cannot disagree.
+  const washLine = hasPreferences(customer) ? ` ${wash.describeSaved(prefs)}.` : '';
 
   // The price, and WHEN it gets taken. Stated as something that has not
   // happened yet, because it has not: no money moves until the bag is weighed.

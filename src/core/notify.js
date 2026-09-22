@@ -68,7 +68,27 @@ const PLAIN_EQUIVALENT = {
 };
 
 function toPlainText(text) {
-  const ascii = String(text).replace(
+  // AN EM DASH IS NEVER INSIDE A WORD, so it goes first and in any spacing.
+  // Neil's locked rule, 21 September: customer-facing copy uses no dashes. The
+  // rule below this only ever caught a dash with a space on BOTH sides, and
+  // Claude writes an em dash with none at all - "laundry—we'll" - which the
+  // character swap flattened to "laundry-we'll" and sent to a phone. The
+  // horizontal bar is the same character to anybody reading it.
+  //
+  // THREE CASES BEFORE THAT, found by trying to break it:
+  //   - a dash between two numbers is a range, and a range reads as "to" -
+  //     "2 – 4pm" is "2 to 4pm", never "2, 4pm"
+  //   - a dash opening a line is a sign-off or a bullet and simply goes;
+  //     "Thanks.\n\n— Lyn" used to come out "Thanks., Lyn"
+  //   - an en dash jammed between two words is a pause, not a range
+  // and the comma rule never reaches across a line break.
+  const unDashed = String(text)
+    .replace(/(\d)[ \t]+[-\u2010-\u2015][ \t]+(?=\d)/g, '$1 to ')
+    .replace(/(^|\n)[ \t]*[\u2014\u2015][ \t]*/g, '$1')
+    .replace(/([A-Za-z])\u2013(?=[A-Za-z])/g, '$1, ')
+    .replace(/[ \t]*[\u2014\u2015][ \t]*/g, ', ');
+
+  const ascii = unDashed.replace(
     /[‐-―‘-‟…• ′″«»‹›]/g,
     (ch) => PLAIN_EQUIVALENT[ch] || ch
   );
@@ -80,10 +100,24 @@ function toPlainText(text) {
   // The prompt says so at length; Claude still reaches for one, because every
   // writer does. So the last word belongs here, at the point of sending.
   //
-  // Only a hyphen with a space on BOTH sides is touched, which is the one
-  // standing in for a comma. Hyphens inside a word (wash-and-fold), inside a
-  // phone number and inside a URL have no spaces and are left alone.
-  return ascii.replace(/ +- +/g, ", ");
+  // A hyphen with a space on EITHER side is standing in for a comma - "Hi -we"
+  // and "Hi- we" are the lopsided forms an en dash leaves once it is flattened,
+  // and they got through while this only looked for a space on both.
+  //
+  // A hyphen with NO space either side is part of something and is left alone:
+  // wash-and-fold, next-day, a phone number, a URL, 16-50 Chandler Dr, a range
+  // like 8-10am. test/lyn-locked-rules.test.js holds every one of those.
+  //
+  // The lopsided forms only fire before a LETTER: "It was -5 out" is a
+  // negative number, not a pause.
+  return ascii
+    .replace(/ +- +/g, ', ')
+    .replace(/(\w) +-(?=[A-Za-z])/g, '$1, ')
+    .replace(/(\w)- +(?=[A-Za-z])/g, '$1, ')
+    // What the swaps above leave behind when a comma was already there.
+    .replace(/ +,/g, ',')
+    .replace(/,{2,}/g, ',')
+    .replace(/^, */, '');
 }
 
 function warnIfExpensive(text) {

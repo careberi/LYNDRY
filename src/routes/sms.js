@@ -119,6 +119,22 @@ async function handleInbound(inbound) {
 
   console.log(`SMS in  ${from}: ${text}`);
 
+  // --- NOT A PHONE ANYBODY IS HOLDING ----------------------------------------
+  //
+  // Neil's locked rules, 21 September: junk gets no reply and no booking flow.
+  // The clearest junk is a sender that is not a US mobile at all - a short code
+  // like 29283, which is a machine sending a verification code or a carrier
+  // notice. One of those got a customer row of its own and a reply from Lyn.
+  //
+  // Logged above, like everything that arrives, and then nothing: no customer
+  // row, no promotion, no AI call, no reply. Every customer we can serve has a
+  // +1 and ten digits, because that is what normalisePhone() writes and what
+  // the carrier delivers to.
+  if (!/^\+1\d{10}$/.test(String(from || ''))) {
+    console.log(`JUNK    ${from}: not a US mobile number. Not answered.`);
+    return;
+  }
+
   // --- A MESSAGE WITH NOTHING IN IT ----------------------------------------
   //
   // A real customer's phone sent one - an empty body, most likely a reaction or
@@ -475,7 +491,21 @@ async function answerWithBrain(customer, text, from) {
   // seconds is one person starting a conversation and gets one introduction,
   // which falls out of the burst window having already collapsed them.
   const openingLine = await lyn.opener(customer);
-  const say = (to, body, id, opts) => reply(to, lyn.lead(openingLine, body), id, opts);
+
+  // SAYING NOTHING IS AN ANSWER. Neil's locked rules, 21 September: a wrong
+  // number or junk gets one short line or no reply at all. The model says
+  // "no reply" with brain.NO_REPLY, and a reply that comes out empty once the
+  // opener is dealt with is the same thing. Checked here, in the one wrapper
+  // every AI reply passes through, so no path below can send the literal word
+  // or an introduction with nothing after it.
+  const say = (to, body, id, opts) => {
+    const out = brain.isNoReply(body) ? '' : lyn.lead(openingLine, body);
+    if (!out.trim() || out.trim() === openingLine) {
+      console.log(`QUIET   ${to}: nothing worth sending. Saying nothing.`);
+      return null;
+    }
+    return reply(to, out, id, opts);
+  };
 
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
@@ -560,6 +590,10 @@ async function answerWithBrain(customer, text, from) {
   };
 
   let message;
+  // Set when the model deliberately chose silence (NO_REPLY). A lookup that
+  // came back empty gets the holding line below; one that chose to say
+  // nothing gets nothing.
+  let choseSilence = false;
   try {
     message = await actions.run(decision.name, decision.input, customer, helpers);
   } catch (err) {
@@ -646,13 +680,45 @@ async function answerWithBrain(customer, text, from) {
       if (followOn.type === 'tool' && !isLookup && (!isSetup || setupIsFine)) {
         console.log(`ACTION+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
         message = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
+      } else if (followOn.type === 'tool' && isLookup && SETUP_ACTIONS.includes(decision.name)) {
+        // SAVE, THEN CHECK, THEN SPEAK. Neil's locked rules, 21 September:
+        // "Maria Lopez, 25 Windham Pl Glen Rock 07452, 24 hours" gets ONE reply
+        // that reads the address back, says it comes back the next day after
+        // pickup, and offers the soonest real window.
+        //
+        // Neither pass could do that alone. check_slot refuses anybody with no
+        // name or address saved - the service area is decided off the saved
+        // address - and save_details' own reply is "When would you like it
+        // picked up?", which asks somebody who has just said "24 hours". So a
+        // lookup after a save is allowed to run, and one more pass turns its
+        // facts into the reply.
+        //
+        // BOUNDED: save, one lookup, one sentence, and a tool at that last step
+        // is ignored. If anything here comes back unusable, the save's own
+        // sentence stands - true, if not the whole answer.
+        console.log(`LOOKUP+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
+        const facts = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
+        const words = await brain.decide({
+          customer: freshCustomer || customer,
+          order: freshOrder,
+          recentMessages: await recentConversation(customer.id),
+          message: text,
+          followUp: {
+            name: followOn.name,
+            reply: typeof facts === 'string' ? facts : JSON.stringify(facts),
+            lookup: true,
+          },
+        });
+        const written = words && words.type === 'text' ? String(words.text || '').trim() : '';
+        if (written && written !== 'OK' && !brain.isNoReply(written)) message = written;
       } else if (LOOKUP_ACTIONS.includes(decision.name)) {
         // The lookup had nothing to say on its own, so the model's sentence IS
         // the reply. "OK" means it thought the previous action had already
         // answered the customer - true for a setup action, never for a lookup -
         // so that counts as nothing and the fallback below covers it.
         const written = String(followOn.text || '').trim();
-        message = written && written !== 'OK' ? written : null;
+        choseSilence = brain.isNoReply(written);
+        message = written && written !== 'OK' && !choseSilence ? written : null;
       }
       // Any text answer — "OK" or otherwise — means nothing more to do, and
       // the setup action's own message is the reply.
@@ -667,7 +733,7 @@ async function answerWithBrain(customer, text, from) {
   // failed or came back empty, the facts themselves carry a sentence for every
   // refusal that has one - and anything else gets an honest holding line rather
   // than silence on a customer's phone.
-  if (lookupFacts && (typeof message !== 'string' || !message.trim())) {
+  if (lookupFacts && !choseSilence && (typeof message !== 'string' || !message.trim())) {
     // NEVER PROMISE TO COME BACK. The old line here was "Let me check that and
     // come straight back to you", which is a promise nothing in this system
     // keeps - a customer said "good" to a recap, got that, and asked "what are
@@ -728,7 +794,7 @@ async function answerWithBrain(customer, text, from) {
   // rule that a handoff texts the customer nothing at all - and anything else
   // that decides it has nothing to say gets the same treatment rather than an
   // empty text going out.
-  if (!message || !String(message).trim()) {
+  if (!message || !String(message).trim() || brain.isNoReply(message)) {
     console.log(`QUIET   ${from}: ${decision.name} had nothing to say. Sending nothing.`);
     return;
   }
