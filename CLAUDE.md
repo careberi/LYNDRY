@@ -353,6 +353,13 @@ number.
 
 ### The offer popup
 
+**THERE IS NOTHING IN IT SINCE 22 SEPTEMBER, AND THAT NEEDED NO CODE.** Neil:
+the 50% comes off the website and off every new customer, and CLEAN50 stays
+valid for anybody who asks for it by name. The popup only ever advertises
+`promotions.autoGrant()`, so a promotion moved off the NEW_NUMBERS audience
+takes the box off every page by itself - absent from the markup, not hidden.
+The machinery below is intact and is what a future offer would use.
+
 **A box over lyndry.com carrying the first-order offer, with the home page's
 phone field in it.** Neil's ask, 12 September. `src/core/site-popup.js` decides
 whether a visitor gets one, `src/web/popup.js` draws it, `/ops/promotions/:id`
@@ -2533,6 +2540,61 @@ that race costs one extra free order.
 **`grant()` returns the grant somebody already had** rather than null, so "did
 this leave them holding one" is answerable from the return value. That is what
 decides whether the Facebook lead message may promise anything.
+
+**STANDING ONE DOWN IS A BUTTON, AND IT IS NOT THE SAME AS ENDING IT.** Neil's
+decision lock, 22 September: the 50% is no longer advertised or automatically
+assigned, and CLEAN50 remains valid when a customer explicitly provides it.
+
+**THE AUDIENCE IS THE WHOLE LEVER.** `autoGrant()` is the single ACTIVE
+promotion with audience `NEW_NUMBERS` and has exactly three readers: the only
+automatic grant point (`onboarding.startConversation()`, reached by all six
+doors - the hero, the popup, `/bergen`, an inbound text, the online booking
+wizard and the Facebook sweep), the website popup, and the create route standing
+the previous one down. Move the audience and every one of them stops, with
+nothing else to remember and no copy to edit.
+
+**ENDING IT WOULD HAVE BEEN THE OBVIOUS BUTTON AND THE WRONG ONE.**
+`claimableByCode()` filters on `ACTIVE`, so "Stop giving it out" kills the code
+too - the one thing this change had to keep. `promotions.standDown()` writes the
+audience and `auto_grant` on that one row and touches nothing else: every grant
+already made stands, every order that used it is untouched, and the promotion
+stays ACTIVE with its code.
+
+**SPECIFIC RATHER THAN CODE, AND THE REASON IS IN `sms.js`.** A promotion whose
+audience is `CODE` is read there as evidence that somebody scanned a door
+hanger: it writes the consent source `DOOR_HANGER` and opens the reply "Hey,
+thanks for scanning." Somebody who types CLEAN50 off an old text scanned
+nothing, and a false answer in the column an audit reads is not worth a tidier
+label. It is also what creating a replacement automatic promotion has always
+written. **So the promotion screens now name the code on any promotion that has
+one** - a code is a second way in whatever the audience says, which is exactly
+what `claimableByCode()` ignoring the audience means.
+
+**THE POPUP COMES DOWN IN THE SAME CALL.** The website switch only renders for
+the automatic promotion, so an audience moved first would leave
+`app_settings.website_popup` stranded at true with no screen able to clear it -
+and the next automatic promotion anybody created would be on the front page
+before they pressed anything. `standDown()` clears it and calls
+`sitePopup.forget()`, the same shape as `releaseSlot()` living inside
+`transition()` - and it does that FIRST, because taking a website switch off is
+safe to do twice while the other order strands it on if the write behind it
+fails. The card for a non-automatic promotion offers the switch off as
+well, so there are two doors and no way to strand it. **Creating a replacement
+passes `keepPopup`**, because replacing the automatic offer is not taking the
+website down - the popup has never named a promotion.
+
+**WHAT IT DOES NOT DO.** It does not withdraw the 36 grants still held, whose
+30-day expiries run out on their own; it does not touch the 8 redemptions or the
+delivered orders carrying the discount; and the AI will still mention the offer
+to somebody who holds one, because that promise was made. Withdrawing a promise
+already made is not something to do quietly, and nothing here does it.
+
+**AND `/bergen` STOPPED PROMISING A DISCOUNT.** The paid-advert landing page and
+its link-preview description both carried "20% off your first order" - already
+false while the automatic offer was 50%, and impossible afterwards. A figure
+typed onto a page is a second copy of a promise only the promotions table can
+keep, and this is the page we pay for traffic to. `/bergen/sent` had the same
+line removed months earlier and the comment there says why.
 
 **Only one promotion is auto-granted at a time**, enforced by a partial unique
 index, and creating a second stands the first down rather than failing. Two

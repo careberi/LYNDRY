@@ -233,6 +233,84 @@ function popupOffer(promo, now = new Date()) {
   return { id: promo.id, headline, terms, maxOrders: promo.max_orders || null };
 }
 
+// ---------------------------------------------------------------------------
+// STOP GIVING THIS TO EVERY NEW NUMBER, WITHOUT TAKING IT OFF ANYBODY.
+//
+// Neil, 22 September: the 50% is no longer advertised or handed to new
+// customers, and CLEAN50 stays valid for anybody who asks for it by name.
+//
+// THE AUDIENCE IS THE ONLY LEVER THAT DRAWS THAT LINE. autoGrant() is the
+// single ACTIVE promotion with audience NEW_NUMBERS, and three things read it:
+// startConversation(), which grants it to every brand-new customer through all
+// six doors; site-popup.js, which advertises it on the website; and the create
+// route, standing the previous one down. Move the audience and the first two
+// stop, with nothing else to remember and no copy to edit.
+//
+// ENDING IT IS THE WRONG BUTTON AND WOULD HAVE BEEN THE OBVIOUS ONE.
+// claimableByCode() filters on ACTIVE, so "Stop giving it out" would kill the
+// code as well - the one thing this change has to keep.
+//
+// SPECIFIC, NOT CODE, AND THE REASON IS IN sms.js. A promotion whose audience is
+// CODE is taken there as evidence that somebody scanned a door hanger: it
+// records the consent source DOOR_HANGER and opens the reply "Hey, thanks for
+// scanning." Somebody who types CLEAN50 off an old text scanned nothing, and a
+// false answer in the column an audit reads is not worth a tidier label. It is
+// also what the create-a-new-automatic path has always written.
+//
+// THE POPUP COMES DOWN IN THE SAME CALL, and that is not tidiness. The switch
+// on the ops screen only renders for the automatic promotion, so an audience
+// moved first leaves app_settings.website_popup stranded at true with no screen
+// able to clear it - and the next automatic promotion anybody creates would be
+// on the front page before they pressed anything. Same shape as releaseSlot()
+// living inside transition(): a release one door forgot is one nobody gets back.
+//
+// AND IT COMES DOWN FIRST, WHICH IS THE HALF THAT MATTERS. Taking the popup off
+// is safe on its own and can be done twice: what it leaves behind is the offer
+// still being given but not advertised, which is a state to press the button
+// again from. The other order strands the flag on exactly the failure above -
+// audience moved, write failed, no screen left that can clear it.
+//
+// Lazy requires, because settings.js and site-popup.js both read this module.
+// ---------------------------------------------------------------------------
+const STOOD_DOWN = 'SPECIFIC';
+
+async function standDown(promotionId, { by = null, keepPopup = false } = {}) {
+  const promo = await find(promotionId);
+  if (!promo) return { ok: false, reason: 'gone', detail: 'No promotion with that id.' };
+
+  if (promo.audience !== 'NEW_NUMBERS') {
+    return {
+      ok: false,
+      reason: 'not_automatic',
+      detail: 'This one is not the automatic promotion, so nobody is being given it unprompted.',
+    };
+  }
+
+  if (!keepPopup) {
+    const settings = require('./settings');
+    const sitePopup = require('./site-popup');
+    await settings.setWebsitePopup(false, by);
+    sitePopup.forget();
+  }
+
+  const { data: moved, error } = await db
+    .from('promotions')
+    .update({ audience: STOOD_DOWN, auto_grant: false })
+    .eq('id', promotionId)
+    // Only while it is still the automatic one: two people on two screens must
+    // not both think they did this.
+    .eq('audience', 'NEW_NUMBERS')
+    .select(FIELDS)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!moved) {
+    return { ok: false, reason: 'not_automatic', detail: 'Somebody else has already stood this one down.' };
+  }
+
+  return { ok: true, promo: moved, code: moved.code || null };
+}
+
 async function autoGrant() {
   const { data, error } = await db
     .from('promotions')
@@ -969,4 +1047,6 @@ module.exports = {
   limitOf,
   AUDIENCES,
   audienceOf,
+  standDown,
+  STOOD_DOWN,
 };
