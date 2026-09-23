@@ -93,7 +93,7 @@ function safeNext(value) {
 }
 
 // ---------------------------------------------------------------------------
-// Sign in
+// Place an order
 // ---------------------------------------------------------------------------
 
 const PENDING_COOKIE = 'ly_cust_pending';
@@ -142,26 +142,48 @@ function readPending(req) {
 // you: a customer signs in and books, a stranger gets an account made and is
 // walked straight into the order.
 //
-// IT STILL CANNOT BE USED TO FIND OUT WHO IS A CUSTOMER. That property was
-// worth keeping and nearly died here: a screen that branched visibly would let
-// anybody type a number and read the answer off the next page. It does not
-// branch. Both cases send a code and land on the same "check your phone" - the
-// paths only separate AFTER the code proves whose phone it is.
+// THE TWO CASES DO NOT DO THE SAME THING, AND THIS COMMENT USED TO SAY THEY
+// DID. It read "both cases send a code and land on the same check your phone",
+// which was true when it was written and has been false since the flow was
+// reversed: a customer gets a code, and a number we have never met gets no text
+// at all and goes straight into the order. The POST handler below is where that
+// is decided and its own comments are the accurate ones.
 //
-// THE CONSENT BOX IS ON IT FOR EVERYONE, and that is not decoration. The very
-// next thing that happens is a text, so for a number we have never met this is
-// the only place written consent can be captured. An existing customer ticking
-// it again costs them a tap and changes nothing - their original consent record
-// is never overwritten, because the first time they agreed is the one that
-// matters if anybody ever asks.
+// SO THIS SCREEN DOES ANSWER "IS THIS NUMBER A CUSTOMER", which it once refused
+// to. That was given up deliberately rather than lost - see the note in the
+// handler - and the throttles are what is left in its place.
+//
+// AND THE CONSENT BOX IS NOT ON THIS SCREEN, which this comment also used to
+// claim. It moved to the address step, because that is the first moment either
+// half of the sentence is true: a stranger here is not being texted yet, so
+// there is nothing to consent to, and a customer here consented long ago.
 // ---------------------------------------------------------------------------
 function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
   return `
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:560px;padding-top:80px;padding-bottom:72px;">
     <h1 class="display-2">Start with your number.</h1>
+    <!-- IT SAYS WHAT HAPPENS TO BOTH PEOPLE, BECAUSE NEITHER OF THEM KNOWS YET.
+
+         This read "Your cell number is your account. No password." - which is
+         about how the sign-in is built rather than about what the visitor is
+         here to do, and lands as a wall on somebody who has just clicked an ad
+         and read "no account to log into" on the home page. The flow was always
+         right: a new number never sees a code and goes straight into the order.
+         Only the words were wrong.
+
+         THE PRICES ARE READ, NEVER TYPED. Same rule as every other page: one
+         copy of the rate, in config, or the day it moves this line is the one
+         nobody remembers. -->
     <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
-      Your cell number is your account. No password.
+      New here? You go straight to your order.
+      Ordered before? We text you a code.
+    </p>
+    <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:14px 0 0;">
+      ${escapeHtml(site.pricePerLb)} a pound one-time,
+      ${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription.
+      $${(config.pricing.minimumCents / 100).toFixed(0)} minimum,
+      back the ${escapeHtml(site.turnaround)}.
     </p>
   </div>
 </section>
@@ -283,7 +305,11 @@ router.get('/account/login', (req, res) => {
   const phone = formatPhone(auth.readGuest(req) || '');
 
   accountPage(res, {
-    title: 'Sign in',
+    // THE SAME WORDS AS THE POST PATH BELOW, which already said "Place an
+    // order". One screen calling itself two things is a screen you cannot
+    // trust, and "Sign in" is the half that is wrong for most people landing
+    // here from an advert.
+    title: 'Place an order',
     body: phoneStep({ next: safeNext(req.query.next), phone }),
     // The number form Google Ads measures. The tag reads the address and the
     // title, never the form: the number pre-filled from the cookie above is in

@@ -249,7 +249,11 @@ function footer() {
         <div>
           <p class="footer-head">Your account</p>
           <div style="display:flex;flex-direction:column;gap:10px;">
-            <a href="/account/login">Sign in or sign up</a>
+            <!-- THE SAME WORDS THE HOME PAGE USES on the button that points
+                 here. "Sign in or sign up" asks a visitor to decide which of
+                 the two they are before they have typed anything, which is
+                 exactly what this one screen exists not to ask. -->
+            <a href="/account/login">Place an order online</a>
           </div>
         </div>
 

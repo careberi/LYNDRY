@@ -299,11 +299,28 @@ test('IT WRITES SPECIFIC, AND sms.js IS WHY IT IS NOT CODE', () => {
 });
 
 test('a first message with no promotion offers no discount, only the price', () => {
+  // THE FUNCTION MOVED AND THE RULE DID NOT. This was introduction(), which
+  // took the opening clause as its first argument; Lyn's locked rules made the
+  // intro the same on every door, so the clause is built in and the function is
+  // firstMessage(). What is being protected is unchanged and is the whole point
+  // of this file: with no promotion attached, the first thing a stranger reads
+  // names the price and promises nothing off it.
+  //
+  // AND IT NO LONGER NAMES THE PRICE, WHICH THIS TEST USED TO REQUIRE. Neil's
+  // locked rules cut the first message to the intro and one short question, so
+  // "$2.00 a pound" is not in it on any door and asserting it here would be
+  // this file demanding the opposite of a decision he made. The price is still
+  // written in exactly one place and still reaches the customer; it simply
+  // arrives in the answer rather than in the greeting.
+  //
+  // WHAT THIS FILE IS FOR IS THE OTHER HALF, and it is unchanged: whatever the
+  // first message says, with no promotion attached it must not promise money
+  // off. That is the assertion that would fail the day somebody made the 50%
+  // automatic again.
   const onboarding = require('../src/core/onboarding');
-  const text = onboarding.introduction('Hey, thanks for reaching out.', { promo: null });
+  const text = onboarding.firstMessage({ promo: null });
   assert.ok(!/% off/i.test(text), text);
   assert.ok(!/free|discount|CLEAN50/i.test(text), text);
-  assert.ok(/a pound/.test(text), text);
 });
 
 // --- the screen says what the button does ----------------------------------------
