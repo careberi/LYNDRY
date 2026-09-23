@@ -206,8 +206,10 @@ async function requestCode(rawPhone, req) {
 
   const text = `${code} is your LYNDRY sign-in code. It expires in ${CODE_TTL_MINUTES} minutes.`;
 
-  // TEXTED TEN SECONDS FROM NOW, NOT INSIDE THIS REQUEST. Neil's rule for both
-  // sign-ins, and this one used to send at once. See src/core/code-sender.js.
+  // TEXTED A MOMENT FROM NOW, NOT INSIDE THIS REQUEST. Neil's rule for both
+  // sign-ins, and this one used to send at once. The wait is three seconds
+  // since 23 September; what matters here is that it is not zero and not
+  // awaited. See src/core/code-sender.js.
   codeSender.schedule(phone, text, (err) => {
     // Texting may not be working - carrier registration has been pending - and
     // without this the dashboard would be unreachable. The code goes to the

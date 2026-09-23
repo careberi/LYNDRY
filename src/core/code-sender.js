@@ -1,10 +1,14 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// A SIGN-IN CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER. BOTH SIGN-INS.
+// A SIGN-IN CODE IS WRITTEN NOW AND TEXTED A FEW SECONDS LATER. BOTH SIGN-INS.
 //
 // Neil, 11 September: "enter your phone number, and then after ten seconds,
-// the code is sent to the phone." The customer sign-in already worked this way
+// the code is sent to the phone." Ten became THREE on 23 September - the delay
+// is there so the page can answer without waiting on the carrier, and the work
+// it covers is one API call. The length is config.signIn.codeDelayMs and
+// nothing in this file assumes a particular one. The customer sign-in already
+// worked this way
 // and the staff sign-in did not - it texted inside the request - so the one he
 // uses every day was the one that ignored the rule. One implementation now,
 // used by src/core/admin-auth.js and src/core/customer-auth.js, so the two

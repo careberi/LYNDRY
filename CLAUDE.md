@@ -3531,11 +3531,11 @@ arriving or not at all, so the rest of the window only helps somebody who
 picked the phone up. Two different lifetimes on two sign-ins would be a thing
 somebody has to go and look up, so they moved together.
 
-**A SIGN-IN CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER, ON BOTH
-SIGN-INS.** Neil's rule: you enter your number, and ten seconds later the code
-is sent. It makes the page faster rather than slower, because the send used to
-be awaited inside the request. `config.signIn.codeDelayMs`
-(`LOGIN_CODE_DELAY_MS`, 10 seconds; zero sends immediately). One implementation,
+**A SIGN-IN CODE IS WRITTEN NOW AND TEXTED THREE SECONDS LATER, ON BOTH
+SIGN-INS.** Neil's rule: you enter your number, and a moment later the code is
+sent. It makes the page faster rather than slower, because the send used to be
+awaited inside the request. `config.signIn.codeDelayMs`
+(`LOGIN_CODE_DELAY_MS`, 3 seconds; zero sends immediately). One implementation,
 `src/core/code-sender.js`, used by `admin-auth.js` and `customer-auth.js`. It was
 customers only until 11 September, and Neil reported the staff sign-in, the one
 he uses every day, texting at once.
@@ -3554,10 +3554,18 @@ the database, so `customerAuth.flushPendingCodes()` runs in `shutdown()`
 alongside the reply flush - without it somebody waits for a text that is never
 sent. The timer is `unref`'d so it can never hold the process open.
 
+**IT WAS TEN SECONDS UNTIL 23 SEPTEMBER.** Neil cut it to three. The delay is
+not a feature of the sign-in - it exists so the page can answer immediately
+instead of waiting on the carrier inside the request - and the work it has to
+cover is one API call, so ten was only ever the first number chosen for it.
+Everything below still holds at three: one pending send per number, and the
+flush on shutdown. Both simply matter less.
+
 **The code page says the code is ON ITS WAY, not that it has been sent.** For
 the first few seconds the page is up and the message is not, and "we texted you
 a code" is a sentence the phone contradicts - which reads as broken and starts
-somebody tapping.
+somebody tapping. **That is the cost the delay buys, and three seconds is a
+shorter one to carry than ten.**
 
 **The staff sign-in still writes the code to the server log when texting
 fails**, which is the way back into a dashboard nobody else can reach. The wait

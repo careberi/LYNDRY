@@ -94,7 +94,11 @@ test('no wait configured sends at once, which is what the tests run with', async
 test('the default wait is ten seconds on both sign-ins', () => {
   // Read the same way src/config.js reads it, so a changed default is caught.
   const { config } = require('../src/config');
-  if (process.env.LOGIN_CODE_DELAY_MS == null) assert.equal(config.signIn.codeDelayMs, 10_000);
+  // Three seconds since 23 September, down from ten. What is pinned is that
+  // there IS a delay and that both sign-ins read the same one, not the number
+  // itself - but the number is asserted so a change to it is a deliberate edit
+  // here rather than something nobody notices.
+  if (process.env.LOGIN_CODE_DELAY_MS == null) assert.equal(config.signIn.codeDelayMs, 3_000);
 });
 
 // ---------------------------------------------------------------------------

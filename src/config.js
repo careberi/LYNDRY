@@ -116,12 +116,33 @@ const config = Object.freeze({
   }),
 
   // HOW LONG A SIGN-IN CODE WAITS BEFORE IT IS TEXTED, on BOTH sign-ins - staff
-  // at /ops/login and customers at /account/login. Neil's rule: you enter your
-  // number, and ten seconds later the code is sent. Zero sends at once, which is
+  // at /ops/login and customers at /account/login. Zero sends at once, which is
   // what the tests use. It used to be read inside customer-auth.js alone, and
   // the staff sign-in did not wait at all. See src/core/code-sender.js.
+  //
+  // THREE SECONDS. Neil, 23 September, down from ten.
+  //
+  // THE DELAY IS NOT A FEATURE OF THE SIGN-IN, and that is why shortening it
+  // costs nothing. It exists so the page can answer immediately instead of
+  // waiting on the carrier inside the request - the row is written first and
+  // the send is handed to a timer, so the screen is up before the text leaves.
+  // Ten seconds was simply the first number chosen for that; the work it has
+  // to cover is one API call.
+  //
+  // WHAT IT DOES COST IS REAL AND IS THE REASON IT WAS EVER LONGER THAN ZERO.
+  // The code page says the code is ON ITS WAY rather than that it has been
+  // sent, because for the length of this delay the page is up and the message
+  // is not - and "we texted you a code" is a sentence the phone contradicts,
+  // which reads as broken and starts somebody tapping. Three seconds is a
+  // shorter lie to have to tell than ten.
+  //
+  // THE OTHER TWO PROPERTIES ARE UNAFFECTED. One pending send per number, so a
+  // second request replaces the first and a burst of taps is still one text
+  // carrying the code that will actually be accepted; and flushPendingCodes()
+  // still runs in shutdown(), so a deploy inside the window cannot swallow one.
+  // Both matter less at three seconds and neither is removed.
   signIn: Object.freeze({
-    codeDelayMs: Number(process.env.LOGIN_CODE_DELAY_MS ?? 10_000),
+    codeDelayMs: Number(process.env.LOGIN_CODE_DELAY_MS ?? 3_000),
   }),
 
   // Where handoff_to_human reaches Neil. His personal number, never published.

@@ -204,7 +204,7 @@ function clearBucket(key) {
 // --- Sending a code ---------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// THE CODE IS WRITTEN NOW AND TEXTED TEN SECONDS LATER. Neil's rule, and the
+// THE CODE IS WRITTEN NOW AND TEXTED THREE SECONDS LATER. Neil's rule, and the
 // staff sign-in follows it too - both use src/core/code-sender.js, which holds
 // the timer, the one-pending-send-per-number rule and the flush on shutdown.
 // ---------------------------------------------------------------------------
