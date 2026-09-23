@@ -359,13 +359,30 @@ test('a blank password switches the route off rather than opening it', () => {
 });
 
 test('a wrong credential is a 404, so the file cannot be found by probing', () => {
+  // THIS TEST USED TO REFUSE A 401 ANYWHERE IN THE ROUTE, and it was right to
+  // fail when one appeared. The rule it was protecting has been narrowed rather
+  // than dropped: Google's connector only sends its password after it has been
+  // challenged for one, so a route that never challenges never receives it, and
+  // the feed reported "Invalid credentials" against a correct password for as
+  // long as it existed.
+  //
+  // WHAT SURVIVES IS THE HALF THAT WAS DOING THE WORK. A wrong credential is
+  // still a 404, so nobody can confirm this file by throwing a password at it.
+  // Only a request offering NOTHING is challenged. See
+  // test/conversion-feed-auth.test.js, which holds all three answers apart.
   const src = withoutComments(SRC('routes', 'web.js'));
   const start = src.indexOf("router.get('/ads/conversions.csv'");
   const route = src.slice(start, src.indexOf('catch (err)', start));
 
   assert.ok(route.includes('status(404)'), route);
-  assert.ok(!route.includes('401'), 'a 401 challenge would announce the file exists');
-  assert.ok(!route.includes('WWW-Authenticate'), route);
+
+  // The branch that runs when the credential is present and wrong.
+  const failed = route.slice(route.indexOf('credentialsMatch'));
+  assert.ok(failed.includes('404'), failed);
+  assert.ok(!failed.includes('401'), 'a wrong credential announces the file exists');
+
+  // And the challenge is reachable only when nothing was offered at all.
+  assert.ok(route.includes('if (!offered)'), route);
 });
 
 test('the credential is compared in constant time', () => {
