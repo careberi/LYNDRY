@@ -2901,7 +2901,21 @@ well, so there are two doors and no way to strand it. **Creating a replacement
 passes `keepPopup`**, because replacing the automatic offer is not taking the
 website down - the popup has never named a promotion.
 
-**WHAT IT DOES NOT DO.** It does not withdraw the 36 grants still held, whose
+**IT WAS PRESSED ON 22 SEPTEMBER, and until it was, nothing had changed.** The
+branch shipped a button; the offer came off the website and off every new
+number at the moment somebody used it, not at the moment the code deployed. For
+a few hours after the merge every ad click still landed on a page offering 50%
+off, because `audience` was still NEW_NUMBERS and `website_popup` was still
+true. **That gap is the thing to remember about this design**: the lever is one
+field on one row, so a deploy proves nothing on its own and the only way to
+know is to look at the row.
+
+Afterwards `autoGrant()` returns nothing, the popup is absent from the markup
+on every page, and `claimableByCode()` still returns CLEAN50 alongside the
+door hanger's D00R10 - which is the whole point of having moved the audience
+rather than ended the promotion.
+
+**WHAT IT DOES NOT DO.** It does not withdraw the grants still held, whose
 30-day expiries run out on their own; it does not touch the 8 redemptions or the
 delivered orders carrying the discount; and the AI will still mention the offer
 to somebody who holds one, because that promise was made. Withdrawing a promise
