@@ -13,6 +13,67 @@ const { config } = require('../../config');
 
 const API_URL = 'https://api.telnyx.com/v2/messages';
 
+// ---------------------------------------------------------------------------
+// A SEND IS TRIED THREE TIMES WHEN TELNYX IS THE ONE FAILING.
+//
+// 23 September, 9:22am: Telnyx had an incident - "Elevated API timeouts and 500
+// errors affecting messaging endpoints", on their own status page - and every
+// text we sent came back HTTP 504 from the Cloudflare page in front of
+// api.telnyx.com. We tried each one ONCE and gave up. So for over an hour no
+// customer text and no sign-in code reached a phone, and Neil was locked out of
+// his own dashboard with a pickup due, while the API was answering other
+// requests in a tenth of a second. The outage was intermittent; our give-up was
+// not.
+//
+// WHAT IS RETRIED IS WHAT MIGHT SUCCEED A SECOND LATER:
+//
+//   5xx          their server, or the gateway in front of it, failed. Nothing
+//                about our message was wrong
+//   429          we were rate limited. Waiting is the whole instruction
+//   no answer    a network error or our own timeout below
+//
+// EVERY OTHER 4xx IS FINAL, AND THAT LINE IS LOAD-BEARING. A 4xx is Telnyx
+// telling us THIS message cannot go - a malformed number, a handset that has
+// opted out at the carrier, a campaign rule. Sending it again changes nothing
+// and, for the opted-out case, sending it again is the one thing we must not
+// do.
+//
+// WHAT IT COSTS: A POSSIBLE DUPLICATE. A 504 means the gateway stopped waiting,
+// not that Telnyx did nothing - it may have accepted the text and failed to say
+// so, and the retry then sends a second copy. For a sign-in code that is
+// harmless, since it is the same code. For a customer it is an occasional
+// repeated text, set against the alternative this replaced, which was the text
+// silently never arriving at all. notify.alreadySaid() still refuses a second
+// identical send from anywhere else inside thirty seconds; this is the one door
+// that can repeat, and only when Telnyx itself did not answer.
+//
+// BOUNDED, SO A HARD OUTAGE STILL ENDS. At most three tries, each abandoned
+// after twelve seconds, with a pause between - about 40 seconds in the worst
+// case, after which the caller gets the error exactly as before. That matters
+// for the staff sign-in: when every try fails, the code still goes to the
+// server log, just later.
+// ---------------------------------------------------------------------------
+const ATTEMPTS = 3;
+const ATTEMPT_TIMEOUT_MS = 12_000;
+const BACKOFF_MS = [1_000, 3_000];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retryable = (status) => status >= 500 || status === 429;
+
+// ONE LINE, NOT A WEB PAGE. Telnyx's 504 arrives as Cloudflare's whole error
+// page - two hundred lines of HTML - and it went into the server log verbatim.
+// The one line anybody needed from that log, "Sign-in code for Neil Perry:
+// 493606", was buried in the middle of it and split across entries by the log
+// viewer. An HTML body is reduced to its <title>, which is where Cloudflare
+// names the error; anything else is trimmed to a single line.
+function summarise(body) {
+  const text = String(body || '');
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text);
+  const line = (title ? title[1] : text).replace(/\s+/g, ' ').trim();
+  return line.length > 200 ? `${line.slice(0, 200)}...` : line || '(no body)';
+}
+
 // A webhook older than this is rejected. Without a limit, someone who captured
 // a valid request once could replay it forever.
 const MAX_WEBHOOK_AGE_SECONDS = 300;
@@ -143,26 +204,61 @@ async function sendMessage({ to, text, from }) {
       : { from: sender }),
   };
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.telnyx.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  let lastError = null;
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Telnyx refused the message (HTTP ${response.status}): ${detail}`);
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    let response;
+
+    try {
+      response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.telnyx.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        // Our own limit, so a gateway that simply hangs cannot hold a reply -
+        // or a sign-in code - open for minutes.
+        signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+      });
+    } catch (err) {
+      lastError = new Error(
+        `Telnyx did not answer (try ${attempt} of ${ATTEMPTS}): ${err.message}`
+      );
+      if (attempt < ATTEMPTS) {
+        console.warn(`${lastError.message} - trying again.`);
+        await sleep(BACKOFF_MS[attempt - 1]);
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (response.ok) {
+      const result = await response.json();
+      if (attempt > 1) console.log(`Telnyx accepted a text to ${to} on try ${attempt}.`);
+      return { providerMessageId: result.data && result.data.id };
+    }
+
+    const detail = summarise(await response.text());
+    lastError = new Error(
+      `Telnyx refused the message (HTTP ${response.status}, try ${attempt} of ${ATTEMPTS}): ${detail}`
+    );
+
+    if (!retryable(response.status) || attempt === ATTEMPTS) throw lastError;
+
+    console.warn(`${lastError.message} - trying again.`);
+    await sleep(BACKOFF_MS[attempt - 1]);
   }
 
-  const result = await response.json();
-  return { providerMessageId: result.data && result.data.id };
+  throw lastError;
 }
 
 module.exports = {
   name: 'telnyx',
+  // Exposed for the tests, which pin what is retried and what is final.
+  summarise,
+  retryable,
+  ATTEMPTS,
   verifySignature,
   parseInbound,
   parseDeliveryReceipt,
