@@ -93,6 +93,21 @@ function serviceDateOf(instant) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+// WHAT THE CLOCK SAID IN NEW JERSEY AT A STORED MOMENT, the same shape as
+// nowInService(): { date, time }. For anything that asks whether a moment in
+// the past fell in quiet hours - the subscription question after a late
+// delivery is judged by when the van was at the door, not by when a sweep
+// happens to look.
+function serviceClockOf(instant) {
+  if (!instant) return null;
+  const at = instant instanceof Date ? instant : new Date(instant);
+  if (Number.isNaN(at.getTime())) return null;
+
+  const parts = {};
+  for (const p of CLOCK.formatToParts(at)) parts[p.type] = p.value;
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
 // Add days to a date string without ever making a Date out of it.
 //
 // Date.UTC then getUTCDate is safe here because nothing is being converted
@@ -190,6 +205,96 @@ function hasAddress(customer) {
 // The prompt asks; this refuses.
 function hasName(customer) {
   return Boolean(String(customer.name || '').trim());
+}
+
+// AN ANSWER GIVEN AFTER BOOKING HAS TO REACH THE ORDERS ALREADY BOOKED.
+//
+// Neil, 21 September: book first, ask wash after. bookPickup() snapshots the
+// customer's preferences onto the order at booking, and the tag page, the run
+// and the reminder all read that snapshot first - so without this a customer
+// who answered "hot, no softener" a minute after booking was saved on their
+// profile and washed cold with softener, and one who said "actually the side
+// gate" was still collected from the front door. The reply said "that's
+// updated on order #N" both times, which was not true either time.
+//
+// | | |
+// |---|---|
+// | the wash | onto a pickup still WAITING to be collected. Once we hold the bag it may be washed already, so its copy is left alone |
+// | the spot | onto a pickup waiting AND onto one in our hands. Where to leave it is open right up until delivery - the same rule actions.js keeps |
+//
+// ONLY ORDERS WITH A SNAPSHOT. An order booked with no preferences at all
+// carries null, and every reader then falls back to the customer's live row -
+// which already has the answer. Writing just these keys into that null would
+// make it a non-empty snapshot and hide everything else on the profile.
+//
+// Returns the order numbers it changed and the ones in our hands whose wash it
+// left alone, so a reply can say what actually happened. Best effort, and it
+// never throws: the answer is saved on the customer already, and a failure
+// here is a line in the log and a stale tag.
+const SPOT_KEYS = ['special_instructions', 'dropoff_spot'];
+
+async function refreshBookedOrders(customerId, preferences) {
+  const done = { changed: [], washHeldBack: [] };
+  const prefs = preferences || {};
+
+  try {
+    const { data: live, error } = await db
+      .from('orders')
+      .select('id, order_number, status, preferences')
+      .eq('customer_id', customerId)
+      .in('status', ['REQUESTED', ...orders.IN_OUR_HANDS]);
+    if (error) throw error;
+
+    for (const order of live || []) {
+      const was = order.preferences;
+      if (!was || !Object.keys(was).length) continue;
+
+      const waiting = order.status === 'REQUESTED';
+      const merged = { ...was };
+
+      for (const key of wash.KEYS) {
+        if (!wash.isValid(key, prefs[key]) || prefs[key] === was[key]) continue;
+        if (waiting) merged[key] = prefs[key];
+        else if (!done.washHeldBack.includes(order.order_number)) done.washHeldBack.push(order.order_number);
+      }
+
+      for (const key of SPOT_KEYS) {
+        const spot = String(prefs[key] || '').trim();
+        if (spot) merged[key] = spot;
+      }
+
+      const keys = [...wash.KEYS, ...SPOT_KEYS];
+      if (keys.every((key) => merged[key] === was[key])) continue;
+
+      const update = { preferences: merged };
+      if (waiting) update.surcharge_cents = wash.surchargeFor(merged);
+
+      const { error: updateError } = await db
+        .from('orders')
+        .update(update)
+        .eq('id', order.id)
+        .eq('status', order.status);
+      if (updateError) throw updateError;
+
+      done.changed.push(order.order_number);
+
+      const said = [];
+      if (wash.KEYS.some((key) => merged[key] !== was[key])) said.push(`wash ${wash.describeSaved(merged)}`);
+      if (SPOT_KEYS.some((key) => merged[key] !== was[key])) {
+        said.push(`spot ${merged.dropoff_spot && merged.dropoff_spot !== merged.special_instructions
+          ? `${merged.special_instructions || 'the door'}, back to ${merged.dropoff_spot}`
+          : merged.special_instructions}`);
+      }
+      await events.record(order.id, {
+        kind: 'NOTE',
+        summary: `Updated from the customer's answer: ${said.join('; ')}`,
+      });
+    }
+  } catch (err) {
+    console.error(`Could not copy an answer onto ${customerId}'s booked orders: ${err.message}`);
+  }
+
+  return done;
 }
 
 // Have they actually told us how to wash their clothes?
@@ -1374,7 +1479,14 @@ function confirmationMessage(
   // - and only for those customers, because the ternary short-circuits when
   // water_temp is unset. The people who got a confirmation were the ones who
   // had not chosen anything.
-  const washLine = prefs.water_temp ? ` ${wash.describeSaved(prefs)}.` : '';
+  //
+  // ONLY WHAT THEY CHOSE. This read `prefs.water_temp`, so a customer with a
+  // temperature and nothing else - or a value we no longer offer - had the
+  // rest filled in from our defaults and read back to them as their order.
+  // Neil's locked rule, 21 September: a default is a placeholder, never the
+  // customer's answer. hasPreferences() is the test the intake table uses to
+  // draw EXPLICIT against DEFAULT, so this and that screen cannot disagree.
+  const washLine = hasPreferences(customer) ? ` ${wash.describeSaved(prefs)}.` : '';
 
   // The price, and WHEN it gets taken. Stated as something that has not
   // happened yet, because it has not: no money moves until the bag is weighed.
@@ -1513,6 +1625,7 @@ module.exports = {
   hasAddress,
   hasName,
   hasPreferences,
+  refreshBookedOrders,
   inServiceArea,
   addressProblem,
   sameTown,
@@ -1524,6 +1637,7 @@ module.exports = {
   normaliseTime,
   today,
   serviceDateOf,
+  serviceClockOf,
   nowInService,
   PICKUP_METHODS,
 };

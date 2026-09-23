@@ -21,6 +21,9 @@ const payments = require('../providers/payments');
 const ledger = require('./payments');
 
 const { config } = require('../config');
+// The two rates the card page names. No loop: subscription.js requires only
+// config.
+const subscription = require('./subscription');
 const { site } = require('../web/site');
 
 // ---------------------------------------------------------------------------
@@ -53,28 +56,46 @@ function money(cents) {
 // bag is on the scale. "Each order you confirm by text" is what ties an
 // individual charge back to a specific YES in the message log.
 function consentText() {
+  // REWRITTEN 21 SEPTEMBER, and three sentences in it were wrong. Neil: "Update
+  // the card page. Charge after we weigh at the door. Subscription is $1.80/lb.
+  // Do not say there is no subscription." It said the card was charged "when we
+  // deliver your laundry back" - the charge moved to the doorstep on 12
+  // September - and "There is no subscription", which stopped being true the
+  // day subscriptions were sold at their own rate.
+  //
+  // THE $25 HOLD IS IN IT, and was not before. It is authorised on this card,
+  // it shows as pending, and if the card will not take the rest of a total at
+  // the door the $25 is kept for the trip. A charge somebody never agreed to is
+  // a chargeback, and this page is what a card network reads in a dispute.
+  //
+  // TWO CHARGES WHEN THE TOTAL IS OVER THE HOLD, AND IT SAYS SO. The first
+  // rewrite said "charge the card then, once" and "the hold becomes part of
+  // that charge"; chargeAtTheDoor() captures the $25 and charges the rest as a
+  // second payment, so an $84.00 wash is two lines on a statement. A page a
+  // card network reads in a dispute has to describe the statement.
+  //
+  // "Saving this card charges nothing", not "nothing is charged today": a
+  // same-day pickup is charged today, at the door.
+  //
+  // Every figure is read, never typed: the two rates from subscription.js, the
+  // minimum and the hold from config. Stripe caps this text at 1200 characters,
+  // and a test holds it under that.
+  const hold = money(showUpCents());
   return (
     // The trading name in brackets only when it differs from the legal one.
-    // No legal entity has been formed yet, so both are "LYNDRY" today and
-    // "LYNDRY (LYNDRY)" on a payment page reads like a bug.
     `You're authorizing ${site.legalName}${
       site.legalName === site.name ? '' : ` (${site.name})`
-    } to save this card and charge it for ` +
-    `each pickup you book. Nothing is taken today and nothing is taken when you book. ` +
-    `Wash and fold is ${site.pricePerLb} a pound with a ${money(config.pricing.minimumCents)} minimum, ` +
-    `and your card is charged once, when we deliver your laundry back. We weigh your bag ` +
-    `after pickup and text you the weight and the total right away, so you always know ` +
-    `the amount before it is taken. Cancel before we pick up and there is nothing to ` +
-    `cancel: no money has moved. ` +
-    // A standing order takes the minimum on a repeating basis, so the old
-    // "no recurring charge" was about to become false. It is not a
-    // subscription - there is no fee for having one and every pickup is still
-    // priced by weight - but a repeating charge has to be disclosed on the
-    // page the customer authorises it from, because that page is what card
-    // networks read in a dispute.
-    `If you set up a repeating pickup, this covers those too: we text you the day ` +
-    `before each one and you can skip or stop any time. There is no subscription ` +
-    `and no fee for having a schedule. Reply STOP any time.`
+    } to save this card and charge it for each pickup you book. Saving this card charges nothing. ` +
+    `A one-time pickup is ${subscription.oneTimeRate()} and a subscription is ` +
+    `${subscription.subscriptionRate()}, with a ${money(config.pricing.minimumCents)} minimum per pickup. ` +
+    `We weigh your laundry at your door and charge the total then, before it leaves with us, ` +
+    `and text you the weight and the total. Before a pickup we may hold ${hold} on the card to ` +
+    `confirm it. At the door the ${hold} hold is taken first and anything over it is charged to ` +
+    `the same card at the same time. If the card will not take the rest, we keep the ${hold} ` +
+    `for the trip and leave your laundry where we found it. ` +
+    `If you set up a subscription, this covers those pickups too: we text you the day before ` +
+    `each one, and you can skip or stop any time. Cancel a pickup before we collect it and ` +
+    `nothing is charged. Reply STOP any time.`
   );
 }
 
@@ -146,7 +167,8 @@ function cardDestination(order, setupUrl) {
     // No scheme and no token. A phone will probably still turn this into a
     // link, and that is fine: what matters is that it names a place they
     // recognise and can check, rather than characters only we can read.
-    return `at ${site.domain}/account - sign in with this number.`;
+    // A comma, not a dash: no dashes in anything a customer reads.
+    return `at ${site.domain}/account, and sign in with this number.`;
   }
 
   return `here: ${setupUrl}`;
@@ -321,7 +343,12 @@ async function setupLinkMessage(customer) {
   return (
     `Before your first pickup we need a card on file. It takes a minute and it's ` +
     `handled by our payment provider, we never see the number: ${url}\n\n` +
-    `${site.pricePerLb} a pound, charged after we weigh it. Nothing recurring.`
+    // "Nothing recurring." came off 21 September: it read as "there is no
+    // subscription", which Neil ruled out. The charge point is the door, and
+    // both rates are named - the same prices on every channel, and a customer
+    // who booked every 2 weeks is not quoted a rate they will not pay.
+    `${subscription.oneTimeRate()} one-time, or ${subscription.subscriptionRate()} on a subscription, ` +
+    `charged after we weigh it at your door.`
   );
 }
 
@@ -388,7 +415,7 @@ function updateCardText({ orderNumber, priceCents, url, holding = false }) {
 
   const where = url
     ? ` Update it here: ${url} or at ${site.domain}/account.`
-    : ` Update it at ${site.domain}/account - sign in with this number.`;
+    : ` Update it at ${site.domain}/account, and sign in with this number.`;
 
   return `${opening}${why}${where}`;
 }

@@ -417,16 +417,17 @@ function signupCardBlock() {
       </h2>
       <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 18px;">
         Nothing is charged now, and nothing is charged when you book. We weigh
-        your laundry after we collect it, and that is the moment your card is
-        charged. You need one on file before your first pickup, so it is easiest
-        to do it here.
+        your laundry at your door, and that is the moment your card is charged:
+        ${site.pricePerLb} a pound one-time, ${site.subscriptionPricePerLb} on a
+        subscription. You need one on file before your first pickup, so it is
+        easiest to do it here.
       </p>
       <form method="post" action="/start/card" style="margin:0;">
         <button type="submit" class="btn btn-ink btn-lg btn-full">Add a card</button>
       </form>
       <p style="font-size:14px;line-height:1.5;color:var(--ink-700);margin:14px 0 0;">
         Handled by Stripe. The card number never touches this website. You can
-        also do it later from the text we just sent.
+        also add one later at ${site.domain}/account.
       </p>
     </div>`;
 }
@@ -1329,7 +1330,10 @@ router.post('/start/card', async (req, res, next) => {
 
     const { data: customer, error } = await db
       .from('customers')
-      .select('id, phone, name, stripe_customer_id, payment_method_id')
+      // default_payment_method_id: the column is called that, and asking for
+      // payment_method_id - which does not exist - failed the query, so the
+      // signup page's Add a card button errored for everybody.
+      .select('id, phone, name, stripe_customer_id, default_payment_method_id')
       .eq('id', id)
       .maybeSingle();
 
@@ -1337,7 +1341,7 @@ router.post('/start/card', async (req, res, next) => {
 
     // The marker outlived the customer, or somebody has already done this.
     // Either way there is nothing to do and nothing to say about it.
-    if (!customer || customer.payment_method_id) {
+    if (!customer || billing.hasPaymentMethod(customer)) {
       signupCard.forget(res);
       return res.redirect(303, '/start/sent');
     }

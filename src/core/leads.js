@@ -6,6 +6,7 @@ const { site } = require('../web/site');
 const { normalisePhone } = require('./phone');
 const onboarding = require('./onboarding');
 const settings = require('./settings');
+const booking = require('./booking');
 const promotions = require('./promotions');
 const { sendAndLog } = require('./notify');
 
@@ -32,13 +33,8 @@ const { sendAndLog } = require('./notify');
 // count is knowable before anything is sent. The AI takes over the moment they
 // reply, which is where it is good.
 //
-// ONLY THE OPENING LINE IS ITS OWN. Neil's point: everything in this sheet came
-// off an advert, so the first sentence says so - "you filled out the laundry
-// pickup form on our Facebook ad" - where the canned welcome in onboarding.js
-// opens with "thanks for sending over your number", which would be the wrong
-// sentence to somebody who has never been on our website. Everything after that
-// is the same in both, and comes from onboarding.introduction() so it stays that
-// way.
+// IT IS THE SAME FIRST MESSAGE EVERY DOOR SENDS - onboarding.firstMessage() -
+// since 21 September. See leadMessage() below.
 // ---------------------------------------------------------------------------
 
 // --- Consent ---------------------------------------------------------------
@@ -184,40 +180,24 @@ async function fetchLeads() {
 
 // --- What we say -----------------------------------------------------------
 
-// Neil's words, and only Neil's words. Three paragraphs: who this is and why we
-// have their number, then the two that every first message shares. Nothing is
-// appended to them - an opt-out line was added here once and taken straight
-// back out.
+// THE SAME FIRST MESSAGE AS EVERY OTHER DOOR. Neil, 21 September: "Same intro
+// everywhere. Website, Facebook lead, door hanger, or they text Hi." So this is
+// onboarding.firstMessage() and nothing else - no opening clause of its own.
 //
-// ONLY THE FIRST PARAGRAPH IS WRITTEN HERE. The middle two come from
-// onboarding.introduction(), which is what the canned website welcome uses too -
-// Neil wrote the two messages separately and then wrote them identically from
-// the second paragraph on, so two copies would only be two things to edit and
-// one of them would be the one nobody remembered. The free-orders sentence and
-// the opening date both come from there, which is why neither can say something
-// different here.
+// WHAT THAT COST, and it was his call: this text used to say where we got
+// their number ("you left this number on our Facebook laundry form"). It no
+// longer does. The LYNDRY name and the offer they were shown in the advert are
+// what tell them who this is.
 //
-// It runs to four segments, which is a real cost on every lead. That is the
-// right trade: this number cost money to acquire, and a terse text to somebody
-// who has never heard of us is how that money gets wasted.
-function leadMessage({ promo = null, opensOn = null } = {}) {
-  // NO OPT-OUT LINE. It was added here unasked and Neil removed it: the message
-  // is whatever introduction() returns, and nothing appends to it.
-  //
-  // STOP still works exactly as it always has - it is handled in code in
-  // src/core/compliance.js before the AI ever sees a message, on every number,
-  // whether or not any text mentions it. What is gone is the sentence, not the
-  // mechanism.
-  //
-  // "you left this number on our Facebook laundry form" rather than "you filled
-  // out the form on our Facebook ad": shorter by a dozen characters, which is
-  // what keeps this door inside two segments, and it puts THEIR action first.
-  // This is the longest of the three openers, so it is the one that decides
-  // whether the shared body can grow.
-  return onboarding.introduction(
-    `Hey, you left this number on our Facebook laundry form.`,
-    { promo, opensOn }
-  );
+// Still NO OPT-OUT LINE, which Neil removed once already. STOP works exactly as
+// it always has, in src/core/compliance.js, whether or not a text mentions it.
+//
+// AND THE SAME NEXT LINE, SHUT OR OPEN. It used to pass no `open`, so with the
+// closed sign up a lead was still asked "Want us to pick up your laundry?"
+// while the website, the popup and a door hanger were told we are not booking
+// yet - one door inviting a booking the code would refuse.
+function leadMessage({ promo = null, opensOn = null, open = true } = {}) {
+  return onboarding.firstMessage({ promo, opensOn, open });
 }
 
 // --- The sweep -------------------------------------------------------------
@@ -394,8 +374,16 @@ async function handle(row) {
   // granted nothing and the free sentence is left out.
   // heldBy() flattens the promotion onto the grant, so a row IS the promotion
   // plus the grant's own expiry and limit. There is nothing to reach into.
+  //
+  // The first one WITH A BLURB, the way every other door picks: a promotion
+  // nobody wrote a sentence for is silent everywhere.
   const held = await promotions.heldBy(started.customer.id).catch(() => []);
-  const promo = held[0] || null;
+  const promo = held.find((h) => String(h.blurb || '').trim()) || null;
+
+  // Shut, they are told so rather than asked for a day. Fails to shut: a
+  // settings read that breaks must not invite a booking that will be refused.
+  const open =
+    booking.alwaysAllowed(started.customer) || (await settings.takingOrders().catch(() => false));
 
   // WHEN THE VAN ACTUALLY STARTS. Read here rather than left out, because this
   // message asks them to name a day and the earliest one we can take may be
@@ -403,7 +391,7 @@ async function handle(row) {
   // comes back null, so nobody has to remember to clear it.
   const opensOn = await settings.opensOn().catch(() => null);
 
-  await sendAndLog(phone, leadMessage({ promo, opensOn }), started.customer.id, {
+  await sendAndLog(phone, leadMessage({ promo, opensOn, open }), started.customer.id, {
     kind: 'SYSTEM',
   });
 

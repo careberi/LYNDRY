@@ -169,14 +169,14 @@ test('and the nightly pass hands the plan down to the order it books', () => {
 
 // --- what is deliberately left alone ----------------------------------------
 
-test('A MESSAGE WITH NO ORDER BEHIND IT STILL NAMES THE ONE-TIME RATE', () => {
-  // Not every $2.00 is a bug, and blanket-replacing them would have been the
-  // wrong fix. Somebody who has never booked anything pays $2.00, so the
-  // introduction, the AI's answer to "what does it cost" and the first card
-  // ask are all correct as they stand. They are about the business, not about
-  // an order.
+test('THE FIRST MESSAGE NAMES NO RATE, SO IT CANNOT NAME THE WRONG ONE', () => {
+  // Neil, 21 September: the first message is the introduction, the offer they
+  // hold and one short line, the same from every door. It carries no price at
+  // all - Lyn gives both rates from the locked facts when anybody asks - so
+  // onboarding.js must not type one or reach for one.
   const onboarding = withoutComments(SRC('core', 'onboarding.js'));
-  assert.match(onboarding, /site\.pricePerLb/, 'the introduction stopped naming a rate at all');
+  assert.ok(!/\$\d/.test(onboarding), 'a price typed into onboarding.js');
+  assert.ok(!/pricePerLb|oneTimeRate|subscriptionRate/.test(onboarding), 'the first message names a rate again');
 
   // The card-page authorization text has a customer and no order, so it stays
   // general too.

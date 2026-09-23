@@ -21,6 +21,10 @@ const issues = require('./issues');
 // rate through it rather than site.pricePerLb, which is the one-time rate and
 // is the wrong number for a subscriber. See the note on `perPoundOf`.
 const subscription = require('./subscription');
+// The subscription question after a first paid delivery: when it goes, and
+// the morning send for a late one. A leaf module - it requires neither this
+// file nor the scheduler, so neither can close a loop through it.
+const subscriptionOffer = require('./subscription-offer');
 const { sendAndLog } = require('./notify');
 const { config } = require('../config');
 const { site } = require('../web/site');
@@ -825,6 +829,24 @@ async function outForDelivery(order, { by = {} } = {}) {
   return step(order, 'OUT_FOR_DELIVERY', () => `Washed, folded and out for delivery today!`, by);
 }
 
+// --- The subscription offer, after the first paid delivery ---------------------
+//
+// Neil's locked rules, 21 September. After somebody's FIRST PAID delivery, if
+// they have no plan, one text in his exact words asking whether they want one.
+// The wording and the decision live in subscription.js; the facts, the send
+// and the morning send for a late delivery live in subscription-offer.js,
+// which the scheduler calls too. This is only the daytime door onto it.
+//
+// ITS OWN MESSAGE, NOT A LINE ON THE DELIVERY TEXT. "Here is your laundry" and
+// "would you like this regularly" are two different things. A delivery in quiet
+// hours is NOT dropped any more - Neil: "do not skip the subscription ask after
+// 9pm" - it waits for the first tick after 8am.
+//
+// NEVER THROWS. The delivery has already happened and been texted.
+async function offerSubscription(delivered, customer) {
+  return subscriptionOffer.afterDelivery(delivered, customer);
+}
+
 // --- Delivered, with the photo ----------------------------------------------
 //
 // The photo is the proof. It goes into a private bucket and the customer gets
@@ -946,11 +968,6 @@ async function deliver(orderIn, file, { by = {} } = {}) {
       ? await billing.chargeOrder(order, order.customers)
       : { ok: true, nothingDue: true };
 
-  // Loaded here rather than read off the customer row: a customer can have
-  // several standing orders now, and the only question this asks is whether
-  // they have any at all before offering them one.
-  const schedules = order.customers ? await recurring.forCustomer(order.customers.id) : [];
-
   const settled = Boolean(charge.ok);
 
   await events.record(order.id, {
@@ -970,71 +987,48 @@ async function deliver(orderIn, file, { by = {} } = {}) {
   });
 
   const result = await step(order, 'DELIVERED', () => {
+    // THE DOOR AND THE PHOTO, TOGETHER, AND FIRST. Neil's locked rule, 21
+    // September: the delivery text says the laundry is at the door and carries
+    // the photo link. Those two are one fact - here it is, and here is where it
+    // is - so they share a line and the link ends it rather than running into a
+    // sentence.
     const photo = photoUrl ? ` Photo: ${photoUrl}` : '';
 
     // The total was already said at the scale, so it is only repeated when
     // something went wrong with it - a real thread ended up quoting the same
-    // figure four times.
+    // figure four times. When there is something to say it gets its own block,
+    // so the photo link above it never looks like it carries on into a sentence.
     let price = '';
     if (charge.nothingDue) {
       price = '';
     } else if (charge.ok) {
-      price = ` ${money(order.price_cents)} charged to your ${billing.describeCard(order.customers) || 'card'}.`;
+      price = `${money(order.price_cents)} charged to your ${billing.describeCard(order.customers) || 'card'}.`;
     } else if (charge.needsCard) {
-      price = ` We don't have a card on file. ${money(order.price_cents)} is outstanding. Add one ${billing.cardDestination(order, charge.setupUrl)}`;
+      price = `We don't have a card on file. ${money(order.price_cents)} is outstanding. Add one ${billing.cardDestination(order, charge.setupUrl)}`;
     } else if (charge.declined) {
-      price = ` Your card was declined. ${money(order.price_cents)} is still outstanding. Update it ${billing.cardDestination(order, charge.setupUrl)}`;
+      price = `Your card was declined. ${money(order.price_cents)} is still outstanding. Update it ${billing.cardDestination(order, charge.setupUrl)}`;
     }
 
-    // The one moment worth asking about a standing order: they have just
-    // seen the service work, start to finish. Asked once, only if they have
-    // no schedule already, and only when the delivery went cleanly - nobody
-    // wants to be sold a weekly habit in the same breath as a failed card.
-    const customer = Object.assign({}, order.customers, { schedules });
-    // A BLANK LINE, NOT A SPACE. Neil's call, and the reason is visible in the
-    // message he sent back: the photo URL ran straight into "Want us to make
-    // this a regular thing", so the link looked like it continued into the
-    // sentence and the offer looked like part of the delivery notice.
+    // NO "SAME DAY" AND NO OFFER ON THE END. Both came out on Neil's locked
+    // rules, 21 September.
     //
-    // Two different things are being said - here is your laundry, and would you
-    // like this regularly - so they get their own block.
+    // "Delivered same day, no extra charge!" is wording he has ruled out
+    // everywhere. What we promise is the day after pickup, and announcing the
+    // times we beat it teaches people to expect it.
     //
-    // A newline is in the GSM alphabet, so this costs two characters and does
-    // NOT push the message into UCS-2. Anything added here still has to be
-    // counted.
-    const offer =
-      !recurring.isScheduled(customer) && settled
-        ? `
+    // The standing-order question that used to ride on the end of this message
+    // is now its own text in his exact words, sent once, after the first PAID
+    // delivery only - see offerSubscription() below. The old one asked on every
+    // delivery to anybody without a schedule, free ones included, and offered
+    // two frequencies where there are three.
+    //
+    // A BLANK LINE, NOT A SPACE, before anything that follows the photo link -
+    // a URL running straight into a sentence reads as though the link carries
+    // on. A newline is in the GSM alphabet, so it does not push the message
+    // into UCS-2.
+    const opener = `Delivered! Your laundry is at your door.`;
 
-Want us to make this a regular thing? We can come every week or every other week.`
-        : '';
-
-    // SAME DAY IS WORTH SAYING OUT LOUD, and this is the only moment it can be
-    // said honestly. What we promise is next day, so a bag collected and
-    // returned between breakfast and teatime beat the promise - and a customer
-    // who is not told simply never notices they got something extra.
-    //
-    // Neil's wording: it is free, and saying so is the point. A turnaround that
-    // fast reads like something that will appear on the bill unless we say it
-    // will not.
-    //
-    // IT REPLACES THE OPENER RATHER THAN BEING ADDED TO IT, and the wording is
-    // as short as it is for a reason that is not style. This message already
-    // carries a price and a photo link and comes to 131 characters; a segment
-    // is 160 and carriers bill per segment. The obvious phrasing - "Delivered!
-    // Same day, at no extra charge - your laundry is at your door." - came to
-    // 162 and doubled the cost of every same-day delivery to say two words.
-    //
-    // So it leads with the news and keeps the sentence that was already there,
-    // at 157. Anything added here has to be counted, not eyeballed.
-    const sameDay =
-      order.collected_at && booking.serviceDateOf(order.collected_at) === booking.today();
-
-    const opener = sameDay
-      ? `Delivered same day, no extra charge! Your laundry is at your door.`
-      : `Delivered! Your laundry is at your door.`;
-
-    return `${opener}${price}${photo}${offer}`;
+    return price ? `${opener}${photo}\n\n${price}` : `${opener}${photo}`;
   }, by);
 
   if (!result.ok) return result;
@@ -1074,6 +1068,11 @@ Want us to make this a regular thing? We can come every week or every other week
   await db.from('orders').update({ stop_number: null, loaded_at: null }).eq('id', order.id);
 
   result.photo = Boolean(photoUrl);
+
+  // After everything else, so nothing about the offer can get in the way of
+  // the delivery itself. It never throws.
+  result.subscriptionOffer = await offerSubscription(result.order, order.customers);
+
   return result;
 }
 
@@ -2254,6 +2253,7 @@ module.exports = {
   recordWeight,
   outForDelivery,
   deliver,
+  offerSubscription,
   nextSteps,
   turnaround,
   dueAt,

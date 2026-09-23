@@ -4494,7 +4494,7 @@ const DONE_MESSAGES = Object.freeze({
   collected: 'Collected. The customer has been texted.',
   'at-partner': 'Marked as dropped at the partner.',
   ready: 'Marked ready for collection.',
-  weight: 'Weight saved. The price is set; the card is charged on delivery.',
+  weight: 'Weight saved. The price is set; the card is charged at the door, when the bags go in the van.',
   // The label banner carries its own sentence in ?note=, because "added" and
   // "was already there" and "taken off" are three different things.
   label: null,

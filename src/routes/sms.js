@@ -19,6 +19,7 @@ const aiPause = require('../core/ai-pause');
 const pausedAlerts = require('../core/paused-alerts');
 const burst = require('../core/burst');
 const recurring = require('../core/recurring');
+const washAsk = require('../core/wash-ask');
 const { site } = require('../web/site');
 
 const router = express.Router();
@@ -118,6 +119,22 @@ async function handleInbound(inbound) {
   }
 
   console.log(`SMS in  ${from}: ${text}`);
+
+  // --- NOT A PHONE ANYBODY IS HOLDING ----------------------------------------
+  //
+  // Neil's locked rules, 21 September: junk gets no reply and no booking flow.
+  // The clearest junk is a sender that is not a US mobile at all - a short code
+  // like 29283, which is a machine sending a verification code or a carrier
+  // notice. One of those got a customer row of its own and a reply from Lyn.
+  //
+  // Logged above, like everything that arrives, and then nothing: no customer
+  // row, no promotion, no AI call, no reply. Every customer we can serve has a
+  // +1 and ten digits, because that is what normalisePhone() writes and what
+  // the carrier delivers to.
+  if (!/^\+1\d{10}$/.test(String(from || ''))) {
+    console.log(`JUNK    ${from}: not a US mobile number. Not answered.`);
+    return;
+  }
 
   // --- A MESSAGE WITH NOTHING IN IT ----------------------------------------
   //
@@ -286,18 +303,11 @@ async function handleInbound(inbound) {
       // No IP to record — this did not come through a browser. The evidence is
       // their own inbound message, not a form submission.
       consentIp: null,
+      // The canned reply is onboarding.firstMessage(), the same text every door
+      // sends. It used to open "Hey, thanks for scanning" or "thanks for
+      // texting in"; Neil, 21 September: the same intro everywhere.
       sendWelcome: canned,
       claimed: scanned ? scanned.promo : null,
-      // "Thanks for scanning" is the door hanger's sentence, and only true of it:
-      // the QR types the message for them. Somebody who typed CLEAN50 off a
-      // flyer did not scan anything, so they are thanked for the code instead.
-      // Same test as the consent source just above, so the two cannot disagree
-      // about whether this person was standing at a front door.
-      opening: canned
-        ? scanned.promo.audience === 'CODE'
-          ? `Hey, thanks for scanning.`
-          : `Hey, thanks for texting in.`
-        : null,
       // A TAP ON A GOOGLE AD'S MESSAGE BUTTON, WHICH LEAVES NO OTHER TRACE.
       //
       // That button opens the phone's SMS app with our number and a starter
@@ -475,7 +485,78 @@ async function answerWithBrain(customer, text, from) {
   // seconds is one person starting a conversation and gets one introduction,
   // which falls out of the burst window having already collapsed them.
   const openingLine = await lyn.opener(customer);
-  const say = (to, body, id, opts) => reply(to, lyn.lead(openingLine, body), id, opts);
+
+  // SAYING NOTHING IS AN ANSWER. Neil's locked rules, 21 September: a wrong
+  // number or junk gets one short line or no reply at all. The model says
+  // "no reply" with brain.NO_REPLY, and a reply that comes out empty once the
+  // opener is dealt with is the same thing. Checked here, in the one wrapper
+  // every AI reply passes through, so no path below can send the literal word
+  // or an introduction with nothing after it.
+  //
+  // THE OPENER GOES ON ONE MESSAGE, THE FIRST ONE. A booking can now send two
+  // texts in one turn - the confirmation, then the wash question - and the
+  // introduction on both would be Lyn introducing herself twice in a minute.
+  //
+  // A WRONG NUMBER GOES WITH NOTHING IN FRONT OF IT. The model marks one with
+  // brain.WRONG_NUMBER, because the introduction and the offer are added
+  // here, after it has written its line, and "sorry to bother you" under a
+  // 50%-off pitch is the booking flow a wrong number must not get.
+  //
+  // Silence is an EMPTY BODY, not a body that happens to come out as the
+  // opener: "who is this?" answered with nothing but Lyn's introduction is
+  // a real answer, and lyn.lead() hands back the opener alone for it.
+  let opening = openingLine;
+  const say = (to, body, id, opts) => {
+    const dismissal = brain.wrongNumberLine(body);
+    const said = dismissal !== null ? dismissal : brain.isNoReply(body) ? '' : String(body || '').trim();
+    const out = !said ? '' : dismissal !== null ? lyn.lead('', said) : lyn.lead(opening, said);
+    if (!out.trim() || brain.isNoReply(out)) {
+      console.log(`QUIET   ${to}: nothing worth sending. Saying nothing.`);
+      return null;
+    }
+    if (dismissal !== null) console.log(`WRONG   ${to}: a wrong number. One line, no introduction.`);
+    opening = '';
+    return reply(to, out, id, opts);
+  };
+
+  // --- THE FIRST REPLY TO SOMEBODY NEW IS THE FIRST MESSAGE -----------------
+  //
+  // Neil, 21 September: same intro everywhere, and if they have 50% off, say it
+  // in that first reply whatever the door. The code doors send
+  // onboarding.firstMessage(); this is the Lyn door, and it has to read the
+  // same.
+  //
+  // A BARE "HI" GETS IT WORD FOR WORD, WITHOUT THE MODEL. Asking a model to
+  // write "the same short next line" is asking it to write a slightly
+  // different one some of the time. The burst window has already run, so
+  // "hi" followed by a question is not a bare hi and goes to Lyn below.
+  //
+  // ANYTHING ELSE GETS THE INTRODUCTION AND THE OFFER IN FRONT OF LYN'S ANSWER.
+  // They asked something, so the answer is the rest of the message - and the
+  // offer is still in their first reply, which is what Neil asked for.
+  // brain.decide() is told what will sit in front of its words so it neither
+  // repeats the offer nor greets them a second time.
+  //
+  // Only for somebody Lyn owes the introduction to. Anybody who got the first
+  // message from a code door has "I'm Lyn," in their thread already, so
+  // lyn.opener() returns nothing for them and none of this runs.
+  const firstParts =
+    openingLine === lyn.INTRODUCTION
+      ? await onboarding.firstMessagePartsFor(customer).catch((err) => {
+          console.error(`Could not build the first message for ${from}: ${err.message}`);
+          return null;
+        })
+      : null;
+
+  if (firstParts && onboarding.isJustAGreeting(text)) {
+    console.log(`FIRST   ${from}: a bare greeting. Sending the first message.`);
+    await say(from, [firstParts.offer, firstParts.next].filter(Boolean).join(' '), customer.id, {
+      kind: 'SYSTEM',
+    });
+    return;
+  }
+
+  if (firstParts && firstParts.offer) opening = `${openingLine} ${firstParts.offer}`;
 
   // What we hand Claude: the customer's profile, their current order, and the
   // last few messages so "same as last time" and "yes" mean something.
@@ -502,7 +583,13 @@ async function answerWithBrain(customer, text, from) {
     // days.
     customer.openPickups = await orders.findAllAwaitingCollection(customer.id);
 
-    decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text });
+    // WHETHER THE WASH QUESTION HAS BEEN ASKED, AS A FACT. The model sees ten
+    // messages; the question may be twenty back, under a pickup text, a
+    // weigh-in and a delivery. The same query the system asks before it sends
+    // one, so the two cannot disagree about whether it went.
+    customer.washAskedAt = await washAsk.askedAt(customer.phone).catch(() => null);
+
+    decision = await brain.decide({ customer, order, recentMessages, recentOrders, openIssue, message: text, opening });
   } catch (err) {
     // The AI being unreachable must never look like LYNDRY ignoring someone.
     console.error('Claude call failed:', err.message);
@@ -557,9 +644,17 @@ async function answerWithBrain(customer, text, from) {
     // What they actually said, kept on an issue alongside the AI's summary,
     // because their own words matter when somebody is upset.
     customerSaid: text,
+    // Set by actions.createOrder() to the order it booked, on the success path
+    // only - not the card ask, not a refused hold. It is what tells this turn
+    // to ask the wash question once the confirmation has gone.
+    booked: null,
   };
 
   let message;
+  // Set when the model deliberately chose silence (NO_REPLY). A lookup that
+  // came back empty gets the holding line below; one that chose to say
+  // nothing gets nothing.
+  let choseSilence = false;
   try {
     message = await actions.run(decision.name, decision.input, customer, helpers);
   } catch (err) {
@@ -624,6 +719,7 @@ async function answerWithBrain(customer, text, from) {
         order: freshOrder,
         recentMessages: await recentConversation(customer.id),
         message: text,
+        opening,
         followUp: {
           name: decision.name,
           reply: typeof message === 'string' ? message : JSON.stringify(message),
@@ -646,13 +742,46 @@ async function answerWithBrain(customer, text, from) {
       if (followOn.type === 'tool' && !isLookup && (!isSetup || setupIsFine)) {
         console.log(`ACTION+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
         message = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
+      } else if (followOn.type === 'tool' && isLookup && SETUP_ACTIONS.includes(decision.name)) {
+        // SAVE, THEN CHECK, THEN SPEAK. Neil's locked rules, 21 September:
+        // "Maria Lopez, 25 Windham Pl Glen Rock 07452, 24 hours" gets ONE reply
+        // that reads the address back, says it comes back the next day after
+        // pickup, and offers the soonest real window.
+        //
+        // Neither pass could do that alone. check_slot refuses anybody with no
+        // name or address saved - the service area is decided off the saved
+        // address - and save_details' own reply is "When would you like it
+        // picked up?", which asks somebody who has just said "24 hours". So a
+        // lookup after a save is allowed to run, and one more pass turns its
+        // facts into the reply.
+        //
+        // BOUNDED: save, one lookup, one sentence, and a tool at that last step
+        // is ignored. If anything here comes back unusable, the save's own
+        // sentence stands - true, if not the whole answer.
+        console.log(`LOOKUP+ ${from}: ${followOn.name} ${JSON.stringify(followOn.input)}`);
+        const facts = await actions.run(followOn.name, followOn.input, freshCustomer || customer, helpers);
+        const words = await brain.decide({
+          customer: freshCustomer || customer,
+          order: freshOrder,
+          recentMessages: await recentConversation(customer.id),
+          message: text,
+          opening,
+          followUp: {
+            name: followOn.name,
+            reply: typeof facts === 'string' ? facts : JSON.stringify(facts),
+            lookup: true,
+          },
+        });
+        const written = words && words.type === 'text' ? String(words.text || '').trim() : '';
+        if (written && written !== 'OK' && !brain.isNoReply(written)) message = written;
       } else if (LOOKUP_ACTIONS.includes(decision.name)) {
         // The lookup had nothing to say on its own, so the model's sentence IS
         // the reply. "OK" means it thought the previous action had already
         // answered the customer - true for a setup action, never for a lookup -
         // so that counts as nothing and the fallback below covers it.
         const written = String(followOn.text || '').trim();
-        message = written && written !== 'OK' ? written : null;
+        choseSilence = brain.isNoReply(written);
+        message = written && written !== 'OK' && !choseSilence ? written : null;
       }
       // Any text answer — "OK" or otherwise — means nothing more to do, and
       // the setup action's own message is the reply.
@@ -667,7 +796,7 @@ async function answerWithBrain(customer, text, from) {
   // failed or came back empty, the facts themselves carry a sentence for every
   // refusal that has one - and anything else gets an honest holding line rather
   // than silence on a customer's phone.
-  if (lookupFacts && (typeof message !== 'string' || !message.trim())) {
+  if (lookupFacts && !choseSilence && (typeof message !== 'string' || !message.trim())) {
     // NEVER PROMISE TO COME BACK. The old line here was "Let me check that and
     // come straight back to you", which is a promise nothing in this system
     // keeps - a customer said "good" to a recap, got that, and asked "what are
@@ -728,12 +857,31 @@ async function answerWithBrain(customer, text, from) {
   // rule that a handoff texts the customer nothing at all - and anything else
   // that decides it has nothing to say gets the same treatment rather than an
   // empty text going out.
-  if (!message || !String(message).trim()) {
+  if (!message || !String(message).trim() || brain.isNoReply(message)) {
     console.log(`QUIET   ${from}: ${decision.name} had nothing to say. Sending nothing.`);
     return;
   }
 
   await say(from, message, customer.id, { kind: 'AI' });
+
+  // BOOK FIRST, ASK WASH AFTER. Neil, 21 September, and the rule he set on 16
+  // September finally made true in code: the pickup is booked, THEN we ask how
+  // they want it washed. Before this the prompt said "the very next message is
+  // the wash question", and nothing could send it - the tool's reply is what
+  // goes to the phone and a booking gets no second pass - so most first
+  // bookings simply washed on the defaults and nobody was asked.
+  //
+  // Its own message, straight after the confirmation, rather than a line on
+  // the end of it: the confirmation is already three segments and shared by
+  // every door, and a question stacked on a confirmation is the one thing the
+  // prompt says never to do.
+  //
+  // src/core/wash-ask.js decides - once, ever, and only with nothing chosen -
+  // and card-saved.js asks through it too, for the booking that needed a card.
+  // Sent through say() so the introduction goes on one message only.
+  if (helpers.booked) {
+    await washAsk.askAfterBooking(customer, { send: (body, options) => say(from, body, customer.id, options) });
+  }
 }
 
 // Whatever is already with a manager for this customer, or null.
