@@ -359,6 +359,26 @@ creates the customer. It exists so booked first pickups can be uploaded back to
 Google later. **Never use enhanced conversions** - they send a hashed phone
 number.
 
+**WHAT THE LIVE ADS STATE AS FACT IS PINNED BY `test/ad-claims.test.js`.** Two
+campaigns went live on 23 September at $80 a day, and every ad quotes next day,
+from $1.80 a pound, a $25 minimum and no delivery fee. None of that is written
+down in this repo, because it is typed into an advertising account - so moving a
+price or a window here would leave the ads quoting the old number to people we
+are paying to read it, with nothing anywhere noticing.
+
+**A FAILURE THERE IS NOT A BUG IN THE CODE.** It means the adverts have to be
+changed the same day, and every assertion says so in its own message. Values are
+read from `config.js`, `site.js` and `booking.js`; there is no database and
+nothing mocked, because a test that needed maintaining is the first one somebody
+switches off.
+
+**IT ALSO PINS THAT NO WINDOW STARTS AFTER 4PM.** A window closes the moment it
+starts, so the last bookable moment today is 4pm however late the day runs. That
+is the fact that makes "book by 8pm, bag out tonight" untrue, and it is why an
+8pm booking cutoff was asked for twice and built neither time. If an evening
+pickup is ever wanted, it is a new `PICKUP_WINDOWS` entry first and an advert
+second, never the other way round.
+
 ### The offer popup
 
 **THERE IS NOTHING IN IT SINCE 22 SEPTEMBER, AND THAT NEEDED NO CODE.** Neil:
