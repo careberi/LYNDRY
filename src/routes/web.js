@@ -1106,10 +1106,47 @@ function credentialsMatch(header) {
 
 router.get('/ads/conversions.csv', async (req, res, next) => {
   try {
-    if (!credentialsMatch(req.get('authorization'))) {
-      // Deliberately not a 401 with a WWW-Authenticate challenge: that would
-      // announce the file exists. Google's scheduled upload is configured with
-      // the credential up front and never needs to be challenged for one.
+    const offered = req.get('authorization');
+
+    // BLANK PASSWORD MEANS THERE IS NO FILE, and that comes first so the
+    // switched-off route can never answer with a challenge inviting somebody to
+    // start guessing at one. Unchanged.
+    if (!config.googleAds.uploadPassword) {
+      return res.status(404).type('text/plain').send('Not found');
+    }
+
+    // A CLIENT THAT WAITS TO BE ASKED HAS TO BE ASKED, AND THIS ROUTE REFUSED
+    // TO. The comment here used to read "deliberately not a 401 with a
+    // WWW-Authenticate challenge: that would announce the file exists. Google's
+    // scheduled upload is configured with the credential up front and never
+    // needs to be challenged for one." The first half is true. The second half
+    // was a guess about somebody else's HTTP client, and it was wrong.
+    //
+    // Google's Data Manager connector does NON-PREEMPTIVE auth: it fetches
+    // once with no Authorization header, reads the 401 and the realm, and only
+    // then sends the password. Against a route that answers 404 and never
+    // challenges, it never sends the credential at all - and reports "Invalid
+    // credentials", which is the one explanation that sends you looking at the
+    // password. The password was right the whole time. Reproduced exactly with
+    // `curl --anyauth`, which authenticates the same way: 200 with `curl -u`,
+    // 404 with `--anyauth`, same URL and same credential.
+    //
+    // SO THE CHALLENGE IS SENT ONLY WHEN NOTHING WAS OFFERED, and that is the
+    // narrowest version of this that works. What it costs is real and is worth
+    // stating: somebody who guesses this exact path now learns a protected file
+    // is here, where before they got the same 404 as any other missing page.
+    // What it keeps is the more valuable half - a WRONG credential still gets
+    // 404, so nobody can tell a bad password from a path that was never a page,
+    // and the file still cannot be confirmed by trying passwords at it.
+    if (!offered) {
+      return res
+        .status(401)
+        .set('WWW-Authenticate', 'Basic realm="LYNDRY conversions", charset="UTF-8"')
+        .type('text/plain')
+        .send('Unauthorized');
+    }
+
+    if (!credentialsMatch(offered)) {
       return res.status(404).type('text/plain').send('Not found');
     }
 
