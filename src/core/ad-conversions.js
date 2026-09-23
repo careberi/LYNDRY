@@ -1,6 +1,5 @@
 'use strict';
 
-const crypto = require('node:crypto');
 const db = require('../db');
 // ONE OWNER FOR THE SERVICE CLOCK. format.js already holds it and every screen
 // in the system reads it from there; a second copy here would be the thing that
@@ -38,6 +37,53 @@ const { SERVICE_TZ } = require('./format');
 // next one. Using the upload time would make every re-run a new conversion and
 // would inflate the count without limit.
 //
+// ---------------------------------------------------------------------------
+// THE LAYOUT IS DATA MANAGER'S, AND IT REPLACED THE LEGACY ONE ON 23 SEPTEMBER.
+//
+// Google moved scheduled uploads to a screen called Data Manager and the old
+// one no longer exists. The file this produced was written for the old screen
+// and Data Manager could not read it at all: it takes THE FIRST LINE AS THE
+// COLUMN HEADERS, and the first line was "Parameters:TimeZone=America/New_York"
+// - so it saw a single column named after the time zone, found no conversions
+// in it, and imported nothing. The credential was fine and the file downloaded
+// cleanly; it was simply unreadable.
+//
+// Four things changed, and each is forced by that screen:
+//
+//   headers first        no Parameters line. It is not supported and it is
+//                        actively harmful, because it is eaten as the header
+//   the offset per row   the time zone used to live on the line that is gone,
+//                        so every timestamp now carries its own -04:00 or
+//                        -05:00 and the file cannot be misread in another zone
+//   three id columns     GCLID, GBRAID and WBRAID are separate fields to Data
+//                        Manager, not one "Google Click ID" column
+//   click id or nothing  see below
+//
+// THE CONVERSION ACTION NAMES DID NOT CHANGE, and must not. "Booked first
+// pickup" and "First paid order" match the actions in the account exactly, and
+// a rename is rejected row by row with no partial credit.
+//
+// ---------------------------------------------------------------------------
+// AND NOTHING PERSONAL LEAVES HERE AT ALL NOW, WHICH IS A CHANGE.
+//
+// There used to be a hashed-phone column for one case: somebody who tapped the
+// message button on a search ad, never loaded the site, and therefore carries
+// no click id at all. Data Manager will only accept those rows with ENHANCED
+// CONVERSIONS switched on, and CLAUDE.md forbids enhanced conversions in as
+// many words. So those rows are left out of the file entirely and the column
+// has gone with them.
+//
+// WHICH MEANS THE OLD "never put a click id and a phone on the same row" RULE
+// IS NOW STRUCTURAL rather than a thing to remember: there is no phone column
+// to put one in. Nothing identifying is in this file - a click id, a fixed
+// action name, a timestamp and an amount.
+//
+// THE COLUMN IS GONE, THE RECORD IS NOT. first_touch_source still marks those
+// customers (migration 0098) and they still appear in any report read off the
+// database. What they cannot do is be uploaded, and feed() says how many were
+// left out rather than dropping them silently.
+// ---------------------------------------------------------------------------
+//
 // WHO IS IN IT: anybody we can honestly attribute to a Google ad.
 //
 //   a click id          gclid, gbraid or wbraid off the landing URL (0085)
@@ -45,11 +91,8 @@ const { SERVICE_TZ } = require('./format');
 //                       never loaded the site, so there is no click id at all
 //                       (first_touch_source, 0098)
 //
-// THE TWO ARE NEVER PUT ON THE SAME ROW, and that is not tidiness. Google's own
-// guidance: uploading a click id alongside user-provided data "can cause
-// matching conflicts if Google Ads prioritizes GCLID". So a row carries a click
-// id and no phone, or a hashed phone and no click id. The phone column exists
-// for the starter-text rows and is empty on every other line.
+// THE STARTER-TEXT ROWS ARE COUNTED AND EXCLUDED - see the note above. They
+// need enhanced conversions, which this codebase does not do.
 //
 // WHAT IS NOT IN IT, deliberately:
 //
@@ -61,9 +104,8 @@ const { SERVICE_TZ } = require('./format');
 //                              $25 kept when a card fails at a door is real
 //                              money and is not somebody buying a wash
 //
-// NO NAME, NO EMAIL, NO ADDRESS, EVER. The only personal thing that leaves here
-// is a phone number that has been through SHA-256, which is what Google asks
-// for and cannot be read back.
+// NO NAME, NO EMAIL, NO ADDRESS, NO PHONE. Nothing personal leaves here in any
+// form, hashed or otherwise.
 // ---------------------------------------------------------------------------
 
 // The two conversion actions, named in Google Ads. THE STRINGS MUST MATCH the
@@ -88,19 +130,18 @@ const GOOGLE_AD_TEXT = 'google_ad_text';
 // A pickup that was called off was not a booked pickup. See above.
 const CANCELLED = 'CANCELED';
 
-// SHA-256 OF THE NUMBER IN E.164, lowercase hex - Google's stated format for a
-// hashed phone. normalisePhone() already produces E.164, so there is no second
-// idea of what a phone number looks like in here.
-function hashPhone(phone) {
-  const e164 = String(phone || '').trim();
-  if (!/^\+[1-9]\d{6,14}$/.test(e164)) return null;
-  return crypto.createHash('sha256').update(e164).digest('hex');
-}
-
-// New Jersey time, written the way Google's importer reads it, to match the
-// TimeZone line at the top of the file. Everything else in this codebase that
-// shows a time to a person uses the service clock; an upload is no different,
-// and UTC here would land every evening's conversion on the wrong day.
+// New Jersey time, ISO 8601, CARRYING ITS OWN UTC OFFSET - "2026-09-14T20:05:25-04:00".
+//
+// THE OFFSET IS IN EVERY ROW BECAUSE THE LINE THAT USED TO HOLD IT IS GONE.
+// The legacy format put "Parameters:TimeZone=America/New_York" at the top of
+// the file and left every timestamp bare; Data Manager has no such line, and a
+// bare timestamp is read in whatever fallback zone the connection happens to be
+// configured with. An hour or four out would not fail loudly - it would quietly
+// attribute conversions to the wrong day.
+//
+// IT IS READ, NOT ASSUMED. -04:00 in summer and -05:00 in winter, taken from
+// the same Intl data everything else here uses, so the March and November
+// changeovers need nobody to remember them.
 function conversionTime(value) {
   // FALSY FIRST, AND THAT GUARD IS LOAD-BEARING. `new Date(null)` is not an
   // invalid date - it is the epoch - so a null paid_at would sail through the
@@ -120,6 +161,9 @@ function conversionTime(value) {
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
+    // "GMT-04:00" - the only part of this that is new, and the whole reason
+    // the row can stand on its own without a time zone declared elsewhere.
+    timeZoneName: 'longOffset',
   })
     .formatToParts(at)
     .reduce((acc, p) => Object.assign(acc, { [p.type]: p.value }), {});
@@ -127,7 +171,12 @@ function conversionTime(value) {
   // Intl gives 24 for midnight in some runtimes; Google wants 00.
   const hour = parts.hour === '24' ? '00' : parts.hour;
 
-  return `${parts.year}-${parts.month}-${parts.day} ${hour}:${parts.minute}:${parts.second}`;
+  // Intl says "GMT-04:00", and at an offset of zero just "GMT". New Jersey is
+  // never the second, but a bare offset would be a silently wrong timestamp
+  // rather than a visible one, so it is spelled out either way.
+  const offset = String(parts.timeZoneName || '').replace(/^GMT/, '') || '+00:00';
+
+  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}:${parts.second}${offset}`;
 }
 
 // IS THIS THE STARTER TEXT GOOGLE TYPES?
@@ -160,17 +209,31 @@ function isAdStarterText(message) {
   return Boolean(said) && said === flatten(AD_STARTER_TEXT);
 }
 
-// WHICH IDENTIFIER THIS ROW CARRIES, and only ever one of them.
+// WHICH CLICK ID THIS CUSTOMER CARRIES, in the column Data Manager wants it in.
+//
+// GCLID is an ordinary web click. GBRAID and WBRAID are the iOS pair, where
+// Apple's rules mean Google cannot hand back a per-click id - they arrive on
+// different journeys and Data Manager keeps them in separate fields. One
+// customer has at most one, and gclid wins if a row somehow carries two.
+//
+// NULL MEANS THE ROW IS NOT IN THE FILE. That covers everybody with no click id
+// at all, including the starter-text customers who need enhanced conversions -
+// see the note at the top. Nothing is uploaded blank and nothing is guessed.
 function identify(customer) {
-  const click = customer.gclid || customer.gbraid || customer.wbraid || null;
-  if (click) return { click, phone: '' };
-
-  if (customer.first_touch_source === GOOGLE_AD_TEXT) {
-    const hashed = hashPhone(customer.phone);
-    if (hashed) return { click: '', phone: hashed };
-  }
-
+  if (customer.gclid) return { gclid: customer.gclid, gbraid: '', wbraid: '' };
+  if (customer.gbraid) return { gclid: '', gbraid: customer.gbraid, wbraid: '' };
+  if (customer.wbraid) return { gclid: '', gbraid: '', wbraid: customer.wbraid };
   return null;
+}
+
+// How many customers we can genuinely attribute to a Google ad but may not
+// upload. Reported rather than silently dropped: it is the size of what
+// refusing enhanced conversions costs, and it belongs in front of whoever reads
+// the numbers rather than buried here.
+function excludedForNoClickId(customers) {
+  return (customers || []).filter(
+    (c) => !identify(c) && c.first_touch_source === GOOGLE_AD_TEXT
+  ).length;
 }
 
 // The earliest order that counts, or undefined. Orders arrive oldest first.
@@ -194,13 +257,7 @@ function rowsFor(customers) {
     if (booked) {
       const at = conversionTime(booked.created_at);
       if (at) {
-        rows.push({
-          click: who.click,
-          name: BOOKED,
-          at,
-          value: BOOKED_VALUE.toFixed(2),
-          phone: who.phone,
-        });
+        rows.push({ ...who, name: BOOKED, at, value: BOOKED_VALUE.toFixed(2) });
       }
     }
 
@@ -218,11 +275,10 @@ function rowsFor(customers) {
       const at = conversionTime(paid.paid_at || paid.delivered_at || paid.created_at);
       if (at) {
         rows.push({
-          click: who.click,
+          ...who,
           name: PAID,
           at,
           value: (Number(paid.amount_paid_cents) / 100).toFixed(2),
-          phone: who.phone,
         });
       }
     }
@@ -242,27 +298,38 @@ function field(value) {
   return /[",\n\r]/.test(text) ? `"${text.split('"').join('""')}"` : text;
 }
 
+// DATA MANAGER'S OWN FIELD NAMES, SPELLED ITS WAY.
+//
+// The mapping step will let you point any column at any field by hand, and
+// these are the names that make it map itself. They are not ours to prettify:
+// "Conversion action" and "Conversion date and time" are what that screen
+// looks for, and "Conversion Name" - the legacy spelling that was here - is
+// not.
 const HEADER = [
-  'Google Click ID',
-  'Conversion Name',
-  'Conversion Time',
-  'Conversion Value',
-  'Conversion Currency',
-  'Phone Number',
+  'GCLID',
+  'GBRAID',
+  'WBRAID',
+  'Conversion action',
+  'Conversion date and time',
+  'Conversion value',
+  'Conversion currency',
 ];
 
-// THE PARAMETERS LINE COMES FIRST and is not a comment - Google's importer
-// reads the time zone from it, and without it the times are read as the
-// account's zone and land hours out.
+// THE FIRST LINE IS THE HEADERS, AND NOTHING MAY COME BEFORE IT.
+//
+// This is the whole of what broke the first connection. Data Manager reads line
+// one as the column names, so the legacy "Parameters:TimeZone=" line was taken
+// as a single column called Parameters_TimeZone_America_New_York, and a file
+// full of conversions imported nothing at all. The time zone lives in each
+// timestamp now; see conversionTime() above.
 function csv(rows) {
-  const lines = [
-    `Parameters:TimeZone=${SERVICE_TZ}`,
-    HEADER.join(','),
-  ];
+  const lines = [HEADER.join(',')];
 
   for (const row of rows) {
     lines.push(
-      [row.click, row.name, row.at, row.value, CURRENCY, row.phone].map(field).join(',')
+      [row.gclid, row.gbraid, row.wbraid, row.name, row.at, row.value, CURRENCY]
+        .map(field)
+        .join(',')
     );
   }
 
@@ -289,7 +356,22 @@ async function attributedCustomers() {
 }
 
 async function feed() {
-  return csv(rowsFor(await attributedCustomers()));
+  const customers = await attributedCustomers();
+
+  // SAID OUT LOUD, ONCE PER FETCH. A customer we can name as a Google ad click
+  // and may not upload is a real cost of refusing enhanced conversions, and a
+  // silent exclusion is how a number nobody can explain turns up in a report
+  // three months later.
+  const left = excludedForNoClickId(customers);
+  if (left) {
+    console.log(
+      `Conversion feed: ${left} customer(s) came from a Google message ad and carry no ` +
+        `click id, so they are not in the file. Uploading them needs enhanced conversions, ` +
+        `which this codebase does not do.`
+    );
+  }
+
+  return csv(rowsFor(customers));
 }
 
 module.exports = {
@@ -297,9 +379,9 @@ module.exports = {
   isAdStarterText,
   csv,
   rowsFor,
-  hashPhone,
   conversionTime,
   identify,
+  excludedForNoClickId,
   HEADER,
   BOOKED,
   PAID,

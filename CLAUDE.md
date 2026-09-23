@@ -359,6 +359,49 @@ creates the customer. It exists so booked first pickups can be uploaded back to
 Google later. **Never use enhanced conversions** - they send a hashed phone
 number.
 
+**THE FEED IS DATA MANAGER'S FORMAT, AND THE LEGACY ONE IMPORTED NOTHING.**
+`GET /ads/conversions.csv` is fetched on a schedule by Google Ads. Google
+retired the old scheduled-upload screen for **Data Manager**, which reads **the
+first line of the file as the column headers** - so the legacy
+`Parameters:TimeZone=America/New_York` line was taken as a single column called
+`Parameters_TimeZone_America_New_York`, and a file full of real conversions
+imported nothing at all. The credential was correct and the file downloaded
+cleanly. It was simply unreadable.
+
+Four things follow, and none of them is ours to prettify: **the headers are on
+line one**, spelled Data Manager's way (`GCLID`, `GBRAID`, `WBRAID`,
+`Conversion action`, `Conversion date and time`, `Conversion value`,
+`Conversion currency`); **every timestamp carries its own offset**
+(`2026-09-14T20:05:25-04:00`), read from Intl so the March and November
+changeovers need nobody to remember them, because the line that used to declare
+the zone is gone and a bare time would be read in whatever fallback the
+connection carries; **the three click ids are three columns**, not one - a real
+customer's $38 order came from a `gbraid`, which the single "Google Click ID"
+column had been submitting in the wrong field; and **the conversion action
+names must not change**, because they match the account exactly and a rename is
+rejected row by row with no partial credit.
+
+**AND A ROW WITH NO CLICK ID IS LEFT OUT, which is what refusing enhanced
+conversions costs.** Somebody who tapped the message button on a search ad
+never loads the site and carries no click id at all, and Data Manager will only
+take those rows with enhanced conversions switched on. So they are excluded and
+the hashed-phone column went with them - which makes the old "never a click id
+and a phone on the same row" rule structural rather than remembered, since
+there is no phone column left. `first_touch_source` still records them
+(migration 0098) and `feed()` says how many were left out on every fetch, so
+the cost is visible rather than a gap nobody can explain.
+
+**IT CHALLENGES A CLIENT THAT WAITS TO BE ASKED.** Data Manager does
+non-preemptive Basic auth - it fetches once with no credential, reads the
+`401` and the realm, then sends the password. The route answered `404` and
+never challenged, so Google never sent the password and reported **"Invalid
+credentials"** against a correct one. A challenge now goes out **only when
+nothing was offered**; a WRONG credential is still a `404`, so the file cannot
+be confirmed by trying passwords at it, and a blank `ADS_UPLOAD_PASSWORD` is
+still `404` to everything, checked first. What it costs: somebody who guesses
+this exact path now learns a protected file is there. `curl --anyauth`
+reproduces Google's behaviour exactly and is the way to test it.
+
 **WHAT THE LIVE ADS STATE AS FACT IS PINNED BY `test/ad-claims.test.js`.** Two
 campaigns went live on 23 September at $80 a day, and every ad quotes next day,
 from $1.80 a pound, a $25 minimum and no delivery fee. None of that is written

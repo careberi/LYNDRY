@@ -10,11 +10,18 @@
 // Most of what is pinned here is the MUST-NOTs, because each one either sends
 // something that should never leave, or teaches Google to buy the wrong person:
 //
-//   never both identifiers   Google's own guidance is that a click id next to
-//                            user data "can cause matching conflicts". A row
-//                            carries one or the other, never the two
-//   nothing identifying      no name, no email, no address, no order number.
-//                            A phone only ever leaves hashed
+//   one click id per row     GCLID, GBRAID and WBRAID are three columns to
+//                            Data Manager, and a row fills exactly one of them
+//   nothing identifying      no name, no email, no address, no order number,
+//                            and since 23 September no phone in any form. The
+//                            hashed-phone column served customers with no
+//                            click id at all, who need enhanced conversions -
+//                            forbidden by CLAUDE.md - so they are excluded and
+//                            the column went with them
+//   headers on line one      Data Manager reads the first line as the column
+//                            names. The legacy "Parameters:TimeZone=" line was
+//                            eaten as one, and a file full of conversions
+//                            imported nothing
 //   the event's own time     never "now" - that is what makes re-uploading the
 //                            same file every day a no-op at Google instead of
 //                            inflating the count for ever
@@ -184,54 +191,71 @@ test('nothing at all is a file with no rows, not a crash', () => {
   assert.deepEqual(ads.rowsFor(null), []);
 });
 
-// --- the two identifiers never share a row ---------------------------------
+// --- one click id per row, in its own column --------------------------------
+//
+// THESE USED TO BE ABOUT KEEPING A CLICK ID AND A HASHED PHONE APART, because
+// the file carried a Phone Number column for customers who tapped a message ad
+// and never loaded the site. Data Manager only accepts those with enhanced
+// conversions, which CLAUDE.md forbids, so the rows are excluded and the column
+// is gone. The rule they protected is stronger now and is structural: there is
+// no phone column to leak into.
 
-test('a row carries a click id OR a hashed phone, never both', () => {
-  const rows = ads.rowsFor([clicker(), texter()]);
-
-  assert.ok(rows.length >= 2);
-  for (const row of rows) {
-    assert.ok(
-      Boolean(row.click) !== Boolean(row.phone),
-      `both or neither on one row: ${JSON.stringify(row)}`
-    );
-  }
-});
-
-test('a click id wins over the starter text when a customer somehow has both', () => {
-  const who = ads.identify(clicker({ first_touch_source: ads.GOOGLE_AD_TEXT }));
-
-  assert.equal(who.click, 'Cj0KCQ-abc123');
-  assert.equal(who.phone, '', 'a click id is exact; adding the phone is what Google warns against');
-});
-
-test('gbraid and wbraid are click ids too', () => {
-  for (const field of ['gbraid', 'wbraid']) {
+test('each click id lands in its own column and the others stay empty', () => {
+  for (const field of ['gclid', 'gbraid', 'wbraid']) {
     const who = ads.identify(clicker({ gclid: null, [field]: 'Xy-restricted-ios' }));
-    assert.equal(who.click, 'Xy-restricted-ios', field);
+
+    assert.equal(who[field], 'Xy-restricted-ios', field);
+    for (const other of ['gclid', 'gbraid', 'wbraid']) {
+      if (other !== field) assert.equal(who[other], '', `${field} leaked into ${other}`);
+    }
   }
 });
 
-test('a starter-text customer with an unusable phone is dropped, not sent blank', () => {
+test('gclid wins when a row somehow carries more than one', () => {
+  const who = ads.identify(clicker({ gbraid: 'B-1', wbraid: 'W-1' }));
+
+  assert.equal(who.gclid, 'Cj0KCQ-abc123');
+  assert.equal(who.gbraid, '', 'two identifiers on one row is what Google warns against');
+  assert.equal(who.wbraid, '');
+});
+
+test('a customer with no click id at all is left out of the file', () => {
+  // Including the starter-text customers, whatever their phone looks like.
+  // They are still recorded in the database; they simply may not be uploaded.
+  assert.equal(ads.identify(texter()), null);
   assert.equal(ads.identify(texter({ phone: 'not a number' })), null);
-  assert.equal(ads.identify(texter({ phone: '' })), null);
-  assert.equal(ads.identify(texter({ phone: null })), null);
+  assert.equal(ads.identify(clicker({ gclid: null, gbraid: null, wbraid: null })), null);
+});
+
+test('the ones that are left out are counted rather than dropped quietly', () => {
+  // What refusing enhanced conversions costs, in people, so it can be said out
+  // loud instead of turning up as an unexplained gap in a report.
+  assert.equal(ads.excludedForNoClickId([clicker(), texter(), texter({ id: 'c3' })]), 2);
+  assert.equal(ads.excludedForNoClickId([clicker()]), 0);
+
+  // Somebody with no click id who did NOT come from a message ad was never
+  // attributable in the first place and is not part of that cost.
+  assert.equal(ads.excludedForNoClickId([clicker({ gclid: null, first_touch_source: null })]), 0);
 });
 
 // --- what leaves the building ----------------------------------------------
 
-test('the phone is SHA-256 of E.164 and is never the number itself', () => {
-  const hashed = ads.hashPhone('+12015551234');
+test('no phone reaches the file in any form, hashed or otherwise', () => {
+  const file = ads.csv(ads.rowsFor([clicker(), texter()]));
 
-  assert.match(hashed, /^[0-9a-f]{64}$/);
-  assert.ok(!hashed.includes('2015551234'));
-  assert.equal(hashed, require('node:crypto').createHash('sha256').update('+12015551234').digest('hex'));
+  assert.ok(!/phone/i.test(ads.HEADER.join(',')), 'there is a phone column again');
+  assert.ok(!/[0-9a-f]{64}/.test(file), 'something that looks like a SHA-256 is in the file');
+  assert.ok(!file.includes('2015551234'), file);
 });
 
-test('a number that is not E.164 hashes to nothing rather than to garbage', () => {
-  for (const bad of ['2015551234', '(201) 555-1234', '+0123', '', null, undefined, '+1201555123456789']) {
-    assert.equal(ads.hashPhone(bad), null, String(bad));
-  }
+test('the module no longer hashes anything', () => {
+  // The hashing existed for one column that has gone. A hash function with no
+  // caller is an invitation to put the column back without the argument that
+  // took it out - see CLAUDE.md on enhanced conversions.
+  const src = withoutComments(SRC('core', 'ad-conversions.js'));
+
+  assert.ok(!src.includes('createHash'), src);
+  assert.ok(!src.includes('hashPhone'), src);
 });
 
 test('nothing identifying appears anywhere in the file', () => {
@@ -256,18 +280,47 @@ test('the module never selects a name, an email or an address', () => {
 
 // --- the file Google reads --------------------------------------------------
 
-test('the time zone line comes first and the header second', () => {
+test('THE VERY FIRST LINE IS THE COLUMN HEADERS, AND NOTHING COMES BEFORE IT', () => {
+  // This is the exact failure that made the first connection import nothing.
+  // Data Manager reads line one as the column names, and the legacy
+  // "Parameters:TimeZone=" line was taken as a single column called
+  // Parameters_TimeZone_America_New_York - so a file full of conversions
+  // arrived as one unusable column.
   const lines = ads.csv(ads.rowsFor([clicker()])).split('\n');
 
-  assert.equal(lines[0], 'Parameters:TimeZone=America/New_York');
-  assert.equal(lines[1], ads.HEADER.join(','));
+  assert.equal(lines[0], ads.HEADER.join(','));
+  assert.ok(!lines[0].startsWith('Parameters'), 'the legacy time zone line is back');
+  assert.ok(!ads.csv([]).startsWith('Parameters'), 'an empty file still carries it');
 });
 
-test('the conversion time is the service clock, not UTC', () => {
+test('the headers are spelled the way Data Manager spells them', () => {
+  // Not ours to prettify. These are the names that make the mapping step map
+  // itself; "Conversion Name" is the legacy spelling and is not one of them.
+  assert.deepEqual(ads.HEADER, [
+    'GCLID',
+    'GBRAID',
+    'WBRAID',
+    'Conversion action',
+    'Conversion date and time',
+    'Conversion value',
+    'Conversion currency',
+  ]);
+});
+
+test('the conversion time is the service clock and carries its own offset', () => {
   // 02:30 UTC is the previous evening in New Jersey. Getting this wrong puts
   // every evening conversion on the wrong day.
-  assert.equal(ads.conversionTime('2026-09-16T02:30:00Z'), '2026-09-15 22:30:00');
-  assert.match(ads.conversionTime('2026-09-16T18:00:00Z'), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  assert.equal(ads.conversionTime('2026-09-16T02:30:00Z'), '2026-09-15T22:30:00-04:00');
+
+  // THE OFFSET IS READ, NOT TYPED, so the March and November changeovers need
+  // nobody to remember them. It used to live on the Parameters line, which is
+  // gone - a bare timestamp would now be read in whatever fallback zone the
+  // connection happens to carry.
+  assert.equal(ads.conversionTime('2026-01-16T02:30:00Z'), '2026-01-15T21:30:00-05:00');
+  assert.match(
+    ads.conversionTime('2026-09-16T18:00:00Z'),
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[-+]\d{2}:\d{2}$/
+  );
 });
 
 test('an unreadable timestamp is left out rather than sent as nonsense', () => {
@@ -288,7 +341,15 @@ test('the same customers produce a byte-identical file on a later run', () => {
   const second = ads.csv(ads.rowsFor(people));
 
   assert.equal(first, second);
-  assert.ok(!first.includes(String(new Date().getFullYear()) + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0') + ' '), 'today\'s date suggests "now" crept in');
+  const today = new Date();
+  const stamp =
+    today.getFullYear() +
+    '-' +
+    String(today.getMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(today.getDate()).padStart(2, '0') +
+    'T';
+  assert.ok(!first.includes(stamp), 'today\'s date suggests "now" crept in');
 });
 
 test('nothing in the module reads the clock to build a row', () => {
@@ -299,8 +360,8 @@ test('nothing in the module reads the clock to build a row', () => {
   assert.ok(!/new Date\(\)/.test(derive), derive);
 });
 
-test('every row has all six columns, in order', () => {
-  const lines = ads.csv(ads.rowsFor([clicker(), texter()])).trim().split('\n').slice(2);
+test('every row has all seven columns, in order', () => {
+  const lines = ads.csv(ads.rowsFor([clicker(), texter()])).trim().split('\n').slice(1);
 
   assert.ok(lines.length >= 2);
   for (const line of lines) {
@@ -309,7 +370,9 @@ test('every row has all six columns, in order', () => {
 });
 
 test('a value that could break the file is quoted rather than shifting a column', () => {
-  const file = ads.csv([{ click: 'a,b', name: 'x"y', at: '2026-09-16 10:00:00', value: '1.00', phone: '' }]);
+  const file = ads.csv([
+    { gclid: 'a,b', gbraid: '', wbraid: '', name: 'x"y', at: '2026-09-16T10:00:00-04:00', value: '1.00' },
+  ]);
   const line = file.trim().split('\n').pop();
 
   assert.ok(line.includes('"a,b"'), line);
@@ -317,8 +380,9 @@ test('a value that could break the file is quoted rather than shifting a column'
 });
 
 test('the currency is on every row', () => {
-  const lines = ads.csv(ads.rowsFor([clicker()])).trim().split('\n').slice(2);
+  const lines = ads.csv(ads.rowsFor([clicker()])).trim().split('\n').slice(1);
 
+  assert.ok(lines.length >= 1);
   for (const line of lines) assert.ok(line.includes('USD'), line);
 });
 
