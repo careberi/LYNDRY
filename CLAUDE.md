@@ -424,12 +424,19 @@ second, never the other way round.
 
 ### The offer popup
 
-**THERE IS NOTHING IN IT SINCE 22 SEPTEMBER, AND THAT NEEDED NO CODE.** Neil:
-the 50% comes off the website and off every new customer, and CLEAN50 stays
-valid for anybody who asks for it by name. The popup only ever advertises
-`promotions.autoGrant()`, so a promotion moved off the NEW_NUMBERS audience
-takes the box off every page by itself - absent from the markup, not hidden.
-The machinery below is intact and is what a future offer would use.
+**IT CARRIES CLEAN50 AGAIN SINCE 24 SEPTEMBER, AND IT WAS EMPTY FOR TWO DAYS.**
+Neil took the 50% off the website and off every new customer on 22 September,
+then put both back on the 24th: *"Automatically put back the 50% off for the
+first order for new customers. Put the pop up back too."* Neither change needed
+code. The popup only ever advertises `promotions.autoGrant()`, so moving
+CLEAN50's audience between `NEW_NUMBERS` and `SPECIFIC` is what puts the box on
+every page or takes it off - see "THE AUDIENCE IS THE WHOLE LEVER" under
+promotions. Nobody signed up in the two days it was off, so nobody missed it.
+
+**THE LIVE GOOGLE ADS SAY THERE IS NO DISCOUNT.** They were rewritten on 23
+September while the offer was off. A visitor from an ad now lands on a page
+offering 50% the ad never mentioned - more than promised, so nobody is misled,
+but the two no longer say the same thing.
 
 **A box over lyndry.com carrying the first-order offer, with the home page's
 phone field in it.** Neil's ask, 12 September. `src/core/site-popup.js` decides
@@ -2943,6 +2950,14 @@ fails. The card for a non-automatic promotion offers the switch off as
 well, so there are two doors and no way to strand it. **Creating a replacement
 passes `keepPopup`**, because replacing the automatic offer is not taking the
 website down - the popup has never named a promotion.
+
+**AND IT WAS REVERSED ON 24 SEPTEMBER**, at Neil's instruction: audience back
+to `NEW_NUMBERS`, `auto_grant` true, `website_popup` true. There is no button
+for the reverse - `standDown()` is one-way and the create route makes a NEW
+automatic promotion rather than restoring one - so it was two direct writes,
+guarded to move only the row it expected. If this flips again it will want a
+button, and the reason it does not have one yet is that it has only happened
+once.
 
 **IT WAS PRESSED ON 22 SEPTEMBER, and until it was, nothing had changed.** The
 branch shipped a button; the offer came off the website and off every new
