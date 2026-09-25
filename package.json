@@ -25,7 +25,8 @@
     "check:thread": "node scripts/check-thread.js",
     "leads": "node --use-system-ca scripts/check-leads.js",
     "demo": "node scripts/demo.js",
-    "reset:order": "node --use-system-ca scripts/reset-order.js"
+    "reset:order": "node --use-system-ca scripts/reset-order.js",
+    "migrate": "node --use-system-ca scripts/migrate.js"
   },
   "engines": {
     "node": ">=22"
@@ -36,6 +37,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "multer": "^2.2.0",
+    "pg": "^8.23.0",
     "qrcode": "^1.5.4",
     "stripe": "^22.4.0"
   }

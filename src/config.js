@@ -1,7 +1,29 @@
 'use strict';
 
-// Load variables from the .env file into process.env before anything reads them.
-require('dotenv').config({ quiet: true });
+// ---------------------------------------------------------------------------
+// WHICH ENVIRONMENT, DECIDED BEFORE ANYTHING IS READ.
+//
+// `.env` is DEVELOPMENT. That is the whole design: the default has to be the
+// safe one, because the failure that actually happened - order #2073, a test
+// Stripe key against a live card - was somebody getting production without
+// meaning to. Production credentials live in Railway, which is where they
+// actually run; `.env.production.local` is a local copy for the occasional
+// deliberate read, and .gitignore already covers that name.
+//
+// `--live` ON THE COMMAND LINE IS THE ONLY WAY TO REACH PRODUCTION FROM HERE,
+// and it is a command-line argument rather than a setting on purpose. A
+// variable would end up pasted into .env "just for now" and left there, which
+// undoes the whole thing silently and looks fine. An argument has to be typed
+// every single time, and it is visible in the command afterwards - so the
+// transcript says which database was touched without anybody having to
+// remember to mention it.
+// ---------------------------------------------------------------------------
+const LIVE = process.argv.includes('--live');
+
+require('dotenv').config({
+  path: require('path').join(__dirname, '..', LIVE ? '.env.production.local' : '.env'),
+  quiet: true,
+});
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -65,6 +87,10 @@ function normaliseBaseUrl(value, fallbackPort) {
 
 const config = Object.freeze({
   env: process.env.NODE_ENV || 'development',
+
+  // Did somebody deliberately ask for production from a machine that is not
+  // production? Read once here so db.js can refuse everything else.
+  live: LIVE,
   port,
   baseUrl: normaliseBaseUrl(process.env.APP_BASE_URL, port),
 
