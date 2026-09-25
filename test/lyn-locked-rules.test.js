@@ -56,6 +56,30 @@ test('the locked facts are stated, all of them', () => {
   assert.ok(/no delivery fee/i.test(block), 'no delivery fee');
 });
 
+test('THE PROMPT NAMES NO WEIGHT LIMIT, BECAUSE THERE IS NOT ONE', () => {
+  // 25 September. A customer asked "If I have 70lbs how much?" and Lyn replied
+  // "we take up to 50 lb per pickup, so 70 lb would need to be split across two
+  // pickups". Neil: we can do more than that, never say it. The model was not
+  // inventing - the prompt told it "Maximum 50 lb per pickup", read off
+  // config.pricing.maxOrderLb, a number nothing in the code enforces.
+  //
+  // THE RISK IS A NUMBER, NOT A PHRASE, so this refuses any pounds figure
+  // presented as a ceiling rather than only the words that happened to go out.
+  assert.ok(!/Maximum \d+ ?lb/i.test(PROMPT), 'the prompt states a maximum load again');
+  assert.ok(!/\bup to \d+ ?lb\b/i.test(PROMPT), 'the prompt caps a pickup at a weight');
+
+  // AND IT SAYS SO POSITIVELY, so the model has an answer rather than a silence
+  // to fill in. A rule the prompt does not state is one it will guess at, which
+  // is the same trap the service area already has to be explicit about.
+  //
+  // Asserted as the RULE rather than as the absence of the phrase, because the
+  // ban on splitting a load necessarily contains the words "split a load" - a
+  // negative match here would fail on its own prohibition, which is the
+  // assert-against-your-own-explanation shape CLAUDE.md records twice.
+  assert.match(PROMPT, /NO LIMIT ON HOW MUCH ONE PICKUP CAN BE/, 'the rule is not stated at all');
+  assert.match(PROMPT, /NEVER tell somebody to split a load/, 'the ban on splitting a load is gone');
+});
+
 test('nothing in the prompt still says we charge after delivery', () => {
   assert.ok(!/charge after the laundry is back/i.test(PROMPT));
   assert.ok(!/charged when we (deliver|drop)/i.test(PROMPT));
