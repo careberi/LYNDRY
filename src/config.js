@@ -451,8 +451,17 @@ const config = Object.freeze({
     estimateLowCents: 3000, // 15 lb
     estimateHighCents: 3600, // 18 lb
 
-    // The most we will take in a single pickup.
-    maxOrderLb: 50,
+    // THERE IS NO MAXIMUM ON A PICKUP, AND `maxOrderLb` IS GONE. It was 50, and
+    // nothing in the system ever enforced it: it set a flag the ops JSON API
+    // echoed and no screen read. What it DID do was get recited. It reached the
+    // AI's prompt as "Maximum 50 lb per pickup" and five public pages as "we
+    // take up to 50 lb", so on 25 September a customer asking about 70 lb was
+    // told to split it across two pickups. Neil: we can do more than that,
+    // never say it.
+    //
+    // It is deleted rather than raised, because any number here is a number
+    // somebody will publish. If a real ceiling ever exists it belongs to the
+    // van and the laundromat, which already have capacities of their own.
 
     // A typical bag, used to turn a bag count into a rough estimate.
     typicalBagLb: 17,

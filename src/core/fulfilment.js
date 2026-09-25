@@ -719,7 +719,10 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
     owedCents: owed,
     // No payment fields here any more. Weighing prices the order; the delivery
     // step is what reports whether money moved.
-    overMaxOrder: weight > config.pricing.maxOrderLb,
+    //
+    // AND NO overMaxOrder. It compared the weight against a 50 lb ceiling that
+    // nothing enforced and only the JSON API echoed - while the same number was
+    // being quoted at customers as a limit. There is no maximum; see config.js.
   };
 }
 

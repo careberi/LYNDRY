@@ -143,7 +143,7 @@ const PAGES = [
           ],
           [
             'How does the price work?',
-            '{{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with pickups {{SUBSCRIPTION_FREQUENCIES}}. A subscription is a rate, not a membership: nothing to join and no minimum number of pickups. There is no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed after we collect it, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order, and we take up to {{MAX_ORDER}} in one pickup.',
+            '{{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with pickups {{SUBSCRIPTION_FREQUENCIES}}. A subscription is a rate, not a membership: nothing to join and no minimum number of pickups. There is no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed after we collect it, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order and no maximum: send as much as you have in one pickup.',
           ],
           [
             'What bags can I put it in?',
@@ -956,7 +956,7 @@ router.get('/llms.txt', (req, res) => {
     `- ${site.pricePerLb} per pound for a one-time pickup, weighed after pickup`,
     `- ${site.subscriptionPricePerLb} per pound on a subscription, with pickups ${site.subscriptionFrequencies}`,
     `- ${tokens.MINIMUM} minimum on a paid order`,
-    `- Up to ${site.maxOrder} in one pickup`,
+    '- No limit on how much one pickup can be',
     `- A typical bag is ${site.typicalBagWeight}, which comes to about ${site.estimateRange}`,
     '- No delivery fee',
     '- No membership. A subscription is a lower rate, not a club: nothing to join, no joining fee, no minimum number of pickups',

@@ -231,7 +231,9 @@ const site = Object.freeze({
   estimateRange: `$${Math.round(config.pricing.estimateLowCents / 100)} to $${Math.round(
     config.pricing.estimateHighCents / 100
   )}`,
-  maxOrder: `${config.pricing.maxOrderLb} lb`,
+  // NO `maxOrder` HERE, AND NO {{MAX_ORDER}} TOKEN. There is no limit on a
+  // pickup; see the note in config.js. A typical bag is not a ceiling and must
+  // never be rendered as one.
   typicalBagWeight: '15 to 18 lb',
 
   turnaround: 'next day',
@@ -331,7 +333,6 @@ const tokens = Object.freeze({
   MINIMUM: `$${(config.pricing.minimumCents / 100).toFixed(0)}`,
   MINIMUM_LB: `${config.pricing.minimumCents / config.pricing.perPoundCents} lb`,
   ESTIMATE_RANGE: site.estimateRange,
-  MAX_ORDER: site.maxOrder,
   BAG_WEIGHT: site.typicalBagWeight,
   TURNAROUND: site.turnaround,
   LEGAL_UPDATED: site.legalUpdated,

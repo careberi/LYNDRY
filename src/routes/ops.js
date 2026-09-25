@@ -156,7 +156,6 @@ router.post('/ops/weight', upload.single('photo'), async (req, res, next) => {
       weight_lb: result.weightLb,
       price_cents: result.priceCents,
       price: money(result.priceCents),
-      over_max_order: result.overMaxOrder,
       // A declined card is not the driver's problem to solve, but
       // "keep going, we will chase it" is worth knowing.
       paid: result.paid,

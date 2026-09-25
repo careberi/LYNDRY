@@ -5153,6 +5153,33 @@ counting, and `09/15/2026` does not.
 - **Price:** $2.00 per pound, weighed after pickup. The one source of
   truth is `pricing.perPoundCents` in `src/config.js`; this line is a
   description of it and drifted from it once already
+- **No maximum on a pickup, and nothing may state one.** Neil, 25 September:
+  *"The AI should have never said it was limited to 50 pounds per pickup. We
+  could do more than that. Don't ever say."* A customer had asked "If I have
+  70lbs how much?" and Lyn answered that 70 lb would need splitting across two
+  pickups.
+
+  **THE MODEL WAS NOT INVENTING IT.** `pricing.maxOrderLb: 50` sat in config and
+  was recited in six places: the prompt's own "Maximum 50 lb per pickup",
+  `/pricing` twice, `/faq`, `/how-it-works`, `/terms`, the FAQ's structured data
+  and `llms.txt`. **Nothing enforced it** - it set an `overMaxOrder` flag that
+  only the ops JSON API echoed and no screen ever read. It did no work except
+  get quoted, and what it quoted was false.
+
+  **DELETED, NOT RAISED**, along with `site.maxOrder`, the `{{MAX_ORDER}}`
+  token and the flag. A bigger number is the same bug waiting, because a figure
+  sitting in config is one somebody will publish. The prompt now carries the
+  opposite in THE FACTS, LOCKED - no limit, never name a ceiling in pounds or
+  bags, never tell anybody to split a load - stated **positively**, because a
+  rule the prompt leaves out is one the model guesses at, the same reason the
+  service area has to be explicit.
+
+  **The typical-bag figure is not a ceiling** and now says so on both pages that
+  carry it: quoting "15 to 18 lb" at somebody with 70 reads as a cap.
+  `test/no-weight-limit.test.js` asserts against the **exported values** rather
+  than the source, so the comments explaining the removal cannot satisfy their
+  own assertions. If a real ceiling ever exists it belongs to the van or the
+  laundromat, which already have capacities of their own
 - **Turnaround:** next day, and the clock means it. A bag is due back **by the
   end of the day after collection** - the whole of day two, to 23:59.
   `booking.endOfPromiseDay()`, read by both `fulfilment.dueAt()` and the
