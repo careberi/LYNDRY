@@ -4900,6 +4900,47 @@ Plus `OUT_OF_SERVICE`, set manually.
 
 ## SMS rules
 
+**A LAPTOP NEVER SENDS A TEXT, AND UNTIL 25 SEPTEMBER THAT WAS AN ACCIDENT.**
+The laptop's `.env` carried a real `TELNYX_API_KEY` against the **production**
+database. Texts stayed fake for exactly one reason: `chooseDriver()` requires
+BOTH keys, and `TELNYX_PUBLIC_KEY` happened to be an empty string.
+
+**THAT IS THE WORST SHAPE A SAFETY PROPERTY CAN HAVE**, because the missing
+value is the one somebody adds ON PURPOSE. The public key verifies **inbound**
+webhook signatures, so it is exactly what a developer fills in to test `/sms`
+properly - and the next status text, reminder or AI reply would have gone to a
+real phone from a half-finished branch.
+
+**SO THE TWO HALVES ARE SEPARATED.** Verifying reaches nobody; sending is the
+dangerous half. Outside production, real keys get `telnyx-grounded`: Telnyx's
+own `verifySignature` and `parseInbound`, and a `sendMessage` that prints the
+text and says **NOT SENT** with the reason. Falling back to the fake driver
+instead would have been worse than useless - its `verifySignature` returns true
+for anything, so testing the webhook path would prove nothing and the developer
+would put the real driver back to get a real answer.
+
+**`pick()` IS PURE AND EXPORTED** so all four squares are pinned by
+`test/sms-driver-choice.test.js` without setting environment variables and
+re-requiring the module. **`isFake` asks "is it Telnyx"**, not "is it the fake
+one", so a driver added later is assumed live until it says otherwise - the safe
+direction for a question whose wrong answer is a text nobody expected.
+
+**AND `npm run seed` WROTE TO PRODUCTION WITH NO FLAG AND NO WARNING.** It was
+the one seed script without `--write`, and `seedCustomer()` upserts on `phone`
+with **Neil's real number** - so the command the README tells you to run
+overwrote his live customer row with a placeholder Jersey City address and an
+invented set of wash preferences. Nothing had gone wrong yet only because the
+row it damages belongs to the one person who would recognise it. It is a dry run
+by default now, like the other four, and it names the database first.
+
+**EVERY SCRIPT THAT TOUCHES DATA SAYS WHERE IT IS POINTED**, through
+`config.describeTarget()` - one implementation, so a script cannot describe the
+target differently from the server's own boot banner. It shouts only for the
+real one: a dev line that looked like a warning would be read past within a day,
+and then the production line would be too. `config.supabase.projectRef` and
+`.isProduction` are read off the URL rather than declared, because a second
+field naming the environment would be free to disagree with the URL above it.
+
 - Verify the Telnyx webhook signature. Reject anything unsigned.
 - Check `provider_message_id` against the `messages` table and drop duplicates.
   Carriers retry; this is what stops a text being acted on twice.

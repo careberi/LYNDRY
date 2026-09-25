@@ -19,6 +19,35 @@ const port = Number(process.env.PORT) || 3000;
 // A trailing slash on the Supabase URL breaks request paths, so strip it.
 const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 
+// ---------------------------------------------------------------------------
+// WHICH DATABASE THIS IS.
+//
+// Until 25 September nothing in the whole system knew. The startup banner named
+// the environment, the AI model, the SMS driver and the payment mode, and never
+// the one thing that decides whether a mistake costs a test row or a customer.
+// So a laptop was a fully privileged production node that had been asked nicely
+// not to act, and the asking failed once already - order #2073, where a test
+// Stripe key met a live card and the customer was recorded as refused.
+//
+// A PROJECT REFERENCE IS NOT A SECRET. It is the subdomain of the Supabase URL,
+// visible in every request the app makes. The service_role key is the secret and
+// is not here. So the real one can be written down, which is what lets the
+// connection recognise itself rather than be told.
+//
+// READ OFF THE URL, NEVER DECLARED SEPARATELY. A second field saying which
+// environment this is would be a second copy of the same fact, free to disagree
+// with the URL directly beneath it - and the copy that disagreed would be the
+// one nobody checked.
+// ---------------------------------------------------------------------------
+const PRODUCTION_PROJECT_REF = 'pauaemlehenfrnjvgzmc';
+
+function projectRefOf(url) {
+  const found = /^https?:\/\/([a-z0-9-]+)\.supabase\./i.exec(String(url || ''));
+  return found ? found[1].toLowerCase() : '';
+}
+
+const supabaseProjectRef = projectRefOf(supabaseUrl);
+
 // The public address of this app.
 //
 // Hosting dashboards show a domain without the "https://" on the front, so it
@@ -47,6 +76,14 @@ const config = Object.freeze({
   supabase: Object.freeze({
     url: supabaseUrl,
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+
+    // The project this connection points at, and whether it is the real one.
+    //
+    // `isProduction` is deliberately NOT "am I in production" - that is
+    // config.env, and the two disagreeing is the entire failure this exists to
+    // catch. This one answers "are these rows real customers".
+    projectRef: supabaseProjectRef,
+    isProduction: Boolean(supabaseProjectRef) && supabaseProjectRef === PRODUCTION_PROJECT_REF,
   }),
 
   // Telnyx sends and receives the text messages. Nothing outside
@@ -551,8 +588,31 @@ function warnAboutMissingEnvVars() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ONE LINE SAYING WHERE YOU ARE, FOR ANYTHING THAT IS ABOUT TO ACT.
+//
+// The server prints it at boot and every script that touches data prints it
+// first. It is written once, here, so a script cannot describe the target
+// differently from the server - and it names the DATABASE, which is the fact
+// that decides whether a mistake costs a test row or a customer.
+//
+// It shouts only for the real one. A dev line that looked like a warning would
+// be read past within a day, and then the production line would be too.
+// ---------------------------------------------------------------------------
+function describeTarget() {
+  const where = config.supabase.isProduction
+    ? '** PRODUCTION **'
+    : `dev (${config.supabase.projectRef || 'no database configured'})`;
+
+  const sms = require('./providers/sms').name;
+  const pay = require('./providers/payments').mode;
+
+  return `${where}  ·  env ${config.env}  ·  sms ${sms}  ·  payments ${pay}`;
+}
+
 module.exports = {
   config,
+  describeTarget,
   warnAboutMissingEnvVars,
   warnAboutUnusableCredentials,
   warnIfNobodyCanAlwaysBook,

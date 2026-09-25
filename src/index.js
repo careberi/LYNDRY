@@ -379,6 +379,12 @@ async function warnIfNobodyCanBePaged() {
 const server = app.listen(config.port, () => {
   console.log(`LYNDRY v${pkg.version} listening on port ${config.port}`);
   console.log(`  environment : ${config.env}`);
+  // WHICH DATABASE, on the line above the base url, because it is the only one
+  // of these that decides whether a mistake reaches a customer.
+  console.log(
+    `  database    : ${config.supabase.projectRef || '(none)'}` +
+      (config.supabase.isProduction ? '  ** PRODUCTION **' : '  (not production)')
+  );
   console.log(`  base url    : ${config.baseUrl}`);
   console.log(`  ai model    : ${config.anthropicModel}`);
   console.log(`  sms provider: ${require('./providers/sms').name}`);

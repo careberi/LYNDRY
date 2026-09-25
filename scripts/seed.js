@@ -15,6 +15,21 @@
 // ---------------------------------------------------------------------------
 
 const db = require('../src/db');
+const { describeTarget } = require('../src/config');
+
+// ---------------------------------------------------------------------------
+// IT WRITES NOTHING UNTIL YOU SAY --write, LIKE THE OTHER FOUR SEED SCRIPTS.
+//
+// This one was the exception, and it was the dangerous exception: seedCustomer()
+// upserts on `phone`, and the phone below is NEIL'S REAL NUMBER. So `npm run
+// seed` - which the README tells you to run, with no flag and no warning -
+// overwrote his live customer row with a placeholder address in Jersey City and
+// a made-up set of wash preferences, on a database full of real customers.
+//
+// Nothing had gone wrong yet, which is the only reason it survived: the row it
+// damages belongs to the one person who would recognise it.
+// ---------------------------------------------------------------------------
+const WRITE = process.argv.includes('--write');
 
 // --- The data ---------------------------------------------------------------
 
@@ -128,7 +143,17 @@ async function seedCustomer() {
 }
 
 async function main() {
-  console.log('Seeding LYNDRY database...\n');
+  console.log(`Seeding: ${describeTarget()}\n`);
+
+  if (!WRITE) {
+    console.log('DRY RUN. Nothing was written. It would have:');
+    console.log(`  building   : "${BUILDING.name}"`);
+    console.log(`  lockers    : ${LOCKER_LABELS.length} (${LOCKER_LABELS.join(', ')})`);
+    console.log(`  customer   : ${CUSTOMER.name} ${CUSTOMER.phone}, ${CUSTOMER.address_line1}`);
+    console.log('\nThat customer line OVERWRITES any existing row on that phone number.');
+    console.log('Run it again with --write if that is what you want.');
+    return;
+  }
 
   const buildingId = await seedBuilding();
   await seedLockers(buildingId);
