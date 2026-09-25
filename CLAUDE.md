@@ -5406,6 +5406,120 @@ where the code is by definition half-finished. If one specific row is ever
 genuinely needed to reproduce a bug, copy that row with the name, phone and
 address replaced.
 
+## What Uber Direct actually does
+
+**RUN AGAINST THEIR TEST API ON 25 SEPTEMBER, and most of what was written from
+the documentation survived. Two things did not, and both would have failed
+silently.** `src/providers/couriers/uber.js` carries the full list in its header
+comment; this is what changes decisions elsewhere.
+
+**A QUOTE FOR A PICKUP AT A CUSTOMER'S HOUSE IS ACCEPTED AND PRICED.** That was
+the existential question and the API's answer is yes. It is not the CONTRACTUAL
+answer - their written US terms describe collecting from a merchant's own
+premises, and CleanCloud, who do this leg commercially in the US, hold the Uber
+account their laundromats ride on. A self-serve account gets the terms as
+written. **That is a question for Uber and not for code**, and nothing in the
+repo pretends otherwise.
+
+**THE PIN IS ON THE DROPOFF, NOT AT THE TOP LEVEL** -
+`dropoff.verification_requirements.pincode.value`. The first draft read
+`json.verification_requirements`, which does not exist, so it was null on every
+delivery: a laundromat attendant with no number to check an arriving bag
+against, on every order, with nothing erroring.
+
+**AND `courier.public_phone_info.pin_code` IS NOT IT.** It is in the same
+response, it is eight digits, and it is the code for ringing the courier through
+Uber's masked number. Reading that one hands somebody a PIN that opens a phone
+call and verifies nothing. `test/uber-response-shape.test.js` holds both against
+a real captured response, because a test written from the documentation passed
+the bug.
+
+**THEIR SIMULATED COURIER SKIPS `pickup_complete`** - pending, pickup, dropoff,
+delivered, with the pickup photo appearing on the move to dropoff. It is a
+documented status and a real courier may well send it, so the fake courier still
+walks through it; what may never happen is anything REQUIRING it to have been
+seen. "Have the bags been collected" reads the photo or a status past `pickup`.
+
+**A PHOTO THAT HAS NOT BEEN TAKEN IS AN EMPTY STRING, NOT AN ABSENT KEY.** Read
+naively that is a URL, and it renders as a broken image on a driver's screen.
+
+**THE FEE IS PER LEG, AND THE SAME IN BOTH DIRECTIONS FOR THE SAME PAIR.** So
+one quote prices a whole order rather than two. The fake courier returned the
+round trip until this was measured, which would have doubled every price built
+on it.
+
+**THE BAND TABLE CANNOT REPRODUCE THEIR PRICE, AND IS NOW ONLY AN ESTIMATE.**
+$7.99 at 0.9 and 2.3 miles, $9.99 at 6.0, $10.99 at 5.7, 6.8, 7.7 and 9.8 - two
+adjacent towns a dollar apart, and Paramus quoting two different prices from two
+of its own streets. They price their own routed distance and never show it to
+us; there is no distance field anywhere in a quote or a delivery, and `duration`
+is 60 to 90 minutes on every trip from one mile to ten, so it is a
+delivery-window estimate and cannot stand in for mileage either.
+
+**So `quote.feeFromLegCents()` is the one function that turns a courier's price
+into a customer's, and `deliveryFeeCents(miles)` is the estimate that feeds it
+when there is nobody to ask.** The estimate has exactly two jobs now: deciding
+WHICH laundromats are worth a live quote, and the whole of development, where
+the courier is a pretend one reading the same table. **What a customer is
+charged always comes from the courier** - Neil's instruction in as many words,
+"its a flat fee we need to connect to the api" - and `quoted` on the answer says
+which of the two it was, so the page can say "about" when it is guessing.
+
+**WHETHER A TRIP IS POSSIBLE IS A PROPERTY OF THE PAIR, NOT OF THE ADDRESS.**
+Mahwah to a Hackensack laundromat is refused and Mahwah to a Glen Rock one is
+$10.99. Newark to Hackensack is refused and Newark to Carlstadt is $10.99.
+Jersey City and Manhattan are refused from everywhere tried. **So every
+shortlisted laundromat is asked separately** and a refusal removes that
+laundromat rather than the customer.
+
+**A LAUNDROMAT THE COURIER REFUSED IS OUT OF THE RUNNING, NEVER ESTIMATED.**
+Otherwise it falls back to the band table, can win on price, and is then the one
+laundromat Uber will not drive to - discovered at booking.
+
+**THE SERVICE AREA IS MEASURED AS THE CROW FLIES.** Neil's rule is "within 10
+miles" of a laundromat, which is what somebody means looking at a map. The road
+factor exists to ESTIMATE A COST and has no business drawing a boundary:
+multiplying by 1.3 first turned a real Park Ridge address 9.8 miles from Glen
+Rock into 12.7 and refused it, and Uber then quoted that exact trip for $10.99.
+
+**TWO REFUSAL CODES, AND THEY MEAN DIFFERENT THINGS.** `unknown_location` is an
+address Uber cannot place at all - gibberish got it. `address_undeliverable` is
+one it placed and will not drive to.
+
+**AND `address_undeliverable` IS STILL AMBIGUOUS, which is the thing not to
+design around.** A nonsense house number in a covered town is PRICED - `9999
+Nowhere Blvd, Fair Lawn` came back $10.99 - and a town with no house number at
+all is priced too, so it resolves loosely and prices whatever it landed on. `100
+Grand Ave, Englewood` was refused while `350 Engle St, Englewood` quoted at
+$9.99, which is Englewood being covered and that one address resolving to some
+other Grand Avenue out of range. **So nothing may turn it into "we do not cover
+you"** - that is a flat statement to a Bergen County customer on the strength of
+a code that does not say it. The page names both possibilities and asks them to
+check. **It must not say "try again in a minute" either**, which is what it fell
+through to before: a minute changes nothing and it sends them round a loop.
+
+**A THROWN ERROR IS NOT A REFUSAL, one vendor along from where that lesson was
+learned with Stripe.** A courier that cannot be reached falls back to the band
+estimate and the page says the fee is approximate; a courier that says no is an
+answer about that address. Collapsing the two would either show an error page to
+somebody we can serve, or quietly promise a trip nobody will make.
+
+**A FREE-TEXT ADDRESS IS PRICED IDENTICALLY TO THE STRUCTURED FORM** - tested
+side by side on nine addresses, including a missing state, lowercase and an
+apartment number. Which is what lets a page with one box ask for a price without
+parsing what somebody typed into fields first.
+
+**`live_mode` COMES BACK ON EVERY DELIVERY AND IS THE THING TO ASSERT ON**,
+rather than trusting which credentials were loaded. Test mode also needs
+`test_specifications.robo_courier_specification`, and the simulated courier does
+not start moving until `pickup_ready_dt` has passed - two minutes of watching a
+`pending` delivery is that, not a broken integration.
+
+**THE TEST ACCOUNT'S COVERAGE IS NOT PROOF OF THE LIVE ONE'S.** Newark and
+Jersey City being refused is surprising for Uber Eats territory and is most
+likely a restriction on this account. Nothing in the code depends on the shape
+of that area, which is the point - it asks.
+
 ## Git
 
 Local identity only for this repo (`neil perry` / `neil@careberi.com`). The
