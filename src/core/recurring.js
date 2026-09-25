@@ -242,6 +242,15 @@ async function bookDue({ date } = {}) {
         pickupTime:
           schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
         fromSchedule: true,
+        // NOBODY IS WATCHING THIS ONE, so it does not text an admin. This pass
+        // books every due pickup in one go, so ten customers with a Tuesday
+        // arrangement would be ten identical texts every Monday evening - about
+        // arrangements set up long ago and already announced once.
+        //
+        // A SEPARATE ANSWER FROM fromSchedule ABOVE, and that is the point: a
+        // person can set up a standing order and have its first pickup booked
+        // in the same breath, and THAT one is news. See order-alerts.js.
+        bookedByTheSystem: true,
         // THE PLAN IT IS BOOKED UNDER, which is what makes it $1.80 a pound.
         //
         // Passed as the schedule's own id rather than looked up from the
@@ -399,6 +408,11 @@ async function bookNext(customer, { after = null } = {}) {
       pickupTime:
         schedule.time_of_day || (customer.preferences && customer.preferences.usual_pickup_time),
       fromSchedule: true,
+      // NOBODY IS WATCHING THIS ONE EITHER. It fires from fulfilment.collect()
+      // as the previous bag goes into the van, so the text would land while the
+      // driver is still on the doorstep, about a pickup a fortnight away that
+      // the customer arranged weeks ago. Same answer as bookDue(), same reason.
+      bookedByTheSystem: true,
       // THE PLAN IT IS BOOKED UNDER, exactly as bookDue() passes it above - and
       // this line was missing until 17 September, which made it the expensive
       // half of a rule that only one of the two doors was keeping.

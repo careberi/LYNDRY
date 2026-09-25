@@ -1206,6 +1206,64 @@ null to null", and a log that is mostly noise is one nobody reads.
 swallows its own errors and logs loudly; a driver at a door must never be
 stopped by the audit trail failing.
 
+### An admin is texted when somebody places an order
+
+**`src/core/order-alerts.js`, hung off `bookPickup()`**, which is the one door
+every booking goes through — the AI's `create_order`, the website wizard, the
+booking intent and the ops screens all reach it, and `orders.create()` has
+exactly one caller, so no door can write an order without passing the alert.
+Putting it in the routes instead would work until somebody added a third. It is
+**not awaited and swallows every error**: the pickup is real whether or not
+anybody got a text, and an exception thrown while telling the office must never
+lose the order it was about. It goes to everyone with `orders.view` plus
+`SUPPORT_PHONE`, logged against a null customer so it does not appear in the
+customer's own thread.
+
+**IT ASKS WHO BOOKED IT, NEVER WHERE THE DATE CAME FROM, AND THAT DISTINCTION
+IS THE WHOLE FILE.** It read `fromSchedule` until 25 September. That flag
+answers a question about the DATE — the day was worked out from a standing
+arrangement rather than chosen off a calendar — and it is true of the overnight
+sweeps, which is what the skip exists for. **It is equally true of the FIRST
+pickup of a subscription**, because `recurring.bookAndSchedule()` passes
+`fromSchedule: repeat`, and that function is what the wizard, the booking intent
+and the AI all call. So every customer who chose a subscription on the website
+was booked in silence.
+
+**FOUR REAL ORDERS WENT IN WITH NOBODY TOLD** — #2060 and #2061 on 12
+September, #2072 on the 17th, and #2079 on the 25th, a customer who signed up at
+08:11 and was booked at 08:12. Neil found it by opening the thread, which is the
+exact thing this file exists to save him doing. **Nothing failed anywhere**: a
+text that is never sent leaves no trace at all, which is what let it run for
+thirteen days.
+
+**SO THE CALLER SAYS WHICH IT IS**, in `bookedByTheSystem`, and **only the two
+sweeps in `recurring.js` pass it** — `bookDue()` on the nightly pass and
+`bookNext()` from `fulfilment.collect()`. Both run with nobody watching, and ten
+customers with a Tuesday arrangement would otherwise be ten identical texts
+every Monday evening.
+
+**THE DEFAULT IS TO SEND, AND THE POLARITY IS THE POINT.** Declaring on the
+person's side would mean seven call sites having to remember, with silence as
+the failure when one forgets — which is the failure that just cost four orders
+and was found by luck. Declaring on the automatic side is two call sites in one
+file, and a door added later is a person until it says otherwise. One text too
+many is reported the same evening; one text too few is reported by nobody.
+
+**`skipReason()` IS PURE AND EXPORTED SO A TEST CAN HOLD IT.** The old rule was
+one word inside a function that cannot be called without reaching the team list
+and the carrier, so nothing pinned it — and `test/` had no coverage of this file
+at all. `test/order-alert.test.js` asserts against function BODIES rather than
+whole files, the same shape `standing-pickup-keeps-the-plan` already uses, and
+its last assertion walks every file under `src/` and **refuses a variable, not
+just the literal `true`** — because the bug was `fromSchedule: repeat`, so a
+guard catching only `: true` would be blind to its own cause.
+
+**WHAT IT STILL DOES NOT COVER: a row written straight into `orders` by hand.**
+#2059, #2069 and #2078 got no alert for that reason and are not this bug — they
+never reached `bookPickup()`. That is three in sixteen days, more often than the
+fault above, and it is correct rather than missing: SQL run by a person is not
+news to the person running it.
+
 **AN ADMIN CAN CALL A PICKUP OFF, AND CANCELLING TEXTS THE CUSTOMER.** Neil's
 ask. A customer could already cancel by texting or from `/account`; nobody here
 could, so a pickup somebody rang up about sat on the board as though the van

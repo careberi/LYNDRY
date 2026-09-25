@@ -12,11 +12,31 @@
 // is the only way an order can be booked without an alert going out. Putting it
 // in the two routes instead would work until somebody added a third.
 //
-// A STANDING ORDER IS NOT SOMEBODY PLACING AN ORDER, and it is skipped. The
-// nightly pass books every due recurring pickup in one go, so a customer with a
-// Tuesday arrangement would generate an identical text every Monday evening,
-// and ten of them would generate ten. Neil set those up; the news is a NEW
-// order, which is what he asked for in as many words.
+// A SWEEP BOOKING A PICKUP IS NOT SOMEBODY PLACING ONE, and that is the only
+// thing skipped. The nightly pass books every due recurring pickup in one go,
+// so a customer with a Tuesday arrangement would generate an identical text
+// every Monday evening, and ten of them would generate ten. Neil set those up;
+// the news is a NEW order, which is what he asked for in as many words.
+//
+// IT IS NOT "DID THE DATE COME OFF A PLAN", AND ASKING THAT WAS THE BUG. This
+// read booking.js's `fromSchedule` until 25 September, and that flag answers a
+// question about the DATE: the day was worked out from a standing arrangement
+// rather than chosen off a calendar. True of the overnight sweeps - and equally
+// true of the very FIRST pickup of a subscription, at the moment a person is
+// sitting on the website setting one up.
+//
+// So four real orders went in silently. #2060 and #2061 on 12 September, #2072
+// on the 17th, and #2079 on the 25th - a customer who signed up at 08:11, chose
+// a monthly pickup and was booked at 08:12, ninety seconds later. Neil found it
+// by opening the thread, which is exactly the thing this file exists to stop
+// him having to do. Nothing failed anywhere: a text that is never sent leaves
+// no trace at all.
+//
+// THE CALLER SAYS WHICH IT IS NOW, and only the two sweeps in recurring.js say
+// "the system". THE DEFAULT IS TO SEND: the flag is not defaulted in here, so a
+// caller that has never heard of it is undefined, which is falsy, which is a
+// text. That is the right way round. One text too many is reported the same
+// evening; one text too few is reported by nobody.
 //
 // IT NEVER BREAKS A BOOKING. Every failure here is swallowed and logged: the
 // pickup is real whether or not anybody got a text about it, and an exception
@@ -71,14 +91,34 @@ function compose({ customer, order, needsCard, freeOrder, when }) {
 }
 
 // ---------------------------------------------------------------------------
+// WHO STAYS QUIET, as a rule with no database behind it.
+//
+// Pure and exported so it can be tested on its own, which is the whole of what
+// went wrong: the old version of this decision was one word buried in the first
+// line of a function that cannot be called without reaching Stripe's neighbours
+// - the team list, the carrier - so nothing pinned it and it was wrong for
+// thirteen days without a single test going red.
+//
+// Null means send. A string means stay quiet, and says why in words, because
+// the caller logs it and "skipped: true" answers nothing at two in the morning.
+// ---------------------------------------------------------------------------
+function skipReason({ bookedByTheSystem } = {}) {
+  if (bookedByTheSystem) return 'a sweep booked it, nobody placed it';
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Send it.
 //
 // `booking` is passed in rather than required at the top: booking.js is what
 // calls this, and requiring it back would be a cycle. It is only needed for one
 // sentence, so taking it as an argument is cheaper than moving whenLine().
 // ---------------------------------------------------------------------------
-async function newOrder({ customer, order, booking, needsCard, freeOrder, fromSchedule }) {
-  if (fromSchedule) return { sent: [], skipped: 'a standing order, not somebody placing one' };
+async function newOrder({ customer, order, booking, needsCard, freeOrder, bookedByTheSystem }) {
+  // Deliberately not defaulted anywhere in this file: undefined is falsy, so a
+  // door that has never heard of the flag gets a text rather than silence.
+  const quiet = skipReason({ bookedByTheSystem });
+  if (quiet) return { sent: [], skipped: quiet };
 
   try {
     const numbers = await issues.alertRecipients(PERMISSION);
@@ -120,4 +160,4 @@ async function newOrder({ customer, order, booking, needsCard, freeOrder, fromSc
   }
 }
 
-module.exports = { newOrder, compose, PERMISSION };
+module.exports = { newOrder, compose, skipReason, PERMISSION };

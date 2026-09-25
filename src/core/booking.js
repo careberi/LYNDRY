@@ -1084,6 +1084,28 @@ async function bookPickup(
     bagCount,
     notes,
     fromSchedule,
+    // WAS A PERSON SITTING THERE WHEN THIS WAS BOOKED? Nothing else decides
+    // whether an admin gets a text about it.
+    //
+    // IT IS NOT fromSchedule ABOVE, AND CONFUSING THE TWO COST FOUR ORDERS.
+    // That one is about the DATE - the day came out of a standing arrangement
+    // rather than off somebody choosing it - and it does three other jobs
+    // besides: it exempts the pickup from the substituted-window rule, it is
+    // written to the order, and it writes the change log. A new customer
+    // setting up a monthly pickup on the website is all of that AND somebody
+    // placing an order, so for thirteen days those two questions shared one
+    // answer and the answer was wrong.
+    //
+    // FALSE BY DEFAULT, BECAUSE SILENCE IS THE EXPENSIVE FAILURE. Exactly two
+    // callers pass true, both sweeps in recurring.js that run with nobody
+    // watching. Every other door has a person at it, and a door added later is
+    // a person until it says otherwise.
+    //
+    // THERE IS NOTHING TO DERIVE IT FROM, which is why it is asked for. It is a
+    // fact about the CALL, not about the order: the same row is written either
+    // way, and placed_via reads WEB both for a wizard booking and for a sweep
+    // booking off a wizard-made schedule.
+    bookedByTheSystem = false,
     // WHICH SUBSCRIPTION THIS PICKUP BELONGS TO, and therefore what it costs.
     //
     // Null is the ordinary answer and means a one-time pickup at the standard
@@ -1314,7 +1336,11 @@ async function bookPickup(
       booking: module.exports,
       needsCard: billing.needsCardOnFile(customer),
       freeOrder: promotions.takesEverythingOff(claimed),
-      fromSchedule,
+      // Whether a PERSON placed it, not whether the date came off a plan. The
+      // first pickup of a subscription somebody is setting up on the website is
+      // both, and handing the alert that second question is what made #2079
+      // silent.
+      bookedByTheSystem,
     })
     .catch((err) => console.error(`Order alert threw: ${err.message}`));
 
