@@ -320,6 +320,33 @@ function footer() {
 // of ink the rest of the site has. The first version put .site-nav on the
 // header, which is the class for the row of LINKS inside the bar and carries
 // no background at all, so the header rendered transparent over the page.
+// ---------------------------------------------------------------------------
+// A BAND ACROSS ANY SITE THAT IS NOT THE REAL ONE.
+//
+// The development site and lyndry.com render from the same code, so in two
+// browser tabs they are identical. That is the likeliest way to act on the
+// wrong one: read a price off dev and quote it, or show somebody "the site"
+// and be looking at a half-finished branch.
+//
+// IT KEYS OFF THE DATABASE, NOT NODE_ENV, and that distinction is the whole
+// point. The deployed development site runs with NODE_ENV=production, because
+// it exists to behave like production - so an environment check would leave it
+// looking exactly like the real thing. What makes a site real is whose rows it
+// is showing.
+//
+// It carries noindex with it, up in the head: two identical sites in Google's
+// index would compete with each other, and the wrong one would sometimes win.
+// ---------------------------------------------------------------------------
+function devBand() {
+  if (config.supabase.isProduction) return '';
+
+  return `<div role="status" style="background:var(--stain-500,#E8412F);color:var(--paper-050,#FFFDF7);
+    font:700 12px/1.4 var(--font-mono,ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;
+    text-align:center;padding:7px 16px;border-bottom:2px solid var(--ink-900,#101210);">
+    Development site &middot; not lyndry.com &middot; nothing here is a real customer
+  </div>`;
+}
+
 function bareHeader() {
   return `
     <header class="site-header">
@@ -378,7 +405,7 @@ function renderPage({
   ${tracking ? googleTag({ conversionId, checkoutStart, stripQuery }) : ''}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${fullTitle}</title>
+  <title>${config.supabase.isProduction ? '' : '[DEV] '}${fullTitle}</title>
   <meta name="description" content="${description}">
 
   <meta property="og:title" content="${fullTitle}">
@@ -397,7 +424,7 @@ function renderPage({
   }
   <!-- Signed-in pages carry someone's address and order history. They are
        behind a sign-in, but there is no reason for a crawler to try. -->
-  ${noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
+  ${noindex || !config.supabase.isProduction ? '<meta name="robots" content="noindex, nofollow">' : ''}
 
   ${ICON_LINKS}
   <meta name="theme-color" content="#101210">
@@ -426,6 +453,7 @@ function renderPage({
 ${head}
 </head>
 <body>
+${devBand()}
 ${bare ? bareHeader() : navBar(path)}
 <main>
 ${body}

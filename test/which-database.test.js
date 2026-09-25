@@ -96,6 +96,33 @@ test('AND .env IS THE DEVELOPMENT ONE, SO THE DEFAULT IS THE SAFE ONE', () => {
   );
 });
 
+test('THE PRODUCTION PROJECT IS RECOGNISED WITH OR WITHOUT THE PROTOCOL', () => {
+  // A hosting dashboard shows a Supabase URL with no "https://" on the front,
+  // and APP_BASE_URL has already been set that way once - there is a whole
+  // function below it in config.js putting the protocol back.
+  //
+  // If that happened to SUPABASE_URL on production, projectRefOf() would return
+  // nothing, isProduction would read FALSE on the live server, and the
+  // development band would render across the top of lyndry.com.
+  const { projectRefOf, PRODUCTION_PROJECT_REF } = require('../src/config');
+  const ref = PRODUCTION_PROJECT_REF;
+
+  for (const shape of [
+    `https://${ref}.supabase.co`,
+    `http://${ref}.supabase.co`,
+    `${ref}.supabase.co`,
+    `  https://${ref}.supabase.co  `,
+    `https://${ref}.supabase.co/`,
+  ]) {
+    assert.equal(projectRefOf(shape), ref, `not recognised: ${JSON.stringify(shape)}`);
+  }
+
+  // And nothing else is mistaken for it.
+  assert.equal(projectRefOf(''), '');
+  assert.equal(projectRefOf('https://example.com'), '');
+  assert.notEqual(projectRefOf('https://psrphpgbiifvnlrgvbdg.supabase.co'), ref);
+});
+
 test('every script that acts describes where it is pointed', () => {
   // One implementation, so a script cannot describe the target differently
   // from the server's own boot banner.

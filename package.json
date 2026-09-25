@@ -26,7 +26,8 @@
     "leads": "node --use-system-ca scripts/check-leads.js",
     "demo": "node scripts/demo.js",
     "reset:order": "node --use-system-ca scripts/reset-order.js",
-    "migrate": "node --use-system-ca scripts/migrate.js"
+    "migrate": "node --use-system-ca scripts/migrate.js",
+    "dev:setup": "node --use-system-ca scripts/dev-setup.js"
   },
   "engines": {
     "node": ">=22"

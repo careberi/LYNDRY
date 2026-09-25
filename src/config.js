@@ -63,8 +63,14 @@ const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 // ---------------------------------------------------------------------------
 const PRODUCTION_PROJECT_REF = 'pauaemlehenfrnjvgzmc';
 
+// THE PROTOCOL IS OPTIONAL, AND THAT IS NOT TIDINESS. A hosting dashboard shows
+// a Supabase URL without "https://" on the front, so it is easy to set the
+// variable without one - normaliseBaseUrl() below exists because that already
+// happened once with APP_BASE_URL. If this failed to recognise the production
+// project for that reason, `isProduction` would read false ON PRODUCTION, and
+// the development band would appear across the top of lyndry.com.
 function projectRefOf(url) {
-  const found = /^https?:\/\/([a-z0-9-]+)\.supabase\./i.exec(String(url || ''));
+  const found = /^(?:https?:\/\/)?([a-z0-9-]+)\.supabase\./i.exec(String(url || '').trim());
   return found ? found[1].toLowerCase() : '';
 }
 
@@ -639,6 +645,10 @@ function describeTarget() {
 module.exports = {
   config,
   describeTarget,
+  // Exported so the rule can be tested directly rather than through whatever
+  // happens to be in .env when the suite runs.
+  projectRefOf,
+  PRODUCTION_PROJECT_REF,
   warnAboutMissingEnvVars,
   warnAboutUnusableCredentials,
   warnIfNobodyCanAlwaysBook,

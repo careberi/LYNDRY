@@ -5278,6 +5278,134 @@ counting, and `09/15/2026` does not.
 - **Legal entity:** none, deliberately — not forming one until the concept is
   proven. Legal pages are sole-proprietor placeholders and need a lawyer
 
+## The development environment
+
+**THERE ARE TWO DATABASES NOW, AND `.env` IS THE DEVELOPMENT ONE.** Neil, 25
+September, ahead of rewriting the website: a production site with a production
+backend, and a development site with a development backend.
+
+| | Branch | Supabase project | Where |
+|---|---|---|---|
+| Live | `main` | `pauaemlehenfrnjvgzmc` | lyndry.com |
+| Development | `dev` | `psrphpgbiifvnlrgvbdg` | a Railway URL |
+
+**ONE REPOSITORY, TWO BRANCHES, BECAUSE THE CODE IS THE SAME CODE.** What
+differs is configuration, which never lives in the repo. A second repository
+would mean two copies of the 100 migration files - two records of one schema,
+free to disagree, with nothing anywhere reporting it.
+
+**THE DEFAULT IS THE SAFE ONE.** `.env` is development; production credentials
+live in Railway, where they actually run, and `.env.production.local` is a local
+copy for deliberate reads. **`--live` on the command line is the only way to
+reach production from a laptop**, and it is an argument rather than a setting on
+purpose: a variable gets pasted into `.env` "just for now" and left there, which
+undoes everything silently and looks fine. An argument has to be typed every
+time and stays visible in the command afterwards. **`.env.dev` would NOT be
+gitignored** - checked - while `.env` and `.env.*.local` are.
+
+**THE CONNECTION REFUSES ITSELF, WHICH IS THE ONLY PART THAT DOES NOT DEPEND ON
+SOMEBODY REMEMBERING.** `src/db.js` throws before building the client when the
+project IS production and the environment is NOT. **It refuses on a positive
+match only** - never on failing to recognise a project - because restoring
+production into a fresh project ref would otherwise stop the real server booting
+and the guard would become the outage.
+
+**NOTHING KNEW WHICH DATABASE IT WAS TALKING TO BEFORE THIS**, which is the root
+of #2073. A dozen places asked "am I in production" and every one guarded a
+timer or a tracking pixel, never the rows. `config.supabase.projectRef` and
+`.isProduction` are read OFF the URL rather than declared, so there is no second
+field to disagree with it, and `projectRefOf()` accepts the URL with or without
+`https://` - a hosting dashboard shows it without, and if that reached
+production `isProduction` would read false ON the live server and put the
+development band across lyndry.com.
+
+**`config.describeTarget()` IS THE ONE LINE EVERY SCRIPT PRINTS FIRST.** One
+implementation, so a script cannot describe the target differently from the boot
+banner, and the banner now names the database as well. It shouts only for the
+real one: a development line that looked like a warning would be read past
+within a day, and then the production line would be too.
+
+**AND THE TWO SITES ARE TOLD APART BY EYE, BECAUSE THEY RENDER FROM ONE
+CODEBASE.** A red band on every page, a `[DEV]` prefix on every browser tab, and
+`noindex` on the whole site so two identical sites never compete in Google.
+There are two copies of the band, in `layout.js` and in `admin.js`, because ops
+has its own layout - and ops is where it matters most, since that is the half
+with the buttons that move orders and charge cards. **Both key off the DATABASE,
+not `NODE_ENV`**: the deployed development site runs as production on purpose so
+that it behaves like production, and an environment check would leave it looking
+exactly like the real thing. What makes a site real is whose rows it is showing.
+
+**DEVELOPMENT ORDER NUMBERS START AT 9000.** Production is in the 2000s and a
+fresh database starts at 1001, so the two ranges would have collided within
+weeks - and "#2085" naming two different orders is how a conversation about a
+real customer ends up acting on a test row.
+
+### Standing one up
+
+```bash
+npm run migrate                 # what would be applied, writes nothing
+npm run migrate -- --write      # apply it
+npm run dev:setup -- --write    # admin, order numbering, the automatic promotion
+npm run seed:team -- --write
+npm run seed:partners -- --write
+npm run seed:demo -- --write
+```
+
+**THERE WAS NO MIGRATION RUNNER UNTIL 25 SEPTEMBER.** The 100 numbered files
+were the record of the schema and were applied by pasting SQL into a dashboard.
+Survivable with one database; with two it is not, and there was no way even to
+ASK which files a database had seen. `scripts/migrate.js` records a row per file
+**with a checksum**, which is the half that matters: it catches a migration
+EDITED after it was applied, the one way two databases can have applied "the
+same" files and still differ. A changed file is reported and never silently
+re-run. It refuses when `SUPABASE_URL` and `SUPABASE_DB_URL` name different
+projects, so you cannot migrate production while every line on screen says
+development.
+
+**IT TAKES THE CONNECTION STRING APART BY HAND AND NEVER GIVES IT TO A URL
+PARSER.** A generated Supabase password is not URL-safe, and each layer breaks
+differently and quietly: `#` makes dotenv cut the line short as an inline
+comment (the symptom is "Invalid URL", nowhere near the cause), `#` makes a URL
+parser drop everything after it, and `@` makes it mis-find the host.
+Percent-encoding and letting pg decode it back sounds like the fix and is not -
+it adds a round trip on the one value that must survive byte for byte, and a
+password one character wrong reports itself as "password authentication failed",
+which reads as the password being wrong rather than the plumbing. An hour went
+into that. **Quote the value in `.env` as well.**
+
+**THE FIRST PERSON CREATED IS A DRIVER, AND THAT IS THE DAY-ONE TRAP.**
+`ops:user add` inserts without a role and the column defaults to `DRIVER`;
+migration 0009's promotion backfill matches nobody on an empty database. So
+whoever signs in first gets a driver's view - no customers, no money, no team
+page - and nobody may change their own role, so there is no way out through the
+browser. It looks like the build is broken. `npm run dev:setup` is what fixes
+it, along with the order numbering and CLEAN50, which lives in production DATA
+rather than in any migration and so does not exist on a fresh database.
+
+**THE PHOTO BUCKETS ARE IN A MIGRATION NOW (0100), WHICH REVERSES 0097.** That
+file says buckets "are not schema and do not belong in a SQL migration" while
+0021 had already created `weight-photos` exactly that way. Standing up the
+development database proved which position survives contact with a second
+environment: `delivery-photos` and `spot-photos` simply were not there, because
+the instruction to make them by hand lives in a comment nobody reads while
+setting up - **and a missing bucket does not stop the server booting**. The
+first symptom is a driver tapping Delivered at the end of a run with the laundry
+already out of the van. All three are PRIVATE; a public one puts every
+customer's doorstep on a guessable URL.
+
+**Seed numbers are fictional but the guard is narrower than it looks.**
+`notify.js` refuses `+1XXX555 01XX` only. `seed-team.js` and `demo.js` fall in
+it; `seed-demo.js` (555-0011 upwards) and `seed-week.js` (555-0200 upwards) do
+NOT. Harmless while the driver is fake, and worth knowing before anybody
+concludes that seeded data is safe against a real carrier.
+
+**Do not copy production data into it.** The gain is a few realistic edge cases;
+the cost is every real customer's name, home address and phone number sitting in
+a second database with a second key and no retention policy, in the environment
+where the code is by definition half-finished. If one specific row is ever
+genuinely needed to reproduce a bug, copy that row with the name, phone and
+address replaced.
+
 ## Git
 
 Local identity only for this repo (`neil perry` / `neil@careberi.com`). The

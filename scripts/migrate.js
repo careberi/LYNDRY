@@ -59,6 +59,59 @@ function migrationFiles() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// THE CONNECTION STRING IS TAKEN APART BY HAND, AND NEVER GIVEN TO A URL PARSER.
+//
+// Supabase generates database passwords full of punctuation and hands you a URI
+// with [YOUR-PASSWORD] in the middle to replace. Do that literally, as anybody
+// would, and the result is not a valid URL - and every layer breaks differently
+// and quietly:
+//
+//   #   dotenv reads it as the start of an inline comment and cuts the line
+//       short. The symptom is "Invalid URL", nowhere near the cause
+//   #   a URL parser reads it as the start of a fragment and drops the rest
+//   @   a URL parser reads it as the end of the credentials
+//
+// Percent-encoding it first and letting pg decode it back sounds like the fix
+// and is not: it adds a second encode/decode round trip on the one value that
+// must survive byte for byte, and a password that arrives one character wrong
+// reports itself as "password authentication failed" - which reads as the
+// password being wrong rather than the plumbing being wrong. An hour went into
+// that on 25 September.
+//
+// So the string is split on its landmarks - "://" , the first ":" after the
+// user, and the LAST "@" - and the four fields are handed to pg directly. No
+// encoding, no decoding, no parser that has opinions about "#". The password is
+// used exactly as it was typed.
+// ---------------------------------------------------------------------------
+function connectionFieldsFrom(url) {
+  const value = String(url || '').trim().replace(/^["']|["']$/g, '');
+  if (!value) return null;
+
+  const scheme = value.indexOf('://');
+  const at = value.lastIndexOf('@');
+  if (scheme === -1 || at === -1) return null;
+
+  const credentials = value.slice(scheme + 3, at);
+  const colon = credentials.indexOf(':');
+  if (colon === -1) return null;
+
+  // host:port/database, where the database may be absent.
+  const rest = value.slice(at + 1);
+  const slash = rest.indexOf('/');
+  const hostPort = slash === -1 ? rest : rest.slice(0, slash);
+  const database = slash === -1 ? 'postgres' : rest.slice(slash + 1).split('?')[0] || 'postgres';
+  const [host, port] = hostPort.split(':');
+
+  return {
+    user: credentials.slice(0, colon),
+    password: credentials.slice(colon + 1),
+    host,
+    port: Number(port) || 5432,
+    database,
+  };
+}
+
 // The project a connection string belongs to. Supabase hosts are either
 // db.<ref>.supabase.co or <something>.pooler.supabase.com with the ref in the
 // username, so both shapes are read.
@@ -74,15 +127,17 @@ function refOfConnectionString(url) {
 async function main() {
   console.log(`Migrating: ${describeTarget()}\n`);
 
-  const url = process.env.SUPABASE_DB_URL || '';
-  if (!url) {
-    console.error('SUPABASE_DB_URL is not set.');
+  const fields = connectionFieldsFrom(process.env.SUPABASE_DB_URL);
+  if (!fields) {
+    console.error('SUPABASE_DB_URL is not set, or is not a connection string.');
     console.error('Supabase dashboard -> Connect -> Session pooler, and paste the URI into .env.');
+    console.error('Wrap it in double quotes: a generated password often contains a #, and');
+    console.error('without quotes dotenv reads that as a comment and cuts the line in half.');
     process.exit(1);
   }
 
   // THE TWO HALVES OF "WHICH DATABASE" MUST AGREE.
-  const connectionRef = refOfConnectionString(url);
+  const connectionRef = refOfConnectionString(process.env.SUPABASE_DB_URL || '');
   if (connectionRef && config.supabase.projectRef && connectionRef !== config.supabase.projectRef) {
     console.error('REFUSED: this .env and this connection string point at different projects.');
     console.error(`  SUPABASE_URL     -> ${config.supabase.projectRef}`);
@@ -92,7 +147,7 @@ async function main() {
   }
 
   const client = new Client({
-    connectionString: url,
+    ...fields,
     // Supabase terminates TLS with a certificate chain Node does not ship a
     // root for. The connection is still encrypted; what is skipped is proving
     // the server's identity, which is the same trade the Supabase CLI makes.
@@ -102,12 +157,25 @@ async function main() {
   await client.connect();
 
   try {
+    // ROW LEVEL SECURITY ON, WITH NO POLICIES, LIKE EVERY OTHER TABLE HERE.
+    //
+    // CLAUDE.md: "Every table has row level security enabled with no policies.
+    // That denies all access via Supabase's public anon key... Any new table
+    // must do the same." This one is the bookkeeping of a migration runner
+    // rather than business data, which is exactly the reasoning that would let
+    // it become the one exception - and a single unprotected table is all
+    // somebody needs to learn the shape of the schema from the public key.
+    //
+    // Supabase's own advisor flags enabling RLS without policies as breaking
+    // access. It does not break it here: the server connects with service_role,
+    // which bypasses RLS entirely, and that is the whole design.
     await client.query(`
       create table if not exists schema_migrations (
         name        text primary key,
         checksum    text not null,
         applied_at  timestamptz not null default now()
       );
+      alter table schema_migrations enable row level security;
     `);
 
     const { rows } = await client.query('select name, checksum from schema_migrations');

@@ -626,6 +626,28 @@ function opsNav(user, active) {
 // instruction - and a page that has not been converted yet must keep the look
 // its body was written for. Flipping a later slice on is adding the flag to
 // those routes; nothing else has to change.
+// ---------------------------------------------------------------------------
+// A BAND ON ANY OPS SCREEN THAT IS NOT THE REAL BUSINESS.
+//
+// The public site has its own (src/web/layout.js); ops has a separate layout
+// and needs its own copy, which is where it matters most: this is the half with
+// the buttons that move orders, charge cards and text customers. Two identical
+// boards in two tabs, and the wrong one is one click away.
+//
+// IT ASKS WHICH DATABASE, NOT WHICH NODE_ENV. The deployed development site
+// runs as production on purpose, so that it behaves like production - an
+// environment check would leave it looking exactly like the real thing. What
+// makes a board real is whose orders are on it.
+// ---------------------------------------------------------------------------
+function opsDevBand() {
+  if (config.supabase.isProduction) return '';
+
+  return `<div role="status" style="background:#E8412F;color:#FFFDF7;font:700 12px/1.4 ui-monospace,monospace;
+    letter-spacing:.06em;text-transform:uppercase;text-align:center;padding:7px 16px;border-bottom:2px solid #101210;">
+    Development &middot; ${escapeHtml(config.supabase.projectRef)} &middot; these are not real orders
+  </div>`;
+}
+
 function adminPage({
   title,
   active = '',
@@ -647,7 +669,7 @@ function adminPage({
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)} — ${site.name} ops</title>
+  <title>${config.supabase.isProduction ? '' : '[DEV] '}${escapeHtml(title)} — ${site.name} ops</title>
   <!-- Internal, and full of customer addresses. Never index it. -->
   <meta name="robots" content="noindex, nofollow">
 
@@ -698,6 +720,7 @@ function adminPage({
 ${head}
 </head>
 <body${terminal ? ` class="ops-terminal${touch ? ' ops-touch' : ''}"` : ''}>
+  ${opsDevBand()}
   ${
     // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
     // should look like the bag tag page - the logo and nothing else.
@@ -1376,7 +1399,7 @@ function loginShell({ heading, intro, error = '', form }) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in — ${site.name} ops</title>
+  <title>${config.supabase.isProduction ? '' : '[DEV] '}Sign in — ${site.name} ops</title>
   <meta name="robots" content="noindex, nofollow">
   <!-- Its own shell, so it needs the icons named separately. Without them this
        page fell back to /favicon.ico like everything else did. -->
@@ -1394,6 +1417,7 @@ function loginShell({ heading, intro, error = '', form }) {
   <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 </head>
 <body>
+  ${opsDevBand()}
   <main class="hero" style="min-height:100vh;display:flex;align-items:center;">
     <div class="container" style="max-width:460px;padding-top:48px;padding-bottom:48px;">
 
