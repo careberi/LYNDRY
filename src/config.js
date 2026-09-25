@@ -469,6 +469,21 @@ const config = Object.freeze({
   // those merges or arrive in production by accident on the first one that went
   // through unread.
   // ---------------------------------------------------------------------------
+  // WHO ACTUALLY DRIVES. Nothing outside src/providers/couriers/ may read these
+  // - the same rule Telnyx and Stripe already follow.
+  //
+  // ALL FOUR BLANK IS THE ORDINARY STATE while this is being built: the fake
+  // courier takes over and the whole flow can be walked without an account.
+  // Test mode is forced wherever the data is invented, so a simulated courier
+  // is the most that can ever happen against a seeded address.
+  uber: Object.freeze({
+    customerId: process.env.UBER_CUSTOMER_ID || '',
+    clientId: process.env.UBER_CLIENT_ID || '',
+    clientSecret: process.env.UBER_CLIENT_SECRET || '',
+    webhookSecret: process.env.UBER_WEBHOOK_SECRET || '',
+    testMode: process.env.UBER_TEST_MODE === 'true' || !supabaseIsProduction,
+  }),
+
   courier: Object.freeze({
     model: process.env.PRICING_MODEL === 'DYNAMIC' ? 'DYNAMIC' : 'FLAT',
 
