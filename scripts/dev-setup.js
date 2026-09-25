@@ -22,10 +22,23 @@
 // same range, so "#2085" would name two different orders and a conversation
 // about a real customer could act on a test row. Development starts at 9000.
 //
-// THREE. THE AUTOMATIC PROMOTION. CLEAN50 lives in production DATA, not in a
-// migration - it was made through the ops screens. Without it the website
-// popup is absent from every page and no new number is offered anything, so
-// the first-message wording cannot be reproduced at all.
+// THREE. NO PROMOTIONS AT ALL, WHICH IS THE OPPOSITE OF PRODUCTION.
+//
+// Neil, 25 September, working out the Uber Direct pricing: "we are clearing all
+// promotions" and "in the dev environment don't make any promotions". The
+// reason is arithmetic rather than preference. Once a courier costs $15.98 in
+// real money on every order, a 50% discount stops being "I work for nothing"
+// and becomes a loss of $5 to $21 depending on the size of the load - the
+// delivery is charged whether or not the laundry is discounted.
+//
+// SO THIS DELETES THEM RATHER THAN SKIPPING THEM. An earlier version of this
+// script CREATED a CLEAN50 to match production, and the seed scripts bring
+// their own. Leaving those in place would mean dev quietly prices orders in a
+// way the new model does not, which is the one thing a development environment
+// must not do.
+//
+// The website popup goes with them: it only ever advertises the automatic
+// promotion, so with none there is nothing for it to say.
 //
 // IT REFUSES TO RUN AGAINST PRODUCTION, on its own, rather than trusting the
 // guard in db.js - this one talks to Postgres directly and never goes through
@@ -98,7 +111,7 @@ async function main() {
       console.log('\nDRY RUN. It would:');
       console.log(`  - add ${ADMIN.name} ${ADMIN.phone} as an ACTIVE ADMIN who drives`);
       console.log(`  - move the order number sequence to ${FIRST_ORDER_NUMBER}`);
-      console.log('  - create a CLEAN50 automatic promotion, 50% off the first order');
+      console.log('  - delete every promotion and every grant, and take the website popup off');
       console.log('\nRun again with --write to do it.');
       return;
     }
@@ -121,14 +134,14 @@ async function main() {
     // on the website. Matched to production's row rather than invented: the
     // audience is what makes it automatic, and the blurb is what the AI is
     // allowed to repeat.
-    await client.query(
-      `insert into promotions (name, blurb, kind, value, applies_to, audience, status, code, expires_days, auto_grant)
-       values ('CLEAN50 - 50% off first order', '50% off your first order', 'PERCENT_OFF', 50,
-               'FIRST_ORDER', 'NEW_NUMBERS', 'ACTIVE', 'CLEAN50', 30, true)
-       on conflict do nothing`
+    // The grants first: customer_promotions points at promotions, and a grant
+    // left behind would be a promise to somebody that nothing can honour.
+    const removedGrants = await client.query('delete from customer_promotions');
+    const removedPromos = await client.query('delete from promotions');
+    await client.query('update app_settings set website_popup = false');
+    console.log(
+      `promotions : none (${removedPromos.rowCount} deleted, ${removedGrants.rowCount} grants withdrawn, popup off)`
     );
-    await client.query('update app_settings set website_popup = true');
-    console.log('promotion  : CLEAN50 active, automatic, popup on');
 
     console.log('\nSigning in: run `npm run dev`, open http://localhost:3000/ops/login,');
     console.log(`enter ${ADMIN.phone}, and read the six-digit code out of the terminal -`);

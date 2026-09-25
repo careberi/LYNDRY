@@ -22,6 +22,70 @@ const { renderPage } = require('../web/layout');
 const towns = require('../web/towns');
 const structured = require('../web/schema');
 const sitePopup = require('../core/site-popup');
+const geocode = require('../core/geocode');
+const quote = require('../core/quote');
+const quoteResult = require('../web/quote-result');
+
+const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+
+// WHAT AN ADDRESS COSTS, end to end: find it on a map, find the laundromats in
+// reach, pick the one that is cheapest FOR THE CUSTOMER, and price it.
+//
+// Neil's rule, 25 September: "always route the customer to whichever one is
+// cheapest for the customer (all in price) while maintaining the net margins".
+// Those are compatible because the margin is a percentage - a cheaper
+// laundromat lowers the customer's bill and Neil's cut in the same proportion,
+// and never below target.
+//
+// THE DISTANCE IS AN ESTIMATE AND THE PAGE SAYS SO. Straight-line miles times
+// the road factor, which is what dispatch already uses. The real number comes
+// from Uber's own quote when the courier is booked, and a customer close to a
+// band edge can land either side of it.
+async function quoteFor(address) {
+  // lookupOnce(), not lookup(): the exported one goes through the shared
+  // throttle, which is what keeps us inside the free geocoder's usage policy.
+  // A public page anybody can type into is exactly where that matters.
+  const place = await geocode.lookupOnce(address);
+  if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) {
+    return { quote: null, error: 'not_found' };
+  }
+
+  const { data: partners, error } = await db
+    .from('partners')
+    .select('id, name, lat, lng, wholesale_per_lb_cents')
+    .eq('status', 'ACTIVE')
+    .eq('type', 'LAUNDROMAT');
+
+  if (error) throw error;
+
+  const reachable = (partners || [])
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.wholesale_per_lb_cents > 0)
+    .map((p) => ({
+      name: p.name,
+      perLbCents: p.wholesale_per_lb_cents,
+      miles: geocode.milesBetween(place, { lat: p.lat, lng: p.lng }) * config.routing.roadFactor,
+    }));
+
+  if (!reachable.length) return { quote: null, error: 'unavailable' };
+
+  const chosen = quote.chooseFor(reachable);
+
+  // Nothing in range: answer with the NEAREST one, so the page can say how far
+  // outside they are rather than only that the answer is no.
+  if (!chosen) {
+    const nearest = reachable.reduce((a, b) => (a.miles <= b.miles ? a : b));
+    return { quote: { ok: false, reason: 'too_far', miles: nearest.miles, maxMiles: config.courier.maxMiles }, error: null };
+  }
+
+  return {
+    quote: quote.quoteFor({
+      miles: chosen.miles,
+      partnerCentsPerLb: chosen.perLbCents,
+      partnerName: chosen.name,
+    }),
+    error: null,
+  };
+}
 const pitchLink = require('../core/pitch-link');
 const popup = require('../web/popup');
 
@@ -702,6 +766,59 @@ router.get('/bergen/sent', (req, res) => {
       // if /bergen/join just created a customer.
       tracking: true,
       conversionId: adAttribution.takeLead(req, res, '/bergen/sent'),
+    })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// GET /quote - what it costs at your address.
+//
+// Neil, 25 September: a public page where somebody types their address and is
+// told their price, one-time and on a subscription. Under the courier model the
+// price depends on where they are, so a page of static copy cannot answer it.
+//
+// A GET THAT WRITES NOTHING. The address is in the query string, so a quote is
+// a link somebody can send to somebody else and a refresh can never repeat
+// anything. No customer row is created, nothing is remembered, and the page
+// says so - a pricing page that quietly signed you up would be the last one
+// anybody typed an address into.
+//
+// IT ONLY EXISTS UNDER THE COURIER MODEL. On the flat model the price is the
+// same everywhere and the page would be an elaborate way of saying $2.00.
+// ---------------------------------------------------------------------------
+router.get('/quote', async (req, res) => {
+  if (config.courier.model !== 'DYNAMIC') return res.redirect(302, '/pricing');
+
+  const address = String(req.query.address || '').trim().slice(0, 200);
+
+  // The honeypot, same as every other public form: anything that fills it gets
+  // the ordinary page and no clue that it was noticed.
+  const isBot = Boolean(String(req.query.company || '').trim());
+
+  let result = { quote: null, error: null };
+
+  if (address && !isBot) {
+    try {
+      result = await quoteFor(address);
+    } catch (err) {
+      console.error(`Quote failed for an address: ${err.message}`);
+      result = { quote: null, error: 'unavailable' };
+    }
+  }
+
+  res.type('html').send(
+    renderPage({
+      title: 'Your price',
+      fullTitle: `What Laundry Pickup Costs at Your Address | ${site.name}`,
+      description: `Type your address and see what wash and fold pickup costs in ${site.serviceArea}. Weighed after collection, no membership, ${money(config.courier.minimumCents)} minimum.`,
+      path: '/quote',
+      body: readPageBody('quote.html'),
+      tracking: true,
+      extra: {
+        ADDRESS_VALUE: quoteResult.escapeHtml(address),
+        QUOTE_RESULT: quoteResult.render({ ...result, address }),
+        COURIER_MINIMUM: money(config.courier.minimumCents),
+      },
     })
   );
 });

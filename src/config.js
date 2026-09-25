@@ -454,6 +454,64 @@ const config = Object.freeze({
     pitchLinkMinutes: Number(process.env.PITCH_LINK_MINUTES || 5),
   }),
 
+  // ---------------------------------------------------------------------------
+  // THE COURIER MODEL, WHICH IS A DIFFERENT BUSINESS AND IS OFF BY DEFAULT.
+  //
+  // Neil, 25 September: couriers instead of the van, a per-pound rate derived
+  // from what the laundromat charges, a delivery fee that carries no margin,
+  // and a flat $30 minimum. Being built in development first, so this is a
+  // SETTING rather than a replacement - production keeps today's flat $2.00
+  // until he decides to switch, both branches carry the same code, and going
+  // live is one variable rather than a merge nobody can review.
+  //
+  // WHY A SETTING RATHER THAN A BRANCH THAT DIVERGES. The dev branch is merged
+  // with main regularly; a pricing change living only in dev would either block
+  // those merges or arrive in production by accident on the first one that went
+  // through unread.
+  // ---------------------------------------------------------------------------
+  courier: Object.freeze({
+    model: process.env.PRICING_MODEL === 'DYNAMIC' ? 'DYNAMIC' : 'FLAT',
+
+    // Uber Direct's published bands, one LEG, in cents. From their own pricing
+    // panel: flat rates by routed distance, 0% commission. An order is two legs
+    // - out to the laundromat and back - so every fee below is doubled.
+    //
+    // THE BANDS ARE THEIRS AND ARE NOT OURS TO INTERPOLATE. A customer at 5.1
+    // miles is in the 5-6 band, not 2% into it.
+    bands: Object.freeze([
+      Object.freeze({ upToMiles: 5, legCents: 799 }),
+      Object.freeze({ upToMiles: 6, legCents: 899 }),
+      Object.freeze({ upToMiles: 7, legCents: 999 }),
+      Object.freeze({ upToMiles: 10, legCents: 1099 }),
+    ]),
+
+    // Past the last band Uber publishes no price, so we do not serve it.
+    maxMiles: 10,
+
+    // WHAT NEIL KEEPS, per category, as a share of the laundry charge. The
+    // delivery fee carries none of it: it is passed through at cost, so a
+    // customer further away pays more for the driving and not for the wash.
+    margins: Object.freeze({ ONE_TIME: 0.2, SUBSCRIPTION: 0.1, WHOLESALE: 0.05 }),
+
+    // Stripe's cut, taken off the top of everything the customer is charged, so
+    // both the rate and the fee have to be grossed up by it or the margin is
+    // short by exactly this much.
+    stripePercent: 0.029,
+    stripeFixedCents: 30,
+
+    // THE LEAST AN ORDER CAN COST, flat, whatever the distance or category.
+    // Neil's call, 25 September, replacing a minimum that moved with the band
+    // and the tier - four numbers a customer would have had to be told. It
+    // binds below roughly ten pounds and is invisible above it.
+    minimumCents: 3000,
+
+    // A quote is compared between laundromats at one weight, because "which is
+    // cheapest" depends on how much laundry there is: a cheap laundromat far
+    // away wins on a big load and loses on a small one. Twenty pounds is about
+    // a full machine and sits near the point where the two effects balance.
+    compareAtLb: 20,
+  }),
+
   // Wash & fold is priced by weight, so the real price of an order is not
   // known until a driver has weighed it. Everything a customer is told before
   // that point is an estimate, and must be described as one.

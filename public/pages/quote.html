@@ -1,0 +1,93 @@
+<!-- =====================================================================
+     What it costs at your address.
+
+     Under the courier model a price is not one number: it depends on how
+     far the laundry travels and which laundromat washes it. So the page
+     that answers "what do you charge" has to ask where you are first.
+
+     The form is a GET to itself, so a quote is a URL somebody can send to
+     somebody else, and refreshing it can never do anything twice.
+     ===================================================================== -->
+
+<section class="container" style="padding-top:64px;padding-bottom:24px;">
+  <div style="max-width:52ch;" data-reveal>
+    <p class="eyebrow">Your price</p>
+    <h1 class="display-2" style="margin:8px 0 16px;">What it costs at your door.</h1>
+    <p style="font-size:17px;line-height:1.6;color:var(--ink-700);margin:0;">
+      We pick up, wash, dry, fold and bring it back. The price depends on where you
+      are, because we pay a courier both ways. Type your address and see the real
+      number, with nothing added afterwards.
+    </p>
+  </div>
+</section>
+
+<section class="container" style="padding-bottom:72px;">
+  <form method="get" action="/quote" class="card card-xl" style="padding:26px 28px;max-width:52ch;" data-reveal>
+    <label for="address" style="display:block;font:700 12px/1 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-700);margin-bottom:10px;">
+      Your street address
+    </label>
+
+    <input id="address" name="address" type="text" required
+           value="{{ADDRESS_VALUE}}"
+           placeholder="16 Chandler Dr, Fair Lawn NJ"
+           autocomplete="street-address"
+           style="width:100%;margin-bottom:14px;">
+
+    <!-- A hidden field a person never sees. Anything that fills it is not a
+         person, and gets the same answer as everybody else. -->
+    <div style="position:absolute;left:-9999px;" aria-hidden="true">
+      <label for="q-company">Company</label>
+      <input id="q-company" name="company" type="text" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button type="submit" class="btn btn-ink" style="width:100%;">
+      See my price {{ICON_ARROW}}
+    </button>
+
+    <p style="font-size:13px;line-height:1.5;color:var(--ink-500);margin:14px 0 0;">
+      We only use this to work out the distance. Nothing is saved and you are not
+      signed up for anything.
+    </p>
+  </form>
+</section>
+
+{{QUOTE_RESULT}}
+
+<section class="container" style="padding-bottom:88px;">
+  <div class="grid-2 grid-2-narrow" style="gap:40px;align-items:start;">
+    <div data-reveal>
+      <h2 class="display-4" style="margin-bottom:12px;">How the price is built</h2>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 12px;">
+        Two parts. A rate per pound for the washing, and one delivery charge that
+        covers the courier coming to you and bringing it back.
+      </p>
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0;">
+        The delivery charge is what the courier costs us and nothing more. Living
+        further away costs more driving, never more washing.
+      </p>
+    </div>
+
+    <div class="card card-xl" style="padding:10px 26px;" data-reveal>
+      <div class="price-row">
+        <span style="font-size:16px;color:var(--ink-800);">Weighed after we collect it</span>
+        <span class="amount">Always</span>
+      </div>
+      <div class="price-row">
+        <span style="font-size:16px;color:var(--ink-800);">Charged before we collect it</span>
+        <span class="amount">Never</span>
+      </div>
+      <div class="price-row">
+        <span style="font-size:16px;color:var(--ink-800);">Smallest order</span>
+        <span class="amount">{{COURIER_MINIMUM}}</span>
+      </div>
+      <div class="price-row">
+        <span style="font-size:16px;color:var(--ink-800);">Back with you</span>
+        <span class="amount">{{TURNAROUND}}</span>
+      </div>
+      <div class="price-row">
+        <span style="font-size:16px;color:var(--ink-800);">Membership</span>
+        <span class="amount">None</span>
+      </div>
+    </div>
+  </div>
+</section>
