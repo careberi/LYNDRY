@@ -68,14 +68,26 @@ const grounded = {
 //
 // Pure and exported so a test can hold every square of it without setting
 // environment variables and re-requiring this file. The thing being protected
-// is "a laptop never texts a customer", and that deserves better than being
-// four ifs nobody can reach.
-function pick({ configured, production }) {
-  if (configured) return production ? 'telnyx' : 'telnyx-grounded';
-  // The fake driver accepts unsigned webhooks. Harmless on a laptop, and on a
-  // public server it would let anyone impersonate a customer. So in production
-  // we fall back to refusing all SMS rather than to trusting everything.
-  return production ? 'disabled' : 'fake';
+// is "nothing texts a customer unless it IS the business", and that deserves
+// better than being four ifs nobody can reach.
+//
+// `realData` IS THE THIRD QUESTION, AND IT IS NOT `production`. The deployed
+// development site runs with NODE_ENV=production on purpose, so that it behaves
+// like production - which means an environment check alone would have let it
+// send real texts the moment somebody pasted carrier keys into it to "test
+// properly". There is nobody real in the development database to text, so the
+// honest test is whose rows these are.
+function pick({ configured, production, realData }) {
+  // Real keys only ever send from the real system: production behaviour AND
+  // production data. Anything else prints the text and says it did not send.
+  if (configured) return production && realData ? 'telnyx' : 'telnyx-grounded';
+
+  // The fake driver accepts unsigned webhooks. Harmless where the data is
+  // invented, and on the real public server it would let anybody impersonate a
+  // customer - so that one case refuses all SMS rather than trusting anything.
+  if (production && realData) return 'disabled';
+
+  return 'fake';
 }
 
 const DRIVERS = { telnyx, 'telnyx-grounded': grounded, disabled, fake };
@@ -83,7 +95,7 @@ const DRIVERS = { telnyx, 'telnyx-grounded': grounded, disabled, fake };
 function chooseDriver() {
   const configured = Boolean(config.telnyx.apiKey && config.telnyx.publicKey);
   const production = config.env === 'production';
-  const name = pick({ configured, production });
+  const name = pick({ configured, production, realData: config.supabase.isProduction });
 
   if (name === 'telnyx-grounded') {
     console.warn(

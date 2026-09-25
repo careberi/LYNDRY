@@ -76,6 +76,13 @@ function projectRefOf(url) {
 
 const supabaseProjectRef = projectRefOf(supabaseUrl);
 
+// ARE THESE REAL CUSTOMERS? Asked in several places below, and deliberately not
+// the same question as NODE_ENV: the deployed development site runs as
+// production so that it behaves like production, which means every advertising
+// and outreach default keyed on the environment would have switched itself on
+// over a database full of invented people.
+const supabaseIsProduction = Boolean(supabaseProjectRef) && supabaseProjectRef === PRODUCTION_PROJECT_REF;
+
 // The public address of this app.
 //
 // Hosting dashboards show a domain without the "https://" on the front, so it
@@ -115,7 +122,7 @@ const config = Object.freeze({
     // config.env, and the two disagreeing is the entire failure this exists to
     // catch. This one answers "are these rows real customers".
     projectRef: supabaseProjectRef,
-    isProduction: Boolean(supabaseProjectRef) && supabaseProjectRef === PRODUCTION_PROJECT_REF,
+    isProduction: supabaseIsProduction,
   }),
 
   // Telnyx sends and receives the text messages. Nothing outside
@@ -291,9 +298,18 @@ const config = Object.freeze({
     leadLabel: process.env.GOOGLE_ADS_LEAD_LABEL || 'n0sjCK-C1_McEILohthE',
     leadValue: 1,
     currency: 'USD',
+    // OFF UNLESS THESE ARE REAL CUSTOMERS, whatever the environment says.
+    //
+    // The deployed development site runs with NODE_ENV=production so that it
+    // behaves like production, which is exactly what would have switched the
+    // advertising tag on over a database full of invented people - reporting
+    // fake conversions into a real ad account that a real bidding algorithm
+    // then learns from. Being told to set GOOGLE_ADS_ENABLED=false in a
+    // dashboard is not a guard: it is a thing to forget once.
     enabled:
-      process.env.GOOGLE_ADS_ENABLED === 'true' ||
-      (process.env.NODE_ENV === 'production' && process.env.GOOGLE_ADS_ENABLED !== 'false'),
+      supabaseIsProduction &&
+      (process.env.GOOGLE_ADS_ENABLED === 'true' ||
+        (process.env.NODE_ENV === 'production' && process.env.GOOGLE_ADS_ENABLED !== 'false')),
 
     // THE OFFLINE CONVERSION FEED. Google Ads fetches this on a schedule over
     // HTTPS with Basic auth, which is the only kind of credential its scheduled
@@ -328,7 +344,14 @@ const config = Object.freeze({
   // page works the moment it deploys, with nothing for Neil to go and set.
   //
   // META_PIXEL_ID still overrides it, for a second pixel or a test one.
-  metaPixelId: (process.env.META_PIXEL_ID || '1014591328609412').trim(),
+  //
+  // AND IT IS BLANK WHERE THE PEOPLE ARE NOT REAL. Same reason as the Google
+  // tag above: the development site runs as production on purpose, and a pixel
+  // firing Lead events off invented signups teaches a real ad account to look
+  // for the wrong people.
+  metaPixelId: supabaseIsProduction
+    ? (process.env.META_PIXEL_ID || '1014591328609412').trim()
+    : '',
 
   // What it costs to run the van for a mile, and how long a stop takes.
   //
@@ -399,7 +422,15 @@ const config = Object.freeze({
   // Blank switches the whole thing off, which is what a fork of this codebase
   // with no adverts running should have.
   leads: Object.freeze({
-    sheetId: process.env.LEADS_SHEET_ID ?? '1t3IuoMGREVgQR08lJLxwIsqDQj6GVIJ3MQgdhDyXm94',
+    // OFF WHERE THE DATABASE IS NOT THE REAL ONE, and this one defaults to the
+    // REAL SHEET when the variable is merely absent - `??` only falls back on
+    // undefined, so forgetting it in a dashboard is not a blank, it is the live
+    // lead list. A development site reading that sheet would take real people
+    // who just tapped a real advert, write them into a database nobody watches,
+    // and mark them dealt with in its own copy of the table.
+    sheetId: supabaseIsProduction
+      ? process.env.LEADS_SHEET_ID ?? '1t3IuoMGREVgQR08lJLxwIsqDQj6GVIJ3MQgdhDyXm94'
+      : '',
 
     // How often the sheet is checked, in minutes. Neil asked for "immediately";
     // a lead who has just tapped an advert is the hottest we will ever have
