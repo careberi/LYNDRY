@@ -8,12 +8,21 @@ const { config } = require('../../config');
 // Nothing outside this folder knows Uber exists, exactly as nothing outside
 // src/providers/sms/ knows Telnyx does. Everything else asks for these:
 //
-//   quote({ from, to, ... })        what would this trip cost, and how long
+//   quote({ from, to, miles })      what would this trip cost, and how long
 //   book({ ... })                   send a courier, get back an id and a PIN
 //   status(deliveryId)              where is it
 //   cancel(deliveryId)              call it off
 //   parseWebhook(body)              turn their event into our shape
 //   verifySignature({ rawBody, headers })   is this really from them
+//
+// `miles` ON A QUOTE IS FOR A COURIER WITH NOBODY TO ASK, and every caller
+// passes it. The real one ignores it and asks Uber, whose fee is priced off
+// their own routed distance and does not track a straight line: $7.99 at 0.9 and
+// 2.3 miles, $10.99 at 5.7 and 9.8, measured 25 September. The fake one has no
+// API behind it, so it reads our band table, which is that estimate. An address
+// is `{ line1, city, state, postalCode }` or a plain string - Uber priced both
+// identically on nine addresses, so a page with one free-text box hands it
+// straight through.
 //
 // THE POINT IS BEING ABLE TO SWITCH IN AN AFTERNOON. Uber Direct is not the
 // only courier network, its terms for collecting from a customer's home are

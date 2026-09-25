@@ -46,17 +46,39 @@ function bandFor(miles) {
   return C().bands.find((b) => distance <= b.upToMiles) || null;
 }
 
-// WHAT THE CUSTOMER PAYS FOR THE DRIVING. Two legs, plus Stripe's whole cut on
-// the fee itself - the percentage and the fixed thirty cents - because a fee
-// that only grossed up the percentage would come up short by 30c on every
-// single order, which is most of the margin on a small one.
-function deliveryFeeCents(miles) {
-  const band = bandFor(miles);
-  if (!band) return null;
-  return upCents((band.legCents * 2 + C().stripeFixedCents) / (1 - C().stripePercent));
+// WHAT THE CUSTOMER PAYS FOR THE DRIVING, GIVEN WHAT ONE LEG ACTUALLY COSTS.
+//
+// THE ONLY FUNCTION THAT TURNS A COURIER'S PRICE INTO A CUSTOMER'S, and the one
+// everything else goes through. Two legs, plus Stripe's whole cut on the fee
+// itself - the percentage and the fixed thirty cents - because a fee that only
+// grossed up the percentage would come up short by 30c on every single order,
+// which is most of the margin on a small one.
+function feeFromLegCents(legCents) {
+  const leg = Number(legCents);
+  if (!Number.isFinite(leg) || leg <= 0) return null;
+  return upCents((leg * 2 + C().stripeFixedCents) / (1 - C().stripePercent));
 }
 
-// WHAT WE PAY UBER, which is not what we charge for it.
+// THE SAME ANSWER FROM A DISTANCE INSTEAD, WHICH IS AN ESTIMATE AND SAYS SO.
+//
+// UBER'S REAL FEE DOES NOT TRACK THIS, MEASURED ON 25 SEPTEMBER against their
+// test API: $7.99 at 0.9 and 2.3 miles, $9.99 at 6.0, and $10.99 at 5.7, 6.8,
+// 7.7 and 9.8 - two adjacent towns a dollar apart, and one town quoting two
+// different prices from two of its own streets. They price their own routed
+// distance and never show it to us, so no arithmetic on a straight line can
+// reproduce it.
+//
+// WHICH IS WHY ANYTHING A CUSTOMER IS CHARGED ASKS THE COURIER. This is for the
+// two cases with nobody to ask: choosing which laundromats are worth a live
+// quote at all, and the whole of development, where the courier is a pretend
+// one reading this same table.
+function deliveryFeeCents(miles) {
+  const band = bandFor(miles);
+  return band ? feeFromLegCents(band.legCents) : null;
+}
+
+// WHAT WE PAY UBER, which is not what we charge for it. An estimate for the same
+// reason and with the same caveat.
 function courierCostCents(miles) {
   const band = bandFor(miles);
   return band ? band.legCents * 2 : null;
@@ -97,12 +119,16 @@ function orderTotalCents({ pounds, ratePerLbCents, feeCents }) {
 // WHAT IS LEFT AFTERWARDS. Not shown to a customer; this is the line that says
 // whether a price is worth taking, and it is the reason the rules live in one
 // testable place rather than in a page template.
-function netCents({ total, pounds, partnerCentsPerLb, miles }) {
+function netCents({ total, pounds, partnerCentsPerLb, miles, legCents = null }) {
   const partner = upCents(Number(pounds) * Number(partnerCentsPerLb));
-  const courier = courierCostCents(miles);
+
+  // A REAL LEG PRICE BEATS THE ESTIMATE. What is left over is the one figure
+  // where guessing costs Neil money rather than costing a customer accuracy, so
+  // wherever the courier has actually said a number, that is the number.
+  const courier = legCents != null ? Number(legCents) * 2 : courierCostCents(miles);
   const stripe = upCents(total * C().stripePercent + C().stripeFixedCents);
 
-  if (courier == null) return null;
+  if (courier == null || !Number.isFinite(courier)) return null;
   return { partner, courier, stripe, net: total - partner - courier - stripe };
 }
 
@@ -131,7 +157,10 @@ function chooseFor(partners, { compareAtLb = C().compareAtLb } = {}) {
   const options = [];
 
   for (const partner of partners || []) {
-    const fee = deliveryFeeCents(partner.miles);
+    // A LIVE LEG PRICE IF THE CALLER HAS ONE, the band estimate otherwise. The
+    // comparison has to be like for like, which it is: whichever of the two it
+    // uses, it uses for every laundromat in the list.
+    const fee = partner.legCents != null ? feeFromLegCents(partner.legCents) : deliveryFeeCents(partner.miles);
     if (fee == null) continue; // past the last band: no published price
 
     const rate = perPoundCents(partner.perLbCents, 'ONE_TIME');
@@ -153,8 +182,13 @@ function chooseFor(partners, { compareAtLb = C().compareAtLb } = {}) {
 
 // EVERY CATEGORY AT ONCE, so the page can show what a subscription saves
 // without asking twice.
-function quoteFor({ miles, partnerCentsPerLb, partnerName = null }) {
-  const fee = deliveryFeeCents(miles);
+function quoteFor({ miles, partnerCentsPerLb, partnerName = null, legCents = null }) {
+  // A REAL LEG PRICE MAKES THE DISTANCE IRRELEVANT, which is how somebody at
+  // 9.8 miles gets a price at all: the band table stops at 10 road miles and
+  // our road miles are a straight line multiplied by 1.3, so a real Park Ridge
+  // address came out at 12.7 and was refused - while Uber quoted it happily for
+  // $10.99. The table's ceiling is a fact about the table, not about the county.
+  const fee = legCents != null ? feeFromLegCents(legCents) : deliveryFeeCents(miles);
   if (fee == null) {
     return { ok: false, reason: 'too_far', maxMiles: C().maxMiles, miles };
   }
@@ -177,11 +211,18 @@ function quoteFor({ miles, partnerCentsPerLb, partnerName = null }) {
     deliveryFeeCents: fee,
     minimumCents: C().minimumCents,
     categories,
+
+    // WHETHER THE COURIER WAS ACTUALLY ASKED. The page says so, because a price
+    // that came off our own table can move when the delivery is booked and a
+    // price Uber quoted cannot - and the difference is worth one word on screen
+    // rather than a footnote nobody writes later.
+    quoted: legCents != null,
   };
 }
 
 module.exports = {
   bandFor,
+  feeFromLegCents,
   deliveryFeeCents,
   courierCostCents,
   perPoundCents,

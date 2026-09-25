@@ -25,6 +25,7 @@ const sitePopup = require('../core/site-popup');
 const geocode = require('../core/geocode');
 const quote = require('../core/quote');
 const quoteResult = require('../web/quote-result');
+const couriers = require('../providers/couriers');
 
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 
@@ -37,10 +38,21 @@ const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 // laundromat lowers the customer's bill and Neil's cut in the same proportion,
 // and never below target.
 //
-// THE DISTANCE IS AN ESTIMATE AND THE PAGE SAYS SO. Straight-line miles times
-// the road factor, which is what dispatch already uses. The real number comes
-// from Uber's own quote when the courier is booked, and a customer close to a
-// band edge can land either side of it.
+// THE COURIER IS ASKED WHAT THE DRIVING COSTS, which is Neil's instruction in
+// as many words: "its a flat fee we need to connect to the api". It is not a
+// nicety - measured against Uber's own API on 25 September, their fee does not
+// track our straight-line distance at all: $7.99 at 0.9 and 2.3 miles, $9.99 at
+// 6.0, $10.99 at 5.7, 6.8, 7.7 and 9.8, with two adjacent towns a dollar apart
+// and one town quoting two different prices from two of its own streets. They
+// price their own routed distance and never show it to us.
+//
+// STRAIGHT-LINE MILES STILL DECIDE WHO GETS ASKED. Every active laundromat is a
+// courier call, so the nearest few are shortlisted on our own arithmetic and
+// only those are quoted. That is what the estimate is for now: choosing who to
+// ask, never what to charge.
+//
+// ONE QUOTE COVERS BOTH LEGS. Uber returned the same fee in both directions for
+// the same pair, so the round trip is that fee doubled rather than two calls.
 async function quoteFor(address) {
   // lookupOnce(), not lookup(): the exported one goes through the shared
   // throttle, which is what keeps us inside the free geocoder's usage policy.
@@ -52,39 +64,124 @@ async function quoteFor(address) {
 
   const { data: partners, error } = await db
     .from('partners')
-    .select('id, name, lat, lng, wholesale_per_lb_cents')
+    .select('id, name, address_line1, city, state, postal_code, lat, lng, wholesale_per_lb_cents')
     .eq('status', 'ACTIVE')
     .eq('type', 'LAUNDROMAT');
 
   if (error) throw error;
 
-  const reachable = (partners || [])
+  const usable = (partners || [])
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && p.wholesale_per_lb_cents > 0)
-    .map((p) => ({
-      name: p.name,
-      perLbCents: p.wholesale_per_lb_cents,
-      miles: geocode.milesBetween(place, { lat: p.lat, lng: p.lng }) * config.routing.roadFactor,
-    }));
+    .map((p) => {
+      const straightMiles = geocode.milesBetween(place, { lat: p.lat, lng: p.lng });
+      return {
+        name: p.name,
+        perLbCents: p.wholesale_per_lb_cents,
+        straightMiles,
+        miles: straightMiles * config.routing.roadFactor,
+        at: {
+          line1: p.address_line1,
+          city: p.city,
+          state: p.state,
+          postalCode: p.postal_code,
+        },
+      };
+    })
+    .sort((a, b) => a.straightMiles - b.straightMiles);
 
-  if (!reachable.length) return { quote: null, error: 'unavailable' };
+  if (!usable.length) return { quote: null, error: 'unavailable' };
 
-  const chosen = quote.chooseFor(reachable);
+  // THE SERVICE AREA IS MEASURED AS THE CROW FLIES, and that is deliberate.
+  //
+  // Neil's rule is "within 10 miles" of a laundromat, which is what somebody
+  // means looking at a map. The road factor exists to ESTIMATE A COST and has no
+  // business drawing a boundary: multiplying by 1.3 first turned a real Park
+  // Ridge address 9.8 miles from Glen Rock into 12.7 and refused it, and Uber
+  // then quoted that exact trip for $10.99.
+  const inArea = usable.filter((p) => p.straightMiles <= config.courier.maxMiles);
 
-  // Nothing in range: answer with the NEAREST one, so the page can say how far
-  // outside they are rather than only that the answer is no.
-  if (!chosen) {
-    const nearest = reachable.reduce((a, b) => (a.miles <= b.miles ? a : b));
-    return { quote: { ok: false, reason: 'too_far', miles: nearest.miles, maxMiles: config.courier.maxMiles }, error: null };
+  if (!inArea.length) {
+    // Answered with the NEAREST one, so the page can say how far outside they
+    // are rather than only that the answer is no.
+    const nearest = usable[0];
+    return {
+      quote: { ok: false, reason: 'too_far', miles: nearest.straightMiles, maxMiles: config.courier.maxMiles },
+      error: null,
+    };
   }
+
+  const shortlist = inArea.slice(0, QUOTE_SHORTLIST);
+  const priced = await legPrices(address, shortlist);
+
+  // EVERY SHORTLISTED LAUNDROMAT REFUSED BY THE COURIER. Answered with the code
+  // rather than with a verdict: `unknown_location` is an address Uber could not
+  // place, and `address_undeliverable` is one it placed somewhere it will not
+  // drive - which is a town outside the area OR an address that resolved to the
+  // wrong street of that name. The page must not turn either into "we do not
+  // cover you".
+  if (priced.every((p) => p.legCents == null && p.refused)) {
+    return {
+      quote: { ok: false, reason: priced[0].refused, miles: shortlist[0].straightMiles, maxMiles: config.courier.maxMiles },
+      error: null,
+    };
+  }
+
+  // A LAUNDROMAT THE COURIER REFUSED IS OUT OF THE RUNNING, not estimated. It
+  // would otherwise fall back to the band table and could win on price - and
+  // then be the one laundromat Uber will not drive to, discovered at booking.
+  const chosen = quote.chooseFor(priced.filter((p) => !p.refused));
+
+  // IN THE AREA AND STILL NO PRICE, WHICH IS OUR PROBLEM AND NOT THEIRS. The
+  // only way here is the courier being unreachable AND the band estimate having
+  // nothing to say, which happens past its ten road miles - so somebody 9.8
+  // miles away as the crow flies lands here while the courier is down.
+  //
+  // IT MUST NOT SAY "YOU ARE OUTSIDE THE ROUND", which is what it said before:
+  // they are inside it, on the rule two dozen lines up, and being told otherwise
+  // because Uber was having a bad minute is the one wrong answer that loses a
+  // customer for good.
+  if (!chosen) return { quote: null, error: 'unavailable' };
 
   return {
     quote: quote.quoteFor({
       miles: chosen.miles,
+      legCents: chosen.legCents,
       partnerCentsPerLb: chosen.perLbCents,
       partnerName: chosen.name,
     }),
     error: null,
   };
+}
+
+// How many laundromats get a live courier quote. Every one is an API call on a
+// page anybody can type into, so the list is the nearest few rather than all of
+// them - and it is the estimate that decides which few.
+const QUOTE_SHORTLIST = 3;
+
+// WHAT ONE LEG COSTS TO EACH OF THEM, asked in parallel and never allowed to
+// break the page.
+//
+// A COURIER THAT CANNOT BE REACHED FALLS BACK TO THE BAND ESTIMATE, rather than
+// showing somebody an error. `legCents` staying null is what makes `quoteFor`
+// use the table, and the answer then says `quoted: false` so the page can be
+// honest about which of the two the number came from.
+//
+// A COURIER THAT SAYS NO IS DIFFERENT FROM ONE THAT IS DOWN, and the two must
+// not collapse into each other: a refusal is an answer about that address and
+// is carried as `refused`, where a thrown error is our problem and is logged.
+async function legPrices(address, shortlist) {
+  return Promise.all(
+    shortlist.map(async (partner) => {
+      try {
+        const asked = await couriers.quote({ from: address, to: partner.at, miles: partner.miles });
+        if (asked && asked.ok) return { ...partner, legCents: asked.feeCents, refused: null };
+        return { ...partner, legCents: null, refused: (asked && asked.reason) || 'no_quote' };
+      } catch (err) {
+        console.error(`Could not price the trip to ${partner.name}: ${err.message}`);
+        return { ...partner, legCents: null, refused: null };
+      }
+    })
+  );
 }
 const pitchLink = require('../core/pitch-link');
 const popup = require('../web/popup');

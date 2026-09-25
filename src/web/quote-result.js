@@ -76,6 +76,34 @@ function unavailable() {
   );
 }
 
+// THE COURIER WOULD NOT TAKE THE TRIP, and the honest part is that we do not
+// know which of two reasons it is.
+//
+// Uber answers `address_undeliverable` both for an address outside the area they
+// drive and for one that resolved to the wrong street of that name - measured on
+// 25 September, where 350 Engle St in Englewood priced fine and 100 Grand Ave in
+// the same town did not. So this says both possibilities and asks them to check,
+// which is true either way.
+//
+// IT MUST NOT SAY "WE DO NOT COVER YOU". That would be a flat statement to a
+// Bergen County customer on the strength of an ambiguous code, and the one case
+// where it is wrong is somebody we could serve today deciding we cannot.
+// AND IT MUST NOT SAY "TRY AGAIN IN A MINUTE" EITHER, which is what this used to
+// fall through to: a minute changes nothing and it sends them round a loop.
+function cannotReach(address) {
+  return shell(
+    `<p class="eyebrow" style="margin:0 0 10px;">Have a look at this</p>
+     <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;margin:0 0 14px;">
+       We could not get a courier to that address.</h2>
+     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 12px;">
+       We tried &ldquo;${escapeHtml(address)}&rdquo;. Either it is outside the area our couriers
+       cover, or the address needs a second look &mdash; a street number and town usually sorts it.</p>
+     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0;">
+       Text us on <strong>${escapeHtml(site.publicPhoneDisplay)}</strong> and we will tell you which
+       it is.</p>`
+  );
+}
+
 // --- the price --------------------------------------------------------------
 
 function priced(quote, address) {
@@ -95,8 +123,12 @@ function priced(quote, address) {
     <p class="eyebrow" style="margin:0 0 10px;">Your price</p>
     <h2 class="display-3" style="margin:0 0 6px;">${perLb(one.perLbCents)} a pound.</h2>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 20px;">
-      Plus ${money(quote.deliveryFeeCents)} for the courier, there and back, at
-      ${escapeHtml(address)}.
+      Plus ${quote.quoted ? '' : 'about '}${money(quote.deliveryFeeCents)} for the courier, there and
+      back, at ${escapeHtml(address)}.${
+        quote.quoted
+          ? ''
+          : ' We could not reach the courier just now, so that part is our estimate.'
+      }
     </p>
 
     <div class="card card-xl" style="padding:10px 26px;margin-bottom:18px;">
@@ -135,8 +167,25 @@ function render({ quote, address, error }) {
   if (error === 'not_found') return notFound(address);
   if (error) return unavailable();
   if (!quote) return '';
-  if (!quote.ok && quote.reason === 'too_far') return tooFar(quote);
-  if (!quote.ok) return unavailable();
+
+  if (!quote.ok) {
+    // OUR OWN ESTIMATE PUT THEM PAST THE LAST BAND, reached only when no courier
+    // could be asked - so the mileage is ours and the wording is about our round.
+    if (quote.reason === 'too_far') return tooFar(quote);
+
+    // THE COURIER COULD NOT PLACE THE ADDRESS AT ALL. Their own code for it, and
+    // it is the same problem as our geocoder missing it, so it gets the same
+    // page: check what you typed.
+    if (quote.reason === 'unknown_location') return notFound(address);
+
+    // THE COURIER PLACED IT AND WILL NOT DRIVE THERE.
+    if (quote.reason === 'address_undeliverable') return cannotReach(address);
+
+    // Anything else really is us: no laundromat has a rate, the database is
+    // unhappy, a code Uber has not sent before.
+    return unavailable();
+  }
+
   return priced(quote, address);
 }
 

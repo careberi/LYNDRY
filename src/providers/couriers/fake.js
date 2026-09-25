@@ -28,13 +28,27 @@ const quote = require('../../core/quote');
 // ---------------------------------------------------------------------------
 
 // Uber's own sequence, which is what the screens will be written against.
+//
+// UBER'S SIMULATED COURIER SKIPPED pickup_complete, watched on 25 September:
+// pending -> pickup -> dropoff -> delivered, with the pickup photo appearing on
+// the move to dropoff. It is a documented status and a real courier may well
+// send it, so it stays here - this driver walking through the longer sequence is
+// what proves a screen copes with it.
+//
+// SO NOTHING MAY REQUIRE HAVING SEEN IT. Anything asking "have the bags been
+// collected" reads the photo, or the fact that the status is past `pickup`, and
+// never "was pickup_complete observed" - because on the real thing it was not.
 const FLOW = [
   'pending', // created, nobody assigned yet
   'pickup', // courier on the way to collect
-  'pickup_complete', // bags in the car, photo taken
+  'pickup_complete', // bags in the car, photo taken. UBER MAY SKIP THIS
   'dropoff', // on the way to the destination
   'delivered', // handed over, or left at the door
 ];
+
+// PAST THE DOORSTEP, whichever route the courier's statuses took. This is what
+// a screen asks instead of looking for one status it may never be sent.
+const COLLECTED = new Set(['pickup_complete', 'dropoff', 'delivered']);
 
 const deliveries = new Map();
 
@@ -61,17 +75,25 @@ function courierFor(deliveryId) {
 // quote page already shows. The two agreeing is the point: if the band table
 // and Uber's live quote disagree, the customer was told the wrong number, and
 // that is a thing to find out here.
+// `from` and `to` ARE ACCEPTED AND IGNORED, so one caller works for both
+// drivers. The real one asks Uber about those two addresses and never looks at
+// `miles`; this one has nobody to ask and never looks at the addresses.
 async function quoteTrip({ miles }) {
-  const fee = quote.courierCostCents(miles);
+  const band = quote.bandFor(miles);
 
-  if (fee == null) {
+  if (!band) {
     return { ok: false, reason: 'out_of_range', maxMiles: config.courier.maxMiles };
   }
 
   return {
     ok: true,
     quoteId: id('dqt'),
-    feeCents: fee,
+
+    // ONE LEG, LIKE UBER'S. The real fee came back per leg and the same in both
+    // directions, so a caller doubles it for the round trip - and this has to
+    // quote the same thing or every price built on it is twice what it should
+    // be. It returned the round trip until the real API was measured.
+    feeCents: band.legCents,
     // Uber's quotes expire after fifteen minutes, so anything built against
     // this has to cope with a quote going stale before it is used.
     expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
@@ -214,4 +236,5 @@ module.exports = {
   advance,
   all,
   FLOW,
+  COLLECTED,
 };
