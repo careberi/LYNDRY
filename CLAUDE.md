@@ -4488,6 +4488,79 @@ plant.** Both are structural rather than checks: `loadVan()` works the price out
 in memory, charges, and only then writes `van_confirmed_at` - and only a stamped
 order reaches the drop-off leg. A test pins that ordering.
 
+### Under a courier the hold covers the delivery, and the weigh-in spends it
+
+**Neil, 25 September:** *"hold gets placed on order (the hold shouls be at least
+the amount of the delivery. Then once the luandromat weights the order, the card
+should be charged."* Three things stood between that and the code, and none of
+them fails loudly.
+
+**THE HOLD IS THE FLOOR OR THE DELIVERY, WHICHEVER IS BIGGER.**
+`quote.holdCents()` knew how to work that out and nothing called it, so an order
+whose two courier legs cost $31 held $25 — less than the one thing we are certain
+to be out of pocket for. Nothing breaks when a hold is too small; it is simply too
+small, and you find out at a refusal weeks later.
+
+**IT IS DECIDED INSIDE `authorizeShowUp()`, NOT AT THE FOUR CALL SITES.**
+`bookPickup()`, the card being saved, the night-before pass and the admin retry
+button all place holds. Declaring the amount on each makes "somebody forgot" the
+failure, silently, in the direction of holding too little — the same polarity that
+cost four orders their alerts with `bookedByTheSystem`. `billing.holdFor(order)`
+is the default and `amountCents` survives as an override nothing passes. A test
+refuses any caller that works the amount out for itself.
+
+**THE AMOUNT LIVES IN `authorized_cents`, WHICH HAS HELD IT SINCE MIGRATION
+0095.** Migration 0105 added `authorization_amount_cents` for this job on the
+reasoning that the hold "had always been a flat $25 out of config, so nothing
+needed to remember the amount". The second half of that is right and the first
+half is not — 0095's own comment says the amount is "read rather than assumed from
+config" — so the bug it was written to prevent never existed and what it added was
+a second copy of a fact the database holds. **Migration 0107 drops it.** Nothing
+ever wrote it.
+
+**THERE WAS NO PRICING BRANCH FOR THE LAUNDROMAT'S SCALE ALONE, AND UNDER A
+COURIER THAT IS THE ORDINARY CASE.** Every branch in `settleWeight()` needed OUR
+weight, and nothing of ours touches the bags — a courier takes them off a doorstep
+and hands them over a counter — so `weight_lb` is null for ever, their figure
+arrives alone, and it answered **"Nothing has been weighed yet"** about an order
+that had just been weighed. It priced nothing, charged nothing and texted nobody.
+
+Their figure bills and is what we pay them, and **`band` stays null**: the bands
+describe how far two scales were apart, and with one scale there is no gap to be
+in. **WHICH IS A REAL LOSS AND IS NAMED IN THE CODE** — under the van our scale
+checked theirs, which is what made their weight mandatory; a courier removes our
+half of that comparison entirely, so the same unchecked number bills the customer
+and pays the laundromat. The partner page's drift figures are the only thing
+watching it.
+
+**AND THE WEIGH-IN CHARGED BESIDE THE HOLD RATHER THAN THROUGH IT.** It called
+`chargeOrder()`, which does not know a hold exists. Harmless under the van, where
+`loadVan()` had already spent the hold at the door — so that line only ever ran on
+orders with none. Under a courier the hold is still sitting at Stripe, so the
+customer would see a **pending $25 AND a real charge** for one load of laundry.
+
+**`chargeAtTheDoor()` IS NOW `billing.settleTotal()`.** One act — settle a total
+against whatever is held — with two callers: the door in `loadVan()`, unchanged,
+and the weigh-in. The rename is because a function named for the door being called
+from a laundromat counter is the stale label this file records costing an afternoon
+when three customer-facing sentences still said "when we deliver it back". **An
+order with no live hold falls straight through it to `chargeOrder()`**, which is
+exactly what every van-era order did on that line before.
+
+**ITS REFUSED-REMAINDER BRANCH BOOKED THE KEPT MONEY AS A TRIP CHARGE WHATEVER HAD
+HAPPENED.** `applies_to_wash: false`, noted "the bags were left" — true at a
+doorstep, where it was the only caller, and false at a counter where the bags are
+on a shelf being washed. A courier order refused there would have had $25 taken and
+recorded as money for a trip, so `balance()` still owed the whole total and
+`paymentHold()` would hold the delivery over money already paid. **Custody decides
+it, read off `orders.IN_OUR_HANDS`** rather than passed in by a caller who could
+forget — the same line `recordCash()` already refuses on.
+
+**A TEXT WE COULD NOT SEND NO LONGER UNDOES A CHARGE.** The `sendAndLog()` at the
+end of `settleWeight()` was unguarded and is the last line before the return: by
+then the price is written, the promotion is spent and the card is charged, so a
+carrier being down threw and every caller read it as the weigh-in having failed.
+
 ### The three states, and the one that must never become a fourth
 
 `billing.showUpState(order)`:
@@ -5276,6 +5349,42 @@ counting, and `09/15/2026` does not.
   Multiplying by 1.3 first turned a real Park Ridge address 9.8 miles from Glen
   Rock into 12.7 and put it outside — and Uber then quoted that exact trip for
   $10.99.
+
+  **HOW FAR UBER ACTUALLY GOES IS AN OPEN QUESTION WITH TWO ANSWERS, AND THIS
+  FILE SAID ONE OF THEM AS FACT.** "Uber stops at ten routed miles" was written
+  here and in `serviceable.js`, and it was never an answer Uber gave us — it is a
+  fact about their published PRICE LIST, which has no band past 7–10. CleanCloud's
+  Uber FAQ, which Neil sent on 25 September, says **"Uber covers deliveries up to
+  20 miles from your store address"**. CleanCloud resells Uber Direct, so that may
+  be a different product, a different tier, or simply their own number. Both
+  figures are now recorded as figures, with where each came from.
+
+  **AND TEST MODE CANNOT SETTLE IT, WHICH IS THE PART TO KNOW BEFORE TRUSTING A
+  DEV BOOKING.** Measured 25 September: Uber's test API quotes Fair Lawn to **LOS
+  ANGELES** at $7.99 and 63 minutes — the identical canned answer it gives for
+  Hackensack four miles away. Philadelphia, Boston and Chicago the same. It
+  refuses nothing and prices nothing by distance. **So on the development site the
+  courier is not deciding the service area at all**: `inNewJersey()` and the
+  shortlist bound are, and neither is Uber. A dev booking is never evidence that
+  we can reach somewhere.
+
+  **WHICH MADE `SHORTLIST_MILES` THE REAL BOUNDARY, A JOB IT IS NOT ALLOWED TO
+  HAVE.** It bounds how many courier quotes a public form may fire, and its own
+  comment says it is not the service area. But `SHORTLIST_SIZE` caps the calls at
+  three however wide it is — so widening it changes WHICH laundromats are asked and
+  never HOW MANY, and costs nothing at all. A bound set BELOW the courier's real
+  limit therefore has exactly one effect: it turns away customers the courier would
+  have carried, silently, as though they were out of area. At 15 miles that was
+  live risk, because one of the two figures is 20. **It is 30 now, above both**,
+  and a test refuses any value inside 20 as well as unbounding the call count that
+  makes the width free.
+
+  **UBER CAPS A SINGLE DELIVERY AT 50 LB.** Also from that FAQ, with 60 inches and
+  32 cubic feet beside it. **Nothing in the code enforces it and nothing may state
+  it until Neil has decided what happens to a 70 lb load** — two couriers and two
+  fees, or a refusal. It is not the `maxOrderLb` that was deleted on 25 September:
+  that was our own invented ceiling being quoted at customers, and this is a
+  vendor's physical limit on one trip. Asked, not assumed.
 
   **`inServiceArea()` IS ASYNC NOW AND LOADS THE LAUNDROMATS ITSELF.** It was
   pure while the answer was a ZIP list. The alternative was a second argument
