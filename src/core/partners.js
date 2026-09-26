@@ -151,11 +151,20 @@ async function list({ type = null, includeEnded = false } = {}) {
   return data || [];
 }
 
-// Every laundromat a bag can be dropped at today. What the driver picks from.
+// Every laundromat a bag can be dropped at today. What the driver picks from -
+// and, under the courier model, what the service area is measured from, since
+// "within ten miles of a laundromat" has to know where they are.
+//
+// LAT AND LNG ARE NOT OPTIONAL HERE. Left out they come back undefined, which is
+// indistinguishable from a shop that was never geocoded, and
+// `booking.withinReachOf()` would then find nobody in range and refuse every
+// booking in the business. It is written to shout rather than refuse when handed
+// a list with no coordinates in it at all, and a test pins both halves - but the
+// fix is to select them, which is this line.
 async function activeLaundromats() {
   const { data, error } = await db
     .from('partners')
-    .select('id, name, city, daily_capacity_lb')
+    .select('id, name, city, daily_capacity_lb, lat, lng')
     .eq('type', 'LAUNDROMAT')
     .eq('status', 'ACTIVE')
     .order('name', { ascending: true });

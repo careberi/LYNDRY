@@ -5244,17 +5244,97 @@ counting, and `09/15/2026` does not.
   built. The `lockers` and `buildings` tables stay (dropping them would be
   destructive and they cost nothing), `open_locker()` stays and refuses
   politely, and nothing on the website promises a locker
-- **Service area:** **Bergen County.** The boundary CLAUDE.md used to say was
-  undrawn is now drawn: `booking.inServiceArea()` checks a literal list of the
-  67 Bergen ZIP codes in `BERGEN_ZIPS`. It was "New Jersey with an `07xxx` zip",
-  which is most of the north of the state and far too wide for one van out of
-  Fair Lawn. **A list rather than a clever test, because a county has no
-  arithmetic** — it is long, boring, and checkable by a person, which matters
-  because being wrong here turns away somebody we could serve.
-  **The AI is told in as many words that it may not decide this** — never
-  from the name of a town, never a list of towns we cover, never a yes
-  before an address has been saved. Asked "do you come to Princeton?" a
-  model will invent a yes, so it asks for the address and the code answers
+- **Service area: IT DEPENDS ON WHO DOES THE DRIVING, AND THERE ARE TWO ANSWERS
+  IN THE CODE ON PURPOSE.** Under the van (`PRICING_MODEL` anything but
+  `DYNAMIC`, which is production today) it is **Bergen County**, a literal list
+  of the 67 ZIP codes in `BERGEN_ZIPS` — a list rather than a clever test,
+  because a county has no arithmetic, and being wrong here turns away somebody we
+  could serve. Under a courier it is **New Jersey, within
+  `config.courier.maxMiles` of one of our laundromats**. Neil, 25 September:
+  within ten miles of a laundromat *"wherever that reaches"*, and *"just keep it
+  inside of new jersey and outside of new york city"*.
+
+  **THAT IS NOT A FLAG ON ONE RULE, IT IS TWO RULES.** The van starts in Fair
+  Lawn, so "ten miles from a laundromat" describes nothing it does; a courier
+  drives door-to-laundromat, so the distance between those two is the only thing
+  deciding whether the trip exists. A county boundary under a courier would
+  refuse Newark, which is 8.4 miles from the Carlstadt laundromat and which Uber
+  will drive for $10.99 — the same $10.99 it charges at 5.7 miles.
+
+  **NEW JERSEY IS WHAT EXCLUDES NEW YORK CITY, AND IT HAS TO BE ASKED
+  AFFIRMATIVELY.** The old check read `if (state && state !== 'NJ')`, which
+  passed a blank state and let the ZIP list do the work. Harmless against 67
+  Bergen codes; not harmless against a radius, because Manhattan is inside ten
+  miles of both Carlstadt and Englewood. `inNewJersey()` requires NJ, and with no
+  state on the row falls back to the ZIP — **07000-08999 is New Jersey and
+  10001-11697 is New York City**, so the two cannot be confused and there is no
+  list to maintain. Uber refused every Manhattan address tried, but a boundary
+  that only holds because a vendor agrees with it is not a boundary.
+
+  **MEASURED AS THE CROW FLIES, NEVER BY ROAD.** "Within 10 miles" is what
+  somebody means looking at a map, and the road factor exists to estimate a COST.
+  Multiplying by 1.3 first turned a real Park Ridge address 9.8 miles from Glen
+  Rock into 12.7 and put it outside — and Uber then quoted that exact trip for
+  $10.99.
+
+  **`inServiceArea()` IS ASYNC NOW AND LOADS THE LAUNDROMATS ITSELF.** It was
+  pure while the answer was a ZIP list. The alternative was a second argument
+  every caller has to remember, where forgetting it means a boundary that quietly
+  passes everybody — on the one check deciding whether we take work nobody can
+  do. A caller holding the list passes it, which is what stops `checkSlot()`
+  querying twice in one booking. **The rules stay pure and are where the tests
+  are**: `inNewJersey()` and `withinReachOf()`.
+
+  **A PROMISE IS TRUTHY, so `if (!inServiceArea(x))` refuses nobody.** A test
+  asserts it is a Promise, because that mistake is invisible: every booking
+  accepted and nothing erroring.
+
+  **THE TWELFTH UNSELECTED COLUMN, AND THE FIRST THAT COULD CLOSE THE BUSINESS.**
+  `partners.activeLaundromats()` did not select `lat` or `lng`. Handed that list,
+  a loop that simply skipped unpinned shops finds nobody in range and refuses
+  **every booking, everywhere**, with "outside our area" — caused by two missing
+  words in a query. So `withinReachOf()` separates three cases that all look
+  alike: `null` is "we could not ask" and fails open; `[]` is "there are no
+  laundromats" and refuses, because nothing can be washed; **a non-empty list
+  with nothing pinned fails open and logs loudly**, because that is the select
+  bug and a boundary we cannot compute must not masquerade as one the customer is
+  outside. A customer with no coordinates is accepted too — Bergen's hyphenated
+  house numbers defeat free geocoders constantly, and silence is not an
+  accusation.
+
+  **THE ZIP-LEVEL CHECK IS DELIBERATELY LOOSER THAN THE BOOKING ONE, BY FIVE
+  MILES.** `zipInServiceArea()` exists so the account form can refuse an address
+  as it is typed rather than after somebody has picked a day. A ZIP is placed at
+  its middle and people live at its edges, so the first version was TIGHTER and
+  that was the wrong way round: a real Mahwah address was inside ten miles of
+  Glen Rock while 07495's centroid was outside, so the form turned away somebody
+  the booking would have accepted. Being told twice is annoying; being told no
+  wrongly is a customer who never learns we could have come. It goes through
+  `withinReachOf()` with a wider reach rather than reimplementing it, so the
+  three fail-open cases above are not written twice.
+
+  **STILL OPEN: THE BOUNDARY SAYS YES WHERE THE COURIER SAYS NO.** Jersey City
+  is 9.7 miles from Carlstadt and inside the area, and Uber refused it from every
+  laundromat tried. Nothing in `bookPickup()` asks a courier yet, so a booking
+  can be accepted that nobody will collect. The quote page catches it because it
+  asks; the text thread and `/account` do not. **That belongs with the courier
+  order flow**, and it is the reason this is written down rather than left as a
+  surprise.
+
+  **The AI is told in as many words that it may not decide this** — never from
+  the name of a town, never a list of towns we cover, never a yes before an
+  address has been saved. Asked "do you come to Princeton?" a model will invent a
+  yes, so it asks for the address and the code answers.
+
+  **WHAT THE CUSTOMER IS TOLD IS `site.serviceArea`, ONE LINE, READ IN 26
+  PLACES** — the AI's prompt, the town pages, both "we do not reach you yet"
+  messages. It is **"northern New Jersey"** under the courier model and "Bergen
+  County" under the van. Not the rule itself: this string has to read properly in
+  "laundry pickup and delivery in ___", "we cover ___" and a headline, and "New
+  Jersey, within 10 miles of one of our laundromats" is unreadable in all three.
+  That precise form is `booking.serviceAreaWords()`, which is what a refusal and
+  an ops screen should quote. **A vague claim that is TRUE beats a precise one
+  that drifts.**
 - **Cancellation:** free until the driver collects; not cancellable after
 - **Public contact: TWO numbers doing two jobs, and one inbox.**
   **(201) 554-1877 is texted** — the Telnyx number, how every order is placed,

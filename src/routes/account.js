@@ -1590,11 +1590,17 @@ async function saveAddress(customer, form) {
     return { ok: false, error: 'Please enter a five-digit ZIP code.' };
   }
 
-  // THE ZIP IS CHECKED HERE, NOT ONLY AT BOOKING. Saving an address outside
-  // Bergen and then refusing the booking tells somebody twice, the second time
-  // after they have picked a day. booking.inServiceArea() is the same list
-  // bookPickup() uses, so the two cannot disagree.
-  if (!booking.inServiceArea({ postal_code: postalCode })) {
+  // THE ZIP IS CHECKED HERE, NOT ONLY AT BOOKING. Saving an address outside the
+  // area and then refusing the booking tells somebody twice, the second time
+  // after they have picked a day.
+  //
+  // IT IS THE SAME RULE `bookPickup()` USES AND NOT THE SAME EVIDENCE, which is
+  // the honest version of what this comment used to claim. There are no
+  // coordinates on a half-typed address, so `zipInServiceArea()` places the ZIP
+  // itself; `bookPickup()` measures from the saved address. A ZIP straddling the
+  // boundary can therefore pass here and be refused there, which is the right
+  // way round - this one is a courtesy and that one is the decision.
+  if (!(await booking.zipInServiceArea(postalCode))) {
     return {
       ok: false,
       error:

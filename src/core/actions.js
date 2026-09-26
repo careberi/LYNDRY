@@ -882,7 +882,7 @@ async function saveDetails(customer, input, helpers = null) {
 
   // The address is complete. If the van doesn't go there, say so NOW — not at
   // their first booking attempt, which would waste the whole conversation.
-  if (!booking.inServiceArea(updated)) {
+  if (!(await booking.inServiceArea(updated))) {
     return (
       `Thanks ${first}, all saved. One thing though: we don't reach ` +
       `${updated.city || 'your area'} just yet. We cover ${site.serviceArea} right now, ` +

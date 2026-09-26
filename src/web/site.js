@@ -186,7 +186,25 @@ const site = Object.freeze({
   // attendant is told to ring.
   opsPhoneDisplay: CALL_PHONE_DISPLAY || (OPS_PHONE ? displayPhone(OPS_PHONE) : PUBLIC_PHONE_DISPLAY),
 
-  serviceArea: 'Bergen County',
+  // WHERE WE SAY WE WORK, read by the AI, the website, the town pages and both
+  // "we do not reach you yet" messages - 26 places, in a dozen different
+  // sentence shapes. One line, deliberately.
+  //
+  // IT MOVED WITH THE MODEL, NOT WITH A COPY DECISION. Under the van the round
+  // starts in Fair Lawn and the county is the boundary. Under a courier the
+  // driving is door-to-laundromat, so the boundary is a radius - Neil, 25
+  // September: within ten miles of a laundromat "wherever that reaches", and
+  // "just keep it inside of new jersey and outside of new york city". Newark is
+  // 8.4 miles from the Carlstadt laundromat and Uber will drive it, so Bergen
+  // County had become a smaller claim than the truth.
+  //
+  // "NORTHERN NEW JERSEY" RATHER THAN THE RULE ITSELF, because this string has
+  // to read properly in "laundry pickup and delivery in ___", "we cover ___"
+  // and a headline. "New Jersey, within 10 miles of one of our laundromats" is
+  // the precise version and is unreadable in all three; it lives in
+  // `booking.serviceAreaWords()`, which is what an ops screen and a refusal
+  // should quote. A vague claim that is TRUE beats a precise one that drifts.
+  serviceArea: config.courier.model === 'DYNAMIC' ? 'northern New Jersey' : 'Bergen County',
 
   // Pricing comes from config so the website, the database and the AI all
   // quote the same numbers.

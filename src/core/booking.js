@@ -423,12 +423,218 @@ function alwaysAllowed(customer) {
   return ten.length === 10 && config.alwaysBookNumbers.includes(ten);
 }
 
-function inServiceArea(customer) {
-  const state = String(customer.state || '').trim().toUpperCase();
-  if (state && state !== 'NJ') return false;
+// --- WHERE WE WORK ----------------------------------------------------------
+//
+// THE SERVICE AREA IS A FUNCTION OF WHO DOES THE DRIVING, which is why there are
+// two answers here rather than one with a flag on it.
+//
+// Under the van, the round starts in Fair Lawn and "ten miles from a laundromat"
+// means nothing - the county is the boundary, and `BERGEN_ZIPS` is it. Under a
+// courier, the driving starts at the customer's door and ends at a laundromat,
+// so the only thing that decides whether a trip is possible is how far apart
+// those two are. `config.courier.model` is what says which world we are in.
+//
+// NEIL'S RULE, 25 SEPTEMBER, IN TWO PARTS: within ten miles of a laundromat
+// wherever that reaches, and "just keep it inside of new jersey and outside of
+// new york city".
+//
+// NEW JERSEY IS WHAT EXCLUDES NEW YORK CITY, and it has to be asked
+// affirmatively. The old check read `if (state && state !== 'NJ')`, which passed
+// a blank state - harmless against a list of 67 Bergen ZIPs, and not harmless at
+// all against a radius, because Manhattan is inside ten miles of both Carlstadt
+// and Englewood. Uber refused every Manhattan address tried, but a boundary that
+// only holds because a vendor happens to agree with it is not a boundary.
+function inNewJersey(customer) {
+  const state = String((customer || {}).state || '').trim().toUpperCase();
+  if (state) return state === 'NJ';
 
-  const zip = String(customer.postal_code || '').trim().slice(0, 5);
-  return BERGEN_ZIPS.has(zip);
+  // NO STATE ON THE ROW, SO THE ZIP ANSWERS. New Jersey is 07000-08999 and New
+  // York City is 10001-11697, so the two cannot be confused - and this needs no
+  // list, unlike the county it replaces. A row with neither is not placed, and
+  // an unplaced address is not in the area.
+  const zip = String((customer || {}).postal_code || '').trim().slice(0, 5);
+  return /^0[78]\d{3}$/.test(zip);
+}
+
+// WITHIN REACH OF ANY ONE OF THEM, measured as the crow flies.
+//
+// PURE, AND THE LAUNDROMATS ARE PASSED IN. Which laundromats are active is a
+// query and this is a rule, so the caller loads them - the same split the rest of
+// this file follows, and what lets the boundary be tested without a database.
+//
+// AS THE CROW FLIES, NOT BY ROAD. "Within 10 miles" is what somebody means
+// looking at a map. The road factor estimates a COST and has no business drawing
+// a boundary: multiplying by 1.3 first turned a real Park Ridge address 9.8 miles
+// from Glen Rock into 12.7 and put it outside, and Uber then quoted that exact
+// trip for $10.99.
+function withinReachOf(customer, laundromats, maxMiles = config.courier.maxMiles) {
+  const at = (customer || {}).lat != null && (customer || {}).lng != null
+    ? { lat: Number(customer.lat), lng: Number(customer.lng) }
+    : null;
+
+  // NOT PLACED IS NOT REFUSED, and that direction is deliberate. A customer with
+  // no coordinates is one the geocoder could not find - Bergen's hyphenated
+  // house numbers defeat it constantly - and a free service having a bad day must
+  // never be the reason somebody cannot book. New Jersey still had to be true.
+  if (!at) return true;
+
+  // NULL IS "WE COULD NOT ASK" AND `[]` IS "THERE ARE NONE", and the two get
+  // opposite answers. A failed query must not read as an empty county: it would
+  // refuse every booking in the business, which is the failure this whole
+  // function is written around.
+  if (laundromats == null) return true;
+
+  const shops = laundromats;
+  const pinned = shops.filter((s) => s.lat != null && s.lng != null);
+
+  // NOT ONE LAUNDROMAT HAS COORDINATES, WHICH IS THE ELEVENTH TIME THIS TRAP HAS
+  // BEEN SET AND THE FIRST TIME IT COULD CLOSE THE WHOLE BUSINESS.
+  //
+  // CLAUDE.md records it against `CARD_FIELDS`, `BOARD_FIELDS` and `RUN_FIELDS`:
+  // a column left out of a `select` comes back undefined, which is
+  // indistinguishable from it being empty. `partners.activeLaundromats()` did not
+  // select lat or lng. Handed that list, a loop that simply skipped unpinned
+  // shops would find nobody in range and refuse EVERY booking, everywhere, with
+  // "outside our area" - and the cause would be two missing words in a query.
+  //
+  // SO THE TWO CASES ARE SEPARATED. Some shops placed and none near is a real
+  // refusal. NONE placed is us being unable to answer, which fails open and says
+  // so loudly, because a boundary we cannot compute must not masquerade as one
+  // the customer is outside.
+  if (shops.length && !pinned.length) {
+    console.error(
+      'SERVICE AREA CANNOT BE CHECKED: not one active laundromat has coordinates. ' +
+        'Either none has been geocoded, or lat/lng were left out of the query. ' +
+        'Bookings are being accepted without the distance rule until this is fixed.'
+    );
+    return true;
+  }
+
+  for (const shop of pinned) {
+    const miles = geocode.milesBetween(at, { lat: Number(shop.lat), lng: Number(shop.lng) });
+    if (miles <= maxMiles) return true;
+  }
+
+  // Placed laundromats exist and none of them is within reach. A genuinely
+  // out-of-area address, and the one case that should be refused.
+  //
+  // An EMPTY list is refused too: no laundromat at all means nothing can be
+  // washed, and taking a booking we cannot fulfil is worse than turning it down.
+  return false;
+}
+
+// A ZIP ON ITS OWN, FOR THE ADDRESS STEP, WHERE THERE ARE NO COORDINATES YET.
+//
+// The account form checks the area as somebody types their address rather than
+// waiting for the booking, so that nobody is told twice - the second time after
+// picking a day. That check had the whole ZIP list to work with; under the
+// courier model it has a radius and needs a point on a map.
+//
+// SO THE ZIP IS PLACED, ONCE, THROUGH THE SHARED THROTTLE. It costs one lookup
+// on a form submission that already makes one for the town/ZIP mismatch check.
+//
+// AND A ZIP IT CANNOT PLACE IS ACCEPTED. Silence is not an accusation, the rule
+// the rest of this file follows: a free geocoder having a bad day must never be
+// what stops somebody becoming a customer, and `bookPickup()` checks again
+// against the real saved address.
+async function zipInServiceArea(zip) {
+  const five = String(zip || '').trim().slice(0, 5);
+
+  if (config.courier.model !== 'DYNAMIC') return BERGEN_ZIPS.has(five);
+
+  // NEW JERSEY IS 07000-08999 AND NEW YORK CITY IS 10001-11697, so this is what
+  // keeps New York out - Neil, 25 September: "just keep it inside of new jersey
+  // and outside of new york city". No list, and nothing to maintain.
+  if (!/^0[78]\d{3}$/.test(five)) return false;
+
+  const at = await geocode.lookupOnce(`${five}, NJ, USA`).catch(() => null);
+  if (!at) return true;
+
+  // A ZIP IS PLACED AT ITS MIDDLE, AND PEOPLE LIVE AT ITS EDGES, so this check
+  // is deliberately looser than the booking one by a whole ZIP's width.
+  //
+  // IT HAS TO BE LOOSER, NEVER TIGHTER, and the first version was tighter: a
+  // real Mahwah address was inside ten miles of the Glen Rock laundromat while
+  // 07495's centroid was outside, so the form turned away somebody the booking
+  // would have accepted. That is worse than the problem this check exists to
+  // solve - being told twice is annoying, being told no wrongly is a lost
+  // customer who never finds out we could have come.
+  //
+  // FIVE MILES COVERS ANY NEW JERSEY ZIP, and Trenton and Atlantic City are
+  // forty miles out, so the obviously-far-away case it is actually for still
+  // works.
+  // THROUGH `withinReachOf`, WITH A WIDER REACH - not a second copy of it. It
+  // already knows the three ways this can fail to have an answer (no
+  // coordinates, an unreadable table, a list with nothing pinned) and all three
+  // apply here identically. Only the distance differs.
+  return withinReachOf(
+    { lat: at.lat, lng: at.lng },
+    await laundromatsForArea(),
+    config.courier.maxMiles + ZIP_MARGIN_MILES
+  );
+}
+
+// How much slack the ZIP-level check gets over the address-level one. See
+// zipInServiceArea() for why it is slack and not precision.
+const ZIP_MARGIN_MILES = 5;
+
+// WHAT THE BOUNDARY IS, IN WORDS, so no sentence anywhere has to name a county
+// the code may not be using. One place to read it from and one place to change.
+function serviceAreaWords() {
+  if (config.courier.model !== 'DYNAMIC') return 'Bergen County, New Jersey';
+  return `New Jersey, within ${config.courier.maxMiles} miles of one of our laundromats`;
+}
+
+// The laundromats the boundary is measured from, or an empty list under the van
+// model where it is not measured from anything.
+//
+// LAZILY REQUIRED. `partners.js` does not reach back into this file today, and
+// a require loop here would hand `partners` an empty object at boot and make
+// every booking out of area - the failure CLAUDE.md records against
+// `booking -> order-alerts -> issues -> booking`. This costs nothing and cannot
+// do that.
+async function laundromatsForArea() {
+  if (config.courier.model !== 'DYNAMIC') return [];
+
+  try {
+    return await require('./partners').activeLaundromats();
+  } catch (err) {
+    // FAILS OPEN, LOUDLY. An unreadable partners table is our problem, and
+    // refusing every booking in the business over it is the worse of the two
+    // failures - `withinReachOf` accepts an unanswerable boundary for the same
+    // reason. New Jersey is still checked, because that needs no query.
+    console.error(`Could not read the laundromats to check the service area: ${err.message}`);
+    return null;
+  }
+}
+
+// ASYNC, AND IT LOADS THE LAUNDROMATS ITSELF WHEN IT IS NOT GIVEN THEM.
+//
+// It was synchronous and pure while the answer was a ZIP list. Under the courier
+// model it needs to know where the laundromats are, and the alternative was a
+// second argument every caller has to remember - where forgetting it would have
+// meant a boundary that quietly passed everybody, on the one check that decides
+// whether we take work we cannot do. There are four callers and a fifth is
+// likely, so the safe version is the one that cannot be called wrongly.
+//
+// A CALLER THAT ALREADY HAS THE LIST PASSES IT, which is what stops `checkSlot`
+// making the same query twice in one booking.
+//
+// THE PURE HALVES ARE `inNewJersey` AND `withinReachOf`, and that is where the
+// rules are tested. Nothing about the boundary itself needs a database.
+async function inServiceArea(customer, laundromats = undefined) {
+  if (config.courier.model !== 'DYNAMIC') {
+    const state = String((customer || {}).state || '').trim().toUpperCase();
+    if (state && state !== 'NJ') return false;
+
+    const zip = String((customer || {}).postal_code || '').trim().slice(0, 5);
+    return BERGEN_ZIPS.has(zip);
+  }
+
+  if (!inNewJersey(customer)) return false;
+
+  const shops = laundromats === undefined ? await laundromatsForArea() : laundromats;
+  return withinReachOf(customer, shops);
 }
 
 // Returns a human sentence if the date is unusable, or null if it is fine.
@@ -947,8 +1153,14 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
   if (!hasName(customer)) return { ok: false, reason: 'no_name' };
 
   // Checked at booking rather than only at signup, because an address can be
-  // edited later and the van's range is the van's range.
-  if (!owner && !inServiceArea(customer)) return { ok: false, reason: 'out_of_area' };
+  // edited later and our range is our range.
+  //
+  // THE LAUNDROMATS ARE LOADED ONCE AND USED TWICE - here and by the waived
+  // list below - because under the courier model the boundary is measured from
+  // them. Under the van model this resolves to the ZIP list and the query is
+  // never made.
+  const shops = await laundromatsForArea();
+  if (!owner && !(await inServiceArea(customer, shops))) return { ok: false, reason: 'out_of_area' };
 
   // WASH PREFERENCES ARE NO LONGER A GATE ON BOOKING, AND THAT REVERSES THE
   // RULE THIS LINE ENFORCED. Neil, 16 September: "Wash prefs after the pickup
@@ -1010,7 +1222,7 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
       waived.push(`a customer's earliest pickup is ${readableDate(opensFor)}`);
     }
 
-    if (!inServiceArea(customer)) waived.push('that address is outside Bergen County');
+    if (!(await inServiceArea(customer, shops))) waived.push(`that address is outside where we work (${serviceAreaWords()})`);
   }
 
   if (!owner) {
@@ -1653,6 +1865,10 @@ module.exports = {
   hasPreferences,
   refreshBookedOrders,
   inServiceArea,
+  zipInServiceArea,
+  inNewJersey,
+  withinReachOf,
+  serviceAreaWords,
   addressProblem,
   sameTown,
   alwaysAllowed,
