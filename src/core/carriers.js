@@ -104,6 +104,34 @@ function mayBookReturnCourier(order) {
   // has said something.
   if (order.partner_weight_lb == null) return { ok: false, reason: 'not_weighed' };
 
+  // A DECLINED CARD REFUSES THE DELIVERY, AND THIS GATE WAS MISSING.
+  //
+  // CLAUDE.md's lock is per LEG, and the courier return IS the delivery leg:
+  // retrieval off a laundromat is allowed while held, because refusing it leaves
+  // our bags on somebody else's shelf at their cost, and the delivery to the
+  // customer's door is refused. `outForDelivery()` and `deliver()` both enforce
+  // it - and this function, which is the only thing standing between a declined
+  // card and an Uber courier, did not.
+  //
+  // IT IS REACHABLE AND NOT THEORETICAL. Under a courier the card is charged at
+  // the weigh-in, and a decline there calls `markFailed()`, which writes
+  // `payment_status = 'FAILED'`. The attendant's very next action is this button.
+  // So the sequence "scale says 28 lb, card says no, send a courier" was one tap
+  // and would have driven somebody's laundry to their door unpaid, past a hold
+  // two other functions were carefully written to respect.
+  //
+  // THE SAME CHECK `deliver()` MAKES, NOT A STRICTER ONE. `paymentHold()` is pure
+  // and reads the order alone. The customer-level SIBLING block - one unsettled
+  // order parking their others - is `heldCustomerIds()`, one async query owned by
+  // the board, and `deliver()` does not ask it either. Matching the existing gate
+  // exactly is right; inventing a stricter one here would be a second rule.
+  //
+  // Required inside the function, not at the top: `dispatch` reaches for
+  // `billing`, which reaches back for `dispatch`, and this module is otherwise a
+  // pure rules file that the portal, the run and the order page all load.
+  const dispatch = require('./dispatch');
+  if (dispatch.paymentHold(order)) return { ok: false, reason: 'payment_hold' };
+
   return { ok: true };
 }
 

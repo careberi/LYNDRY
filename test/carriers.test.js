@@ -87,9 +87,63 @@ test('A LAUNDROMAT CANNOT SEND A COURIER FOR A LEG WE HAVE TAKEN', () => {
 test('and it cannot send one before the bags are weighed', () => {
   // The laundromat's scale is the only scale under a courier, so nothing leaves
   // the counter before it has said something.
+  //
+  // EVERY ORDER HERE NAMES ITS CARRIER, and that is not decoration. The second
+  // assertion used to be `{ partner_weight_lb: 28.5 }` with no carrier, which
+  // relies on the DEFAULT being a courier - true only while `PRICING_MODEL` is
+  // DYNAMIC, which the development `.env` carries and production does not. So this
+  // test failed under the model production actually runs, and nobody saw it
+  // because the suite had only ever been run with the dev environment loaded.
+  // A test about the WEIGHT gate must not also be a test about the default.
   assert.equal(carriers.mayBookReturnCourier({ return_carrier: 'COURIER' }).reason, 'not_weighed');
-  assert.equal(carriers.mayBookReturnCourier({ partner_weight_lb: 28.5 }).ok, true);
+  assert.equal(
+    carriers.mayBookReturnCourier({ return_carrier: 'COURIER', partner_weight_lb: 28.5 }).ok,
+    true
+  );
   assert.equal(carriers.mayBookReturnCourier(null).ok, false);
+});
+
+test('AND A DECLINED CARD REFUSES THE DELIVERY, WHICH IT DID NOT', () => {
+  // THE HOLE THIS CLOSES WAS LIVE. CLAUDE.md's lock is per leg: retrieval off a
+  // laundromat is allowed while a payment is held, because refusing it leaves our
+  // bags on somebody else's shelf, and the DELIVERY to the customer's door is
+  // refused. `outForDelivery()` and `deliver()` both enforce that. This function -
+  // the only thing between a declined card and an Uber courier - did not.
+  //
+  // It is one tap away under a courier: the card is charged at the weigh-in, a
+  // decline writes `payment_status = 'FAILED'`, and the attendant's very next
+  // action is this button.
+  const held = {
+    return_carrier: 'COURIER',
+    partner_weight_lb: 28.5,
+    status: 'READY',
+    payment_status: 'FAILED',
+    price_cents: 4500,
+    amount_paid_cents: 0,
+  };
+
+  assert.equal(carriers.mayBookReturnCourier(held).ok, false, 'a held order can still be sent back');
+  assert.equal(carriers.mayBookReturnCourier(held).reason, 'payment_hold');
+
+  // PAID AND WAIVED GO BACK AS NORMAL. Nothing to charge is not the same as cannot
+  // charge, and confusing the two would strand exactly the customers we have
+  // decided to do a favour for.
+  for (const payment_status of ['PAID', 'WAIVED', 'UNPAID']) {
+    assert.equal(
+      carriers.mayBookReturnCourier({ ...held, payment_status }).ok,
+      true,
+      `a ${payment_status} order is being held back`
+    );
+  }
+
+  // AND A PART PAYMENT THAT CLEARS THE BALANCE IS NOT A HOLD. The rule is written
+  // as money rather than as a status, so cash landing against a failed card
+  // releases it without this rule being re-opened.
+  assert.equal(
+    carriers.mayBookReturnCourier({ ...held, amount_paid_cents: 4500 }).ok,
+    true,
+    'a balance settled in cash is still treated as held'
+  );
 });
 
 test('THE COLUMNS ARE SELECTED WHEREVER THEY ARE READ', () => {

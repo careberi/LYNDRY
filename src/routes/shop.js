@@ -386,6 +386,7 @@ function flashOf(req) {
     'problem:courier': 'collectFailed',
     'problem:weighfirst': 'weighFirst',
     'problem:oursToDrive': 'oursToDrive',
+    'problem:onHold': 'onHold',
     'problem:phone': 'staffBadPhone',
     'problem:taken': 'staffTaken',
     'problem:notyours': 'staffNotYours',
@@ -531,7 +532,23 @@ router.post('/shop/orders/:number/collect', async (req, res, next) => {
     // spends money at a vendor.
     const may = carriers.mayBookReturnCourier(order);
     if (!may.ok) {
-      const problem = may.reason === 'ours_to_drive' ? 'oursToDrive' : 'weighfirst';
+      // A REASON PER REASON, NOT A TERNARY WITH A DEFAULT.
+      //
+      // It was `ours_to_drive ? oursToDrive : weighfirst`, so every refusal that
+      // was not a driver's became "weigh every bag" - and the payment-hold gate
+      // added to `mayBookReturnCourier()` would have sent an attendant back to a
+      // scale she had already used. A mapping whose fallback is a specific
+      // instruction tells the wrong story the moment a third reason exists.
+      //
+      // So it is a lookup, and an UNKNOWN reason falls through to the generic
+      // "ring us" rather than to any instruction: a refusal nobody has written a
+      // message for must not pretend to know what she should do about it.
+      const PROBLEM_FOR = {
+        ours_to_drive: 'oursToDrive',
+        not_weighed: 'weighfirst',
+        payment_hold: 'onHold',
+      };
+      const problem = PROBLEM_FOR[may.reason] || 'onHold';
       return res.redirect(303, `${back}&problem=${problem}`);
     }
 

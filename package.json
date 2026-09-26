@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test \"test/*.test.js\"",
+    "test:both": "node scripts/test-both-models.js",
     "dev": "node --use-system-ca --watch src/index.js",
     "seed": "node --use-system-ca scripts/seed.js",
     "sms": "node --use-system-ca scripts/simulate-sms.js",

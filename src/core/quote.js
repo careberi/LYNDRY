@@ -111,7 +111,15 @@ function perPoundCents(partnerCentsPerLb, category = 'ONE_TIME') {
 function orderTotalCents({ pounds, ratePerLbCents, feeCents }) {
   const laundry = upCents(Number(pounds) * Number(ratePerLbCents));
   const total = laundry + Number(feeCents);
-  const floored = Math.max(total, C().minimumCents);
+  // THE MINIMUM COMES FROM `pricing`, NOT FROM THE COURIER BLOCK.
+  //
+  // `C()` here is `config.courier`, which used to carry a `minimumCents` of its
+  // own - so this function floored a quote at $30 while `orders.create()`
+  // snapshotted $25 onto the order and `settleWeight()` charged at $25. The
+  // public quote page reads this one, so a customer could be quoted a minimum
+  // five dollars above the one they were billed at, with nothing to notice it.
+  // One value, on `pricing`, switching with the model.
+  const floored = Math.max(total, config.pricing.minimumCents);
 
   return { laundry, delivery: Number(feeCents), total: floored, atMinimum: floored > total };
 }
@@ -248,7 +256,7 @@ function quoteFor({ miles, partnerCentsPerLb, partnerName = null, legCents = nul
     miles,
     partnerName,
     deliveryFeeCents: fee,
-    minimumCents: C().minimumCents,
+    minimumCents: config.pricing.minimumCents,
     categories,
 
     // WHETHER THE COURIER WAS ACTUALLY ASKED. The page says so, because a price

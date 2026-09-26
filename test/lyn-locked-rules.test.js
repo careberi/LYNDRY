@@ -27,6 +27,9 @@ const path = require('node:path');
 
 const brain = require('../src/core/brain');
 const { toPlainText } = require('../src/core/notify');
+// The minimum is read rather than typed - it is $25 under the van and $45 under a
+// courier, and the locked block quotes whichever is running.
+const { config } = require('../src/config');
 
 const SRC = (...bits) =>
   fs.readFileSync(path.join(__dirname, '..', 'src', ...bits), 'utf8').split('\r\n').join('\n');
@@ -50,7 +53,12 @@ test('the locked facts are stated, all of them', () => {
   assert.ok(/next day after pickup/.test(block), 'the return promise');
   assert.ok(block.includes('$2.00/lb'), 'the one-time rate');
   assert.ok(block.includes('$1.80/lb'), 'the subscription rate');
-  assert.ok(/\$25 minimum/.test(block), 'the minimum');
+  // READ FROM CONFIG, NEVER TYPED. It was `/\$25 minimum/`, and the minimum is
+  // $45 under a courier - so the prompt stating the right figure failed a test
+  // demanding the old one. What matters is that Lyn quotes THE floor that prices
+  // the order, which is the whole reason the block is called LOCKED.
+  const minimum = `$${(config.pricing.minimumCents / 100).toFixed(0)} minimum`;
+  assert.ok(block.includes(minimum), `the minimum: the prompt does not say "${minimum}"`);
   assert.ok(/charged after we weigh/.test(block), 'when the card is charged');
   assert.ok(/no membership/i.test(block), 'no membership');
   assert.ok(/no delivery fee/i.test(block), 'no delivery fee');

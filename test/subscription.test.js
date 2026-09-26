@@ -307,8 +307,17 @@ test('A FIRST-ORDER PROMOTION COMES OFF THE SUBSCRIPTION RATE', () => {
   assert.equal(Math.round(subscriberBefore / 2), 1800);
   assert.equal(Math.round(oneTimeBefore / 2), 2000);
 
-  // And the minimum is a floor on both, unchanged by any of this.
-  assert.equal(config.pricing.minimumCents, 2500);
+  // And the minimum is a floor on both, unchanged by any of this. What this pins
+  // is that the two rates share ONE floor - not what that floor is, which moved
+  // from $25 to $45 the day a courier started doing the driving.
+  assert.ok(config.pricing.minimumCents > 0, 'there is no floor at all');
+  assert.equal(
+    config.pricing.minimumCents,
+    config.courier.model === 'DYNAMIC'
+      ? config.pricing.courierMinimumCents
+      : config.pricing.vanMinimumCents,
+    'the active floor is not one of the two declared ones'
+  );
 });
 
 // --- the marketing site agrees with the checkout -----------------------------

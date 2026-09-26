@@ -148,6 +148,24 @@ const T = Object.freeze({
     en: 'Weigh every bag before we send a courier.',
     es: 'Pese todas las bolsas antes de enviar un mensajero.',
   },
+  // A HELD ORDER, AND IT SAYS NOTHING ABOUT MONEY.
+  //
+  // An attendant sees no price, no rate and no payment state anywhere in this
+  // portal - that is enforced by what the queries select - so "the card was
+  // declined" would be the one place money leaked onto her screen, and it is
+  // somebody else's business besides.
+  //
+  // IT ALSO MUST NOT SAY "WEIGH IT FIRST", which is what she was told before this
+  // message existed: `mayBookReturnCourier()`'s reason was mapped with a ternary
+  // that turned anything other than `ours_to_drive` into the weighing message. So
+  // a held order sent her back to a scale she had already used, on bags she had
+  // already weighed, with the real reason invisible.
+  //
+  // It names the office instead, because a person there can actually clear it.
+  onHold: {
+    en: 'We need to sort something out on this order before it goes back. Please ring us.',
+    es: 'Tenemos que resolver algo en este pedido antes de que regrese. Por favor llamenos.',
+  },
 
   processingLink: { en: 'Processing Instructions', es: 'Instrucciones de Procesamiento' },
   questions: { en: 'Any problem, ring us on', es: 'Cualquier problema, llamenos al' },

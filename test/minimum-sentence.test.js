@@ -114,40 +114,71 @@ const say = (lb, surcharge) => {
   };
 };
 
-test('AN ORDER OVER THE MINIMUM IS NEVER TOLD IT IS UNDER ONE', () => {
-  // The exact case that was wrong: 13 lb is $26.00, comfortably over the $25
-  // floor, and a $2 option takes the bill to $28.
-  const { text, total } = say(13, 200);
+// THE WEIGHTS ARE DERIVED FROM THE FLOOR, NOT TYPED.
+//
+// They were 13 lb and 8 lb, chosen because they sit either side of a $25 minimum -
+// so all three of these failed the day the courier model made the floor $45 and
+// 13 lb became an order UNDER it. The rule being tested is "a load over the floor
+// is never told about a minimum, and one under it is told the floor"; the
+// arithmetic that made 13 lb the over case was never the rule.
+const RATE = config.pricing.perPoundCents;
+const FLOOR = config.pricing.minimumCents;
 
-  assert.equal(total, 2800);
-  assert.ok(!/minimum/.test(text), `a 13 lb order still mentions a minimum: ${text}`);
+// Comfortably clear of the floor in each direction, so neither can land on it.
+const OVER_LB = Math.ceil(FLOOR / RATE) + 5;
+const UNDER_LB = Math.max(1, Math.floor(FLOOR / RATE) - 5);
+
+// A regex matching one money figure, with the $ and . escaped.
+const at = (cents) => new RegExp(money(cents).replace(/([$.])/g, '\\$1'));
+
+test('AN ORDER OVER THE MINIMUM IS NEVER TOLD IT IS UNDER ONE', () => {
+  // The exact case that was wrong: a load comfortably over the floor, with a $2
+  // wash option on top, was being told it was under a minimum.
+  const { text, total } = say(OVER_LB, 200);
+  const byWeight = OVER_LB * RATE;
+
+  assert.equal(total, byWeight + 200);
+  assert.ok(!/minimum/.test(text), `a ${OVER_LB} lb order still mentions a minimum: ${text}`);
 
   // And the sum in it works, which is the thing a customer actually checks.
-  assert.match(text, /\$26\.00 at \$2\.00 a pound/);
+  assert.match(text, at(byWeight));
   assert.match(text, /plus \$2\.00 for the wash options/);
-  assert.match(text, /\$28\.00 in total/);
+  assert.match(text, at(byWeight + 200));
+  assert.match(text, /in total/);
 });
 
 test('an order under the minimum says so, and says the FLOOR', () => {
-  const { text, total } = say(8, 0);
+  const { text, total } = say(UNDER_LB, 0);
 
-  assert.equal(total, 2500);
-  assert.match(text, /under our \$25\.00 minimum/);
-  assert.ok(!/\$27/.test(text));
+  assert.equal(total, FLOOR);
+  assert.match(text, new RegExp(`under our ${money(FLOOR).replace(/([$.])/g, '\\$1')} minimum`));
+
+  // Never the floor plus a surcharge nobody asked for.
+  assert.doesNotMatch(text, at(FLOOR + 200));
 });
 
 test('AND A SURCHARGE UNDER THE MINIMUM SITS ON TOP OF IT, VISIBLY', () => {
-  // $25 floor plus a $2 option is a $27 bill and a $25 minimum. The sentence
-  // has to carry both numbers or the customer is left to guess which is which.
-  const { text, total } = say(8, 200);
+  // The floor plus a $2 option is a bill above the floor and a minimum at it. The
+  // sentence has to carry both numbers or the customer is left to guess which is
+  // which.
+  const { text, total } = say(UNDER_LB, 200);
 
-  assert.equal(total, 2700);
-  assert.match(text, /under our \$25\.00 minimum/, 'the floor moved');
+  assert.equal(total, FLOOR + 200);
+  assert.match(
+    text,
+    new RegExp(`under our ${money(FLOOR).replace(/([$.])/g, '\\$1')} minimum`),
+    'the floor moved'
+  );
   assert.match(text, /plus \$2\.00 for the wash options/, 'the extra is invisible');
-  assert.match(text, /so that is \$27\.00\./, 'the bill is not stated');
+  assert.match(text, at(FLOOR + 200), 'the bill is not stated');
 
-  // The thing Neil named: never "the $27 minimum".
-  assert.ok(!/\$27\.00 minimum/.test(text), 'the surcharge is being called the minimum');
+  // The thing Neil named: never "the $27 minimum" - the surcharged total is not
+  // the minimum, whatever the floor happens to be.
+  assert.doesNotMatch(
+    text,
+    new RegExp(`${money(FLOOR + 200).replace(/([$.])/g, '\\$1')} minimum`),
+    'the surcharge is being called the minimum'
+  );
 });
 
 test('and an ordinary order is unchanged', () => {
@@ -157,7 +188,11 @@ test('and an ordinary order is unchanged', () => {
 
 test('THE MINIMUM IN THE SENTENCE IS THE ONE THE CODE ENFORCES', () => {
   // Read from config rather than typed, so the sentence cannot drift from the
-  // floor that priced the order.
-  assert.equal(config.pricing.minimumCents, 2500);
-  assert.match(say(8, 0).text, new RegExp(money(config.pricing.minimumCents).replace('$', '\\$')));
+  // floor that priced the order. It asserts the two AGREE and never what the
+  // number is - the number moved once already, from $25 to $45 under a courier.
+  assert.match(
+    say(UNDER_LB, 0).text,
+    at(config.pricing.minimumCents),
+    'the sentence names a different floor from the one that priced the order'
+  );
 });

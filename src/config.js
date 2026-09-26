@@ -98,6 +98,16 @@ function normaliseBaseUrl(value, fallbackPort) {
   return withProtocol.replace(/\/+$/, '');
 }
 
+// THE ORDER MINIMUM, ONE PER MODEL, AND THE ACTIVE ONE IS COMPUTED.
+//
+// Declared out here rather than inside `pricing` because an object literal cannot
+// refer to its own keys - and writing the ternary with the two figures repeated
+// would have put each number in the file twice, which is exactly the duplication
+// this replaced. See the long note on `pricing.minimumCents`.
+const VAN_MINIMUM_CENTS = 2500;
+const COURIER_MINIMUM_CENTS = 4500;
+const COURIER_PRICING = process.env.PRICING_MODEL === 'DYNAMIC';
+
 const config = Object.freeze({
   env: process.env.NODE_ENV || 'development',
 
@@ -485,7 +495,7 @@ const config = Object.freeze({
   }),
 
   courier: Object.freeze({
-    model: process.env.PRICING_MODEL === 'DYNAMIC' ? 'DYNAMIC' : 'FLAT',
+    model: COURIER_PRICING ? 'DYNAMIC' : 'FLAT',
 
     // Uber Direct's published bands, one LEG, in cents. From their own pricing
     // panel: flat rates by routed distance, 0% commission. An order is two legs
@@ -547,11 +557,15 @@ const config = Object.freeze({
     stripePercent: 0.029,
     stripeFixedCents: 30,
 
-    // THE LEAST AN ORDER CAN COST, flat, whatever the distance or category.
-    // Neil's call, 25 September, replacing a minimum that moved with the band
-    // and the tier - four numbers a customer would have had to be told. It
-    // binds below roughly ten pounds and is invisible above it.
-    minimumCents: 3000,
+    // THE MINIMUM IS NOT HERE ANY MORE. It was `minimumCents: 3000` and it was a
+    // SECOND minimum: `config.pricing.minimumCents` is $25 and is what the ads
+    // quote, what Lyn says, what `orders.create()` snapshots onto every order and
+    // what `settleWeight()` floors the charge at - while this one was read by
+    // `quote.orderTotalCents()` alone, which is what the public quote page shows.
+    //
+    // So a customer could be quoted a $30 minimum and charged $25, and nothing
+    // anywhere would notice. It is one value now, on `pricing`, and it switches
+    // with the model - see the note there.
 
     // A quote is compared between laundromats at one weight, because "which is
     // cheapest" depends on how much laundry there is: a cheap laundromat far
@@ -596,7 +610,53 @@ const config = Object.freeze({
     //
     // Change this and the website copy has to change with it, because a
     // minimum has to be stated before a card is charged, not after.
-    minimumCents: 2500,
+    //
+    // IT DEPENDS ON WHO DOES THE DRIVING, AND IT IS STILL ONE VALUE.
+    //
+    // Under the van the driving is Neil's own time and a $25 minimum covers it.
+    // Under a courier every order pays a third party twice - out to the
+    // laundromat and back - which is about $18 on a pair of $8.99 legs once
+    // Stripe is grossed up. At $2.00/lb against a $1.25/lb laundromat the gross
+    // margin is $0.75 a pound, so it takes 24 lb of laundry just to pay the
+    // courier: a 15 lb order, which is the typical one, LOST $7.90 at a $25
+    // minimum. Measured, not estimated.
+    //
+    // NEIL'S CALL, 25 SEPTEMBER, with the three alternatives in front of him:
+    // raise the minimum and keep "no delivery fee" true, rather than charging a
+    // separate courier line (which would make the live ads, the home page,
+    // /pricing, /faq and seventy town pages false the same day) or raising the
+    // per-pound rate (which makes a 45 lb order subsidise a flat cost).
+    //
+    // WHAT $45 DOES AND DOES NOT COVER, so nobody is surprised. A minimum only
+    // binds below $45 / $2.00 = 22.5 lb. Above that the per-pound rate carries
+    // the courier alone, which leaves a thin band around 20-25 lb: at a $1.25/lb
+    // laundromat a 22 lb order still nets about -$2. The lever for THAT band is
+    // the wholesale rate, which `quote.chooseFor()` already optimises, not this
+    // number. $53 would make every size positive at $1.25/lb and costs a small
+    // customer more; it was offered and $45 was chosen.
+    //
+    // TWO MODELS, ONE VALUE, AND THAT IS THE WHOLE POINT. A second constant is
+    // what caused the bug this replaced. Production is on the van today, so the
+    // $25 the live ads quote is untouched by this and `test/ad-claims.test.js`
+    // still reads whichever one is running.
+    // BOTH ARE NAMED AND THE ACTIVE ONE IS DERIVED, which is not the two-minimum
+    // bug coming back. That bug was two values each read by live code - one
+    // quoting a customer, one billing them. Here exactly one is ever charged,
+    // `minimumCents` is a derivation rather than a third number, and the other two
+    // exist so a test can say WHICH BUSINESS it is describing.
+    //
+    // `test/ad-claims.test.js` is why. It pins what the live Google ads state as
+    // fact, and the live ads are the van: asserting against whichever model the
+    // developer's `.env` happens to carry made it fail on every laptop in
+    // development, and a test that needs maintaining is the first one somebody
+    // switches off. It names `vanMinimumCents` now.
+    //
+    // Same shape as MAX_STICKER_SEQ against STICKERS_PER_TAG: one is what we can
+    // read, the other what we print, and neither is free to drift because the
+    // thing the code uses is computed from them.
+    vanMinimumCents: VAN_MINIMUM_CENTS,
+    courierMinimumCents: COURIER_MINIMUM_CENTS,
+    minimumCents: COURIER_PRICING ? COURIER_MINIMUM_CENTS : VAN_MINIMUM_CENTS,
 
     // THE SHOW-UP CHARGE, HELD ON THE CARD BEFORE A PICKUP IS CONFIRMED.
     //

@@ -61,11 +61,34 @@ test('the ads say from $1.80 a pound, and $1.80 is really the cheapest rate', ()
   );
 });
 
-test('the ads say a $25 minimum, and the minimum is $25', () => {
+test('the ads say a $25 minimum, and the VAN minimum is $25', () => {
+  // IT NAMES THE VAN'S MINIMUM, NOT WHICHEVER MODEL THIS LAPTOP IS IN.
+  //
+  // The live ads describe the business that is running, and production is on the
+  // van. `config.pricing.minimumCents` switches with `PRICING_MODEL`, which is
+  // DYNAMIC in the development `.env` - so asserting against the ACTIVE value
+  // failed on every developer's machine the moment the courier minimum landed,
+  // for a reason that has nothing to do with the adverts. A test that has to be
+  // maintained is the first one somebody switches off, which this file says about
+  // itself.
+  //
+  // `vanMinimumCents` is the same number the live site charges, computed into
+  // `minimumCents` rather than typed a second time, so this cannot drift from what
+  // production does.
   assert.equal(
-    config.pricing.minimumCents,
+    config.pricing.vanMinimumCents,
     2500,
     `Every advert says a $25 minimum. ${ADS_MUST_CHANGE}`
+  );
+
+  // AND THE COURIER MINIMUM IS THE DAY THE ADS DO CHANGE. Nothing advertises it
+  // yet because the courier model is not live; the moment it is, every ad quoting
+  // $25 is false and this is the line that says so.
+  assert.equal(
+    config.pricing.courierMinimumCents,
+    4500,
+    'The courier minimum moved. No live advert quotes it yet - the day one does, ' +
+      `this assertion is the alarm. ${ADS_MUST_CHANGE}`
   );
 });
 

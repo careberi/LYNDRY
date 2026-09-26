@@ -907,14 +907,14 @@ router.get('/quote', async (req, res) => {
     renderPage({
       title: 'Your price',
       fullTitle: `What Laundry Pickup Costs at Your Address | ${site.name}`,
-      description: `Type your address and see what wash and fold pickup costs in ${site.serviceArea}. Weighed after collection, no membership, ${money(config.courier.minimumCents)} minimum.`,
+      description: `Type your address and see what wash and fold pickup costs in ${site.serviceArea}. Weighed after collection, no membership, ${money(config.pricing.minimumCents)} minimum.`,
       path: '/quote',
       body: readPageBody('quote.html'),
       tracking: true,
       extra: {
         ADDRESS_VALUE: quoteResult.escapeHtml(address),
         QUOTE_RESULT: quoteResult.render({ ...result, address }),
-        COURIER_MINIMUM: money(config.courier.minimumCents),
+        COURIER_MINIMUM: money(config.pricing.minimumCents),
       },
     })
   );
