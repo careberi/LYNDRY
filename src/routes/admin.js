@@ -2633,6 +2633,79 @@ function carrierCard(order) {
       we have taken, and a leg a courier has is off the driver's round.</p>`;
 }
 
+// ---------------------------------------------------------------------------
+// WHICH LAUNDROMAT THIS ORDER GOES TO.
+//
+// Neil, 26 September: "also route this one to fancy k". The second time he has
+// asked - #1975 went to Fancy K on 11 September though Best Wash was cheaper -
+// and until now the answer was a row edited by hand, which CLAUDE.md records in
+// as many words: "There is no button for it yet."
+//
+// A PIN IS NOT THE PLAN, AND THAT DISTINCTION IS THE WHOLE CARD.
+// `intended_partner_id` alone is the booking-time PLAN and goes stale - #1975 was
+// planned before Best Wash existed, and the route navigated somewhere the plan
+// did not name. `partner_pinned_at` and `partner_pinned_by` are what say a PERSON
+// decided, and `dispatch.dropoffGroups()` sends an order to its pin ahead of the
+// live choice and ahead of the plan.
+//
+// BEHIND `orders.override`, Admin only, the line the charge retry and the cancel
+// already draw: sending somebody's laundry to a particular shop is a decision
+// about the customer's order rather than a step in the round.
+//
+// ONLY WHILE IT IS STILL GOING SOMEWHERE. Once a laundromat physically has the
+// bags, `partner_id` is the record of who had them and a pin would be a note
+// about a decision nobody can act on. The card says so rather than disappearing.
+function laundromatCard(order, mayPin, shops) {
+  if (!mayPin) return '';
+
+  const pinned = Boolean(order.partner_pinned_at);
+  const chosen = order.intended_partner_id || null;
+
+  // WHERE THE BAGS ACTUALLY ARE beats anything planned. `partner_id` is written
+  // when they are handed over, so past that point this is history, not a choice.
+  if (order.partner_id) {
+    const had = (shops || []).find((p) => p.id === order.partner_id);
+    return `<h2>Laundromat</h2>
+      <div id="laundromat">
+        <p style="margin:0 0 6px;"><strong>${escapeHtml(had ? had.name : 'A laundromat')}</strong> has the bags.</p>
+        <p class="hint" style="margin:0;">Where an order goes is decided before it is handed
+          over. This one is recorded, not chosen.</p>
+      </div>`;
+  }
+
+  const options = (shops || [])
+    .map(
+      (p) =>
+        `<option value="${escapeHtml(p.id)}"${p.id === chosen ? ' selected' : ''}>${escapeHtml(p.name)}</option>`
+    )
+    .join('');
+
+  return `<h2>Laundromat</h2>
+    <div id="laundromat">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
+        <strong>Going to</strong>
+        <span>${
+          pinned
+            ? escapeHtml(((shops || []).find((p) => p.id === chosen) || {}).name || 'a shop')
+            : 'Cheapest all in'
+        }</span>
+      </div>
+      ${pinned ? '<div><span class="chip">chosen by hand</span></div>' : ''}
+
+      <form method="post" action="/ops/orders/${order.order_number}/laundromat" style="margin:8px 0 0;">
+        <select name="partner_id" class="cbtn" style="width:100%;margin-bottom:6px;">
+          <option value="">Cheapest all in (automatic)</option>
+          ${options}
+        </select>
+        <button class="cbtn" type="submit">Send it there</button>
+      </form>
+
+      <p class="hint">Pinning books nothing and moves nothing. It decides where the
+        drop-off goes, ahead of the router's own choice. A pin to a shop that is no
+        longer active is ignored.</p>
+    </div>`;
+}
+
 function cancelCard(order, mayCancel) {
   if (!mayCancel) return '';
   if (order.status === 'CANCELED') return '';
@@ -2691,6 +2764,37 @@ function cancelCard(order, mayCancel) {
           <button class="btn btn-ink btn-lg" type="submit">
             Cancel it and text them
           </button>
+        </div>
+      </form>
+
+      <!-- CANCELLING WITHOUT TELLING THEM. Neil's ask, 26 September.
+
+           ITS OWN FORM AND ITS OWN BUTTON, not a checkbox on the one above. A tick
+           that silently changes what a button does is the shape of control this
+           codebase refuses elsewhere - "a button that quietly does a second thing
+           is one nobody trusts" - and the two acts are different enough to be
+           named differently. The reason still rides along, because the change log
+           needs it more here than ever.
+
+           SECOND, AND PLAINER. The default has the weight of the layout, which is
+           the right way round: the text exists because a cancelled pickup nobody
+           was told about is somebody leaving a bag out for a van that never
+           comes. -->
+      <form method="post" action="/ops/orders/${escapeHtml(order.id)}/cancel"
+            style="margin-top:22px;padding-top:18px;border-top:1px solid var(--ink-100);max-width:560px;">
+        <input type="hidden" name="silent" value="yes">
+        <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:var(--ink-700);">
+          <strong>Or cancel without telling them.</strong> For an order they never
+          asked for, a duplicate, or one you have already spoken to them about.
+          They will not know, so they may still leave a bag out.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:1 1 260px;">
+            <label class="field-label" for="silent_reason">Why</label>
+            <input class="input" type="text" id="silent_reason" name="reason" maxlength="200" required
+                   placeholder="Duplicate of #2060, already spoke to him">
+          </div>
+          <button class="btn btn-lg" type="submit">Cancel, say nothing</button>
         </div>
       </form>
     </div>
@@ -2981,9 +3085,31 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         ? await recurring.forCustomer(order.customer_id).catch(() => [])
         : [];
 
-    // Only fetched when the bag could actually be dropped somewhere, so every
-    // other order page does not pay for a query it will not use.
-    const laundromats = order.status === 'IN_PROCESS' ? await partners.activeLaundromats() : [];
+    // WHERE THE BAG COULD GO, for the drop-off control and for the pin.
+    //
+    // IT USED TO BE `IN_PROCESS` ONLY, because the only thing that needed it was
+    // the drop-off card - the moment a driver is holding bags and choosing a
+    // counter. The pin needs it earlier: Neil routes an order to a particular
+    // laundromat when he books it, which is before anybody has collected anything.
+    //
+    // Still not on every order page. Past the handover the shop is recorded rather
+    // than chosen, and somebody who cannot pin one has no use for the list - so the
+    // query is skipped for a driver and for anything already delivered.
+    // `stillRunning` IS WRITTEN OUT RATHER THAN REUSED, and that is not
+    // duplication for its own sake: the shared one is declared twenty-six lines
+    // BELOW this, so referencing it here is a temporal dead zone - "Cannot access
+    // 'stillRunning' before initialization", thrown at runtime on every order page,
+    // with the file parsing perfectly.
+    const live = !['DELIVERED', 'CANCELED'].includes(order.status);
+
+    const laundromats =
+      (roles.can(req.opsUser, 'orders.override') && !order.partner_id && live) ||
+      order.status === 'IN_PROCESS'
+        ? await partners.activeLaundromats().catch((err) => {
+            console.error(`Could not read the laundromats for ${order.id}: ${err.message}`);
+            return [];
+          })
+        : [];
     // THE PICKUP SEQUENCE, or null once the bags are loaded.
     //
     // Only while the order is still at the customer's door: from booked until
@@ -3075,6 +3201,11 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // decide, and a control that changes nothing is one somebody presses and
       // then rings up about.
       can.override && stillRunning ? carrierCard(order) : '',
+      // WHICH LAUNDROMAT IT GOES TO. Beside the carrier because they are the same
+      // kind of decision - who does the work and where it is done - and both are
+      // Admin only for the same reason: they are about the customer's order rather
+      // than about a step in the round.
+      can.override && stillRunning ? laundromatCard(order, true, laundromats) : '',
       can.customers && stillRunning
         ? `<h2>Driver</h2><div id="driver"><form method="post" action="/ops/orders/${order.order_number}/driver" style="margin:0;display:flex;gap:8px;flex-wrap:wrap;">
              <select name="driver_id" style="font:inherit;padding:4px 6px;border:1px solid #9ca3af;border-radius:3px;min-height:30px;">
@@ -3886,18 +4017,8 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
           customer.address_line2 ? `, ${escapeHtml(customer.address_line2)}` : ''
         }${customer.city ? `, ${escapeHtml(customer.city)}` : ''}<br>
         Bag goes: ${spot ? escapeHtml(spot) : '<strong>not recorded</strong>'}<br>
-        <!-- CHOSEN OR DEFAULTED, SAID OUT LOUD. describeSaved() falls back to
-             cold and softener when nothing is set, so `|| 'not set'` could never
-             fire and this panel read a default back as though the customer had
-             picked it. That is the distinction the intake table exists to draw,
-             and it belongs here too. -->
         Wash: ${escapeHtml(wash.describeSaved(prefs))}${
           booking.hasPreferences(customer) ? '' : ' <strong>(default, they have not said)</strong>'
-        }<br>
-        Card: ${
-          customer.default_payment_method_id
-            ? `${escapeHtml(customer.card_brand || 'card')} ending ${escapeHtml(customer.card_last4 || '')}`
-            : '<strong>none on file</strong>, so this will not be confirmed until they add one'
         }
       </div>
     </div>
@@ -3921,7 +4042,25 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
              value="${v('notes')}" placeholder="two bags, one is bedding"
              style="width:100%;margin-bottom:24px;">
 
-      <button class="btn btn-primary btn-lg" type="submit">Book it and text them</button>
+      <!-- BOOKING WITHOUT TELLING THEM. Neil, 26 September: "i should have the
+           option to net text the customer once its booked."
+
+           A CHECKBOX RATHER THAN A SECOND BUTTON, unlike the cancel card, and the
+           difference is real: cancelling silently and cancelling are two different
+           acts with different consequences for somebody who may leave a bag out.
+           Booking is one act, and whether it is announced is a property of it -
+           the customer is getting the pickup either way.
+
+           IT IS OFF BY DEFAULT, so the button still says what it does. -->
+      <label style="display:flex;gap:10px;align-items:flex-start;margin:0 0 20px;cursor:pointer;">
+        <input type="checkbox" name="silent" value="yes" style="margin-top:3px;">
+        <span style="font-size:14px;line-height:1.5;color:var(--ink-700);">
+          <strong>Do not text them.</strong> The pickup is booked either way - they
+          simply will not hear about it from us, so tell them yourself.
+        </span>
+      </label>
+
+      <button class="btn btn-primary btn-lg" type="submit">Book it</button>
       <a class="btn btn-ghost btn-lg" href="/ops/customers/${customer.id}">Cancel</a>
     </form>`;
 }
@@ -4020,6 +4159,25 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
       }[result.reason];
 
       return reshow(message || 'That pickup could not be booked.');
+    }
+
+    // BOOKING WITHOUT TELLING THEM. Neil, 26 September: "i should have the option
+    // to net text the customer once its booked."
+    //
+    // NOTHING IS SENT AND NOTHING IS LOGGED, rather than a send being swallowed.
+    // `messages` is the record of what reached a phone, so a row there would show
+    // in the thread as though we had confirmed it - which is the one thing
+    // somebody reading that thread later must not be told.
+    //
+    // THE ORDER IS IDENTICAL EITHER WAY. This decides whether it is announced, not
+    // what it is: same rules, same hold, same rate, same board.
+    if (String((req.body || {}).silent || '') === 'yes') {
+      return res.redirect(
+        303,
+        `/ops/orders/${result.order.order_number}?problem=${encodeURIComponent(
+          'Booked. They have NOT been texted, so tell them yourself.'
+        )}`
+      );
     }
 
     // Confirm by text, from the same function every other door uses, so the
@@ -5321,11 +5479,33 @@ router.post('/ops/orders/:id/cancel', guard, may('orders.override'), async (req,
       );
     }
 
+    // CANCELLING WITHOUT TELLING THEM. Neil's ask, 26 September, twice and
+    // plainly: "do not text him just do what i am telling you to do".
+    //
+    // THE ARGUMENT AGAINST IT IS WRITTEN DOWN RATHER THAN ARGUED AGAIN, because it
+    // is a good one and somebody will meet this checkbox without the history: a
+    // cancelled pickup the customer does not know about is somebody leaving a bag
+    // on a doorstep for a van that never comes. That is why the text exists and it
+    // is still the default.
+    //
+    // WHEN IT IS RIGHT: an order the customer never asked for, a duplicate, a test
+    // row, or one they have already been told about by phone. In every one of those
+    // the text is the confusing thing rather than the kind one.
+    //
+    // THE SILENCE GOES IN THE CHANGE LOG, which is the whole reason this is a
+    // control rather than an SQL statement. An order that quietly became CANCELED
+    // with no message and no record of why nobody was told is indistinguishable
+    // from the bug where a text failed - and that ambiguity is what the log exists
+    // to remove.
+    const silent = String(body.silent || '') === 'yes';
+
     await orders.transition(order, 'CANCELED');
 
     await orderEvents.record(order.id, {
       kind: 'STATUS',
-      summary: `Cancelled by ${req.opsUser ? req.opsUser.name : 'an admin'}`,
+      summary:
+        `Cancelled by ${req.opsUser ? req.opsUser.name : 'an admin'}` +
+        (silent ? ', WITHOUT telling the customer' : ''),
       reason,
       by: { opsUser: req.opsUser },
     });
@@ -5355,28 +5535,43 @@ router.post('/ops/orders/:id/cancel', guard, may('orders.override'), async (req,
 
     text += note ? ` ${note}` : ` Text us whenever you want to book again.`;
 
-    let told = true;
-    try {
-      await notify.sendAndLog(order.customers.phone, text, order.customer_id, {
-        sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
-        kind: 'SYSTEM',
-      });
-    } catch (err) {
-      // The order IS cancelled - that already happened and must not be undone
-      // because a text failed. Say so plainly instead, because an admin who
-      // thinks the customer was told and was not is the worst of both.
-      console.error(`Cancelled ${order.id} but could not text them: ${err.message}`);
-      told = false;
+    // SILENT MEANS NOTHING IS SENT, not that a send is quietly swallowed. The text
+    // is never composed as far as the carrier, so nothing lands in `messages`
+    // either - that table is the record of what reached a phone, and a row there
+    // would show in the thread as though we had told them.
+    let told = false;
+
+    if (!silent) {
+      told = true;
+      try {
+        await notify.sendAndLog(order.customers.phone, text, order.customer_id, {
+          sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+          kind: 'SYSTEM',
+        });
+      } catch (err) {
+        // The order IS cancelled - that already happened and must not be undone
+        // because a text failed. Say so plainly instead, because an admin who
+        // thinks the customer was told and was not is the worst of both.
+        console.error(`Cancelled ${order.id} but could not text them: ${err.message}`);
+        told = false;
+      }
     }
 
-    return res.redirect(
-      303,
-      told
+    // THREE OUTCOMES, NOT TWO, and the third is the one worth spelling out: an
+    // admin who chose silence gets told plainly that the customer does not know,
+    // because that is now a thing they have to carry rather than something the
+    // system handled.
+    const said = silent
+      ? `${back}?problem=${encodeURIComponent(
+          'Cancelled. The customer has NOT been told - they may still leave a bag out.'
+        )}`
+      : told
         ? `${back}?done=${encodeURIComponent('Cancelled, and they have been texted.')}`
         : `${back}?problem=${encodeURIComponent(
             'Cancelled - but the text did NOT go. Tell them yourself before they leave a bag out.'
-          )}`
-    );
+          )}`;
+
+    return res.redirect(303, said);
   } catch (err) {
     return next(err);
   }
@@ -5449,6 +5644,89 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
 // changes and nobody is texted. It records a decision; the screens that act on
 // it read it next time they draw. A button that quietly did a second thing is
 // one nobody trusts.
+// SEND THIS ORDER TO A PARTICULAR LAUNDROMAT, OR PUT IT BACK ON AUTOMATIC.
+//
+// Neil's ask, 26 September, and the second time - #1975 was pinned by hand in
+// September because Best Wash was cheaper and he wanted Fancy K.
+//
+// IT WRITES THE TWO PINNED COLUMNS AS WELL AS THE PLAN, and that is the point.
+// `intended_partner_id` on its own is the booking-time plan, which goes stale;
+// `partner_pinned_at` and `partner_pinned_by` are what tell `dropoffGroups()` a
+// PERSON decided, so the pin beats the live choice instead of losing to it.
+//
+// CHECKED AGAINST THE ACTIVE LIST, never trusted from the form. A select is the
+// submitter's to edit, and a pin to a shop that has been ended would quietly send
+// a courier to a closed door.
+router.post('/ops/orders/:id/laundromat', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+
+    // ONCE THEY HAVE THE BAGS IT IS HISTORY. `partner_id` is written at handover
+    // and is the record of who actually had them; a pin after that is a note about
+    // a decision nobody can act on.
+    if (order.partner_id) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('A laundromat already has this one, so where it goes is settled.')}`
+      );
+    }
+
+    const wanted = String((req.body || {}).partner_id || '').trim() || null;
+    const active = await partners.activeLaundromats().catch(() => []);
+    const shop = wanted ? (active || []).find((p) => p.id === wanted) : null;
+
+    if (wanted && !shop) {
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent('That laundromat is not on the active list.')}`
+      );
+    }
+
+    const was = order.intended_partner_id
+      ? ((active || []).find((p) => p.id === order.intended_partner_id) || {}).name || 'a laundromat'
+      : 'the cheapest all in';
+
+    const { error } = await db
+      .from('orders')
+      .update({
+        intended_partner_id: wanted,
+        // CLEARED TOGETHER. Going back to automatic has to drop the pin as well,
+        // or `dropoffGroups()` keeps reading a hand-made decision that is no
+        // longer anybody's.
+        partner_pinned_at: wanted ? new Date().toISOString() : null,
+        partner_pinned_by: wanted && req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null,
+      })
+      .eq('id', order.id);
+
+    if (error) throw error;
+
+    // THE EFFECT, NOT THE COLUMN. A history is read by somebody asking what
+    // happened, not by somebody reading the schema.
+    await orderEvents
+      .record(order.id, {
+        kind: 'NOTE',
+        summary: shop ? `Routed to ${shop.name} by hand` : 'Back to the cheapest laundromat all in',
+        was,
+        became: shop ? shop.name : 'automatic',
+        by: { actor: req.opsUser && req.opsUser.name ? req.opsUser.name : 'ops' },
+        reason: shop ? 'Pinned by a person, so the router does not re-decide it' : null,
+      })
+      .catch((err) => console.error(`Could not log the laundromat pin on ${order.id}: ${err.message}`));
+
+    return res.redirect(
+      303,
+      `${back}?done=${encodeURIComponent(
+        shop ? `Going to ${shop.name}.` : 'Back to the cheapest laundromat all in.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/orders/:id/carrier', guard, may('orders.override'), async (req, res, next) => {
   try {
     const order = await loadOrderForAction(req.params.id);
