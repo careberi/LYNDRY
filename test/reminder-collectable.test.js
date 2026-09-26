@@ -183,12 +183,23 @@ test('the fields are one constant, not typed out three times', () => {
 
 // --- the reminder explains the pending charge -------------------------------
 
-test('THE REMINDER SAYS WHAT IS ON HOLD, because it is the only message that can', () => {
-  // The hold is placed by the night-before pass minutes before this goes out. A
-  // booking made a fortnight ago was confirmed before any hold existed, so its
-  // confirmation could not mention one - this text is the first and only chance
-  // to explain the pending charge they are about to see.
-  const body = reminders.reminderMessage({
+test('THE REMINDER SAYS NOTHING ABOUT THE HOLD, WHICH REVERSES NEIL\'S OWN ASK', () => {
+  // It read ` $25.00 is on hold to confirm the pickup - we take the real total at
+  // the door.` Neil, 26 September, reading a real thread: "this remainder $25.00
+  // is on hold to confirm the pickup does not need to included in the remidner."
+  //
+  // WHAT THE SENTENCE WAS FOR, so nobody puts it back without knowing: the hold is
+  // placed minutes before this text goes out, and a booking made a fortnight ago is
+  // confirmed before any hold exists - so this was the only message that could ever
+  // explain the pending charge. Removing it means a customer who booked more than a
+  // day ahead sees $25 pending with nothing having explained it. His call, made
+  // with that argument in front of him.
+  //
+  // AND HALF OF IT WAS STALE ANYWAY: "we take the real total at the door" was
+  // written when loadVan() charged at the doorstep. Under a courier nobody of ours
+  // goes to the door - settleWeight() charges at the laundromat weigh-in - so it
+  // described a visit that does not happen.
+  const held = reminders.reminderMessage({
     pickup_date: '2026-09-16',
     pickup_window_start: '17:00',
     pickup_window_end: '21:00',
@@ -197,8 +208,13 @@ test('THE REMINDER SAYS WHAT IS ON HOLD, because it is the only message that can
     authorized_cents: 2500,
   });
 
-  assert.match(body, /\$25\.00 is on hold/);
-  assert.match(body, /real total at the door/);
+  assert.ok(!/hold/i.test(held), `the reminder still mentions the hold: ${held}`);
+  assert.ok(!/at the door/i.test(held), 'the reminder still says the charge happens at a door');
+
+  // AND IT STILL SAYS THE TWO THINGS IT IS FOR: when we are coming, and where the
+  // bag goes. The scope was one sentence.
+  assert.match(held, /tomorrow/i, 'the reminder stopped saying when');
+  assert.match(held, /bag/i, 'the reminder stopped saying where the bag goes');
 });
 
 test('AND SAYS NOTHING WHEN THERE IS NO HOLD', () => {
@@ -214,18 +230,29 @@ test('AND SAYS NOTHING WHEN THERE IS NO HOLD', () => {
   }
 });
 
-test('the amount is read off the order, never assumed from config', () => {
-  // Two copies of one number disagree the day the amount moves, and this one is
-  // printed on a customer's statement beside ours.
-  const body = reminders.reminderMessage({
-    pickup_date: '2026-09-16',
-    pickup_method: 'LEAVE_OUTSIDE',
-    authorization_intent_id: 'pi_1',
-    authorized_cents: 1500,
-  });
-
-  assert.match(body, /\$15\.00 is on hold/);
-  assert.ok(!/\$25\.00/.test(body));
+test('IT SAYS NOTHING ABOUT MONEY AT ALL NOW', () => {
+  // This replaced "the amount is read off the order, never assumed from config",
+  // which existed so the figure in the sentence could not disagree with the one on
+  // the customer's statement. There is no figure and no sentence, so the stronger
+  // rule is available: a reminder is a message about a van coming to a door, and
+  // one that mentions money has grown into something else.
+  for (const order of [
+    { pickup_date: '2026-09-16', pickup_method: 'LEAVE_OUTSIDE' },
+    { pickup_date: '2026-09-16', pickup_method: 'LEAVE_OUTSIDE', payment_status: 'WAIVED' },
+    {
+      pickup_date: '2026-09-16',
+      pickup_method: 'LEAVE_OUTSIDE',
+      authorization_intent_id: 'pi_1',
+      authorized_cents: 2500,
+    },
+    { pickup_date: '2026-09-16', pickup_method: 'LEAVE_OUTSIDE', authorized_at: 'x', captured_cents: 2500 },
+  ]) {
+    const body = reminders.reminderMessage(order);
+    assert.ok(
+      !/hold|charge|card|total|\$\d/i.test(body),
+      `${JSON.stringify(order)} produced a reminder about money: ${body}`
+    );
+  }
 });
 
 test('A STANDING ORDER STILL FITS IN TWO SEGMENTS WITH IT', () => {
@@ -245,8 +272,22 @@ test('A STANDING ORDER STILL FITS IN TWO SEGMENTS WITH IT', () => {
   });
 
   assert.match(worst, /SKIP/);
-  assert.match(worst, /is on hold/);
-  assert.ok(worst.length <= 306, `${worst.length} characters is three segments`);
+
+  // THE HOLD CLAUSE IS WHAT PUT THIS WITHIN A COUPLE OF CHARACTERS OF THE
+  // TWO-SEGMENT CEILING, and it is gone - the worst case is 227 where it was 306.
+  //
+  // STILL TWO SEGMENTS, NOT ONE. The SKIP line alone takes a standing order past
+  // 160, so this cannot be a one-segment message and claiming so would be a test
+  // that fails the moment somebody fixes a typo. What is worth locking is the
+  // HEADROOM that was just won back: ~79 characters, which is enough for a real
+  // sentence and is exactly the kind of thing that gets spent by accident.
+  assert.ok(!/is on hold/.test(worst), 'the hold clause is back in the reminder');
+  assert.ok(
+    worst.length <= 240,
+    `${worst.length} characters - the room won back by dropping the hold clause is being spent. ` +
+      'Two segments is 306 and this used to sit just inside it; anything approaching that again ' +
+      'wants deciding rather than drifting.'
+  );
 });
 
 test('AND THE CONSTANT CARRIES EVERYTHING collectable() READS', () => {

@@ -221,7 +221,13 @@ test('and naming the plan does not cost a third segment', () => {
   });
 
   assert.match(worst, /SKIP/);
-  assert.match(worst, /is on hold/);
+
+  // THE HOLD CLAUSE IS GONE, so the 305-of-306 this was written against is now
+  // comfortably inside two segments. The rule it protects is unchanged and is the
+  // reason the plan name REPLACES the opener rather than being added to it: every
+  // pickup a subscription books carries one, so a longer wording is a third
+  // segment on every subscriber's reminder, every week, for ever.
+  assert.ok(!/is on hold/.test(worst), 'the hold clause is back in the reminder');
   assert.ok(worst.length <= 306, `${worst.length} characters is three segments`);
 });
 

@@ -195,31 +195,36 @@ function reminderMessage(order) {
     ? ` Reply SKIP if you don't need it this week and we'll cancel it, no charge.`
     : '';
 
-  // WHAT IS SITTING ON THEIR CARD RIGHT NOW.
+  // THE HOLD IS NOT MENTIONED HERE ANY MORE, AND THAT REVERSES NEIL'S OWN ASK.
   //
-  // Neil's ask, 14 September. The hold is placed by the night-before pass a few
-  // minutes before this text goes out, so this is the first and only message
-  // that can explain the pending charge they are about to see - a booking made
-  // a fortnight ago was confirmed before any hold existed, so its confirmation
-  // could not mention one. Unexplained, $25 pending is a phone call at best and
-  // a chargeback at worst.
+  // It read ` $25.00 is on hold to confirm the pickup - we take the real total at
+  // the door.` Neil, 26 September, reading a real thread: "this remainder $25.00
+  // is on hold to confirm the pickup does not need to included in the remidner."
   //
-  // READ OFF THE ORDER, never assumed from config. A waived order and a free
-  // one carry no hold, so they get no sentence without anybody having to
-  // remember them here; and the figure named is the one actually held, which is
-  // what stops this and the hold disagreeing the day the amount moves.
-  const hold = billing.showUpHold(order);
+  // WHAT THE SENTENCE WAS FOR, so nobody puts it back without knowing: the hold is
+  // placed by the night-before pass a few minutes before this text goes out, so
+  // this was the first and only message that could explain the pending charge - a
+  // booking made a fortnight ago is confirmed before any hold exists, and its
+  // confirmation therefore cannot name one.
   //
-  // WORDED TO FIT. A standing order's reminder already carries the SKIP line,
-  // and that one plus this sentence plus a long dropoff spot lands within a
-  // couple of characters of the two-segment ceiling - so the phrasing was
-  // measured against that worst case rather than chosen and hoped for. Anything
-  // longer here costs a third segment on every standing-order reminder.
-  const held = hold
-    ? ` ${billing.money(hold.cents)} is on hold to confirm the pickup - we take the real total at the door.`
-    : '';
+  // WHAT IT COSTS TO REMOVE IT, SAID PLAINLY: a customer who booked more than a
+  // day ahead now sees $25 pending on their card with nothing anywhere having
+  // explained it. That was the argument for adding it and it has not gone away.
+  // Neil's call, made with it in front of him.
+  //
+  // AND HALF OF IT HAD GONE STALE ANYWAY, which is a second reason rather than the
+  // reason. "We take the real total at the door" was written when `loadVan()`
+  // charged at the doorstep. Under a courier nobody of ours goes to the door at
+  // all - `settleWeight()` charges at the laundromat weigh-in - so the sentence
+  // was describing a visit that does not happen. This is the sixth customer-facing
+  // sentence found saying the wrong thing after the charge point moved; CLAUDE.md
+  // says to grep for "at the door" and "a pound" when it moves again.
+  //
+  // WHAT IT BUYS: the reminder was within a couple of characters of the
+  // two-segment ceiling on a standing order carrying the SKIP line and a long
+  // dropoff spot. It is comfortably inside one now, on every reminder, for ever.
 
-  return `${head} ${where}${held} Text us if anything changes.${out}`;
+  return `${head} ${where} Text us if anything changes.${out}`;
 }
 
 // Everything due a reminder for `date`, sent, and stamped as it goes.
