@@ -72,6 +72,20 @@ const T = Object.freeze({
   signInButton: { en: 'Sign in', es: 'Entrar' },
   sendAnother: { en: 'Send another code', es: 'Enviar otro codigo' },
 
+  expectedTitle: { en: 'Coming in', es: 'Por llegar' },
+  expectedHelp: {
+    en: 'A courier is bringing these. They will ask you for the code before they can hand the bags over.',
+    es: 'Un mensajero trae estas. Le pedira el codigo antes de poder entregar las bolsas.',
+  },
+  theCode: { en: 'Code for the courier', es: 'Codigo para el mensajero' },
+  noCodeYet: { en: 'No code yet', es: 'Aun sin codigo' },
+  itsHere: { en: 'These bags are here', es: 'Estas bolsas ya llegaron' },
+  arrived: { en: 'Added to your list.', es: 'Agregado a su lista.' },
+  arrivedFailed: {
+    en: 'We could not mark that as arrived. Ring us.',
+    es: 'No pudimos marcarlo como llegado. Llamenos.',
+  },
+  nothingComing: { en: 'Nothing on the way right now.', es: 'Nada en camino ahora.' },
   today: { en: 'Your laundry today', es: 'Su ropa de hoy' },
   nothingHere: { en: 'Nothing here right now.', es: 'Nada por ahora.' },
   nothingHereMore: {
@@ -453,20 +467,53 @@ function orderRow(order, lang) {
   </a>`;
 }
 
+// ONE ORDER A COURIER IS BRINGING, AND THE CODE THEY WILL ASK FOR.
+//
+// THE CODE IS THE POINT OF THIS ROW. Uber texts it to the shop as well, and this
+// is what saves an attendant when that text has not arrived or the phone is in
+// somebody's pocket - which on a counter is most of the time.
+//
+// IT IS NOT TYPED BACK IN. The courier enters it in their own app and Uber will
+// not let them complete without it, so asking the attendant to re-type a number
+// we have just shown her would be theatre. What the button records is the one
+// thing only she knows: the bags are physically here.
+function expectedRow(e, lang) {
+  const bags = Number(e.bagCount);
+
+  return `<div class="card" style="margin-bottom:10px;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <strong style="font-size:17px;">${s('order', lang)} ${escapeHtml(String(e.orderNumber))}</strong>
+      ${Number.isFinite(bags) && bags > 0 ? `<span>${bags} ${bags === 1 ? s('oneBag', lang) : s('bags', lang)}</span>` : ''}
+    </div>
+
+    <div style="margin:10px 0;">
+      <div class="eyebrow" style="margin:0 0 2px;">${s('theCode', lang)}</div>
+      <div style="font-family:var(--c-mono,ui-monospace,monospace);font-size:30px;font-weight:700;letter-spacing:0.12em;">
+        ${e.pin ? escapeHtml(e.pin) : s('noCodeYet', lang)}
+      </div>
+    </div>
+
+    <form method="post" action="/shop/expected/${encodeURIComponent(e.orderNumber)}/arrived" style="margin:0;">
+      <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">${s('itsHere', lang)}</button>
+    </form>
+  </div>`;
+}
+
 // THROUGH `opsNote()`, NEVER AN INLINE-STYLED BOX. `test/ops-notices.test.js`
 // refuses a hand-styled banner anywhere in the ops screens, and this file is held
 // to the same rule now that it renders through the same shell.
 function flashNotes(flash, lang) {
   if (!flash) return [];
 
-  const good = flash === 'weightSaved' || flash === 'collectSent';
+  const good = ['weightSaved', 'collectSent', 'arrived'].includes(flash);
   return [opsNote({ tone: good ? 'good' : 'bad', title: s(flash, lang) })];
 }
 
 // THE ONES NEEDING SOMETHING FIRST. Not by arrival time: the question the page
 // answers is "what do I do next", and an order waiting to be weighed is that
 // whatever time it came in.
-function board({ lang = 'en', shop, orders = [], flash = null, isOwner = false } = {}) {
+function board({ lang = 'en', shop, orders = [], expected = [], flash = null, isOwner = false } = {}) {
   const rank = { WEIGH: 0, WASH: 1, OTHER: 2, DONE: 3, GONE: 4 };
   const sorted = [...orders].sort(
     (a, b) =>
@@ -474,8 +521,20 @@ function board({ lang = 'en', shop, orders = [], flash = null, isOwner = false }
       String(a.at_partner_at || '').localeCompare(String(b.at_partner_at || ''))
   );
 
+  // WHAT IS ON ITS WAY, ABOVE WHAT IS ALREADY HERE. An attendant's first
+  // question walking up to the tablet is "is anything coming", and the code a
+  // courier will ask for is the one thing on this screen she cannot look up
+  // anywhere else.
+  const incoming = expected.length
+    ? `
+    <h2>${s('expectedTitle', lang)}</h2>
+    <p>${s('expectedHelp', lang)}</p>
+    ${expected.map((e) => expectedRow(e, lang)).join('')}
+    <h2 style="margin-top:22px;">${s('today', lang)}</h2>`
+    : `<h1>${s('today', lang)}</h1>`;
+
   const body = `
-    <h1>${s('today', lang)}</h1>
+    ${incoming}
     ${
       sorted.length
         ? sorted.map((o) => orderRow(o, lang)).join('')

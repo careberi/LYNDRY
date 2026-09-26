@@ -136,16 +136,16 @@ async function sendForReturn(order, { by = null, customer = null, partner = null
     // along. A courier that could not be reached has not said no, so nothing is
     // recorded as refused and the attendant is told to try again.
     console.error(`Could not book a courier for order ${order.order_number}: ${err.message}`);
-    await record(order, { by, refusedReason: `threw: ${err.message}` }).catch(() => {});
+    await record(order, { leg: 'TO_CUSTOMER', by, refusedReason: `threw: ${err.message}` }).catch(() => {});
     return { ok: false, reason: 'courier_unreachable', detail: err.message };
   }
 
   if (!booked || !booked.id) {
-    await record(order, { by, refusedReason: 'no delivery id' }).catch(() => {});
+    await record(order, { leg: 'TO_CUSTOMER', by, refusedReason: 'no delivery id' }).catch(() => {});
     return { ok: false, reason: 'courier_refused' };
   }
 
-  const row = await record(order, { by, booked });
+  const row = await record(order, { leg: 'TO_CUSTOMER', by, booked });
 
   await orderEvents.record(order.id, {
     kind: 'COURIER',
@@ -157,14 +157,236 @@ async function sendForReturn(order, { by = null, customer = null, partner = null
   return { ok: true, delivery: row || booked, booked };
 }
 
+// --- the trip INTO the laundromat -------------------------------------------
+
+// SEND A COURIER TO COLLECT FROM THE CUSTOMER AND TAKE IT TO THE LAUNDROMAT.
+//
+// The other half of the round trip, and the one that carries the PIN.
+//
+// A PIN HERE AND NOT ON THE RETURN, AND THAT ASYMMETRY IS THE WHOLE POINT.
+// Uber generates a four-digit code, returns it to us, AND TEXTS IT TO THE
+// RECIPIENT - so the laundromat holds it and the courier has to ask for it
+// before the app will let them complete the drop. A courier who turns up at the
+// wrong shop cannot offload there, because only the right shop's screen shows
+// the right number.
+//
+// The return leg is left at the customer's door, where there is nobody to read a
+// code out, and Uber refuses the combination outright.
+//
+// IT DOES NOT MOVE THE ORDER'S STATUS. Booking is not collecting - the same rule
+// the return leg follows. What moves an order to AT_PARTNER is the bags actually
+// being at a counter, which `arrived()` below records.
+async function sendForPickup(order, { by = null, customer = null, partner = null, courier = couriers } = {}) {
+  const existing = await findLeg(order.id, 'TO_PARTNER');
+  if (existing && existing.delivery_id) {
+    return { ok: true, already: true, delivery: existing };
+  }
+
+  if (!partner) return { ok: false, reason: 'no_partner' };
+  if (!customer) return { ok: false, reason: 'no_customer' };
+  if (!partner.phone) return { ok: false, reason: 'no_partner_phone' };
+  if (!customer.phone) return { ok: false, reason: 'no_customer_phone' };
+
+  // THE CARD MUST HAVE TAKEN THE HOLD FIRST. Neil's rule: a pickup is confirmed
+  // by the card accepting the hold, not by a card existing. Sending a courier to
+  // a door we cannot bill for is the exact trip the hold pays for.
+  if (order.authorization_refused_at) {
+    return { ok: false, reason: 'card_refused' };
+  }
+
+  const from = addressOf(customer, {
+    name: customer.name || 'LYNDRY customer',
+    phone: customer.phone,
+    // WHERE THE BAG IS. The one free-text field a courier genuinely needs, and
+    // the same two columns the reminder and the run read, newest first.
+    notes: order.dropoff_spot || order.special_instructions || null,
+  });
+
+  const to = addressOf(partner, {
+    name: partner.name,
+    phone: partner.phone,
+    businessName: partner.name,
+    notes: `LYNDRY order ${order.order_number}. The counter has a code for you.`,
+  });
+
+  let booked = null;
+  try {
+    booked = await courier.book({
+      from,
+      to,
+      externalId: `LYNDRY-${order.order_number}-IN`,
+
+      pickupReadyAt: minutes(PICKUP_READY_MINUTES),
+      pickupDeadlineAt: minutes(PICKUP_DEADLINE_MINUTES),
+      dropoffReadyAt: minutes(PICKUP_READY_MINUTES),
+      dropoffDeadlineAt: minutes(DROPOFF_DEADLINE_MINUTES),
+
+      manifest: [{ name: 'Laundry', quantity: Number(order.bag_count || 1) }],
+
+      // THE HANDOVER CODE. Uber makes it, texts it to the laundromat, and will
+      // not let the courier complete without it.
+      requirePin: true,
+
+      // AND THEREFORE NOT LEFT AT A DOOR. Uber refuses the combination, and it
+      // is right to: a laundromat has a counter and somebody behind it.
+      leaveAtDoor: false,
+    });
+  } catch (err) {
+    console.error(`Could not book a collection for order ${order.order_number}: ${err.message}`);
+    await record(order, { leg: 'TO_PARTNER', by, refusedReason: `threw: ${err.message}` }).catch(() => {});
+    return { ok: false, reason: 'courier_unreachable', detail: err.message };
+  }
+
+  if (!booked || !booked.id) {
+    await record(order, { leg: 'TO_PARTNER', by, refusedReason: 'no delivery id' }).catch(() => {});
+    return { ok: false, reason: 'courier_refused' };
+  }
+
+  const row = await record(order, { leg: 'TO_PARTNER', by, booked });
+
+  // WHICH LAUNDROMAT THE BAGS ARE ACTUALLY GOING TO, written now rather than on
+  // arrival. `orders.partner_id` is the record of which shop had it, and the
+  // courier is on its way there - so an order whose plan changes afterwards
+  // would otherwise send a driver, or a person, to the wrong counter.
+  await db
+    .from('orders')
+    .update({ partner_id: partner.id })
+    .eq('id', order.id)
+    .then(({ error }) => {
+      if (error) console.error(`Could not record the laundromat on ${order.id}: ${error.message}`);
+    });
+
+  await orderEvents.record(order.id, {
+    kind: 'COURIER',
+    summary: `Courier booked to collect order ${order.order_number} and take it to ${partner.name}`,
+    became: booked.id,
+    by: { actor: by && by.name ? by.name : 'system' },
+  });
+
+  return { ok: true, delivery: row || booked, booked, pin: booked.pin };
+}
+
+// THE BAGS ARE ON THE COUNTER.
+//
+// What actually moves an order to AT_PARTNER under a courier. There is no van to
+// confirm and no driver to tap, so the signal is the laundromat saying the bags
+// are here - which is the only person who knows.
+//
+// TWO HOPS, BECAUSE THE STATE MACHINE HAS NO SHORTCUT. REQUESTED -> AT_PARTNER
+// is not a legal move and is not being added: IN_PROCESS means the laundry is
+// ours and in transit, which under a courier is exactly true from the moment it
+// leaves the doorstep. Both hops go through `orders.transition()`, which is the
+// only thing allowed to move a status.
+//
+// IT DOES NOT GO THROUGH `fulfilment.dropAtPartner()`, DELIBERATELY. That one
+// calls `readyForPartner()`, which refuses without `van_confirmed_at` - a column
+// only `loadVan()` writes. Under a courier there is no van to confirm, so that
+// guard can never be satisfied and its refusal ("Load the van first") is
+// nonsense to an attendant. The guards that DO apply are asked here instead.
+async function arrived(order, { by = null, partner = null } = {}) {
+  const leg = await findLeg(order.id, 'TO_PARTNER');
+
+  // NO COURIER WAS EVER SENT FOR THIS. Somebody is confirming bags that nothing
+  // dispatched - which is worth refusing rather than quietly accepting, because
+  // the likeliest cause is the wrong order number on a busy counter.
+  if (!leg) return { ok: false, reason: 'nothing_coming' };
+
+  if (order.status === 'AT_PARTNER') return { ok: true, already: true };
+
+  const orders = require('./orders');
+
+  // ALREADY PAST THE LAUNDROMAT. Confirming arrival on an order that has been
+  // washed and sent back is the same mistake one step later.
+  if (!['REQUESTED', 'IN_PROCESS'].includes(order.status)) {
+    return { ok: false, reason: 'too_late', detail: order.status };
+  }
+
+  // `transition()` TAKES TWO ARGUMENTS, RETURNS THE ORDER ROW, AND THROWS.
+  //
+  // The first version passed a third argument, checked `step.ok` on the row that
+  // came back, and treated the missing property as a refusal - so the REQUESTED
+  // to IN_PROCESS hop SUCCEEDED and the function then reported failure and
+  // stopped, leaving a real order stranded half way with the attendant told to
+  // ring us. Caught by pressing the button.
+  //
+  // IT IS SAFE TO PRESS AGAIN, which is what makes that recoverable: the status
+  // is read fresh every time, so a second press does whichever hops are left.
+  let moving = order;
+
+  try {
+    if (moving.status === 'REQUESTED') {
+      moving = (await orders.transition(moving, 'IN_PROCESS')) || { ...moving, status: 'IN_PROCESS' };
+    }
+
+    await orders.transition(moving, 'AT_PARTNER');
+  } catch (err) {
+    console.error(`Could not move order ${order.order_number} to the laundromat: ${err.message}`);
+    return { ok: false, reason: 'refused', detail: err.message };
+  }
+
+  if (partner && !order.partner_id) {
+    await db
+      .from('orders')
+      .update({ partner_id: partner.id })
+      .eq('id', order.id)
+      .then(({ error }) => {
+        if (error) console.error(`Could not record the laundromat on ${order.id}: ${error.message}`);
+      });
+  }
+
+  await orderEvents.record(order.id, {
+    kind: 'COURIER',
+    summary: `Bags arrived at ${partner ? partner.name : 'the laundromat'}`,
+    was: order.status,
+    became: 'AT_PARTNER',
+    by: { actor: by && by.name ? by.name : 'the laundromat' },
+  });
+
+  return { ok: true, delivery: leg };
+}
+
+// Everything a laundromat should be expecting: booked, not yet on the counter.
+//
+// SCOPED TO ONE SHOP IN THE QUERY. A laundromat must never see an order heading
+// somewhere else, and filtering afterwards is not access control.
+async function expectedAt(partnerId) {
+  if (!partnerId) return [];
+
+  const { data, error } = await db
+    .from('courier_deliveries')
+    .select('delivery_id, pin, status, requested_at, orders!inner(id, order_number, status, bag_count, partner_id)')
+    .eq('leg', 'TO_PARTNER')
+    .not('delivery_id', 'is', null)
+    .eq('orders.partner_id', partnerId)
+    .in('orders.status', ['REQUESTED', 'IN_PROCESS'])
+    .order('requested_at', { ascending: true });
+
+  if (error) {
+    console.error(`Could not read what ${partnerId} is expecting: ${error.message}`);
+    return [];
+  }
+
+  return (data || []).map((row) => ({
+    orderId: row.orders.id,
+    orderNumber: row.orders.order_number,
+    bagCount: row.orders.bag_count,
+    // THE CODE THE COURIER WILL ASK FOR. Shown so an attendant can read it out;
+    // Uber texts it to the shop as well, and this is what saves her when that
+    // text has not arrived or the phone is in somebody's pocket.
+    pin: row.pin,
+    status: row.status,
+    requestedAt: row.requested_at,
+  }));
+}
+
 // --- the ledger -------------------------------------------------------------
 
-async function record(order, { by = null, booked = null, refusedReason = null }) {
+async function record(order, { leg = 'TO_CUSTOMER', by = null, booked = null, refusedReason = null }) {
   const { data, error } = await db
     .from('courier_deliveries')
     .insert({
       order_id: order.id,
-      leg: 'TO_CUSTOMER',
+      leg,
       delivery_id: booked ? booked.id : null,
       status: booked ? booked.status : null,
       fee_cents: booked && booked.feeCents != null ? booked.feeCents : null,
@@ -229,7 +451,10 @@ async function bookedFor(orderIds) {
 
 module.exports = {
   PICKUP_READY_MINUTES,
+  sendForPickup,
   sendForReturn,
+  arrived,
+  expectedAt,
   findLeg,
   bookedFor,
   addressOf,

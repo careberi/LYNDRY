@@ -285,6 +285,7 @@ const RESERVED_SLUGS = Object.freeze([
   'logout',
   'orders',
   'order',
+  'expected',
   'team',
   'staff',
   'people',

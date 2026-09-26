@@ -345,6 +345,11 @@ router.get('/shop', async (req, res, next) => {
     // presses it again, and a second car arrives.
     const coming = await courierLegs.bookedFor((data || []).map((o) => o.id));
 
+    // WHAT A COURIER IS BRINGING. Scoped to this shop inside the query, like
+    // everything else here - a laundromat must never see an order heading
+    // somewhere else.
+    const expected = await courierLegs.expectedAt(req.partner.id);
+
     res.set('Cache-Control', 'no-store');
     return html(
       res,
@@ -353,6 +358,7 @@ router.get('/shop', async (req, res, next) => {
         shop: req.partner,
         isOwner: isOwner(req),
         orders: (data || []).map((o) => ({ ...o, courierBooked: coming.has(o.id) })),
+        expected,
         flash: flashOf(req),
       })
     );
@@ -370,6 +376,8 @@ function flashOf(req) {
   const said = {
     'done:weight': 'weightSaved',
     'done:courier': 'collectSent',
+    'done:arrived': 'arrived',
+    'problem:arrivedFailed': 'arrivedFailed',
     'done:added': 'staffAdded',
     'done:removed': 'staffRemoved',
     'done:restored': 'staffRestored',
@@ -552,6 +560,52 @@ router.post('/shop/orders/:number/collect', async (req, res, next) => {
     }
 
     return res.redirect(303, `${back}&done=courier`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// THE BAGS ARE ON THE COUNTER.
+//
+// What actually moves an order to AT_PARTNER under a courier. There is no van to
+// confirm and no driver to tap, so the signal is the laundromat saying the bags
+// are here - which is the only person who knows.
+//
+// SCOPED TO THIS SHOP, in the query that finds the order. An attendant typing
+// another laundromat's order number confirms nothing.
+router.post('/shop/expected/:number/arrived', async (req, res, next) => {
+  const lang = langOf(req);
+  const back = `/shop?lang=${lang}`;
+
+  try {
+    const asked = String(req.params.number || '').replace(/\D/g, '');
+    if (!asked) return res.redirect(303, back);
+
+    const { data: order, error } = await db
+      .from('orders')
+      .select(ORDER_FIELDS)
+      .eq('order_number', Number(asked))
+      .eq('partner_id', req.partner.id)
+      .in('status', ['REQUESTED', 'IN_PROCESS'])
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!order) return res.redirect(303, `${back}&problem=arrivedFailed`);
+
+    const done = await courierLegs.arrived(order, {
+      by: { id: req.partnerUser.id, name: `${req.partnerUser.name} at ${req.partner.name}` },
+      partner: req.partner,
+    });
+
+    if (!done.ok) {
+      console.error(
+        `Could not mark order ${order.order_number} arrived at ${req.partner.name}: ${done.reason}` +
+          (done.detail ? ` (${done.detail})` : '')
+      );
+      return res.redirect(303, `${back}&problem=arrivedFailed`);
+    }
+
+    return res.redirect(303, `${back}&done=arrived`);
   } catch (err) {
     return next(err);
   }
