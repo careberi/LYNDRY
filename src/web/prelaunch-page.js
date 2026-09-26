@@ -248,8 +248,18 @@ ${banner(problem, 'bad')}
       // undefined%" on a live screen. The values were never wrong; only this
       // sentence about them was.
       line: `Normal to ${limits.normalPct}%, exception past ${limits.acceptablePct}%`,
+      // THE THRESHOLDS CONFIGURE A COMPARISON THAT CANNOT HAPPEN UNDER A COURIER.
+      // Neil, 26 September, after taking "their scale against ours" off the
+      // laundromat page: "also dont need: ops/weights". Nobody of ours weighs a
+      // bag, so there is no second number for these percentages to be about.
+      //
+      // A CARD POINTING AT A PAGE THAT REDIRECTS IS WORSE THAN NO CARD, which is
+      // why this is filtered rather than left to `vanOnly` in the route. Same
+      // reasoning the menu follows.
+      vanOnly: true,
     },
   ]
+    .filter((c) => !(c.vanOnly && config.courier.model === 'DYNAMIC'))
     .map(card)
     .join('')}
 </div>`;

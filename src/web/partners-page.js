@@ -468,7 +468,186 @@ function loadLine(load) {
     <span style="font-size:14px;${tone ? `color:${tone};` : 'color:var(--ink-500);'}">${room}</span>`;
 }
 
-function partnerDetailBody({ partner, history, hours = [], load = null, notice }) {
+// ---------------------------------------------------------------------------
+// THE SHOP'S OWN PORTAL, AND WHO CAN SIGN IN TO IT.
+//
+// Neil, 26 September. Until this the portal existed, every laundromat had a URL,
+// and the only way to give anybody access was `npm run shop:user` in a terminal -
+// so the screen listing laundromats could not say where a shop's portal was or who
+// could open it.
+//
+// "THE ABILITY TO SIGN INTO IT AS WELL" NEEDS NO NEW MECHANISM, and saying so on
+// the page is better than building one. Neil adds HIMSELF as an owner with his own
+// number and signs in at the shop's URL like anybody else - as himself, with
+// everything he does attributed to him. An impersonation feature would put his
+// actions in an attendant's name, which is the one thing a staff list prevents.
+//
+// ONLY OPS MAY NAME AN OWNER. The portal's own Staff page cannot pass a role at
+// all - `partnerStaff.addAttendant()` has no argument for one - because an owner
+// minting another owner is what the two ladders exist to prevent. This is the rung
+// between them and it belongs here.
+function staffCard(p, staff) {
+  if (p.type !== 'LAUNDROMAT') return '';
+
+  const url = p.slug ? `/shop/${escapeHtml(p.slug)}` : null;
+
+  const rows = (staff || [])
+    .map((person) => {
+      const off = person.status !== 'ACTIVE';
+      const owner = person.role === 'OWNER';
+      const act = `/ops/partners/${escapeHtml(p.id)}/staff/${escapeHtml(person.id)}`;
+
+      return `
+      <tr${off ? ' style="opacity:.55;"' : ''}>
+        <td>${escapeHtml(person.name || '')}${off ? ' (switched off)' : ''}</td>
+        <td>${escapeHtml(format.displayPhone(person.phone))}</td>
+        <td>${owner ? '<strong>Owner</strong>' : 'Attendant'}</td>
+        <td style="text-align:right;white-space:nowrap;">
+          <form method="post" action="${act}" style="display:inline;">
+            <input type="hidden" name="role" value="${owner ? 'ATTENDANT' : 'OWNER'}">
+            <button class="btn btn-sm" type="submit">${owner ? 'Make attendant' : 'Make owner'}</button>
+          </form>
+          <form method="post" action="${act}" style="display:inline;">
+            <input type="hidden" name="status" value="${off ? 'ACTIVE' : 'DISABLED'}">
+            <button class="btn btn-sm" type="submit">${off ? 'Switch on' : 'Switch off'}</button>
+          </form>
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  return `
+<div class="card card-xl" style="padding:26px;margin-bottom:24px;">
+  <p class="eyebrow" style="margin:0 0 6px;">Their portal</p>
+  <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 10px;">
+    Who can sign in
+  </h2>
+
+  ${
+    url
+      ? `<p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;">
+           Their own address is
+           <a href="${url}" style="font-family:var(--font-mono);">${url}</a> &mdash; it names the
+           shop and is not a credential. Everybody below signs in there with a code we text them.
+         </p>`
+      : `<p style="font-size:15px;line-height:1.6;color:var(--stain-500);margin:0 0 18px;">
+           This laundromat has no portal address yet. It is made from the name, so press Edit and
+           save to give it one.
+         </p>`
+  }
+
+  ${
+    staff && staff.length
+      ? `<div class="pt-scroll"><table class="pt-hist">
+           <thead><tr><th>Name</th><th>Mobile</th><th>Role</th><th></th></tr></thead>
+           <tbody>${rows}</tbody>
+         </table></div>`
+      : `<p style="font-size:15px;line-height:1.6;color:var(--ink-500);margin:0 0 18px;">
+           Nobody can sign in to this shop yet.
+         </p>`
+  }
+
+  <form method="post" action="/ops/partners/${escapeHtml(p.id)}/staff"
+        style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:22px;">
+    <div style="flex:1 1 160px;">
+      <label class="field-label" for="sn">Name</label>
+      <input class="field" id="sn" name="name" type="text" maxlength="60" required style="min-width:0;">
+    </div>
+    <div style="flex:1 1 160px;">
+      <label class="field-label" for="sp">Mobile</label>
+      <input class="field" id="sp" name="phone" type="tel" placeholder="201-555-0142" required
+             style="min-width:0;">
+    </div>
+    <div style="flex:0 1 150px;">
+      <label class="field-label" for="sr">Role</label>
+      <select class="field" id="sr" name="role" style="min-width:0;">
+        <option value="OWNER">Owner</option>
+        <option value="ATTENDANT">Attendant</option>
+      </select>
+    </div>
+    <button class="btn btn-ink" type="submit">Add them</button>
+  </form>
+
+  <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:16px 0 0;">
+    An owner can add and remove their own attendants. Nobody is texted when they are added &mdash;
+    they sign in when they choose to. <strong>To see the portal yourself, add your own number as an
+    owner</strong> and sign in at their address: everything you do is then recorded as you rather
+    than as one of their staff.
+  </p>
+</div>`;
+}
+
+// WHAT THEY HAVE WEIGHED, WHEN THEIRS IS THE ONLY SCALE.
+//
+// Replaces "Their scale against ours" under the courier model. No drift, no
+// tolerance and no flags, because there is no second number to be out by.
+//
+// THE LOST CONTROL IS NAMED RATHER THAN QUIETLY DROPPED. Under the van our scale
+// checked theirs, which is what made a shop running consistently heavy visible. A
+// courier removes our half, so the same unchecked figure bills the customer and
+// pays the shop. This page is exactly where somebody would look for that check, so
+// it is the page that has to say it is gone.
+function theirScaleAlone(p, weighed) {
+  if (p.type !== 'LAUNDROMAT') return '';
+
+  const w = weighed || { orders: 0, totalLb: 0, meanLb: 0, meanPerBag: null };
+  const n = (value, dp = 1) => (value == null ? '&mdash;' : Number(value).toFixed(dp));
+
+  const figure = (value, label) => `
+    <div>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1;">${value}</div>
+      <div class="eyebrow" style="margin:6px 0 0;">${label}</div>
+    </div>`;
+
+  return `
+<div class="card card-xl" style="padding:26px;">
+  <p class="eyebrow" style="margin:0 0 6px;">Their scale</p>
+  <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 10px;">
+    What they have weighed
+  </h2>
+
+  ${
+    w.orders
+      ? `<div style="display:flex;flex-wrap:wrap;gap:22px;margin:14px 0 18px;">
+           ${figure(w.orders, 'Orders weighed')}
+           ${figure(n(w.totalLb), 'Pounds in total')}
+           ${figure(n(w.meanLb), 'Average order')}
+           ${figure(n(w.meanPerBag), 'Average per bag')}
+         </div>`
+      : `<p style="font-size:15px;line-height:1.6;color:var(--ink-500);margin:0 0 6px;">
+           Nothing weighed yet. It fills in as orders go through them.
+         </p>`
+  }
+
+  <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:14px 0 0;">
+    <strong>Nobody of ours weighs these bags.</strong> A courier takes them off a doorstep and hands
+    them over this counter, so their figure is the only one there is &mdash; it bills the customer and
+    it pays them. There is nothing to check it against. Pounds per bag against their own history is
+    the one signal left: a shop that has always reported 25 lb a bag and starts reporting 40 shows up
+    above.
+  </p>
+</div>`;
+}
+
+function partnerDetailBody({
+  partner,
+  history,
+  hours = [],
+  load = null,
+  notice,
+  // THE PORTAL, WHICH THE PAGE KNEW NOTHING ABOUT. Neil, 26 September:
+  // "Shouldnt the laundromat page have a spot for me to add the owner/admin of
+  // the laudnromat url page. also i shoudl a link to that page and the ability
+  // to sign into it as well."
+  //
+  // Until this, a laundromat's portal existed and the only way to give anybody
+  // access to it was `npm run shop:user` in a terminal. A screen listing
+  // laundromats that could not say who could sign in to one, or even where it
+  // was, was a screen missing the half that has people in it.
+  staff = [],
+  weighed = null,
+  courierModel = false,
+} = {}) {
   const p = partner;
   const laundromat = p.type === 'LAUNDROMAT';
 
@@ -601,6 +780,34 @@ ${
     ${p.notes ? `<p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:var(--ink-700);white-space:pre-wrap;">${escapeHtml(p.notes)}</p>` : ''}
   </div>
 
+  ${staffCard(p, staff)}
+
+  ${
+    // THEIR SCALE AGAINST OURS IS A VAN QUESTION AND CANNOT BE ASKED UNDER A
+    // COURIER. Neil, 26 September: "we are not weighing the orders anymore.
+    // There is no need for the Their scale against ours check."
+    //
+    // He is right and it follows from the model rather than being a preference:
+    // nobody of ours touches the bags, so `orders.weight_lb` is null for ever and
+    // the comparison has one number in it. `weightHistory()` requires BOTH and can
+    // only ever come back empty for a courier order - what was on screen was
+    // seeded van-era data.
+    //
+    // THE VAN VERSION IS UNTOUCHED, because production still runs it. Third thing
+    // in this codebase that is two rules on purpose, after the service area and
+    // the order minimum.
+    courierModel ? theirScaleAlone(p, weighed) : ''
+  }
+  ${
+    // ABSENT, NEVER HIDDEN. The first version set `display:none` on this card
+    // under the courier model, which is the exact thing this codebase refuses:
+    // prices are left out of a driver's markup rather than hidden with CSS,
+    // because a value that never reaches the page cannot leak from it - and a
+    // screen that hides a thing while the data still renders is not a decision,
+    // it is a stylesheet away from being undone.
+    courierModel
+      ? ''
+      : `
   <div class="card card-xl" style="padding:26px;">
     <p class="eyebrow" style="margin:0 0 6px;">Their scale against ours</p>
     ${
@@ -644,7 +851,8 @@ ${
       Tolerance is ${partners.TOLERANCE_LB} lb or ${(partners.TOLERANCE_PCT * 100).toFixed(0)}% of
       the bag, whichever is larger. Our weight is always what the customer was charged.
     </p>
-  </div>
+  </div>`
+  }
 </div>`;
 }
 

@@ -65,6 +65,7 @@ const partners = require('../core/partners');
 const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
 const { scheduledBody } = require('../web/scheduled-page');
 const { couriersBody } = require('../web/couriers-board');
+const partnerStaff = require('../core/partner-staff');
 const courierLegs = require('../core/courier-legs');
 const couriers = require('../providers/couriers');
 const {
@@ -421,7 +422,7 @@ const OPS_MENUS = Object.freeze([
       { href: '/ops', label: 'Orders', permission: 'orders.view' },
       // The live day. It belongs beside the orders it sequences, not beside the
       // calculators - it reads the real queue and nothing on it is invented.
-      { href: '/ops/routing', label: 'Routing', permission: 'orders.act' },
+      { href: '/ops/routing', label: 'Routing', permission: 'orders.act', vanOnly: true },
       // LOAD THE VAN IS NOT LISTED, at Neil's request: "it shouldn't be
       // something I could select on my own". It is a step of the route, not a
       // destination - you reach it from the collect-from-the-laundromat stop on
@@ -518,8 +519,8 @@ const OPS_MENUS = Object.freeze([
     // that is what Business is for.
     label: 'Tools',
     items: [
-      { href: '/ops/labels', label: 'Bag tags', permission: 'orders.act' },
-      { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
+      { href: '/ops/labels', label: 'Bag tags', permission: 'orders.act', vanOnly: true },
+      { href: '/ops/economics', label: 'Unit economics', permission: 'money.view', vanOnly: true },
       // COURIERS IS LISTED, unlike the cards on the Admin dashboard, and the
       // difference is that this one IS something you go looking for. A courier is
       // an outside company holding somebody's laundry in a stranger's car: when a
@@ -531,7 +532,7 @@ const OPS_MENUS = Object.freeze([
       { href: '/ops/couriers', label: 'Couriers', permission: 'money.view' },
       // "Route planner" says which of the two it is. This one is a day you
       // invent; Routing under Dashboard is the day that exists.
-      { href: '/ops/planner', label: 'Route planner', permission: 'money.view' },
+      { href: '/ops/planner', label: 'Route planner', permission: 'money.view', vanOnly: true },
     ],
   },
   {
@@ -567,7 +568,16 @@ function opsNav(user, active) {
     // Used by Admin, which must not appear at all for somebody who is not one.
     if (menu.permission && !roles.can(user, menu.permission)) return '';
 
-    const items = menu.items.filter((i) => !i.permission || roles.can(user, i.permission));
+    // AND `vanOnly` DROPS THE SCREENS THE COURIER MODEL TAKES THE SUBJECT AWAY
+    // FROM - routing, the planner, unit economics and bag tags. See `vanOnly`
+    // above for why they are gated rather than deleted. The routes refuse too;
+    // this is only the menu, and a menu is never a guard.
+
+    const courier = config.courier.model === 'DYNAMIC';
+
+    const items = menu.items.filter(
+      (i) => (!i.permission || roles.can(user, i.permission)) && !(i.vanOnly && courier)
+    );
     if (!items.length) return '';
 
     // Which group holds the page you are on, so "where am I" survives being
@@ -1614,6 +1624,38 @@ function refuse(req, res) {
 // `guard` proves who you are; `may(...)` proves you're allowed. Every page
 // below takes both.
 const may = (permission) => roles.requirePermission(permission, refuse);
+
+// ---------------------------------------------------------------------------
+// SCREENS THAT ONLY MEAN ANYTHING WHEN WE DO THE DRIVING.
+//
+// Neil, 26 September: remove /ops/routing, /ops/labels, /ops/economics,
+// /ops/planner - and then /ops/weights.
+//
+// ALL FIVE ARE VAN SCREENS AND THE COURIER TAKES THEIR SUBJECT AWAY. Routing and
+// the planner sequence a round nobody drives; unit economics prices a mile we do
+// not pay for by the mile; bag tags are applied at the laundromat now rather than
+// at a doorstep; and the weight thresholds configure how far two scales may
+// disagree when there is only one scale.
+//
+// GATED, NOT DELETED, AND THAT IS A DELIBERATE DISAGREEMENT WITH THE WORD
+// "REMOVE". Production runs the van today - `PRICING_MODEL` is unset there - and
+// /ops/routing is how a live round is planned. Deleting the code would take
+// working tooling off the business that is actually running. This makes them
+// vanish wherever the courier model is on, which is the development site now and
+// production the day it switches, with no second decision to remember. Deleting
+// them outright is then a small step rather than a risky one.
+//
+// THE ROUTE REFUSES, NOT ONLY THE MENU. Hiding a page whose route still fires is a
+// menu rule and never a guard, which this codebase says about itself repeatedly -
+// so every route for the five, including the POSTs and the sub-paths, goes through
+// here. A GET redirects to the board, because somebody following an old bookmark
+// deserves to land somewhere rather than on an error.
+const vanOnly = (req, res, next) => {
+  if (config.courier.model !== 'DYNAMIC') return next();
+
+  if (req.method === 'GET') return res.redirect(302, '/ops');
+  return res.status(404).type('text/plain').send('Not found.');
+};
 
 // ---------------------------------------------------------------------------
 // GET /ops — the orders board
@@ -6651,7 +6693,7 @@ router.get('/ops/reports.csv', guard, may('money.view'), async (req, res, next) 
   }
 });
 
-router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res, next) => {
+router.get('/ops/routing', guard, vanOnly, withIssues, may('orders.act'), async (req, res, next) => {
   try {
     const address = String(req.query.address || '').trim().slice(0, 200);
     const lb = String(req.query.lb || '').trim().slice(0, 6);
@@ -6747,7 +6789,7 @@ router.get('/ops/routing', guard, withIssues, may('orders.act'), async (req, res
 //
 // Redirects back with ?base=saved rather than rendering, so a refresh repeats
 // the message and never the save. Same pattern as every other ops form.
-router.post('/ops/routing/base', guard, may('service.manage'), async (req, res, next) => {
+router.post('/ops/routing/base', guard, vanOnly, may('service.manage'), async (req, res, next) => {
   try {
     // WHO CHANGED IT IS RECORDED BY THE SAVE ITSELF - app_settings carries
     // updated_by and updated_at, which is the right place for it. order_events
@@ -7658,7 +7700,7 @@ const LABEL_STATES = Object.freeze({
   // stickers are on it, so nothing here counts in fours.
 });
 
-router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res, next) => {
+router.get('/ops/labels', guard, vanOnly, withIssues, may('orders.act'), async (req, res, next) => {
   try {
     // Every label, so the counts and the list are the same data rather than
     // three separate queries that could each be right about a different moment.
@@ -7930,7 +7972,7 @@ router.get('/ops/labels', guard, withIssues, may('orders.act'), async (req, res,
 //
 // Size is overridable because the next roll may not be 2 x 1, and a wrong guess
 // wastes a whole one.
-router.get('/ops/labels/pdf', guard, may('orders.act'), async (req, res, next) => {
+router.get('/ops/labels/pdf', guard, vanOnly, may('orders.act'), async (req, res, next) => {
   try {
     const wanted = Math.max(1, Math.min(50, Math.floor(Number(req.query.n)) || 10));
 
@@ -8007,7 +8049,7 @@ router.get('/ops/labels/pdf', guard, may('orders.act'), async (req, res, next) =
   }
 });
 
-router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
+router.post('/ops/labels', guard, vanOnly, may('orders.act'), async (req, res, next) => {
   try {
     // Clamped rather than refused, and capped at 50 to match the form. The
     // browser check is a convenience; this is the one that counts, because a
@@ -8053,7 +8095,7 @@ router.post('/ops/labels', guard, may('orders.act'), async (req, res, next) => {
 // "enquiries".
 // ---------------------------------------------------------------------------
 
-router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req, res, next) => {
+router.get('/ops/labels/:code', guard, vanOnly, withIssues, may('orders.act'), async (req, res, next) => {
   try {
     const code = String(req.params.code || '').toUpperCase();
 
@@ -8122,7 +8164,7 @@ router.get('/ops/labels/:code', guard, withIssues, may('orders.act'), async (req
 // business, wholesale rate included, which is not a driver's to browse.
 // ---------------------------------------------------------------------------
 
-router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) => {
+router.get('/ops/economics', guard, vanOnly, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
         // Slice six, Tools and Resources. The terminal skin. See adminPage().
@@ -8145,7 +8187,7 @@ router.get('/ops/economics', guard, withIssues, may('money.view'), (req, res) =>
 // money.view for the same reason: it shows the wholesale wash rate.
 // ---------------------------------------------------------------------------
 
-router.get('/ops/planner', guard, withIssues, may('money.view'), (req, res) => {
+router.get('/ops/planner', guard, vanOnly, withIssues, may('money.view'), (req, res) => {
   res.type('html').send(
     adminPage({
         // Slice six, Tools and Resources. The terminal skin. See adminPage().
@@ -10265,7 +10307,100 @@ router.post('/ops/couriers/:id/cancel', guard, may('orders.override'), async (re
   }
 });
 
-router.get('/ops/weights', guard, withIssues, may('service.manage'), async (req, res, next) => {
+// ---------------------------------------------------------------------------
+// WHO CAN SIGN IN TO A LAUNDROMAT'S PORTAL.
+//
+// Neil, 26 September: "Shouldnt the laundromat page have a spot for me to add the
+// owner/admin of the laudnromat url page. also i shoudl a link to that page and
+// the ability to sign into it as well."
+//
+// BEHIND `partners.manage`, not `partners.view`. Reading who works at a shop is
+// one thing; handing somebody a way into a screen that shows real orders is
+// another - the same line `/ops/partners` already draws for texting a pitch link,
+// because sending something to a real person is different from reading a list.
+//
+// THE RULES ARE IN `src/core/partner-staff.js` AND ARE NOT REIMPLEMENTED HERE. The
+// portal's own Staff page calls the same three functions; two implementations of
+// "add somebody to a shop" is how they drift the first time one learns something.
+//
+// AND THIS IS THE ONLY DOOR THAT MAY NAME AN OWNER. The portal cannot pass a role
+// at all. LYNDRY says who runs a shop, the owner says who works there.
+router.post('/ops/partners/:id/staff', guard, may('partners.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const body = req.body || {};
+    const said = await partnerStaff.add({
+      partnerId: req.params.id,
+      name: body.name,
+      phone: body.phone,
+      role: body.role,
+    });
+
+    const why = {
+      bad_phone: 'That does not look like a mobile number.',
+      no_name: 'They need a name.',
+      taken: 'That number already signs in to a laundromat. A number belongs to one shop.',
+      no_shop: 'No laundromat with that id.',
+    };
+
+    const back = `/ops/partners/${encodeURIComponent(req.params.id)}`;
+
+    if (!said.ok) {
+      return res.redirect(303, `${back}?note=${encodeURIComponent(why[said.reason] || 'Could not add them.')}`);
+    }
+
+    // NOBODY IS TEXTED, which is worth saying on the way back because the obvious
+    // assumption is that adding somebody tells them. They sign in when they choose
+    // to, from the shop's own address.
+    return res.redirect(
+      303,
+      `${back}?note=${encodeURIComponent(
+        `${said.person.name} can sign in now. Nobody has been texted.`
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ONE PERSON: SWITCH THEM ON OR OFF, OR MOVE THEM BETWEEN OWNER AND ATTENDANT.
+//
+// Two forms post here and the body says which. `notSelfId` is deliberately NOT
+// passed: that rule exists so an owner cannot leave their own shop with nobody
+// able to add anybody, and Neil is not in a shop's staff list in the ordinary
+// case - if he has added himself to look at the portal he must be able to take
+// himself back out.
+router.post('/ops/partners/:id/staff/:userId', guard, may('partners.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const body = req.body || {};
+    const back = `/ops/partners/${encodeURIComponent(req.params.id)}`;
+
+    const said = body.role
+      ? await partnerStaff.setRole(req.params.userId, body.role, { partnerId: req.params.id })
+      : await partnerStaff.setStatus(req.params.userId, body.status, { partnerId: req.params.id });
+
+    if (!said.ok) {
+      const why = {
+        not_theirs: 'Nobody like that at this laundromat.',
+        no_shop: 'No laundromat with that id.',
+      };
+      return res.redirect(303, `${back}?note=${encodeURIComponent(why[said.reason] || 'Nothing changed.')}`);
+    }
+
+    const note = body.role
+      ? `${said.person.name} is now ${said.role === 'OWNER' ? 'the owner' : 'an attendant'}.`
+      : `${said.person.name} is ${said.status === 'ACTIVE' ? 'switched on' : 'switched off'}.`;
+
+    return res.redirect(303, `${back}?note=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/ops/weights', guard, vanOnly, withIssues, may('service.manage'), async (req, res, next) => {
   try {
     return res.type('html').send(
       adminPage({
@@ -10289,7 +10424,7 @@ router.get('/ops/weights', guard, withIssues, may('service.manage'), async (req,
 });
 
 // The three weight thresholds. The only control that lives nowhere else.
-router.post('/ops/admin/weights', guard, may('service.manage'), async (req, res, next) => {
+router.post('/ops/admin/weights', guard, vanOnly, may('service.manage'), async (req, res, next) => {
   try {
     const body = req.body || {};
 
@@ -11092,7 +11227,26 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
     const partner = await partners.find(req.params.id);
     if (!partner) return notFoundPage(res, 'No partner with that id.');
 
-    const history = await partners.weightHistory(partner.id);
+    // THE VAN COMPARISON AND THE COURIER SUMMARY ARE TWO QUERIES AND ONLY ONE IS
+    // ASKED. `weightHistory()` requires BOTH weights and can only ever come back
+    // empty under a courier, so running it there would be a round trip for a card
+    // that does not render - and `weighedFor()` is meaningless under the van,
+    // where the comparison is the point.
+    const courierModel = config.courier.model === 'DYNAMIC';
+
+    const history = courierModel
+      ? { rows: [], total: 0, flagged: 0, meanDrift: 0, heavier: 0, lighter: 0 }
+      : await partners.weightHistory(partner.id);
+
+    const weighed = courierModel ? await partners.weighedFor(partner.id) : null;
+
+    // WHO CAN SIGN IN TO THEIR PORTAL. Neil's ask, 26 September - until this the
+    // only way to give anybody access was `npm run shop:user` in a terminal.
+    const staff = await partnerStaff.list(partner.id).catch((err) => {
+      console.error(`Could not read the staff for ${partner.id}: ${err.message}`);
+      return [];
+    });
+
     const hours = await partners.hoursFor(partner.id);
 
     // What is on their floor right now. One query across every partner, then
@@ -11111,6 +11265,9 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
           history,
           hours,
           load,
+          staff,
+          weighed,
+          courierModel,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
         }),
         user: req.opsUser,

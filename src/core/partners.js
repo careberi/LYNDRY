@@ -799,8 +799,69 @@ async function weightHistory(partnerId, { limit = 200 } = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// WHAT THEY HAVE WEIGHED FOR US, WHEN THEIRS IS THE ONLY SCALE.
+//
+// Neil, 26 September, looking at the partner page: "we are not weighing the
+// orders anymore. There is no need for the Their scale against ours check."
+//
+// HE IS RIGHT, AND IT FOLLOWS FROM THE COURIER RATHER THAN BEING A PREFERENCE.
+// Nobody of ours touches the bags: an Uber driver takes them off a doorstep and
+// hands them over a counter, so `orders.weight_lb` is null for ever and
+// `weightHistory()` - which requires BOTH weights - can only ever return an empty
+// set for a courier order. The comparison is not wrong so much as impossible.
+//
+// SO THIS IS WHAT REPLACES IT: how much they have weighed, over how many orders,
+// and what that is worth to them. No drift, no tolerance, no flags, because there
+// is no second number to be out by.
+//
+// AND THE LOST CONTROL IS NAMED RATHER THAN QUIETLY DROPPED. Under the van our
+// scale checked theirs, which is what made a laundromat running consistently heavy
+// visible. A courier removes our half of that, so the same unchecked figure both
+// bills the customer and pays the shop. That is inherent in nobody of ours
+// handling the bag - it is not something this function can fix - but the page says
+// it out loud, because the partner page is exactly where somebody would go looking
+// for a check that no longer exists.
+//
+// THE VAN VERSION IS UNTOUCHED. `weightHistory()` above still does the real
+// comparison and production still runs it; this is the second of two rules, the
+// same shape as the service area and the order minimum.
+async function weighedFor(partnerId, { limit = 200 } = {}) {
+  const { data, error } = await db
+    .from('orders')
+    .select('id, order_number, at_partner_at, partner_weight_lb, partner_weight_at, bag_count')
+    .eq('partner_id', partnerId)
+    .not('partner_weight_lb', 'is', null)
+    .order('partner_weight_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const rows = (data || []).map((order) => ({
+    order,
+    lb: Number(order.partner_weight_lb),
+    // POUNDS PER BAG IS THE ONE SIGNAL LEFT, and it is theirs against their own
+    // history rather than against us. A shop that has always reported 25 lb a bag
+    // and starts reporting 40 is visible here; a shop that has always been heavy
+    // is not, and nothing in a courier model can see that.
+    perBag: order.bag_count ? Number(order.partner_weight_lb) / Number(order.bag_count) : null,
+  }));
+
+  const totalLb = rows.reduce((sum, r) => sum + r.lb, 0);
+  const bagged = rows.filter((r) => r.perBag != null);
+
+  return {
+    rows,
+    orders: rows.length,
+    totalLb,
+    meanLb: rows.length ? totalLb / rows.length : 0,
+    meanPerBag: bagged.length ? bagged.reduce((sum, r) => sum + r.perBag, 0) / bagged.length : null,
+  };
+}
+
 module.exports = {
   BILLING_PERIODS,
+  weighedFor,
   TYPES,
   STATUSES,
   WEEKDAYS,

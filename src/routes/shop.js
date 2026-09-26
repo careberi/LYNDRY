@@ -8,6 +8,7 @@ const wash = require('../core/wash');
 const fulfilment = require('../core/fulfilment');
 const partnerWeighIn = require('../core/partner-weighin');
 const courierLegs = require('../core/courier-legs');
+const partnerStaff = require('../core/partner-staff');
 const carriers = require('../core/carriers');
 const page = require('../web/shop-page');
 const signInTap = require('../web/sign-in-tap');
@@ -648,14 +649,12 @@ router.get('/shop/staff', requireOwner, async (req, res, next) => {
   const lang = langOf(req);
 
   try {
-    const { data, error } = await db
-      .from('partner_users')
-      .select('id, name, phone, role, status, created_at')
-      .eq('partner_id', req.partner.id)
-      .order('role', { ascending: true })
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
+    // ONE SELECT LIST, IN `partner-staff.js`. It was written out here as well, so
+    // a column the ops screen needed would have arrived `undefined` on this one -
+    // the trap CLAUDE.md counts against CARD_FIELDS, BOARD_FIELDS, RUN_FIELDS and
+    // four others, every time because an unselected column is indistinguishable
+    // from an absent value.
+    const staff = await partnerStaff.list(req.partner.id);
 
     res.set('Cache-Control', 'no-store');
     return html(
@@ -664,7 +663,7 @@ router.get('/shop/staff', requireOwner, async (req, res, next) => {
         lang,
         shop: req.partner,
         me: req.partnerUser,
-        staff: data || [],
+        staff,
         flash: flashOf(req),
       })
     );
@@ -679,28 +678,23 @@ router.post('/shop/staff', requireOwner, async (req, res, next) => {
   const back = `/shop/staff?lang=${lang}`;
 
   try {
-    const phone = normalisePhone(body.phone);
-    const name = String(body.name || '').trim().slice(0, 60);
-
-    if (!phone || !name) return res.redirect(303, `${back}&problem=phone`);
-
-    // ALWAYS AN ATTENDANT. `role` is not read off the form and must not be: a
-    // hidden field is the submitter's to edit, and an owner minting another
-    // owner is exactly what the two ladders exist to prevent.
-    const { error } = await db.from('partner_users').insert({
-      partner_id: req.partner.id,
-      phone,
-      name,
-      role: 'ATTENDANT',
+    // ALWAYS AN ATTENDANT, AND THE DOOR IS WHAT GUARANTEES IT. `addAttendant()`
+    // cannot be passed a role at all - an owner minting another owner is exactly
+    // what the two ladders exist to prevent, and a hidden form field is the
+    // submitter's to edit. Only ops may name an OWNER.
+    //
+    // THE RULES MOVED TO `src/core/partner-staff.js` when the ops screen became a
+    // second door onto the same act. Two implementations of "add somebody to a
+    // shop" is how they drift the first time one of them learns something.
+    const said = await partnerStaff.addAttendant({
+      partnerId: req.partner.id,
+      name: body.name,
+      phone: body.phone,
     });
 
-    if (error) {
-      // The phone column is unique across every laundromat, deliberately: a
-      // number that signs in has to resolve to exactly one shop.
-      if (String(error.message).includes('duplicate') || error.code === '23505') {
-        return res.redirect(303, `${back}&problem=taken`);
-      }
-      throw error;
+    if (!said.ok) {
+      const problem = said.reason === 'taken' ? 'taken' : 'phone';
+      return res.redirect(303, `${back}&problem=${problem}`);
     }
 
     // NOBODY IS TEXTED. They are added to a list; they sign in when they choose
@@ -718,32 +712,23 @@ router.post('/shop/staff/:id', requireOwner, async (req, res, next) => {
   const wanted = String((req.body || {}).status || '') === 'ACTIVE' ? 'ACTIVE' : 'DISABLED';
 
   try {
-    // NOBODY CAN REMOVE THEMSELVES. The form does not offer it and the route
-    // refuses it anyway - it is the one action that can leave a shop with no
-    // owner and no way to add one, which would take a phone call to us to undo.
-    if (String(req.params.id) === String(req.partnerUser.id)) {
-      return res.redirect(303, `${back}&problem=self`);
+    // NOBODY CAN REMOVE THEMSELVES, which `partner-staff.js` enforces from the
+    // `notSelfId` the route hands it: it is the one action that can leave a shop
+    // with no owner and no way to add one, and undoing that takes a phone call to
+    // us. The form does not offer it and the rule refuses it anyway.
+    //
+    // AND IT IS SCOPED TO THIS SHOP IN THE QUERY, never filtered afterwards - an
+    // owner typing another laundromat's user id into the address bar changes
+    // nothing there.
+    const said = await partnerStaff.setStatus(req.params.id, wanted, {
+      partnerId: req.partner.id,
+      notSelfId: req.partnerUser.id,
+    });
+
+    if (!said.ok) {
+      const problem = said.reason === 'self' ? 'self' : 'notyours';
+      return res.redirect(303, `${back}&problem=${problem}`);
     }
-
-    // SCOPED TO THIS SHOP IN THE QUERY, never after it. An owner typing another
-    // laundromat's user id into the address bar changes nothing there.
-    const { data, error } = await db
-      .from('partner_users')
-      .update({
-        status: wanted,
-        // SWITCHING SOMEBODY OFF ENDS THEIR SESSION NOW, not in eight hours.
-        // `requirePartner` re-reads the row every request, so clearing the token
-        // is belt and braces - and somebody just let go is where both belts
-        // matter.
-        ...(wanted === 'ACTIVE' ? {} : { session_token: null }),
-      })
-      .eq('id', req.params.id)
-      .eq('partner_id', req.partner.id)
-      .select('id')
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!data) return res.redirect(303, `${back}&problem=notyours`);
 
     return res.redirect(303, `${back}&done=${wanted === 'ACTIVE' ? 'restored' : 'removed'}`);
   } catch (err) {

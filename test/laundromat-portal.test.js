@@ -418,37 +418,60 @@ test('THE STAFF TAB IS AN OWNER\'S, AND THE ROUTE CHECKS TOO', () => {
 
 test('AN OWNER CANNOT MINT ANOTHER OWNER', () => {
   // The whole point of the split: LYNDRY says who owns a shop, the owner says
-  // who works there. Nothing in the portal writes `role`, so the worst an owner
-  // can do is add and remove people at the shop they already run.
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  // who works there. So the worst an owner can do is add and remove people at
+  // the shop they already run.
+  //
+  // THE RULES MOVED TO `src/core/partner-staff.js` when the ops screen became a
+  // second door onto the same act - Neil asked for the owner to be settable from
+  // the laundromat page, and a second copy of "add somebody to a shop" is how two
+  // doors drift. So this asserts the SHAPE that makes it impossible rather than a
+  // string in a route file: the portal's door has no argument for a role.
+  const portal = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  const core = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'partner-staff.js'), 'utf8');
 
-  assert.match(src, /role: 'ATTENDANT'/, 'the portal stopped pinning new people to ATTENDANT');
+  assert.match(portal, /addAttendant\(/, 'the portal no longer goes through the attendant-only door');
+
   assert.doesNotMatch(
-    src,
-    /role:\s*(req\.body|body)\./,
-    'the portal reads a role off the form, so an owner can promote themselves'
+    portal,
+    /role:\s*(req\.body|body)\.|partnerStaff\.add\(|setRole\(/,
+    'the portal can name a role, so an owner can promote themselves'
   );
-  assert.doesNotMatch(
-    src,
-    /role:\s*'OWNER'/,
-    'the portal can now write OWNER, which is LYNDRY\'s decision and not a shop\'s'
-  );
+
+  // And that door really cannot carry one.
+  const fn = /async function addAttendant\([\s\S]*?\n}/.exec(core);
+  assert.ok(fn, 'addAttendant() has been renamed or removed');
+  assert.match(fn[0], /role: ROLES\.ATTENDANT/, 'addAttendant no longer pins the role');
+  assert.ok(!/\brole\b\s*[,}]/.test(fn[0].split('{')[0]), 'addAttendant now takes a role argument');
 });
 
-test('EVERY STAFF WRITE IS SCOPED TO THE SIGNED-IN SHOP', () => {
-  // An owner typing another laundromat's user id into the address bar must
-  // change nothing there. Filtered in the query, never after it.
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
-  const writes = [...src.matchAll(/\.from\('partner_users'\)([\s\S]*?);/g)].map((m) => m[1]);
+test('EVERY STAFF WRITE IS SCOPED TO THE SHOP, IN THE QUERY', () => {
+  // Somebody typing another laundromat's user id into the address bar must change
+  // nothing there. Filtered in the query, never after it - the same rule the
+  // portal's order lookups follow.
+  //
+  // IT READS THE CORE MODULE NOW, and that is where it matters more: both the
+  // portal and the ops screen reach these writes, so a missing scope would be one
+  // bug in two places.
+  const core = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'partner-staff.js'), 'utf8');
+  const writes = [...core.matchAll(/\.from\('partner_users'\)([\s\S]*?);/g)].map((m) => m[1]);
 
-  assert.ok(writes.length >= 2, 'the portal stopped touching partner_users');
+  assert.ok(writes.length >= 3, `only found ${writes.length} partner_users queries`);
+
   for (const q of writes) {
     assert.match(
       q,
-      /partner_id: req\.partner\.id|\.eq\('partner_id', req\.partner\.id\)/,
-      'a partner_users query is not scoped to the signed-in laundromat'
+      /partner_id: partnerId|\.eq\('partner_id', partnerId\)/,
+      'a partner_users query is not scoped to one laundromat'
     );
   }
+
+  // AND THE PORTAL NO LONGER WRITES DIRECTLY AT ALL, which is what stops the two
+  // doors drifting.
+  const portal = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  assert.ok(
+    !/\.from\('partner_users'\)/.test(portal),
+    'the portal reaches partner_users directly again, beside the shared rules'
+  );
 });
 
 test('A RESERVED SLUG FALLS THROUGH, IT DOES NOT REDIRECT', () => {
