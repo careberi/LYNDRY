@@ -5358,6 +5358,154 @@ counting, and `09/15/2026` does not.
 - **Legal entity:** none, deliberately — not forming one until the concept is
   proven. Legal pages are sole-proprietor placeholders and need a lawyer
 
+## The laundromat portal
+
+**`/shop` IS THE SCREEN AN ATTENDANT SIGNS INTO.** Neil, 25 September: *"I need
+an interface as to where the laundromat attendant can log into and see the
+current orders at her store... they will also need to enter the weight into the
+order of all the bags and then go back into that order to tell uber to come get
+it."*
+
+**THIS REVERSES "A PARTNER NEVER TOUCHES THE SYSTEM", and that rule was right
+until the van went.** Its whole argument was that the weigh-in charges a card, so
+400 instead of 40 is a $1,000 charge and our own driver belongs between that
+number and somebody's card. Under a courier nobody of ours is ever in the
+building — so either an attendant types the weight or nobody does.
+
+**IT WEARS THE OPS SKIN, WHICH IS `ops.css` PLUS `class="ops-terminal"`.** Neil:
+*"the style of the laundromat back end should be the exact same style as the
+/ops backend"*. It had its own hand-rolled shell for a day and looked like the
+marketing site, because the ops look is a stylesheet and a body class and it was
+loading neither. `terminal` and `touch` are both on: terminal is the style he
+asked for, touch keeps controls at 52px, which is what a counter needs.
+
+**`src/web/ops-shell.js` IS THE ONE SHELL AND `adminPage()` IS A WRAPPER OVER
+IT.** The rendered `/ops` HTML is unchanged — compared tag by tag, the only
+differences are the four things that became arguments.
+
+**IT MAY NEVER IMPORT `roles.js`, AND THAT IS THE DESIGN RATHER THAN TIDINESS.**
+`opsNav()` derives a menu from a USER, and `roles.roleOf(null)` falls back to
+DRIVER — which holds `orders.view`, `orders.act` and `orders.drive`. So a portal
+calling a user-shaped shell with `user: null` would have rendered a working
+internal nav: Your route, Orders, Routing, Bag tags. **The failure mode of a
+missing user is a PERMISSIVE nav, not an empty one.** `nav` is therefore a string
+of already-rendered HTML, and the trap is unreachable rather than remembered.
+
+**USE `.ops-table`, NEVER `.kv`.** Both are in `ops.css` and only one works
+outside the order console: `table.kv` is written as `.console table.kv`, so the
+wash instructions rendered as bare unstyled text. Neil found it on screen.
+`.ops-table-wrap` / `.ops-table` are the shared helper's classes, deliberately
+unscoped, and are what `table()` emits on the orders board. **Anything in
+`ops.css` written under `.console` is the order console's and does not travel.**
+
+### Its own URL, and who runs it
+
+**A LAUNDROMAT GETS `/shop/riverside-wash-co`.** Neil: *"when I add a laundromat,
+they should get their own url that they can log into"*. Generated from the name
+by `partners.slugify()`, unique, and **never changed once set** — a bookmark on a
+tablet behind a counter must not move when somebody fixes a typo in a partner's
+name.
+
+**IT IS NOT A CREDENTIAL AND MUST NEVER BECOME ONE.** It names which shop you are
+signing in to; a texted six-digit code is still the only thing that gets anybody
+in. An unknown slug redirects to the plain sign-in, so the page is not a way of
+finding out which laundromats we work with, and a typo'd bookmark still works.
+
+**A RESERVED SLUG FALLS THROUGH WITH `next()`, IT DOES NOT REDIRECT.** The slug
+route is declared before the sign-in guard, so it sits in front of `/shop/staff`
+in the table. Redirecting on a reserved word made the Staff page unreachable: an
+owner tapping their own nav landed back on the sign-in page. `RESERVED_SLUGS` is
+one list shared with the generator, and a test walks every fixed `/shop/` path to
+check it is on it.
+
+**TWO ROLES, `OWNER` AND `ATTENDANT`, AND THE TWO LADDERS DO NOT MEET.** LYNDRY
+says who owns a shop; the owner says who works there. **Nothing in the portal
+writes `role`** — a test refuses one read off a form — so an owner cannot mint
+another owner, and the worst they can do is add and remove people at the shop
+they already run. Removing sets `DISABLED` and keeps the row, so the record of
+who weighed which bag survives.
+
+**Nobody is texted when they are added.** They go on a list and sign in when they
+choose to, from the shop's own URL. An unprompted text saying "you have been
+added to a system" is a message nobody asked for.
+
+### What an attendant never sees
+
+**Enforced by what the queries SELECT, never by what a template prints.** No
+customer name, phone or address; no price, no rate, and above all not the
+wholesale figure we pay that shop. The ops screens keep that behind `money.view`
+so a driver cannot browse it, and an attendant is further out than a driver.
+`customer_id` is the one exception and is not a name: the weigh-in needs it to
+raise an issue when two scales disagree, and without it that issue was silently
+never raised.
+
+**Every order query is scoped to `partner_id` in the SQL.** Verified by hand as
+well as by test: another shop's order is absent from the board, a direct URL
+bounces, and a POST at it writes nothing.
+
+### The courier button
+
+**`POST /shop/orders/:number/collect` books a real delivery** through
+`src/core/courier-legs.js`. Verified against Uber's test API: an attendant
+pressed it and `del_J4ovKgaAQbiYqPbkMtK8Gg` came back at $8.99 with a tracking
+URL.
+
+**THE ORDER'S STATUS DOES NOT MOVE, AND THAT IS THE CAREFUL PART.**
+`OUT_FOR_DELIVERY` texts the customer *"Washed, folded and out for delivery
+today!"* — `STEPS` says `texts: true`. A courier having been REQUESTED is not the
+laundry being on its way: nobody has collected anything, and a courier can
+decline, time out or cancel. So the button books and records; what moves the
+order is a courier actually taking the bags, which arrives as a webhook **that
+does not exist yet**. Until it does an order sits at `READY` with a courier
+coming, and the board says so from the `courier_deliveries` row rather than from
+the status.
+
+**`courier_deliveries` IS A TABLE AND NOT COLUMNS ON `orders`** (migration 0103).
+An order has TWO trips — the door to the laundromat and back again — and one
+`courier_delivery_id` column cannot hold both. Keyed on `(order_id, leg)`, and it
+keeps refusals, because "we asked and they said no" is a thing that happened.
+
+**NO PIN ON THE RETURN LEG, AND THAT IS NOT AN OVERSIGHT.** It is left at the
+door, which is what the service promises, and Uber refuses a PIN on a
+leave-at-door delivery — rightly, because a PIN needs somebody there to read it
+out. **The PIN belongs on the trip INTO the laundromat**, where an attendant is
+standing at a counter.
+
+**A NEW MODULE RATHER THAN A FUNCTION IN `fulfilment.js`.** Every step in that
+file is a VAN step: `outForDelivery()` refuses without `return_bag_count`, which
+a driver ticks off on a route, and `loadVan()` counts bags against `loaded_at`.
+Weakening those would weaken them for the van orders still on the board.
+
+**Pressing twice books one courier.** `findLeg()` is checked first, because a
+tablet on a slow connection is exactly where a double tap happens.
+
+### Two silent bugs the button found
+
+**THE TWO COURIER DRIVERS TOOK DIFFERENT ARGUMENTS.** Uber's `book()`
+destructured `{from, to}`; the fake one `{pickup, dropoff}`. `index.js` passes
+them straight through, so the first real caller would have booked a fake delivery
+with `from: undefined` — and the fake stored it and handed back a valid-looking
+id. **Development would have looked like it worked**, which is the opposite of
+what a pretend courier is for. `test/courier-book-shape.test.js` reads both
+sources and holds the signatures together, and the fake refuses a booking with no
+address.
+
+**`COURIER` WAS NOT AN ALLOWED `order_events` KIND**, so the change log entry was
+written and thrown away. `orderEvents.record()` swallows its own errors by design
+— a driver at a door must not be stopped by the audit trail failing — and the
+cost of that rule is exactly this: a bad `kind` looks like nothing at all from
+the caller's side. Migration 0104 adds it, and `test/order-event-kinds.test.js`
+now holds every kind the code writes against the CHECK constraint.
+
+### Still to build
+
+The trip INTO the laundromat and its PIN handover; the courier webhook that moves
+an order to `OUT_FOR_DELIVERY` and then `DELIVERED`; and **where the money moves**
+— an order weighed at a laundromat today has already been charged, at a doorstep,
+by `loadVan()`, which no courier order ever reaches. `settleWeight()` still
+contains a charge path that nothing currently gets to. That is a decision about
+the charge point, which has moved four times, and it is Neil's.
+
 ## The development environment
 
 **THERE ARE TWO DATABASES NOW, AND `.env` IS THE DEVELOPMENT ONE.** Neil, 25

@@ -516,14 +516,22 @@ function orderPage({
   // about languages.
   const say = translator(lang);
 
+  // `.ops-table`, NOT `.kv`. Both are in ops.css and only one of them works
+  // here: `table.kv` is written as `.console table.kv`, scoped to the order
+  // console's own layout, so outside it the rows get no styling at all and the
+  // wash instructions rendered as bare text. Neil found it on screen.
+  //
+  // `.ops-table-wrap` / `.ops-table` are the shared helper's classes and are
+  // deliberately unscoped - they are what `table()` emits on the orders board,
+  // and what the Staff page here already uses.
   const rows = washLines
     .map(([label, value]) => `<tr><th>${escapeHtml(say(label))}</th><td>${escapeHtml(say(value))}</td></tr>`)
     .join('');
 
   const wash = `
-    <h2>${s('howToWash', lang)}</h2>
-    <div class="tablewrap">
-      <table class="kv">${rows}</table>
+    <h2 style="margin-top:18px;">${s('howToWash', lang)}</h2>
+    <div class="ops-table-wrap">
+      <table class="ops-table"><tbody>${rows}</tbody></table>
     </div>`;
 
   // THE FORM IS ABSENT UNLESS IT IS THEIRS TO FILL IN, not disabled. The same
