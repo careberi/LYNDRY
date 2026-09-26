@@ -1356,6 +1356,39 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
     // billing for it, which is the worst outcome available here.
     billable = ours;
     basis = 'our scale; the laundromat did not enter one';
+  } else if (theirs != null) {
+    // UNDER A COURIER, THEIRS IS THE ONLY SCALE THERE IS.
+    //
+    // THIS BRANCH DID NOT EXIST AND EVERY COURIER ORDER FELL PAST IT. All three
+    // branches above need OUR weight, and under a courier nothing of ours ever
+    // touches the bags: an Uber driver takes them off a doorstep and hands them
+    // over a counter, so `weight_lb` is null for ever and the laundromat's figure
+    // arrives alone. So settleWeight() reached the `else` and answered "Nothing
+    // has been weighed yet" about an order that had just been weighed - pricing
+    // nothing, charging nothing and texting nobody.
+    //
+    // IT IS THE ORDINARY CASE NOW, NOT AN EXCEPTION, which is why it is a branch
+    // of its own rather than a widening of the backstop above. Those two are
+    // about a laundromat that did not bother; this is about a business model
+    // where there is no second scale to bother with.
+    //
+    // THERE IS NOTHING TO CROSS-CHECK, AND THAT IS A REAL LOSS WORTH NAMING.
+    // Under the van our scale checked theirs, which is what made their weight
+    // mandatory and what a disagreement raised an issue about. A courier removes
+    // our half of that comparison entirely, so the same number both bills the
+    // customer and pays the laundromat, unchecked by anybody. That is inherent in
+    // nobody of ours handling the bag - it is not something this function can fix
+    // - but it means their scale is now the single point of trust in the pricing,
+    // and the partner page's drift figures are the only thing watching it.
+    billable = theirs;
+    basis = 'the laundromat scale, the only one that weighed it';
+
+    // WHAT WE PAY THEM IS THE SAME FIGURE, and `band` stays null. The bands
+    // describe how far two scales were apart, so with one scale there is no band
+    // to be in - null is the honest answer and `partnerBillFor()` is not asked,
+    // because it exists to withhold an invoice past the exception line and there
+    // is no line to be past.
+    partnerBill = theirs;
   } else {
     return { ok: false, reason: 'no_weight', detail: 'Nothing has been weighed yet.' };
   }
@@ -1485,11 +1518,28 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   // Nothing to take is not a failure. A waived order, an order somebody has
   // already settled by hand, and a promotion that took the total to zero all
   // land here and none of them should touch a card.
+  // THROUGH THE HOLD, NEVER BESIDE IT.
+  //
+  // It was `chargeOrder()`, which charges the whole total fresh and does not
+  // know a hold exists. Under the van that was right, because by the time a
+  // laundromat weighed anything loadVan() had already spent the hold at the
+  // door - so this line only ever ran on orders that had none.
+  //
+  // UNDER A COURIER THE HOLD IS STILL SITTING THERE. Nobody of ours goes to the
+  // door, so nothing captures it, and charging the full total here would leave
+  // the customer looking at a pending hold AND a real charge for the same wash:
+  // two amounts on one statement for one load of laundry, which is the sentence
+  // the confirmation's hold clause exists to prevent somebody having to ring up
+  // about.
+  //
+  // `settleTotal()` is the one that captures what fits and charges the rest, and
+  // an order with no live hold falls straight through it to `chargeOrder()` -
+  // which is exactly what every van-era order did on this line before.
   const charge =
     priceCents > 0 &&
     settled.payment_status !== 'PAID' &&
     settled.payment_status !== 'WAIVED'
-      ? await billing.chargeOrder(withCustomer, customer).catch((err) => {
+      ? await billing.settleTotal(withCustomer, customer, { totalCents: priceCents }).catch((err) => {
           // Charging must never take the weigh-in down with it. The price is
           // settled and recorded above; the money is a separate thing that can
           // be retried from the order page.
@@ -1549,7 +1599,18 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
     // was coming. See collectedMessage().
     const text = settled.payment_status === 'WAIVED' ? waivedWeighInText(billable) : `${howPriced}${money_}`;
 
-    await sendAndLog(customer.phone, text, customer.id);
+    // TELLING THEM MUST NOT UNDO THE CHARGE. This was unguarded, and it is the
+    // last line before the return: the price is written, the promotion is spent
+    // and the card has been charged by the time it runs, so a carrier being down
+    // threw out of settleWeight() and every caller read that as the weigh-in
+    // having failed. An attendant would press the button again, which is safe
+    // only because `.is('weight_settled_at', null)` refuses the second write -
+    // the money was never at risk, but the screen said the opposite of the truth.
+    // Same reasoning as recordCard(): the thing that already happened is the
+    // important one, and a text we could not send is a line in the log.
+    await sendAndLog(customer.phone, text, customer.id).catch((err) =>
+      console.error(`Charged ${order.id} but could not text the price: ${err.message}`)
+    );
   }
 
   return {
@@ -1724,7 +1785,7 @@ async function loadVan(order, { by = {} } = {}) {
 
   // --- The card, before anything is written --------------------------------
   //
-  // THROUGH THE HOLD, WHICH IS WHERE THE $25 IS SPENT. chargeAtTheDoor() takes
+  // THROUGH THE HOLD, WHICH IS WHERE THE $25 IS SPENT. settleTotal() takes
   // what fits out of the authorization placed when the pickup was booked and
   // charges only the difference, so a customer sees one $25 hold turn into one
   // charge rather than a hold plus a full-price charge beside it. An order with
@@ -1733,7 +1794,7 @@ async function loadVan(order, { by = {} } = {}) {
   const charge =
     order.payment_status === 'WAIVED'
       ? { ok: true, waived: true }
-      : await billing.chargeAtTheDoor(order, customer, { totalCents: priceCents }).catch((err) => {
+      : await billing.settleTotal(order, customer, { totalCents: priceCents }).catch((err) => {
           console.error(`Could not charge ${order.id} at the door: ${err.message}`);
           return { ok: false, threw: true, reason: err.message };
         });

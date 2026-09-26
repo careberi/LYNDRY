@@ -205,7 +205,7 @@ function postDeliveryOffer() {
 //
 //   paid           this order was actually charged: PAID and over $0. A waived
 //                  order is WAIVED, and a free one is never charged at all -
-//                  billing.chargeAtTheDoor() writes nothing for a $0 total, so
+//                  billing.settleTotal() writes nothing for a $0 total, so
 //                  it stays UNPAID. Neither is "paid", with no special case
 //   paidDeliveries this customer's delivered, paid, over-$0 orders, COUNTING
 //                  THIS ONE. Exactly 1 is the first. Earlier free orders do not

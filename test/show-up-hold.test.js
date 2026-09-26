@@ -372,7 +372,7 @@ test('NO UNPAID BAGS IN THE VAN: the card is tried before anything is written', 
   // the price out in memory, charges, and only then writes van_confirmed_at.
   const body = bodyOf(SRC('core', 'fulfilment.js'), 'async function loadVan(');
 
-  const charged = body.indexOf('chargeAtTheDoor');
+  const charged = body.indexOf('settleTotal');
   const refused = body.indexOf('declinedAtTheDoor');
   // The WRITE, not the double-tap guard at the top of the function, which reads
   // the same column and is deliberately the first thing that happens.
@@ -682,7 +682,7 @@ test('AN ORDER THAT COMES TO NOTHING IS NOT DECLINED AT THE DOOR', async () => {
   // catastrophic at a door, where loadVan() turns any ok:false into bags left
   // on the step. A customer on the first-20-orders-free promotion with a load
   // under the minimum prices at exactly $0.
-  const result = await billing.chargeAtTheDoor(
+  const result = await billing.settleTotal(
     { id: 'o1', payment_status: 'UNPAID' },
     {},
     { totalCents: 0 }

@@ -52,7 +52,7 @@ test('it authorises the $25 hold it actually places', () => {
 
 test('it describes the statement: the hold first, the rest as a second charge', () => {
   const text = billing.consentText();
-  // chargeAtTheDoor() makes two payments when the total is over the hold.
+  // settleTotal() makes two payments when the total is over the hold.
   assert.ok(!/\bonce\b/i.test(text), 'it says the card is charged once');
   assert.ok(!/becomes part of that charge/.test(text), 'it says the hold and the rest are one charge');
   assert.ok(/hold is taken first and anything over it is charged to the same card/.test(text), text);

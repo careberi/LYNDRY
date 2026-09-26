@@ -15,7 +15,7 @@ const payments = require('../providers/payments');
 //
 // That throws a TypeError SYNCHRONOUSLY, before the promise the `.catch()`
 // beside it is attached to ever exists, so the "best effort" catch on every one
-// of those calls never ran. The throw escaped chargeAtTheDoor() and loadVan()
+// of those calls never ran. The throw escaped settleTotal() and loadVan()
 // read it as a refusal - on an order whose card had just paid in full. See
 // settleFromHold() and fulfilment.declinedAtTheDoor().
 const ledger = require('./payments');
@@ -24,6 +24,9 @@ const { config } = require('../config');
 // The two rates the card page names. No loop: subscription.js requires only
 // config.
 const subscription = require('./subscription');
+// What to hold, when the delivery costs more than the floor. No loop either:
+// quote.js requires config and nothing else.
+const quote = require('./quote');
 const { site } = require('../web/site');
 
 // ---------------------------------------------------------------------------
@@ -70,7 +73,7 @@ function consentText() {
   //
   // TWO CHARGES WHEN THE TOTAL IS OVER THE HOLD, AND IT SAYS SO. The first
   // rewrite said "charge the card then, once" and "the hold becomes part of
-  // that charge"; chargeAtTheDoor() captures the $25 and charges the rest as a
+  // that charge"; settleTotal() captures the $25 and charges the rest as a
   // second payment, so an $84.00 wash is two lines on a statement. A page a
   // card network reads in a dispute has to describe the statement.
   //
@@ -908,6 +911,29 @@ function showUpCents() {
   return Math.max(0, Math.round(config.pricing.authorizationCents || 0));
 }
 
+// ---------------------------------------------------------------------------
+// WHAT TO HOLD ON THIS PARTICULAR ORDER.
+//
+// Neil, 25 September: "the hold shouls be at least the amount of the delivery."
+// Under the van the trip cost us a driver's time and the flat $25 floor covered
+// it. Under a courier the driving is a real invoice from somebody else, two legs
+// of it, and on a long pair of legs it can be more than the floor - so a $25
+// hold on an order whose delivery alone costs $31 holds less than the one thing
+// we are certain to be out of pocket for.
+//
+// IT IS DECIDED HERE AND NOT AT THE CALL SITES, and that polarity is the whole
+// reason this function exists. FOUR things place a hold - bookPickup(), the card
+// being saved, the night-before pass and the admin retry button - and asking each
+// to work the amount out would make "somebody forgot" the failure, silently, in
+// the direction of holding too little. CLAUDE.md records exactly that shape
+// costing four orders with `bookedByTheSystem`. The default has to be right.
+//
+// `amountCents` on authorizeShowUp() survives as a deliberate override for a
+// caller that genuinely knows better. Nothing passes it today.
+function holdFor(order) {
+  return quote.holdCents({ deliveryFeeCents: order && order.delivery_fee_cents });
+}
+
 // A LIVE hold on this order, or null. Live means still sitting at Stripe
 // uncaptured: the id is cleared the moment it is taken or let go, so "is there
 // money held against this pickup" is one null check rather than a date
@@ -1020,7 +1046,7 @@ async function authorizeShowUp(order, customer, { amountCents = null } = {}) {
   // refusal would say the card said no when there is no card to ask.
   if (!hasPaymentMethod(customer)) return { ok: false, needsCard: true };
 
-  const amount = amountCents == null ? showUpCents() : Math.round(Number(amountCents));
+  const amount = amountCents == null ? holdFor(order) : Math.round(Number(amountCents));
   if (!(amount > 0)) return { ok: true, skipped: 'nothing_to_hold' };
 
   const attempts = Number(order.authorization_attempts || 0);
@@ -1154,7 +1180,20 @@ function doorSplit(totalCents, heldCents) {
 }
 
 // ---------------------------------------------------------------------------
-// THE DOOR. The bags are weighed, this is what it comes to, take the money.
+// THE BAGS ARE WEIGHED, THIS IS WHAT IT COMES TO, TAKE THE MONEY.
+//
+// IT WAS CALLED `chargeAtTheDoor()` AND THE NAME STOPPED BEING TRUE. Under the
+// van the weighing and the money both happened on a customer's step, so the door
+// was the only place this could be called from. Under a courier nobody of ours
+// ever stands at that door - the bags are weighed at a laundromat counter, which
+// is where settleWeight() now calls this from. Two callers, one act: settle a
+// total against whatever is held.
+//
+// The door half is unchanged and still lives in loadVan(). What moved is only
+// the name, because a function called "at the door" invoked from a laundromat is
+// the kind of stale label that costs somebody an hour six months later - the
+// same lesson CLAUDE.md records about the three customer-facing sentences that
+// still said "when we deliver it back" long after the charge point moved.
 //
 // Neil's three outcomes, in his order: capture what fits, then charge whatever
 // is left over, and if that is refused keep what was captured.
@@ -1167,7 +1206,7 @@ function doorSplit(totalCents, heldCents) {
 // exactly what every order did before this existed. That is what keeps the
 // orders already on the board working on the morning this deploys.
 // ---------------------------------------------------------------------------
-async function chargeAtTheDoor(order, customer, { totalCents }) {
+async function settleTotal(order, customer, { totalCents }) {
   if (order.payment_status === 'WAIVED') return { ok: true, waived: true };
 
   const hold = showUpHold(order);
@@ -1246,7 +1285,7 @@ async function chargeAtTheDoor(order, customer, { totalCents }) {
     return { ok: true, fromHold: true, capturedCents: kept, chargedCents: total };
   }
 
-  // --- THE REMAINDER WAS REFUSED. We keep the $25 and the bags stay. -------
+  // --- THE REMAINDER WAS REFUSED. We keep what was captured. ---------------
   //
   // The ledger row is written HERE rather than at the moment of capture,
   // because until this line nobody knew what the money was for: the same $25
@@ -1255,14 +1294,44 @@ async function chargeAtTheDoor(order, customer, { totalCents }) {
   // this row is milliseconds and a failure is logged loudly - the same
   // exposure recordCard() already carries, and for the same reason: the money
   // has moved and losing the row is a reporting problem.
+  //
+  // AND WHICH OF THE TWO IT IS DEPENDS ON WHETHER WE HAVE THE LAUNDRY.
+  //
+  // This wrote `recordShowUp()` unconditionally, which is `applies_to_wash:
+  // false` and a note reading "the bags were left" - true at a doorstep, where
+  // this was the only caller, and false at a laundromat counter, where the
+  // weigh-in now calls it. A courier order refused here would have had $25 taken
+  // off the customer's card, recorded as money for a trip, on bags sitting on a
+  // shelf being washed. `balance()` would then still owe the whole total, so
+  // `paymentHold()` holds the delivery over $25 the customer has already paid.
+  //
+  // CUSTODY IS THE DISTINGUISHING FACT and it already has a name. Neil's rule
+  // for the kept money is that the trip charge is for laundry we NEVER TOOK -
+  // the driver drove there, weighed, and left the bags. Once the laundry is
+  // ours, anything we take is part of the wash. `orders.IN_OUR_HANDS` is that
+  // line and is the same one `recordCash()` refuses on.
+  //
+  // DERIVED, NOT A FLAG THE CALLER PASSES. Two callers today and either could
+  // forget, and the failure is silent money in the wrong column.
   if (kept > 0) {
-    await ledger
-      .recordShowUp(order, {
-        amountCents: kept,
-        paymentIntentId: took.paymentIntentId,
-        note: 'Kept for the trip: the extra charge was refused and the bags were left.',
-      })
-      .catch((err) => console.error(`Could not record the show-up charge: ${err.message}`));
+    // Required inside the function, not at the top: orders.js reaches back for
+    // billing.js, so this is a loop, and CLAUDE.md's rule for one is that the
+    // module reads the other inside the function that needs it.
+    const orderStates = require('./orders');
+    const haveTheLaundry = orderStates.IN_OUR_HANDS.includes(order.status);
+
+    await (haveTheLaundry
+      ? ledger.recordCard(order, {
+          amountCents: kept,
+          paymentIntentId: took.paymentIntentId,
+          note: 'Part payment: the hold was captured and the rest of the total was refused.',
+        })
+      : ledger.recordShowUp(order, {
+          amountCents: kept,
+          paymentIntentId: took.paymentIntentId,
+          note: 'Kept for the trip: the extra charge was refused and the bags were left.',
+        })
+    ).catch((err) => console.error(`Could not record the captured hold: ${err.message}`));
   }
 
   await markFailed(order, result.reason, result.paymentIntentId, result.declineCode);
@@ -1340,6 +1409,7 @@ async function settleFromHold(
 module.exports = {
   refundDeposit,
   showUpCents,
+  holdFor,
   showUpHold,
   holdIsFresh,
   holdDueNow,
@@ -1348,7 +1418,7 @@ module.exports = {
   authorizeShowUp,
   captureShowUp,
   releaseShowUp,
-  chargeAtTheDoor,
+  settleTotal,
   hasPaymentMethod,
   needsCardOnFile,
   paymentsConfigured,

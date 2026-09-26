@@ -1,0 +1,31 @@
+-- 0107_drop_duplicate_hold_amount.sql
+--
+-- 0105 ADDED A COLUMN THE DATABASE ALREADY HAD, AND THE BUG IT WAS WRITTEN TO
+-- PREVENT NEVER EXISTED.
+--
+-- `orders.authorization_amount_cents` was added two commits ago against this
+-- reasoning: the show-up hold had always been a flat $25 out of
+-- `config.pricing.authorizationCents`, so nothing needed to remember the amount,
+-- and the moment the hold becomes "at least the delivery" a capture reading the
+-- config would capture today's figure against a hold placed last week.
+--
+-- THE SECOND HALF OF THAT IS TRUE AND THE FIRST HALF IS NOT. `authorized_cents`
+-- has held the per-order amount since 0095, whose own comment says why in as
+-- many words: "What was held, in cents. Read rather than assumed from config,
+-- because the amount could change between a booking and its doorstep and the
+-- hold that exists is the one that was agreed." `authorizeShowUp()` writes it
+-- and `showUpHold()` reads it; no capture has ever read the constant.
+--
+-- So the danger was already designed out, and what 0105 added is a second copy
+-- of a fact the database holds - the thing this codebase refuses everywhere
+-- else. Two columns for one amount is one that goes stale, and the stale one
+-- here would be read by whoever finds it first.
+--
+-- DROPPED RATHER THAN LEFT UNREAD. An unused column with a confident comment on
+-- it is worse than no column: the next person to need the held amount finds two
+-- and has no way to tell which is live. Nothing has ever written it, so nothing
+-- is lost - it exists only in the development database and only for two commits.
+--
+-- The other two columns from 0105 stay. `delivery_fee_cents` and
+-- `courier_cost_cents` are genuinely new facts with no home anywhere else.
+alter table orders drop column if exists authorization_amount_cents;

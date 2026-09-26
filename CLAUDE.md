@@ -3831,7 +3831,7 @@ and a test holds it there.
 
 **IT DESCRIBES THE STATEMENT, WHICH THE FIRST REWRITE DID NOT.** That said
 "charge the card then, once" and "the hold becomes part of that charge";
-`chargeAtTheDoor()` captures the $25 and charges the rest as a second payment,
+`settleTotal()` captures the $25 and charges the rest as a second payment,
 so an $84.00 wash is two lines on a statement. It says the hold is taken first
 and anything over it is charged to the same card at the same time. And "Saving
 this card charges nothing" replaced "Nothing is charged today", which is false
@@ -4004,7 +4004,7 @@ CATCH IT.** Every one of those calls was written `await payments.recordCard(...)
 losing the row is only a reporting problem. That reasoning was right and the
 code never ran it: the TypeError is raised *evaluating the call*, before the
 promise the catch is attached to exists. The throw went up through
-`settleFromHold()`, out of `chargeAtTheDoor()`, and into `loadVan()`'s own
+`settleFromHold()`, out of `settleTotal()`, and into `loadVan()`'s own
 `.catch()`, which turned it into `{ ok: false }`.
 
 **`const ledger = require('./payments')` is the fix, and the name is the

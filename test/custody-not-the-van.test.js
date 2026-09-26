@@ -191,7 +191,7 @@ test('FINISH PICKUP IS loadVan UNDERNEATH, SO THE MONEY RULES DO NOT MOVE', () =
   assert.match(body, /return loadVan\(/, 'finishPickup does not go through loadVan');
 
   // It charges nothing itself, and knows nothing about money.
-  assert.ok(!/chargeAtTheDoor|billing\./.test(body), 'finishPickup touches billing directly');
+  assert.ok(!/settleTotal|billing\./.test(body), 'finishPickup touches billing directly');
   assert.ok(!/van_confirmed_at: /.test(body), 'finishPickup stamps the charge flag itself');
 });
 

@@ -17,7 +17,7 @@
 //      Stripe provider does not have, which throws a TypeError SYNCHRONOUSLY -
 //      before the promise the `.catch()` beside it is attached to exists, so
 //      the "best effort" catch on each of those calls never ran. The throw
-//      escaped chargeAtTheDoor(), and loadVan() read any failure at all as a
+//      escaped settleTotal(), and loadVan() read any failure at all as a
 //      refusal.
 //
 //   2. orders.uncollect() nulled weight_lb and left price_cents set, which
@@ -98,13 +98,17 @@ test('BILLING BINDS THE TWO MODULES TO TWO NAMES', () => {
 test('AND EVERY LEDGER WRITE GOES THROUGH IT', () => {
   const src = withoutComments(SRC('core', 'billing.js'));
 
-  // The calls are split over two lines, so match the name on the line above.
+  // WHITESPACE IS NOT THE RULE. This required a literal newline between the name
+  // and the method, because that is how the calls happened to be wrapped the day
+  // it was written - so moving one onto a single line failed a test about which
+  // MODULE is being called. `\s*` covers a line break and a space equally, which
+  // is the only formatting this should have an opinion about: none.
   assert.ok(
-    !/payments\s*\n\s*\.record(Card|ShowUp)\(/.test(src),
+    !/\bpayments\s*\.record(Card|ShowUp)\(/.test(src),
     'a ledger write still goes to the Stripe provider'
   );
-  assert.ok(/ledger\s*\n\s*\.recordCard\(/.test(src), 'recordCard no longer uses the ledger');
-  assert.ok(/ledger\s*\n\s*\.recordShowUp\(/.test(src), 'recordShowUp no longer uses the ledger');
+  assert.ok(/\bledger\s*\.recordCard\(/.test(src), 'recordCard no longer uses the ledger');
+  assert.ok(/\bledger\s*\.recordShowUp\(/.test(src), 'recordShowUp no longer uses the ledger');
 });
 
 // --- 2. only a refusal leaves bags behind -------------------------------------
