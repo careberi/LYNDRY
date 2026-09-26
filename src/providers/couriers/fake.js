@@ -101,12 +101,38 @@ async function quoteTrip({ miles }) {
   };
 }
 
-async function book({ pickup, dropoff, pickupReadyAt, pickupDeadlineAt, dropoffReadyAt, dropoffDeadlineAt, manifest, requirePin = false, leaveAtDoor = false, note = null }) {
+// `from` AND `to`, MATCHING THE REAL ADAPTER. This took `pickup`/`dropoff`
+// while nothing called it, and `index.js` passes arguments straight through -
+// so the first caller written against Uber's names would have booked a fake
+// delivery with `from: undefined`, and this file would have stored it and
+// returned a perfectly valid-looking shape. Development would have proved
+// nothing. `test/courier-book-shape.test.js` holds the two together.
+async function book({
+  from,
+  to,
+  pickupReadyAt,
+  pickupDeadlineAt,
+  dropoffReadyAt,
+  dropoffDeadlineAt,
+  manifest,
+  requirePin = false,
+  leaveAtDoor = false,
+  note = null,
+  quoteId = null,
+  externalId = null,
+}) {
   // THE ONE COMBINATION UBER REFUSES, refused here too. A PIN needs somebody to
   // read it out; leaving it at the door means nobody is there. Finding that out
   // on a laptop is the entire reason this file bothers to be strict.
   if (requirePin && leaveAtDoor) {
     throw new Error('A PIN cannot be required on a delivery left at the door.');
+  }
+
+  // AN ADDRESS IS NOT OPTIONAL, and saying so here is the point of a pretend
+  // courier being strict. Uber refuses a booking with no pickup; this used to
+  // accept one and hand back an id.
+  if (!from || !to) {
+    throw new Error('A courier booking needs both a `from` and a `to` address.');
   }
 
   const deliveryId = id('del');
@@ -115,8 +141,10 @@ async function book({ pickup, dropoff, pickupReadyAt, pickupDeadlineAt, dropoffR
     status: 'pending',
     pin: requirePin ? pin() : null,
     leaveAtDoor,
-    pickup,
-    dropoff,
+    from,
+    to,
+    quoteId,
+    externalId,
     manifest: manifest || null,
     note,
     windows: { pickupReadyAt, pickupDeadlineAt, dropoffReadyAt, dropoffDeadlineAt },

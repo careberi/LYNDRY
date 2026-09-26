@@ -41,18 +41,23 @@ test('and with no account, invented data gets a courier that does not exist', ()
   assert.equal(on(false, true, true), 'disabled');
 });
 
+// THE ARGUMENTS ARE `from` AND `to` NOW, matching the real adapter. They were
+// `pickup`/`dropoff` here and `from`/`to` at Uber, and `index.js` passes them
+// straight through - so the first real caller would have booked a fake delivery
+// with `from: undefined` and this file would have stored it. See
+// test/courier-book-shape.test.js, which holds the two together.
 test('THE FAKE COURIER REFUSES WHAT UBER REFUSES', async () => {
   // A PIN needs somebody to read it out; leaving it at the door means nobody is
   // there. Uber rejects the combination, so this does too - the whole value of
   // a pretend courier is that it is strict about the same things.
   await assert.rejects(
-    fake.book({ requirePin: true, leaveAtDoor: true, pickup: {}, dropoff: {} }),
+    fake.book({ requirePin: true, leaveAtDoor: true, from: { line1: 'a' }, to: { line1: 'b' } }),
     /PIN cannot be required on a delivery left at the door/
   );
 });
 
 test('a booked delivery carries a four-digit PIN and no courier yet', async () => {
-  const delivery = await fake.book({ pickup: {}, dropoff: {}, requirePin: true });
+  const delivery = await fake.book({ from: { line1: 'a' }, to: { line1: 'b' }, requirePin: true });
 
   assert.match(delivery.pin, /^\d{4}$/, 'the PIN is not four digits');
   assert.equal(delivery.status, 'pending');
@@ -62,7 +67,7 @@ test('a booked delivery carries a four-digit PIN and no courier yet', async () =
 test('AND IT WALKS THE SAME ROAD A REAL ONE DOES', async () => {
   // Every screen in the new flow is written against these statuses, so the
   // order and the names have to be Uber's rather than convenient.
-  const delivery = await fake.book({ pickup: {}, dropoff: {}, requirePin: true });
+  const delivery = await fake.book({ from: { line1: 'a' }, to: { line1: 'b' }, requirePin: true });
   const seen = [delivery.status];
 
   for (let i = 0; i < 10; i += 1) {
@@ -81,7 +86,7 @@ test('AND IT WALKS THE SAME ROAD A REAL ONE DOES', async () => {
 test('leaving it at the door produces a photo without being asked', async () => {
   // Uber turns the delivery photo on by itself for leave-at-door, and that
   // photo is what the customer is texted as the delivered message.
-  const delivery = await fake.book({ pickup: {}, dropoff: {}, leaveAtDoor: true });
+  const delivery = await fake.book({ from: { line1: 'a' }, to: { line1: 'b' }, leaveAtDoor: true });
   for (let i = 0; i < 5; i += 1) fake.advance(delivery.id);
 
   const done = await fake.status(delivery.id);

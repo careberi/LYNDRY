@@ -7,6 +7,7 @@ const auth = require('../core/partner-auth');
 const wash = require('../core/wash');
 const fulfilment = require('../core/fulfilment');
 const partnerWeighIn = require('../core/partner-weighin');
+const courierLegs = require('../core/courier-legs');
 const page = require('../web/shop-page');
 const signInTap = require('../web/sign-in-tap');
 const { normalisePhone } = require('../core/phone');
@@ -310,6 +311,11 @@ router.get('/shop', async (req, res, next) => {
 
     if (error) throw error;
 
+    // WHICH ONES ALREADY HAVE A COURIER COMING, in one query rather than one per
+    // row. An attendant who cannot see that she already pressed the button
+    // presses it again, and a second car arrives.
+    const coming = await courierLegs.bookedFor((data || []).map((o) => o.id));
+
     res.set('Cache-Control', 'no-store');
     return html(
       res,
@@ -317,7 +323,7 @@ router.get('/shop', async (req, res, next) => {
         lang,
         shop: req.partner,
         isOwner: isOwner(req),
-        orders: data || [],
+        orders: (data || []).map((o) => ({ ...o, courierBooked: coming.has(o.id) })),
         flash: flashOf(req),
       })
     );
@@ -388,6 +394,8 @@ router.get('/shop/orders/:number', async (req, res, next) => {
         ? order.preferences
         : (order.customers && order.customers.preferences) || {};
 
+    const coming = await courierLegs.findLeg(order.id, 'TO_CUSTOMER');
+
     res.set('Cache-Control', 'no-store');
     return html(
       res,
@@ -395,9 +403,12 @@ router.get('/shop/orders/:number', async (req, res, next) => {
         lang,
         shop: req.partner,
         isOwner: isOwner(req),
-        order,
+        order: { ...order, courierBooked: Boolean(coming) },
         washLines: wash.washLines(preferences),
         flash: flashOf(req),
+        // THE BUTTON EXISTS ONCE THE WORK IS WEIGHED AND NO COURIER IS COMING.
+        // The route checks both again, because markup guards nothing.
+        canSendCourier: order.partner_weight_lb != null && !coming,
       })
     );
   } catch (err) {
@@ -450,6 +461,66 @@ module.exports = router;
 // open redirector on lyndry.com, which is a ready-made phishing link - so it is
 // held against its own rules rather than only being read.
 module.exports.safeNext = safeNext;
+
+// --- "come and get these bags" ----------------------------------------------
+//
+// Neil, 25 September: "in the order screen, there should be a button of the
+// attendant to tell the uber driver to come get the bags."
+//
+// IT DOES NOT MOVE THE ORDER'S STATUS. `OUT_FOR_DELIVERY` texts the customer
+// "Washed, folded and out for delivery today!", and a courier having been
+// REQUESTED is not the laundry being on its way - nobody has collected anything,
+// and a courier can decline, time out or cancel. See `courier-legs.js`.
+//
+// THE ATTENDANT NEVER LEARNS WHERE THE BAGS ARE GOING. The customer's address is
+// loaded here, handed to the courier, and never rendered. It is the one query in
+// this file that reads a customer, and it reads exactly what a courier needs.
+router.post('/shop/orders/:number/collect', async (req, res, next) => {
+  const lang = langOf(req);
+
+  try {
+    const order = await theirOrder(req);
+    if (!order) return res.redirect(303, `/shop?lang=${lang}`);
+
+    const back = `/shop/orders/${encodeURIComponent(order.order_number)}?lang=${lang}`;
+
+    // WEIGHED FIRST. The laundromat's scale is the only one there is under a
+    // courier, so the weight has to exist before the bags leave the counter -
+    // and the page hides the button until it does, which guards nothing on its
+    // own.
+    if (order.partner_weight_lb == null) {
+      return res.redirect(303, `${back}&problem=weighfirst`);
+    }
+
+    // The customer, for the courier and for nothing else.
+    const { data: customer, error } = await db
+      .from('customers')
+      .select('id, name, phone, address_line1, address_line2, city, state, postal_code')
+      .eq('id', order.customer_id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!customer) return res.redirect(303, `${back}&problem=courier`);
+
+    const sent = await courierLegs.sendForReturn(order, {
+      by: req.partnerUser,
+      customer,
+      partner: req.partner,
+    });
+
+    if (!sent.ok) {
+      console.error(
+        `Courier refused for order ${order.order_number} at ${req.partner.name}: ${sent.reason}` +
+          (sent.detail ? ` (${sent.detail})` : '')
+      );
+      return res.redirect(303, `${back}&problem=courier`);
+    }
+
+    return res.redirect(303, `${back}&done=courier`);
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // --- the shop's own staff, run by its owner ---------------------------------
 //

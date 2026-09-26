@@ -393,6 +393,12 @@ function codeStep({ lang = 'en', error = '', phone = '', code = '', next = '/sho
 // THE STATUSES ARE THE SYSTEM'S AND THE WORDS ARE NOT. `AT_PARTNER` means
 // nothing behind a counter; "needs weighing" does.
 function jobOf(order) {
+  // A COURIER ON THE WAY IS THE LOUDEST FACT ABOUT AN ORDER, whatever its status
+  // says. The status does not move when one is booked - that would text the
+  // customer that their laundry is travelling before anybody collected it - so
+  // this is the only thing on the screen that can say so.
+  if (order.courierBooked) return 'GONE';
+
   if (order.status === 'AT_PARTNER' && order.partner_weight_lb == null) return 'WEIGH';
   if (order.status === 'AT_PARTNER') return 'WASH';
   if (order.status === 'READY') return 'DONE';
