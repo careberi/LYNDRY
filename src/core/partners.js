@@ -308,6 +308,12 @@ function slugify(name) {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/&/g, ' and ')
+    // AN APOSTROPHE VANISHES; EVERYTHING ELSE SEPARATES. "Maria's Laundromat"
+    // is two words, and treating the apostrophe as punctuation to break on gave
+    // `maria-s-laundromat`, which reads as a mistake on a card in a shop window.
+    // Both the straight quote and the curly one, because a name pasted out of a
+    // document carries the curly one.
+    .replace(/['‘’]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
@@ -816,6 +822,13 @@ module.exports = {
   compareWeights,
   list,
   activeLaundromats,
+
+  // The laundromat portal's URL. `slugify` and RESERVED_SLUGS are pure and are
+  // where the rule is tested; `ensureSlug` is the one that writes.
+  slugify,
+  freeSlug,
+  ensureSlug,
+  RESERVED_SLUGS,
   find,
   create,
   update,

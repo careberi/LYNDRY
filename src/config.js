@@ -493,6 +493,18 @@ const config = Object.freeze({
     //
     // THE BANDS ARE THEIRS AND ARE NOT OURS TO INTERPOLATE. A customer at 5.1
     // miles is in the 5-6 band, not 2% into it.
+    //
+    // THE MILES IN THIS TABLE ARE UBER'S ROUTED MILES, NOT A STRAIGHT LINE, and
+    // the two are not convertible. Measured from the Carlstadt laundromat:
+    // Hackensack is 4.6 miles across the map and bills $10.99, which is their
+    // 7-10 band, because the road goes around the Meadowlands and over the
+    // river. Glen Rock is 9.4 miles across the map - twice as far - and bills
+    // the SAME $10.99, because it is a straight run up Route 17. So the implied
+    // road factor ranges from about 1.0 to over 2.2 within one county.
+    //
+    // WHICH IS THE WHOLE REASON THE FEE COMES FROM THE COURIER. `quote.js` uses
+    // this table only to decide which laundromats are worth asking about, and
+    // in development where there is nobody to ask.
     bands: Object.freeze([
       Object.freeze({ upToMiles: 5, legCents: 799 }),
       Object.freeze({ upToMiles: 6, legCents: 899 }),
@@ -500,8 +512,29 @@ const config = Object.freeze({
       Object.freeze({ upToMiles: 10, legCents: 1099 }),
     ]),
 
-    // Past the last band Uber publishes no price, so we do not serve it.
+    // UBER DIRECT STOPS AT TEN ROUTED MILES. Their published table has no band
+    // past 7-10, and anything longer comes back `address_undeliverable` - which
+    // reads like a coverage refusal and is not one. Every town tested prices a
+    // short trip inside itself, Manhattan included.
+    //
+    // OURS IS MEASURED AS THE CROW FLIES, SO THIS NUMBER IS MORE GENEROUS THAN
+    // THEIRS, which is the wrong direction: a customer 9.4 miles across the map
+    // can be twelve by road and be refused. It is a pre-filter for deciding
+    // which laundromats to ASK about, never a promise - Neil, 25 September:
+    // "we should always check with uber to see if we can deliver to a location
+    // before we tell someone we can".
     maxMiles: 10,
+
+    // WHAT A METRO COSTS ON TOP, per trip, from Uber's own fee panel. New York
+    // City is the only one that can reach this business; California and Seattle
+    // are on the same list and are somebody else's problem.
+    //
+    // IT IS ALREADY INSIDE THE QUOTE - a Manhattan trip came back $12.99, which
+    // is exactly $7.99 plus this - so nothing has to add it. It is recorded
+    // because an order is TWO legs, so serving New York costs $10 an order
+    // before a single pound is washed, and that is a decision rather than a
+    // detail.
+    nycSurchargeCents: 500,
 
     // WHAT NEIL KEEPS, per category, as a share of the laundry charge. The
     // delivery fee carries none of it: it is passed through at cost, so a

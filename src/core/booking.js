@@ -10,6 +10,7 @@ const { site } = require('../web/site');
 const { config } = require('../config');
 const wash = require('./wash');
 const geocode = require('./geocode');
+const serviceable = require('./serviceable');
 const settings = require('./settings');
 const promotions = require('./promotions');
 // Required lazily inside the call rather than here: order-alerts needs
@@ -550,28 +551,37 @@ async function zipInServiceArea(zip) {
   const at = await geocode.lookupOnce(`${five}, NJ, USA`).catch(() => null);
   if (!at) return true;
 
-  // A ZIP IS PLACED AT ITS MIDDLE, AND PEOPLE LIVE AT ITS EDGES, so this check
-  // is deliberately looser than the booking one by a whole ZIP's width.
+  // IT ASKS A COURIER, LIKE EVERY OTHER REFUSAL DOES NOW.
   //
-  // IT HAS TO BE LOOSER, NEVER TIGHTER, and the first version was tighter: a
-  // real Mahwah address was inside ten miles of the Glen Rock laundromat while
-  // 07495's centroid was outside, so the form turned away somebody the booking
-  // would have accepted. That is worse than the problem this check exists to
-  // solve - being told twice is annoying, being told no wrongly is a lost
-  // customer who never finds out we could have come.
+  // Neil's rule is about what we TELL somebody - "we should always check with
+  // uber to see if we can deliver to a location before we tell someone we can" -
+  // and this check's whole job is to say NO on a form, which is the direction
+  // that costs a customer. Saying it off a ruler was the last place left doing
+  // that.
   //
-  // FIVE MILES COVERS ANY NEW JERSEY ZIP, and Trenton and Atlantic City are
-  // forty miles out, so the obviously-far-away case it is actually for still
-  // works.
-  // THROUGH `withinReachOf`, WITH A WIDER REACH - not a second copy of it. It
-  // already knows the three ways this can fail to have an answer (no
-  // coordinates, an unreadable table, a list with nothing pinned) and all three
-  // apply here identically. Only the distance differs.
-  return withinReachOf(
-    { lat: at.lat, lng: at.lng },
-    await laundromatsForArea(),
-    config.courier.maxMiles + ZIP_MARGIN_MILES
+  // A BARE ZIP IS ENOUGH TO ASK WITH. Uber resolves an address loosely and
+  // prices what it lands on: a town with no house number at all quoted fine when
+  // it was tested, so "07302, NJ" gets a real answer about that area.
+  //
+  // AND IT IS STILL DELIBERATELY LOOSER THAN THE BOOKING CHECK. A ZIP is placed
+  // at its middle and people live at its edges, so the shortlist is widened by
+  // `ZIP_MARGIN_MILES` before anybody is asked. The first version was TIGHTER
+  // and that was the wrong way round: a real Mahwah address was inside reach of
+  // the Glen Rock laundromat while 07495's centroid was not, so the form turned
+  // away somebody the booking would have taken. Being told twice is annoying;
+  // being told no wrongly is a customer who never learns we could have come.
+  const answer = await serviceable.reachable(
+    // The ZIP is all we have - no street, no house number - and that is what
+    // makes this the courtesy check rather than the decision.
+    { state: 'NJ', postal_code: five },
+    {
+      laundromats: await laundromatsForArea(),
+      at: { lat: at.lat, lng: at.lng },
+      maxMiles: config.courier.maxMiles + ZIP_MARGIN_MILES,
+    }
   );
+
+  return answer.ok;
 }
 
 // How much slack the ZIP-level check gets over the address-level one. See
@@ -582,7 +592,13 @@ const ZIP_MARGIN_MILES = 5;
 // the code may not be using. One place to read it from and one place to change.
 function serviceAreaWords() {
   if (config.courier.model !== 'DYNAMIC') return 'Bergen County, New Jersey';
-  return `New Jersey, within ${config.courier.maxMiles} miles of one of our laundromats`;
+
+  // NO MILEAGE IN IT ANY MORE, because no mileage decides it. The boundary is
+  // New Jersey plus whatever a courier will actually drive, and putting a number
+  // here would be a second copy of a rule that is not ours to state - our ten
+  // miles are measured across a map and Uber's are measured along a road, and
+  // the two disagree by anything from nothing to a factor of two.
+  return 'New Jersey, anywhere a courier will reach one of our laundromats';
 }
 
 // The laundromats the boundary is measured from, or an empty list under the van
@@ -608,21 +624,41 @@ async function laundromatsForArea() {
   }
 }
 
-// ASYNC, AND IT LOADS THE LAUNDROMATS ITSELF WHEN IT IS NOT GIVEN THEM.
+// ASYNC, AND IT ASKS A COURIER.
 //
-// It was synchronous and pure while the answer was a ZIP list. Under the courier
-// model it needs to know where the laundromats are, and the alternative was a
-// second argument every caller has to remember - where forgetting it would have
-// meant a boundary that quietly passed everybody, on the one check that decides
-// whether we take work we cannot do. There are four callers and a fifth is
-// likely, so the safe version is the one that cannot be called wrongly.
+// Neil, 25 September: *"we should always check with uber to see if we can
+// deliver to a location before we tell someone we can"*, and then *"lets not use
+// the straight as the crow flies method then and use uber's driving miles"*.
+//
+// SO A RULER NO LONGER DECIDES THIS. `serviceable.reachable()` asks a courier
+// about the customer's actual address and the nearest few laundromats, and what
+// comes back is the answer. Straight-line distance keeps one job - choosing
+// which laundromats are worth asking about - and may never say yes or no to a
+// person.
+//
+// WHY, MEASURED RATHER THAN ARGUED: from the Carlstadt laundromat, Hackensack is
+// 4.6 miles across the map and routes into Uber's 7-10 band, while Glen Rock at
+// 9.4 miles lands in the SAME band. The road factor between them ranges from
+// about 1.0 to over 2.2 inside one county. There is no multiplier that turns a
+// straight line into Uber's miles.
+//
+// IT WAS SYNCHRONOUS AND PURE while the answer was a ZIP list. It is async
+// because the truth now lives at a vendor, and it loads the laundromats itself
+// when it is not given them - the alternative was a second argument every caller
+// has to remember, where forgetting it means a boundary that quietly passes
+// everybody, on the one check that decides whether we take work nobody can do.
 //
 // A CALLER THAT ALREADY HAS THE LIST PASSES IT, which is what stops `checkSlot`
 // making the same query twice in one booking.
 //
-// THE PURE HALVES ARE `inNewJersey` AND `withinReachOf`, and that is where the
-// rules are tested. Nothing about the boundary itself needs a database.
-async function inServiceArea(customer, laundromats = undefined) {
+// IT FAILS OPEN, which `serviceable.js` owns: a courier we cannot reach must not
+// close the business, so it falls back to the radius that decided this before
+// anybody was asked. New Jersey is still checked either way, because that needs
+// no API call and is the one rule a courier cannot answer for us - Uber will
+// quote a Manhattan trip perfectly happily.
+// `courier` is threaded through for the tests, which must not reach a vendor -
+// see the note on `serviceable.reachable()`. Nothing in the app passes it.
+async function inServiceArea(customer, laundromats = undefined, { courier } = {}) {
   if (config.courier.model !== 'DYNAMIC') {
     const state = String((customer || {}).state || '').trim().toUpperCase();
     if (state && state !== 'NJ') return false;
@@ -631,10 +667,28 @@ async function inServiceArea(customer, laundromats = undefined) {
     return BERGEN_ZIPS.has(zip);
   }
 
-  if (!inNewJersey(customer)) return false;
-
   const shops = laundromats === undefined ? await laundromatsForArea() : laundromats;
-  return withinReachOf(customer, shops);
+
+  // A null list is "we could not read the partners table", which is our problem
+  // rather than the customer's. New Jersey still had to be true.
+  if (shops == null) return inNewJersey(customer);
+
+  const answer = await serviceable.reachable(customer, {
+    laundromats: shops,
+    at: coordsOf(customer),
+    ...(courier ? { courier } : {}),
+  });
+  return answer.ok;
+}
+
+// The customer's own coordinates, when the geocoder has placed them. Null is an
+// ordinary state - Bergen's hyphenated house numbers defeat free geocoders
+// constantly - and `reachable()` treats it as "ask about the nearest few
+// laundromats anyway" rather than as a refusal.
+function coordsOf(customer) {
+  const c = customer || {};
+  if (c.lat == null || c.lng == null) return null;
+  return { lat: Number(c.lat), lng: Number(c.lng) };
 }
 
 // Returns a human sentence if the date is unusable, or null if it is fine.
@@ -1869,6 +1923,7 @@ module.exports = {
   inNewJersey,
   withinReachOf,
   serviceAreaWords,
+  coordsOf,
   addressProblem,
   sameTown,
   alwaysAllowed,

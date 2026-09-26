@@ -175,29 +175,73 @@ test('NEW YORK IS REFUSED EVEN STANDING NEXT TO A LAUNDROMAT', async () => {
   // holds because a vendor agrees with it is not a boundary.
   const inManhattan = { state: 'NY', postal_code: '10036', ...northOf(SHOP, 2) };
 
-  assert.equal(await booking.inServiceArea(inManhattan, [SHOP]), false);
+  assert.equal(await booking.inServiceArea(inManhattan, [SHOP], { courier: courierThatSaysYes }), false);
 });
 
-test('a New Jersey address within reach is in, and one far away is not', async () => {
-  const near = nj(northOf(SHOP, 3));
-  const far = nj(northOf(SHOP, MAX + 20));
+// A COURIER THAT ANSWERS WITHOUT A NETWORK. `npm test` reached Uber's live API
+// the moment the boundary started asking one - two seconds a case, and a suite
+// that fails when somebody else's sandbox does. Nothing in test/ may depend on a
+// vendor being up, for the same reason nothing in it touches the database.
+const courierThatSaysYes = { quote: async () => ({ ok: true, feeCents: 1099 }) };
+const courierThatSaysNo = { quote: async () => ({ ok: false, reason: 'address_undeliverable' }) };
+const courierThatIsDown = {
+  quote: async () => {
+    throw new Error('sandbox is having a bad afternoon');
+  },
+};
 
-  if (config.courier.model === 'DYNAMIC') {
-    assert.equal(await booking.inServiceArea(near, [SHOP]), true);
-    assert.equal(await booking.inServiceArea(far, [SHOP]), false);
-  } else {
-    // Under the van the ZIP list decides and the coordinates are ignored, so
-    // both of these are the same Glen Rock ZIP and both are in.
-    assert.equal(await booking.inServiceArea(near, [SHOP]), true);
-    assert.equal(await booking.inServiceArea(far, [SHOP]), true);
-  }
+test('a New Jersey address the courier will take is in', async () => {
+  const near = nj(northOf(SHOP, 3));
+
+  assert.equal(await booking.inServiceArea(near, [SHOP], { courier: courierThatSaysYes }), true);
+});
+
+test('AND THE COURIER DECIDES IT, NOT A RULER', async () => {
+  // The change Neil asked for: "lets not use the straight as the crow flies
+  // method then and use uber's driving miles". An address three miles away that
+  // the courier refuses is refused, and one at nine miles that it accepts is in.
+  const near = nj(northOf(SHOP, 3));
+  const nearlyMax = nj(northOf(SHOP, MAX - 0.6));
+
+  if (config.courier.model !== 'DYNAMIC') return; // the van model uses the ZIP list
+
+  assert.equal(
+    await booking.inServiceArea(near, [SHOP], { courier: courierThatSaysNo }),
+    false,
+    'a courier refusal was overruled by the distance'
+  );
+  assert.equal(
+    await booking.inServiceArea(nearlyMax, [SHOP], { courier: courierThatSaysYes }),
+    true,
+    'a trip the courier priced was refused by our own ruler'
+  );
+});
+
+test('A COURIER WE CANNOT REACH DOES NOT CLOSE THE BUSINESS', async () => {
+  // Fails open onto the radius, which is exactly what decided this before
+  // anybody was asked. Refusing every booking because a vendor is having a bad
+  // minute is far worse than taking one somebody later has to ring about.
+  if (config.courier.model !== 'DYNAMIC') return;
+
+  const near = nj(northOf(SHOP, 3));
+  assert.equal(await booking.inServiceArea(near, [SHOP], { courier: courierThatIsDown }), true);
+});
+
+test('but New Jersey is still checked when the courier is down', async () => {
+  // It costs no API call and it is the one rule a courier cannot answer for us:
+  // Uber quotes a Manhattan trip perfectly happily, at $7.99 plus their $5 New
+  // York surcharge.
+  if (config.courier.model !== 'DYNAMIC') return;
+
+  const manhattan = { state: 'NY', postal_code: '10036', ...northOf(SHOP, 2) };
+  assert.equal(await booking.inServiceArea(manhattan, [SHOP], { courier: courierThatIsDown }), false);
 });
 
 test('IT IS ASYNC, SO A CALLER THAT FORGETS TO AWAIT CANNOT PASS SILENTLY', async () => {
   // A Promise is truthy, so `if (!inServiceArea(x))` never refuses anybody. It
   // is worth one assertion that this is a Promise, because that mistake is
   // invisible: every booking would be accepted and nothing would error.
-  const answer = booking.inServiceArea(nj(northOf(SHOP, 3)), [SHOP]);
+  const answer = booking.inServiceArea(nj(northOf(SHOP, 3)), [SHOP], { courier: courierThatSaysYes });
 
   assert.ok(typeof answer.then === 'function', 'inServiceArea stopped being async');
   assert.equal(await answer, true);
