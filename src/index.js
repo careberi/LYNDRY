@@ -23,11 +23,13 @@ const ops = require('./routes/ops');
 const admin = require('./routes/admin');
 const account = require('./routes/account');
 const bag = require('./routes/bag');
+const shop = require('./routes/shop');
 const paymentRoutes = require('./routes/payments');
 const db = require('./db');
 const burst = require('./core/burst');
 const customerAuth = require('./core/customer-auth');
 const adminAuth = require('./core/admin-auth');
+const partnerAuth = require('./core/partner-auth');
 const scheduler = require('./core/scheduler');
 const issues = require('./core/issues');
 
@@ -237,6 +239,11 @@ app.use('/', account.router);
 // no login and nothing to install.
 app.use('/', bag);
 
+// The laundromat portal. MOUNTED BEFORE THE WEBSITE for the reason admin.js is
+// mounted before ops.js: web.router ends in a catch-all not-found handler, and
+// anything after it is unreachable.
+app.use('/', shop);
+
 // The public website and the signup form.
 app.use('/', web.router);
 
@@ -429,6 +436,11 @@ function shutdown(signal) {
     adminAuth
       .flushPendingCodes()
       .catch((err) => console.error(`Could not flush pending staff sign-in codes: ${err.message}`)),
+    // And the laundromat portal's, which is a third sign-in with a third delayed
+    // send. An attendant waiting on a code through a deploy is the same problem.
+    partnerAuth
+      .flushPendingCodes()
+      .catch((err) => console.error(`Could not flush pending laundromat sign-in codes: ${err.message}`)),
   ]).finally(() => server.close(() => process.exit(0)));
   // If something hangs, don't wait forever. Raised from ten seconds when the
   // flush above was added: answering a held message means a call to the AI and

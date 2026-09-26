@@ -11,6 +11,7 @@ const throttle = require('../core/throttle');
 const issues = require('../core/issues');
 const orderEvents = require('../core/order-events');
 const partnersCore = require('../core/partners');
+const partnerWeighIn = require('../core/partner-weighin');
 const { config } = require('../config');
 const { sendAndLog } = require('../core/notify');
 const scanner = require('../web/scanner');
@@ -1355,50 +1356,21 @@ router.post('/o/:code/weight', async (req, res, next) => {
     const tagged = await tags.findByTag(code);
 
     if (tagged) {
-      const weight = Number((req.body || {}).weight_lb);
       const backTo = `/o/${encodeURIComponent(code)}?t=${encodeURIComponent(String(req.query.t || ''))}`;
 
-      if (!Number.isFinite(weight) || weight <= 0 || weight > 400) {
-        return res.redirect(303, `${backTo}&weighed=bad`);
-      }
-
-      // Same guard as the markup, because the markup guards nothing on a page
-      // with no sign-in.
-      if (tagged.status !== 'AT_PARTNER') {
-        return res.redirect(303, `${backTo}&weighed=early`);
-      }
-
-      await db
-        .from('orders')
-        .update({ partner_weight_lb: weight, partner_weight_at: new Date().toISOString() })
-        .eq('id', tagged.id);
-
-      await orderEvents.record(tagged.id, {
-        kind: 'PARTNER_WEIGHT',
-        summary: `Laundromat weighed the whole load at ${weight.toFixed(1)} lb`,
-        was: tagged.weight_lb == null ? null : `${tagged.weight_lb} lb ours`,
-        became: `${weight.toFixed(1)} lb theirs`,
+      // THROUGH `partner-weighin.js`, WHICH THE PORTAL ALSO CALLS. This was
+      // fifty lines here while the tag page was the only door onto it; the
+      // moment the laundromat portal appeared, a second copy would have drifted
+      // the first time one of them learned something the other did not.
+      const done = await partnerWeighIn.recordWholeLoad({
+        order: tagged,
+        weightLb: (req.body || {}).weight_lb,
         by: { actor: 'partner' },
+        settleWeight: fulfilment.settleWeight,
       });
 
-      const settled = await fulfilment
-        .settleWeight({ ...tagged, partner_weight_lb: weight }, { by: { actor: 'partner' } })
-        .catch((err) => {
-          console.error(`Could not settle order ${tagged.id}: ${err.message}`);
-          return { ok: false };
-        });
-
-      if (settled && settled.held && tagged.customers) {
-        await issues
-          .raise({
-            customer: tagged.customers,
-            order: tagged,
-            reason:
-              `Scales disagree: we weighed it ${tagged.weight_lb} lb, the laundromat ` +
-              `${weight.toFixed(1)} lb. NOTHING HAS BEEN CHARGED and the customer has ` +
-              `not been told a price. Settle it on the order page and both happen then.`,
-          })
-          .catch((err) => console.error(`Could not raise a weight mismatch: ${err.message}`));
+      if (!done.ok) {
+        return res.redirect(303, `${backTo}&weighed=${done.reason === 'bad_weight' ? 'bad' : 'early'}`);
       }
 
       await bags.recordScan({ code, orderId: tagged.id, outcome: 'SHOWN', ip, userAgent });

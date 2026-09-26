@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+
 const { site, tokens } = require('./site');
 const { CSS_BASE } = require('./assets');
 const { config } = require('../config');
@@ -90,7 +93,43 @@ function escapeHtml(value) {
 
 // An icon. Always goes through here rather than inline SVG, so swapping icon
 // sets stays a change to css/icons.css and nothing else.
+// EVERY GLYPH `icons.css` ACTUALLY DEFINES, read from the file at boot.
+//
+// NOT A SECOND LIST TO KEEP IN STEP. A hand-written set here would be a copy of
+// what that file says, and the one that disagreed would be the one nobody
+// noticed - which is the whole failure this exists to stop.
+const GLYPHS = (() => {
+  try {
+    const css = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'css', 'icons.css'), 'utf8');
+    return new Set([...css.matchAll(/^\.icon-([a-z0-9-]+)\s*\{/gm)].map((m) => m[1]));
+  } catch (err) {
+    // Unreadable is not a reason to stop rendering pages. Every icon then draws
+    // as it always did, which is the behaviour before this check existed.
+    console.error(`Could not read icons.css to check glyph names: ${err.message}`);
+    return null;
+  }
+})();
+
 function icon(name, size) {
+  // A NAME WITH NO RULE PAINTS A SOLID BLACK BOX, AND THAT IS WHAT THIS STOPS.
+  //
+  // The glyphs are CSS masks over `background-color: currentColor`. With no
+  // `mask-image` the element is not "no icon" - it is the whole box filled in
+  // ink. `icons.css` opens by warning about exactly this for a mask that fails
+  // to LOAD; a name that was never added is the same failure by a shorter route,
+  // and it shipped on the laundromat portal's back link as a black square.
+  //
+  // NOTHING IS BETTER THAN A BLOCK. The icon is decorative - it already carries
+  // `aria-hidden` - so a missing one costs a little polish, where a black square
+  // reads as the page being broken.
+  if (GLYPHS && !GLYPHS.has(name)) {
+    console.error(
+      `No .icon-${name} rule in public/css/icons.css, so nothing was rendered. ` +
+        'Add the glyph there (see the note at the top of that file) or use one that exists.'
+    );
+    return '';
+  }
+
   const sizeClass = size ? ` icon-${size}` : '';
   return `<span class="icon icon-${name}${sizeClass}" aria-hidden="true"></span>`;
 }
