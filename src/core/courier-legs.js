@@ -449,6 +449,177 @@ async function bookedFor(orderIds) {
   return new Set((data || []).map((r) => r.order_id));
 }
 
+// ---------------------------------------------------------------------------
+// WHAT THE COURIERS ARE DOING, FOR A PERSON TO LOOK AT.
+//
+// Neil, 25 September: "ad pages that help me see/mange the uber situation".
+//
+// EVERY LEG EVER BOOKED OR REFUSED, newest first. Refusals are in it on purpose:
+// `record()` writes a row with a null `delivery_id` and a reason when a booking is
+// turned down, and "we asked and they said no" is the half of this you cannot see
+// anywhere else - an order simply sits there looking unbooked.
+//
+// The order is joined rather than looked up per row: thirty legs must not be
+// thirty round trips, the same rule the board and the partner load already follow.
+async function recent({ limit = 100 } = {}) {
+  const { data, error } = await db
+    .from('courier_deliveries')
+    .select(
+      'id, order_id, leg, delivery_id, status, fee_cents, pin, tracking_url, ' +
+        'pickup_photo_url, dropoff_photo_url, refused_reason, requested_at, updated_at, ' +
+        'orders(order_number, status, partner_id, customer_id)'
+    )
+    .order('requested_at', { ascending: false })
+    .limit(Math.min(Math.max(1, Number(limit) || 100), 500));
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    orderId: row.order_id,
+    orderNumber: row.orders ? row.orders.order_number : null,
+    orderStatus: row.orders ? row.orders.status : null,
+    leg: row.leg,
+    deliveryId: row.delivery_id,
+    status: row.status,
+    feeCents: row.fee_cents,
+    pin: row.pin,
+    trackingUrl: row.tracking_url,
+    // AN EMPTY STRING IS NOT A PHOTO. The adapter already turns one into null, and
+    // a row written before it did can still carry the empty string, which renders
+    // as a broken image.
+    pickupPhotoUrl: row.pickup_photo_url || null,
+    dropoffPhotoUrl: row.dropoff_photo_url || null,
+    refusedReason: row.refused_reason,
+    requestedAt: row.requested_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+// WHAT THE COURIERS HAVE COST US, from the rows rather than from a column.
+//
+// `orders.courier_cost_cents` was added for this and is a second copy of it:
+// `fee_cents` on each leg IS what Uber charged, so the cost of an order is the sum
+// of its legs and the cost of a day is the sum of a day's. Same rule as the
+// laundromat load - a running total in a column is a second version of a fact that
+// disagrees the first time anything goes wrong.
+async function spendSince(iso) {
+  const { data, error } = await db
+    .from('courier_deliveries')
+    .select('fee_cents')
+    .not('fee_cents', 'is', null)
+    .gte('requested_at', iso);
+
+  if (error) throw error;
+
+  return (data || []).reduce((sum, row) => sum + (Number(row.fee_cents) || 0), 0);
+}
+
+// ASK THE COURIER WHERE THIS ONE ACTUALLY IS.
+//
+// THE ONLY HONEST WAY TO KNOW TODAY, because there is no webhook yet: `status` is
+// whatever Uber said at the moment the leg was booked, which is `pending` for ever
+// however far the courier has driven. A button that re-asks is what makes the
+// screen true rather than a record of one API call.
+//
+// IT WRITES WHAT IT LEARNS AND MOVES NO ORDER. Recording where a courier is and
+// deciding what that means to an order are two different things, and the second
+// one texts customers - see the note at the top of this file about
+// OUT_FOR_DELIVERY. When the webhook lands it will do the deciding; this only ever
+// updates the row.
+async function refresh(id, { courier = couriers } = {}) {
+  const leg = await byId(id);
+  if (!leg) return { ok: false, reason: 'no_leg' };
+  if (!leg.delivery_id) return { ok: false, reason: 'never_booked' };
+
+  let live = null;
+  try {
+    live = await courier.status(leg.delivery_id);
+  } catch (err) {
+    // A COURIER WE CANNOT REACH IS NOT A COURIER THAT SAID ANYTHING. Leaving the
+    // row alone is right: the stale status is at least a fact about something Uber
+    // once told us, and overwriting it with a guess would be worse.
+    return { ok: false, reason: 'unreachable', detail: err.message };
+  }
+
+  if (!live || !live.id) return { ok: false, reason: 'unknown_delivery' };
+
+  const patch = {
+    status: live.status || leg.status,
+    fee_cents: live.feeCents != null ? live.feeCents : leg.fee_cents,
+    pickup_photo_url: live.pickupPhotoUrl || null,
+    dropoff_photo_url: live.dropoffPhotoUrl || null,
+    tracking_url: live.trackingUrl || leg.tracking_url,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await db.from('courier_deliveries').update(patch).eq('id', leg.id);
+  if (error) throw error;
+
+  return {
+    ok: true,
+    was: leg.status,
+    now: patch.status,
+    changed: patch.status !== leg.status,
+    live,
+  };
+}
+
+// CALL A COURIER OFF.
+//
+// Behind `orders.override` on the screen, because it spends and unspends money at
+// a vendor and because a courier already at a door is not somebody to cancel by
+// accident.
+//
+// IT CANCELS AT UBER FIRST AND WRITES SECOND. A row marked cancelled while a car
+// is still coming is the worse failure: the screen would say nobody is on the way
+// and somebody would book a second one.
+async function cancelLeg(id, { by = null, courier = couriers } = {}) {
+  const leg = await byId(id);
+  if (!leg) return { ok: false, reason: 'no_leg' };
+  if (!leg.delivery_id) return { ok: false, reason: 'never_booked' };
+
+  let said = null;
+  try {
+    said = await courier.cancel(leg.delivery_id);
+  } catch (err) {
+    return { ok: false, reason: 'unreachable', detail: err.message };
+  }
+
+  if (!said || said.ok === false) {
+    return { ok: false, reason: said ? said.reason || 'refused' : 'refused', detail: said && said.detail };
+  }
+
+  const { error } = await db
+    .from('courier_deliveries')
+    .update({ status: said.status || 'canceled', updated_at: new Date().toISOString() })
+    .eq('id', leg.id);
+
+  if (error) throw error;
+
+  await orderEvents.record(leg.order_id, {
+    kind: 'COURIER',
+    summary: `Courier ${leg.leg === 'TO_PARTNER' ? 'collection' : 'return'} cancelled`,
+    was: leg.status,
+    became: said.status || 'canceled',
+    by: { actor: by && by.name ? by.name : 'ops' },
+  });
+
+  return { ok: true, status: said.status || 'canceled' };
+}
+
+// One leg by its own id, raw. Used by the two controls above.
+async function byId(id) {
+  const { data, error } = await db
+    .from('courier_deliveries')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
 module.exports = {
   PICKUP_READY_MINUTES,
   sendForPickup,
@@ -458,4 +629,11 @@ module.exports = {
   findLeg,
   bookedFor,
   addressOf,
+
+  // The ops screen.
+  recent,
+  spendSince,
+  refresh,
+  cancelLeg,
+  byId,
 };

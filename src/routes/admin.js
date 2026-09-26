@@ -64,6 +64,9 @@ const { scannerScript } = require('../web/scanner');
 const partners = require('../core/partners');
 const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/partners-page');
 const { scheduledBody } = require('../web/scheduled-page');
+const { couriersBody } = require('../web/couriers-board');
+const courierLegs = require('../core/courier-legs');
+const couriers = require('../providers/couriers');
 const {
   adminDashboardBody,
   settingsBody,
@@ -517,6 +520,15 @@ const OPS_MENUS = Object.freeze([
     items: [
       { href: '/ops/labels', label: 'Bag tags', permission: 'orders.act' },
       { href: '/ops/economics', label: 'Unit economics', permission: 'money.view' },
+      // COURIERS IS LISTED, unlike the cards on the Admin dashboard, and the
+      // difference is that this one IS something you go looking for. A courier is
+      // an outside company holding somebody's laundry in a stranger's car: when a
+      // customer rings to ask where their bags are, this is the screen you open,
+      // and hunting for it through a dashboard card is the wrong shape for that.
+      //
+      // Behind money.view - Admin only - because every row carries what a leg cost
+      // and the two controls spend and unspend money at a vendor.
+      { href: '/ops/couriers', label: 'Couriers', permission: 'money.view' },
       // "Route planner" says which of the two it is. This one is a day you
       // invent; Routing under Dashboard is the day that exists.
       { href: '/ops/planner', label: 'Route planner', permission: 'money.view' },
@@ -10140,6 +10152,119 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
 // that page five small cards with one enormous form dropped between them.
 // Neil's call: it is a screen you go to in order to change something, not one
 // you read at a glance, so it sits behind a card like everything else.
+// ---------------------------------------------------------------------------
+// THE UBER SITUATION.
+//
+// Neil, 25 September: "ad pages that help me see/mange the uber situation".
+//
+// THREE ROUTES, AND THE READ IS THE IMPORTANT ONE. Before this there was no screen
+// at all: a courier leg was booked from the laundromat portal and the only way to
+// know whether a car was coming - or had been REFUSED, which leaves an order
+// looking merely unbooked - was to query the database.
+//
+// `money.view`, SO ADMIN ONLY. Every row carries what a leg cost and the two
+// controls spend and unspend money at a vendor.
+// ---------------------------------------------------------------------------
+router.get('/ops/couriers', guard, withIssues, may('money.view'), async (req, res, next) => {
+  try {
+    // NEW JERSEY'S DAY, NEVER THE SERVER'S. Railway runs in UTC, so from 8pm
+    // Eastern `new Date().toISOString()` has already rolled over and "spent today"
+    // would quietly become "spent tomorrow". `today()` is booking.today().
+    const [legs, spendToday] = await Promise.all([
+      courierLegs.recent({ limit: 200 }),
+      courierLegs.spendSince(`${today()}T00:00:00-04:00`).catch(() => 0),
+    ]);
+
+    return res.type('html').send(
+      adminPage({
+        terminal: true,
+        title: 'Couriers',
+        active: '/ops/couriers',
+        body: couriersBody({
+          legs,
+          spendToday,
+          // THE DRIVER'S OWN NAME, not a tidy label. `uber`, `uber-test` and `fake`
+          // are three different things and a development environment books
+          // couriers that reach nobody - which you otherwise discover by waiting
+          // for a car that never comes.
+          courier: { name: couriers.name, isFake: couriers.isFake, configured: couriers.configured },
+          notice: req.query.done ? String(req.query.done).slice(0, 300) : null,
+          problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
+        }),
+        user: req.opsUser,
+        openIssues: req.openIssues,
+        serviceClosed: req.serviceClosed,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ASK UBER WHERE ONE ACTUALLY IS.
+//
+// A POST rather than a GET even though it changes nothing of ours, because it
+// calls out to a vendor: a GET would fire again on every refresh and every back
+// button, which is the rule `?done=` and `?problem=` exist to keep everywhere else
+// in ops.
+router.post('/ops/couriers/:id/refresh', guard, may('money.view'), async (req, res, next) => {
+  try {
+    const said = await courierLegs.refresh(req.params.id);
+
+    if (!said.ok) {
+      const why = {
+        no_leg: 'That courier leg does not exist.',
+        never_booked: 'Nothing was ever booked for that leg, so there is nothing to ask about.',
+        unreachable: 'Could not reach Uber just now. Nothing was changed.',
+        unknown_delivery: 'Uber does not recognise that delivery.',
+      };
+      return res.redirect(
+        303,
+        `/ops/couriers?problem=${encodeURIComponent(why[said.reason] || 'Could not ask Uber.')}`
+      );
+    }
+
+    // SAY WHETHER ANYTHING MOVED. "Asked Uber" on its own leaves somebody pressing
+    // it again to find out whether it worked.
+    const note = said.changed
+      ? `Uber says ${said.now}. It was ${said.was || 'unknown'}.`
+      : `No change. Uber still says ${said.now || 'nothing'}.`;
+
+    return res.redirect(303, `/ops/couriers?done=${encodeURIComponent(note)}`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// CALL A COURIER OFF.
+//
+// Behind `orders.override` rather than `money.view`, which is the line the charge
+// and hold retries already draw: reading what a vendor has cost is one thing, and
+// cancelling a car that may be at a door is a decision about the order.
+router.post('/ops/couriers/:id/cancel', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const said = await courierLegs.cancelLeg(req.params.id, { by: req.opsUser });
+
+    if (!said.ok) {
+      const why = {
+        no_leg: 'That courier leg does not exist.',
+        never_booked: 'Nothing was booked for that leg, so there is nothing to cancel.',
+        unreachable: 'Could not reach Uber just now. NOTHING WAS CANCELLED - the courier is still coming.',
+      };
+      return res.redirect(
+        303,
+        `/ops/couriers?problem=${encodeURIComponent(
+          why[said.reason] || `Uber would not cancel it: ${said.detail || said.reason}`
+        )}`
+      );
+    }
+
+    return res.redirect(303, '/ops/couriers?done=Cancelled at Uber.');
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/ops/weights', guard, withIssues, may('service.manage'), async (req, res, next) => {
   try {
     return res.type('html').send(
