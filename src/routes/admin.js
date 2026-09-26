@@ -4244,7 +4244,7 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
           ? `We are not taking orders right now. ${result.detail}`
           : 'We are not taking orders right now. Turn it back on under Taking orders, or tell them we will call back.',
         no_address: 'No address on file for them. Add it on their profile first.',
-        out_of_area: `That address is outside ${site.serviceArea}. Tell them we do not reach them yet.`,
+        out_of_area: `That address is outside ${booking.serviceAreaWords()}. Tell them we do not reach them yet.`,
         no_preferences: 'No wash preferences on file. Ask how they want it washed and add it to their profile.',
         bad_date: result.detail,
         bad_time: result.detail,

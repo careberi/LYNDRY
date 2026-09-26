@@ -555,7 +555,7 @@ function bookingRefusal(result) {
         ? `We’re not booking pickups just yet. ${result.detail}`
         : 'We’re not booking pickups just yet. We’ll be in touch the moment we are.',
       no_address: 'We need your address before we can pick up. Email us and we’ll add it.',
-      out_of_area: `We don’t reach your address just yet. We cover ${site.serviceArea} right now.`,
+      out_of_area: `We don’t reach your address just yet. How far we go depends on where our partner laundromats are.`,
       no_preferences: 'Tell us how you like it washed first. Text us and we’ll get you set up in a minute.',
       bad_date: result.detail,
       bad_time: result.detail,

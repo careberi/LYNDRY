@@ -198,13 +198,27 @@ const site = Object.freeze({
   // 8.4 miles from the Carlstadt laundromat and Uber will drive it, so Bergen
   // County had become a smaller claim than the truth.
   //
-  // "NORTHERN NEW JERSEY" RATHER THAN THE RULE ITSELF, because this string has
-  // to read properly in "laundry pickup and delivery in ___", "we cover ___"
-  // and a headline. "New Jersey, within 10 miles of one of our laundromats" is
-  // the precise version and is unreadable in all three; it lives in
-  // `booking.serviceAreaWords()`, which is what an ops screen and a refusal
-  // should quote. A vague claim that is TRUE beats a precise one that drifts.
-  serviceArea: config.courier.model === 'DYNAMIC' ? 'northern New Jersey' : 'Bergen County',
+  // "NEW JERSEY", AND IT WAS "NORTHERN NEW JERSEY" UNTIL 26 SEPTEMBER. Neil:
+  // "we are not just in northern NJ anymore, our distance depends on our
+  // laundromat partners". He is right, and the old string was a promise about
+  // geography that a new partner falsified the day it was signed.
+  //
+  // THE COVERAGE CLAIMS BUILT ON IT ARE GONE - the footer, Contact, the FAQ,
+  // How it works and Partners no longer say "we cover ___" at all, because the
+  // only honest answer is per-address and the quote page is what gives it.
+  // What is left are the places that need a REGION rather than a claim: the
+  // page titles and meta descriptions Google matches on, the schema.org
+  // areaServed, and the terms.
+  //
+  // So this is now the outer bound the code actually enforces. `inNewJersey()`
+  // refuses anything outside the state, and inside it the real limit is
+  // distance to a laundromat, which no fixed string can express. It reads
+  // properly in "laundry pickup and delivery in ___", it cannot go stale as
+  // partners are added, and the precise form still lives in
+  // `booking.serviceAreaWords()` for a refusal or an ops screen to quote.
+  // CLAUDE.md's own rule: a vague claim that is TRUE beats a precise one that
+  // drifts.
+  serviceArea: config.courier.model === 'DYNAMIC' ? 'New Jersey' : 'Bergen County',
 
   // Pricing comes from config so the website, the database and the AI all
   // quote the same numbers.
@@ -214,6 +228,14 @@ const site = Object.freeze({
   // shown before that point is an estimate and has to say so — quoting a firm
   // price we then change is the fastest way to lose someone's trust.
   pricePerLb: `$${(config.pricing.perPoundCents / 100).toFixed(2)}`,
+
+  // THE ORDER MINIMUM, FOR PROSE THAT IS NOT A PAGE. The {{MINIMUM}} token
+  // below covers page files; this is the same figure for the places that build
+  // a sentence in JavaScript - the meta descriptions, mainly. It exists because
+  // the home page's description carried a typed "$25 minimum" long after the
+  // courier model moved it to $45, which is exactly the drift a second copy
+  // causes and exactly what Google had indexed.
+  minimumDisplay: `$${(config.pricing.minimumCents / 100).toFixed(0)}`,
 
   // THE OTHER RATE, BECAUSE THERE ARE TWO AND THE SITE ONLY EVER SHOWED ONE.
   //
@@ -348,7 +370,7 @@ const tokens = Object.freeze({
   PRICE_PER_LB: site.pricePerLb,
   SUBSCRIPTION_PRICE_PER_LB: site.subscriptionPricePerLb,
   SUBSCRIPTION_FREQUENCIES: site.subscriptionFrequencies,
-  MINIMUM: `$${(config.pricing.minimumCents / 100).toFixed(0)}`,
+  MINIMUM: site.minimumDisplay,
   MINIMUM_LB: `${config.pricing.minimumCents / config.pricing.perPoundCents} lb`,
   ESTIMATE_RANGE: site.estimateRange,
   BAG_WEIGHT: site.typicalBagWeight,

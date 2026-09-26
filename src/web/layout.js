@@ -50,9 +50,11 @@ const { config } = require('../config');
 const NAV_LINKS = [
   { href: '/how-it-works', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
-  // The county hub. Named for what somebody is looking for rather than for the
-  // county, because half the people reading it will not know Bergen by name.
-  { href: '/locations', label: 'Areas' },
+  // AREAS IS OFF THE NAV, AND THE PAGE IS STILL THERE. Neil, 26 September.
+  // /locations is the hub for seventy town pages and they each link back to
+  // it, so deleting it would orphan the lot; taking it off the menu only stops
+  // people browsing into it. It stays in the sitemap, in llms.txt, and linked
+  // from the hero eyebrow and Contact, which is what keeps it reachable.
   { href: '/faq', label: 'Questions' },
   { href: '/partners', label: 'Partners' },
   { href: '/contact', label: 'Contact' },
@@ -187,6 +189,7 @@ const ICON_TOKENS = Object.freeze({
   ICON_MESSAGE: icon('message-circle', '26'),
   ICON_PACKAGE: icon('package', '26'),
   ICON_PACKAGE_CHECK: icon('package-check', '26'),
+  ICON_PHONE: icon('phone', '20'),
   ICON_TRUCK: icon('truck', '26'),
   ICON_MAP_PIN: icon('map-pin', '26'),
   ICON_SHIRT: icon('shirt', '26'),
@@ -260,12 +263,15 @@ function footer() {
         <div style="max-width:32ch;">
           <div style="margin-bottom:22px;">${logo('footer')}</div>
           <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:var(--paper-300);">
-            Laundry that runs on text messages. Picked up from your door, back
-            the ${site.turnaround}.
+            Wash, dry and fold. Picked up from your door and back the
+            ${site.turnaround}, ordered online in about a minute.
           </p>
-          <p style="margin:10px 0 0;font-size:15px;line-height:1.55;color:var(--ink-400);">
-            Serving ${site.serviceArea}.
-          </p>
+          <!-- NO SERVICE AREA HERE ANY MORE. Neil, 26 September: "we are not
+               just in northern NJ anymore, our distance depends on our
+               laundromat partners". A fixed place-name in the footer of every
+               page is a claim that goes stale the day a partner is added, and
+               the only thing that can answer it honestly is the quote page,
+               which asks a courier about the actual address. -->
         </div>
 
         <div>
@@ -273,9 +279,8 @@ function footer() {
           <div style="display:flex;flex-direction:column;gap:10px;">
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
-            <a href="/locations">Areas</a>
             <a href="/faq">Questions</a>
-            <a href="/#get-started">Get started</a>
+            <a href="/account/login">Place an order</a>
           </div>
         </div>
 
@@ -310,8 +315,8 @@ function footer() {
         <!-- Centred rather than pulled to the top with the columns. It is one
              control against three blocks of text, and sitting it on the same
              line as the headings leaves it stranded above a lot of nothing. -->
-        <a href="/#get-started" class="btn btn-primary btn-lg" style="align-self:center;">
-          Get started ${icon('arrow-right', '22')}
+        <a href="/account/login" class="btn btn-primary btn-lg" style="align-self:center;">
+          Place an order ${icon('arrow-right', '22')}
         </a>
 
       </div>
@@ -323,12 +328,13 @@ function footer() {
              If it doesn't, the campaign is rejected. -->
         <!-- NAME, ADDRESS, PHONE - the three things every local directory and
              every search engine cross-checks against a listing, in one place and
-             the same on every page. The address is the county rather than a
+             the same on every page. The address is the region rather than a
              street, because there is no shopfront and inventing one would be
-             worse than saying where the van actually goes. -->
+             worse than saying where the work actually happens. It was the
+             county until 26 September; see the note on site.serviceArea. -->
         <p class="footer-legal" style="margin-bottom:14px;">
           <strong>${site.name}</strong><br>
-          ${site.serviceArea}, New Jersey<br>
+          ${site.serviceArea}<br>
           Text <a href="${site.publicPhoneLink ? 'sms:' + site.publicPhoneLink : '#'}">${site.publicPhoneDisplay}</a>
           &middot; Call <a href="tel:${site.callPhoneLink}">${site.callPhoneDisplay}</a><br>
           <a href="mailto:${site.email}">${site.email}</a>

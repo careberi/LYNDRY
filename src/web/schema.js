@@ -91,7 +91,7 @@ function localBusiness({ path = '/', town = null } = {}) {
         '@type': 'ContactPoint',
         contactType: 'reservations',
         telephone: site.publicPhoneLink,
-        description: 'Text to book a pickup',
+        description: 'Text us about a pickup',
       },
       {
         '@type': 'ContactPoint',

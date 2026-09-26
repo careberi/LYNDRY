@@ -41,6 +41,23 @@ const MODEL = config.anthropicModel;
 // The seven tools
 // ---------------------------------------------------------------------------
 
+// WHAT LYN MAY NO LONGER DO: TAKE AN ORDER. Neil, 26 September: "lets have
+// people able to text lynn, but she cannot accept order. she pushes people to
+// the online order".
+//
+// She answers everything else exactly as she did. What goes is the three tools
+// that CREATE work - a pickup, a standing arrangement, or the availability
+// answer that only exists in order to book against it. Rescheduling and
+// cancelling stay, because they are about an order that already exists and a
+// customer must always be able to call one off.
+//
+// TWO LAYERS, AND BOTH ARE NEEDED - the same split the closed sign already
+// uses. The tools are not offered, so the model cannot call them; and
+// actions.run() refuses them anyway, because "a screen that hides a control
+// while the route behind it still fires is not a guard" and a model asked
+// nicely not to book will eventually book.
+const CANNOT_BOOK = ['create_order', 'check_slot', 'set_pickup_schedule'];
+
 const TOOLS = [
   {
     name: 'create_order',
@@ -467,6 +484,12 @@ function systemPrompt(today, now, { paused = null, promo = null, opensOn = null 
   const shut = Boolean(paused);
 
   return `You handle text messages for LYNDRY, a laundry pickup and delivery service in ${site.serviceArea}.
+
+YOU DO NOT BOOK PICKUPS. THIS IS THE FIRST THING TO KNOW ABOUT WHAT YOU DO.
+Orders are placed online, at ${site.domain}/account, and that is where anybody who wants one goes. You have no tool that creates a pickup, no tool that sets up a repeat, and no way to check whether a day or a time is free - so you cannot promise any of it, and you must not talk as though you could.
+Somebody who asks for a pickup gets told where to place it and that it takes about a minute, warmly and in one line. Do not ask them for a day. Do not ask them for a time. Do not take their address in order to book, and never say "I'll get that booked", "you're all set", "I've put you down" or anything else that sounds like it happened.
+SAYING YOU CANNOT IS NOT A REFUSAL AND MUST NOT READ LIKE ONE. They are not being turned away, they are being pointed at the thing that actually works, and it is faster than texting. One sentence, the address, and carry on with whatever else they asked.
+WHAT YOU STILL DO IS MOST OF IT: answer questions about price, turnaround, what we wash and how it works; tell somebody where their order is; move or cancel a pickup they already have; save their details and their wash preferences; and hand over to a person the moment anything is wrong.
 
 Right now it is ${now.time} on ${today}, which is a ${booking.readableDate(today)}, in New Jersey.
 Tomorrow is ${booking.addDays(today, 1)}, a ${booking.readableDate(booking.addDays(today, 1))}.
@@ -1382,8 +1405,10 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
     // Taking the tool off the table for that one call makes the loop impossible
     // rather than discouraged. The model must either do something real or write
     // the reply, which are the only two useful moves at that point.
-    tools:
-      followUp && followUp.lookup ? TOOLS.filter((t) => t.name !== 'check_slot') : TOOLS,
+    // `followUp.lookup` used to strip check_slot for one call to stop a loop.
+    // That tool is gone for every call now, so the branch is left only because
+    // OFFERED_TOOLS is what both arms would return.
+    tools: OFFERED_TOOLS,
 
     messages: [{ role: 'user', content: message }],
   });
@@ -1514,8 +1539,14 @@ function wrongNumberLine(text) {
 // systemPrompt and customerContext are exported so the exact words the AI is
 // given can be printed and read without starting the server or sending a text.
 // `npm run prompt` does that. Everything the AI is allowed to do is in here.
+// Everything except the three above. Derived rather than written out, so a tool
+// added to TOOLS is offered unless it is deliberately named as order-taking.
+const OFFERED_TOOLS = TOOLS.filter((t) => !CANNOT_BOOK.includes(t.name));
+
 module.exports = {
   decide,
+  CANNOT_BOOK,
+  OFFERED_TOOLS,
   followUpMessage,
   TOOLS,
   MODEL,

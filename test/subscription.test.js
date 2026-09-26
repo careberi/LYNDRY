@@ -496,10 +496,22 @@ test('THE SUBSCRIPTION RATE IS THE BIG NUMBER, not the one-time rate', () => {
     return { sub, one };
   };
 
-  // Pricing card: the subscription figure is rendered before the one-time one.
-  const pricing = first(['public', 'pages', 'pricing.html'], 'font-size:62px');
-  assert.ok(pricing.sub > -1 && pricing.one > -1, 'both rates should be in the price card');
-  assert.ok(pricing.sub < pricing.one, 'the one-time rate is still the big number on /pricing');
+  // /PRICING IS NOT ON THIS LIST ANY MORE, and that is a removal rather than a
+  // rate that drifted. Neil, 26 September: that page shows a dynamic quote
+  // instead of flat pricing, so it names no per-pound figure at all - it asks
+  // for an address and /quote answers with the rate that address actually gets.
+  // There is no "big number" left there to be wrong about.
+  //
+  // THE OTHER THREE STILL QUOTE A FLAT RATE and are still held to it here. That
+  // is the open question rather than a settled one: the home page, How it works
+  // and the town pages all print the flat figures while /pricing says the rate
+  // depends on your address, and the live Google Ads quote the flat one too.
+  const pricingSrc = fs.readFileSync(
+    path.join(__dirname, '..', 'public', 'pages', 'pricing.html'), 'utf8');
+  assert.ok(
+    !pricingSrc.includes('{{PRICE_PER_LB}}'),
+    '/pricing is quoting a flat per-pound rate again, which contradicts its own quote box'
+  );
 
   // Home: the heading names the subscription rate.
   const home = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'home.html'), 'utf8');

@@ -6,10 +6,61 @@
      three-card band is kept and the outer two say what is in the price and
      what isn't, instead of quoting plans we don't offer. -->
 
-<section class="container" style="padding:88px 40px 48px;">
+<section class="container" style="padding:88px 40px 32px;">
   <p class="eyebrow eyebrow-brand">Pricing</p>
-  <h1 class="display-2">Two rates. No surprises.</h1>
-  <p class="lead" style="max-width:44ch;">Weighed after pickup, texted to you right away, charged once we weigh it.</p>
+  <h1 class="display-2">What it costs at your door.</h1>
+  <p class="lead" style="max-width:46ch;">
+    The rate is the same everywhere. The total is not, because it depends on which
+    laundromat serves your address. Put yours in and see the real number.
+  </p>
+</section>
+
+<!-- =====================================================================
+     THE ADDRESS BOX, ABOVE THE RATES. Neil, 26 September: the pricing page
+     needs dynamic quote pricing instead of the flat pricing.
+
+     It GETs to /quote rather than answering here, which is what stops this
+     being a second implementation of a price: /quote asks a courier about the
+     real address and renders the answer, and this page only asks the question.
+     A quote is then a URL somebody can send on, and refreshing it can never
+     do anything twice.
+
+     THE BOX CARRIES NO VALUE ATTRIBUTE, and that is deliberate. The copy of
+     this form on /quote fills one from a token that the /quote route supplies;
+     nothing supplies it here, and an unreplaced token renders as its own
+     literal text sitting in the box. Empty is right anyway - this is the first
+     time anybody is being asked.
+
+     (Naming that token here would put it in the page too: an HTML comment is
+     served to the browser, so it is inside the markup like everything else.)
+     ===================================================================== -->
+<section class="container" style="padding-bottom:56px;">
+  <form method="get" action="/quote" class="card card-xl" style="padding:26px 28px;max-width:52ch;" data-reveal>
+    <label for="address" style="display:block;font:700 12px/1 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-700);margin-bottom:10px;">
+      Your street address
+    </label>
+
+    <input id="address" name="address" type="text" required
+           placeholder="16 Chandler Dr, Fair Lawn NJ"
+           autocomplete="street-address"
+           style="width:100%;margin-bottom:14px;">
+
+    <!-- A hidden field a person never sees. Anything that fills it is not a
+         person, and gets the same answer as everybody else. -->
+    <div style="position:absolute;left:-9999px;" aria-hidden="true">
+      <label for="p-company">Company</label>
+      <input id="p-company" name="company" type="text" tabindex="-1" autocomplete="off">
+    </div>
+
+    <button type="submit" class="btn btn-ink" style="width:100%;">
+      See my price {{ICON_ARROW}}
+    </button>
+
+    <p style="font-size:13px;line-height:1.5;color:var(--ink-500);margin:14px 0 0;">
+      We only use this to work out the distance. Nothing is saved and you are not
+      signed up for anything.
+    </p>
+  </form>
 </section>
 
 <!-- ===================================================================== -->
@@ -57,38 +108,44 @@
     <div class="card card-lg card-xl card-accent"
          style="padding:30px;display:flex;flex-direction:column;" data-reveal>
       <span class="badge badge-ink" style="margin-bottom:18px;">Wash &amp; fold</span>
-      <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Subscription</p>
+      <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Your rate</p>
 
-      <!-- THE SUBSCRIPTION RATE IS THE BIG NUMBER. Neil, 15 September.
-           It is the cheaper of the two and the one most people should be on, so
-           it leads; the one-time rate sits under it rather than being hidden.
-           Both are here because the checkout offers both, and a page that
-           showed one meant somebody could choose from a menu of one and meet a
-           cheaper option at the till.
-           A subscription is a RATE, not a club - see the FAQ below, and see
-           that "no membership" further down is still true. -->
+      <!-- NO FIXED PER-POUND FIGURE HERE ANY MORE. Neil, 26 September: the
+           pricing page needs dynamic quote pricing instead of the flat pricing.
+
+           IT WAS NOT MERELY OUT OF DATE, IT CONTRADICTED THE BOX ABOVE IT. The
+           same page asked for an address, answered with one rate for a real
+           Fair Lawn one, and then printed a different figure here - because
+           under a courier the rate is worked out from the laundromat that
+           serves the street, and no single number is true everywhere.
+
+           WHAT IS STILL FLAT IS STATED, because it genuinely is: the smallest
+           order, no delivery fee, no membership, and the fact that nothing is
+           charged until the bag is weighed. The rate itself is the quote's to
+           give. -->
       <div style="display:flex;align-items:baseline;gap:8px;">
-        <span style="font-family:var(--font-display);font-weight:900;font-size:62px;letter-spacing:-0.05em;line-height:0.85;">{{SUBSCRIPTION_PRICE_PER_LB}}</span>
-        <span style="font-size:15px;font-weight:600;">per pound, on a subscription</span>
+        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.045em;line-height:0.95;">Worked out from your address</span>
       </div>
-      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:10px 0 0;">
-        Pickups {{SUBSCRIPTION_FREQUENCIES}}. Change it or cancel it any time.
+      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:14px 0 0;">
+        One rate per pound, weighed after we collect it. Which rate depends on the
+        laundromat that serves your street, so the box above gives you the real
+        number rather than an average.
       </p>
 
       <div style="display:flex;align-items:baseline;gap:8px;margin-top:18px;padding-top:18px;border-top:2px solid var(--ink-100);">
-        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.04em;line-height:0.85;">{{PRICE_PER_LB}}</span>
-        <span style="font-size:15px;font-weight:600;">per pound, one-time</span>
+        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.04em;line-height:0.85;">{{MINIMUM}}</span>
+        <span style="font-size:15px;font-weight:600;">smallest order, everywhere</span>
       </div>
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:10px 0 0;">
-        Book whenever you need us. Nothing booked after it.
+        However little you send. A subscription is cheaper per pound than a
+        one-time pickup, on whichever rate your address gets.
       </p>
 
       <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:20px 0 26px;">
-        {{MINIMUM}} minimum per pickup, either way. Nothing is charged when you
-        book. We weigh your bag after pickup, text you the total, and charge
-        once. No membership.
+        Nothing is charged when you book. We weigh your bag after pickup, text you
+        the total, and charge once. No delivery fee and no membership.
       </p>
-      <a href="/#get-started" class="btn btn-ink btn-full">Get started {{ICON_ARROW_SM}}</a>
+      <a href="/account/login" class="btn btn-ink btn-full">Place an order {{ICON_ARROW_SM}}</a>
     </div>
 
     <div class="card card-xl" style="padding:30px;" data-reveal>
@@ -175,11 +232,11 @@
     <div class="card card-xl card-on-ink" style="padding:8px 34px;">
       <div class="qa" style="border-top:none;">
         <h3>Is there a subscription?</h3>
-        <p>Yes, and it is a rate rather than a membership. A one-time pickup is {{PRICE_PER_LB}} a pound. A subscription is {{SUBSCRIPTION_PRICE_PER_LB}} a pound with pickups {{SUBSCRIPTION_FREQUENCIES}}. There is nothing to join, no joining fee and no minimum number of pickups, you still pay only for the laundry you send, and you can change how often we come or cancel at any time. Cancelling never changes the price of a pickup you have already had.</p>
+        <p>Yes, and it is a rate rather than a membership. A subscription is cheaper per pound than a one-time pickup, with pickups {{SUBSCRIPTION_FREQUENCIES}}. Both rates are worked out from your address, so put it in the box at the top of this page to see yours. There is nothing to join, no joining fee and no minimum number of pickups, you still pay only for the laundry you send, and you can change how often we come or cancel at any time. Cancelling never changes the price of a pickup you have already had.</p>
       </div>
       <div class="qa">
         <h3>How do I know what I'll be charged?</h3>
-        <p>We weigh your laundry after picking it up and multiply by your rate: {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, or {{PRICE_PER_LB}} a pound for a one-time pickup. A {{MINIMUM}} minimum per pickup applies either way. A typical {{BAG_WEIGHT}} bag works out around {{ESTIMATE_RANGE}} at the one-time rate. You get the exact figure by text as the charge goes through.</p>
+        <p>We weigh your laundry after picking it up and multiply by your rate, which the box at the top of this page will tell you for your address. A {{MINIMUM}} minimum per pickup applies either way. You get the exact figure by text as the charge goes through.</p>
       </div>
       <div class="qa">
         <h3>How do I pay?</h3>

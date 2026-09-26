@@ -62,7 +62,7 @@
   height: var(--ly-h, 44px);
   /* Width comes from the artwork's own proportions, so a variant only ever has
      to say how tall it is and can never squash the mark. */
-  aspect-ratio: 600 / 546;
+  aspect-ratio: 600 / 481;
   background: url(logo.png) center / contain no-repeat;
 }
 
@@ -284,16 +284,37 @@ button.clip-toggle { font: inherit; text-align: center; }
   margin: 0 0 22px;
 }
 
-/* The hero headline holds its two-line break at every width.
-   It is sized from the COLUMN it sits in, not the viewport, because on
-   desktop that column is only about half the screen — a viewport-based size
-   overflows it and wraps to a third line, which is what "Text us. We got your
-   laundry." did at 1280px while looking fine at 800px.
-   10.8cqi is the largest size at which the longer line still fits. */
+/* The hero headline is sized from the COLUMN it sits in, not the viewport,
+   because on desktop that column is only about half the screen and a
+   viewport-based size overflows it.
+
+   IT WAS 10.8cqi, AND THAT NUMBER BELONGED TO A HEADLINE THAT IS GONE. It was
+   the largest size at which "Text us. We got your laundry." still held its
+   two-line break - a constraint that died with the line itself. "Laundry,
+   picked up and delivered." is meant to wrap to three, and the design handoff
+   sets it nearly twice as large, capped at 94px.
+
+   13.6cqi is MEASURED, not chosen: "pickup & delivery" is the longest of the
+   three lines and needs 354px of a 336px column at 48.7px, so 13.8cqi is the
+   exact fit and this sits just under it. Because both the type and the column
+   scale with cqi, that ratio holds at every width - which is the whole reason
+   the size is expressed against the column rather than the viewport.
+
+   CHANGE THE WORDS AND YOU HAVE TO RE-MEASURE. A longer line than
+   "pickup & delivery" will run off the side rather than wrap, because the
+   spans below refuse to. The floor is 30px so that it cannot engage before a
+   column gets narrower than any phone. */
 @supports (font-size: 1cqi) {
   .hero-copy { container-type: inline-size; }
-  .hero-copy .display-1 { font-size: clamp(30px, 10.8cqi, 96px); }
+  .hero-copy .display-1 { font-size: clamp(30px, 13.6cqi, 94px); }
 }
+
+/* EACH LINE IS ONE LINE, AT EVERY WIDTH. Neil, 26 September, naming all three.
+   They are three claims stacked, not a sentence that wraps, so a <br> was not
+   enough - on a phone "pickup & delivery" still broke in half. A block span
+   that refuses to wrap is what actually holds it, and it means the LONGEST
+   line is what the type size has to be measured against. */
+.hero-stack span { display: block; white-space: nowrap; }
 .display-2 {
   font-family: var(--font-display);
   font-weight: 900;
@@ -587,10 +608,20 @@ button {
    --suds-500. That fails WCAG AA for body text by a wide margin. Ink on the
    same green is 5.92:1 and passes. The underline stays, so the link is still
    obviously a link. */
-.hero a:not(.btn),
-.card-brand a:not(.btn) { color: var(--ink-900); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
-.hero a:not(.btn):hover,
-.card-brand a:not(.btn):hover { color: var(--suds-700); }
+/* AND THE EXCLUSION LIST GREW, BECAUSE THE BUG CAME BACK. 26 September: the
+   hero's new "Place an order online" control is an <a class="hero-cta"> - one
+   class - and this rule is a class plus an element plus a :not(), so it won.
+   Ink text on an ink button, invisible, on the main control of the home page.
+   Exactly the failure the comment above describes, one class along.
+
+   ANYTHING IN THE HERO THAT IS A CONTROL RATHER THAN A LINK GOES IN THIS LIST.
+   Adding it here is the fix; out-specifying it from the control's own rule is
+   not, because the next property added to this line would leak straight back
+   through. */
+.hero a:not(.btn):not(.hero-cta),
+.card-brand a:not(.btn):not(.hero-cta) { color: var(--ink-900); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.hero a:not(.btn):not(.hero-cta):hover,
+.card-brand a:not(.btn):not(.hero-cta):hover { color: var(--suds-700); }
 
 /* ---------------------------------------------------------------------------
    Badge
@@ -962,6 +993,250 @@ button {
   background: var(--ink-900);
 }
 .fact-rail span:last-child::after { display: none; }
+
+/* =====================================================================
+   THE HERO'S RIGHT-HAND COLUMN, AND THE WAYS IN UNDER THE HEADLINE.
+
+   These are classes rather than the inline styles the design handoff
+   carried, and that is not tidiness. An inline `grid-template-columns`
+   beats the media query that collapses it, so a hero built the handoff's
+   way renders two columns on a phone and runs off the side of the screen.
+   CLAUDE.md records that as a rule because it has bitten before.
+   ===================================================================== */
+
+/* The stack of ways in: the loud one, then the quiet pair. */
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 540px;
+}
+
+/* THE ONLY THING ON THIS PAGE WE ARE ASKING ANYBODY TO DO, AT THE SIZE THAT
+   SAYS SO. Neil, 26 September: a giant button that takes over where the call
+   and email tiles were - so its height is deliberately about what that whole
+   stack came to, rather than a number picked to look big.
+
+   Ink, and the shadow is PAPER rather than ink: this sits on green, and an ink
+   offset under an ink button is invisible. */
+.hero-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 158px;
+  padding: 28px 32px 28px 36px;
+  background: var(--ink-900);
+  color: var(--paper-050);
+  border: 3px solid var(--ink-900);
+  border-radius: 18px;
+  box-shadow: 6px 6px 0 var(--paper-050);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  /* Wraps to two lines in the column it sits in, which is what makes it read
+     as a block rather than as a wide thin bar. */
+  font-size: clamp(30px, 3.6vw, 44px);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  transition: transform 140ms var(--ease-pop), box-shadow 140ms var(--ease-pop);
+}
+.hero-cta:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 9px 9px 0 var(--paper-050);
+  color: var(--paper-050);
+}
+.hero-cta:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--paper-050);
+}
+
+/* The arrow ships at 22px from the token, which is right beside 22px type and
+   lost beside 44px. Sized here rather than by minting a second token, because
+   this is the only placement that wants it bigger. */
+.hero-cta .icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+}
+
+@media (max-width: 560px) {
+  .hero-cta { min-height: 124px; padding: 22px 24px; border-radius: 16px; }
+  .hero-cta .icon { width: 30px; height: 30px; }
+}
+
+/* ---- The mock pickup, in the second column -------------------------- */
+
+.pickup-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 28px 18px 18px 0;
+}
+
+/* The tilted panel behind the card. A ::before rather than a real element,
+   because it is decoration and nothing should be able to tab to it. */
+.pickup-wrap::before {
+  content: '';
+  position: absolute;
+  top: 44px;
+  left: 40px;
+  right: 0;
+  bottom: 0;
+  background: var(--lilac-300);
+  border: 3px solid var(--ink-900);
+  border-radius: 22px;
+  transform: rotate(3deg);
+}
+
+.pickup-card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--paper-050);
+  border: 3px solid var(--ink-900);
+  border-radius: 22px;
+  box-shadow: 10px 10px 0 var(--ink-900);
+  overflow: hidden;
+}
+
+.pickup-card__head {
+  background: var(--ink-900);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.pickup-card__head span:first-child { color: var(--suds-300); }
+.pickup-card__head span:last-child  { color: var(--paper-300); }
+
+.pickup-card__body { padding: 24px 24px 22px; }
+
+.pickup-when { display: flex; align-items: center; gap: 16px; }
+.pickup-when__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  border: 3px solid var(--ink-900);
+  background: var(--suds-500);
+}
+.pickup-when__day {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink-900);
+}
+.pickup-when__window { font-size: 15px; color: var(--ink-700); margin-top: 4px; }
+
+.pickup-rows { margin: 22px 0 0; }
+.pickup-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--ink-100);
+}
+.pickup-rows dt {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+.pickup-rows dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-900);
+  text-align: right;
+}
+
+/* The progress rail. The line behind the dots is a ::before on the row, so
+   the dots sit on top of it without any of them needing a z-index. */
+.pickup-rail {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 3px solid var(--ink-900);
+}
+.pickup-rail::before {
+  content: '';
+  position: absolute;
+  top: 33px;
+  left: 10%;
+  right: 10%;
+  height: 3px;
+  background: var(--ink-200);
+}
+.pickup-step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  text-align: center;
+}
+.pickup-step i {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink-900);
+  background: var(--paper-000);
+}
+.pickup-step--done   { color: var(--ink-900); }
+.pickup-step--done i { background: var(--suds-500); }
+.pickup-step--now    { color: var(--ink-900); }
+.pickup-step--now i  { background: var(--sunbeam-500); }
+
+/* The offer pill, hung off the corner of the card. Drawn only when there is
+   a live offer to name - see HERO_OFFER in src/routes/web.js. */
+.pickup-badge {
+  position: absolute;
+  bottom: -40px;
+  right: -4px;
+  transform: rotate(-5deg);
+  background: var(--sunbeam-500);
+  border: 3px solid var(--ink-900);
+  border-radius: 999px;
+  box-shadow: 4px 4px 0 var(--ink-900);
+  padding: 12px 20px;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--ink-900);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  /* The card is decoration, like the phone mock it replaced. On a phone the
+     headline and the ways in are the whole point, and it only pushes them
+     down the screen. */
+  .pickup-wrap { display: none; }
+}
 
 /* The lilac bar under the hero. It needs the same lift off the page as the row
    and the fact rail above it: the bubble layer is POSITIONED and this was not,

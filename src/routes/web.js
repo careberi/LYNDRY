@@ -211,7 +211,7 @@ const PAGES = [
     title: 'Home',
     fullTitle: 'Laundry Pickup & Delivery in Bergen County, NJ | LYNDRY',
     head: () => structured.tags([structured.localBusiness(), structured.service()]),
-    description: `Wash and fold pickup in ${site.serviceArea}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, $25 minimum, next-day return. Text to book, no app.`,
+    description: `Wash and fold pickup in ${site.serviceArea}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, ${site.minimumDisplay} minimum, next-day return. Order online, no app.`,
   },
   {
     path: '/how-it-works',
@@ -235,13 +235,13 @@ const PAGES = [
           ],
         ]),
       ]),
-    description: `Text LYNDRY, leave the bag, get it back the ${site.turnaround}. ${site.subscriptionPricePerLb}/lb wash and fold on a subscription, ${site.pricePerLb}/lb one-time. Nobody needs to be home.`,
+    description: `Order online, leave the bag at your door, get it back the ${site.turnaround}. Wash and fold pickup and delivery, weighed after collection. Nobody needs to be home.`,
   },
   {
     path: '/pricing',
     file: 'pricing.html',
     title: 'Pricing',
-    fullTitle: `Wash & Fold Pricing, ${site.subscriptionPricePerLb}/lb Pickup in ${site.serviceArea} | LYNDRY`,
+    fullTitle: `Wash & Fold Pricing in ${site.serviceArea} | LYNDRY`,
     head: () =>
       structured.tags([
         structured.faqPage([
@@ -271,7 +271,7 @@ const PAGES = [
     // "charged once on delivery", which is the model that was replaced when the
     // charge point moved to the laundromat's scale - and the same brief says not
     // to change the charge rule. The rule wins over the sentence describing it.
-    description: `${site.subscriptionPricePerLb} a pound on a subscription, or ${site.pricePerLb} a pound for a one-time pickup. $25 minimum. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
+    description: `Put in your address and see what wash and fold pickup costs on your street. ${site.minimumDisplay} smallest order. Weighed after pickup, charged once after we weigh it. No booking charge, no delivery fee, no membership.`,
   },
   {
     path: '/faq',
@@ -631,8 +631,25 @@ async function extraTokensFor(page, req) {
 
     const said = problems[String(req.query.problem || '')] || null;
 
+    // THE OFFER PILL ON THE HERO CARD, READ FROM THE PROMOTION RATHER THAN
+    // TYPED ONTO THE PAGE. The design handoff had "50% off your first order"
+    // written into the markup, which is the exact thing that had to be taken
+    // off /bergen: a figure on a page is a second copy of a promise only the
+    // promotions table can keep, and the copy on the page is the one that goes
+    // on saying it after the offer is stood down.
+    //
+    // sitePopup.offer() rather than a query of our own, so the website has ONE
+    // lever: it is cached, it fails safe to nothing, and it already refuses a
+    // capped promotion that has run out. Not forRequest() - that answers null
+    // once somebody has dismissed the popup, and the pill is not theirs to
+    // dismiss.
+    const offer = await sitePopup.offer();
+
     return {
       QR_SVG: await textUsQrSvg(),
+      HERO_OFFER: offer
+        ? `<div class="pickup-badge">${escapeHtml(offer.headline)}</div>`
+        : '',
       START_PROBLEM: said
         ? `<p role="alert" style="margin:14px 0 0;padding:12px 15px;border:2px solid var(--ink-900);
                    border-radius:12px;background:var(--stain-500);color:var(--paper-050);
@@ -1162,7 +1179,7 @@ router.get('/llms.txt', (req, res) => {
     '',
     `> ${site.tagline}`,
     '',
-    `${site.name} is a wash and fold laundry pickup and delivery service in ${site.serviceArea}, New Jersey.`,
+    `${site.name} is a wash and fold laundry pickup and delivery service in ${site.serviceArea}.`,
     'We collect laundry from your door, wash, dry and fold it, and bring it back.',
     '',
     '## What it costs',

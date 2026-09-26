@@ -103,174 +103,129 @@
     <div class="hero-row">
 
       <div class="hero-copy" data-parallax="0.14">
-        <!-- Written in sentence case; the .eyebrow class uppercases it. That
-             is the design system's rule — uppercase lives in the Space Mono
-             label treatment, never in the copy itself. -->
-        <p class="eyebrow eyebrow-brand">Wash &amp; fold &middot; pickup &amp; drop-off</p>
+        <!-- Written in sentence case; the .eyebrow class uppercases it. That is
+             the design system's rule - uppercase lives in the Space Mono label
+             treatment, never in the copy itself.
 
-        <!-- Break at the full stop, not wherever the line happens to run out.
-             text-wrap:balance on its own put "We" alone at the end of the
-             first line, which reads as a stumble. -->
-        <!-- THE BRAND LINE, AND IT IS NO LONGER THE H1.
-             It is still the biggest thing on the page and still the first thing
-             read: display-1 is the class doing that, and it has not moved. What
-             changed is only which element carries it, because an H1 is the one
-             heading a search engine weighs hardest and this one contains no
-             word anybody types into a search box. -->
-        <p class="display-1">Text us.<br>We got your laundry.</p>
+             THE SERVICE AREA IS A LINK, AND THAT IS THE ONE ADDITION TO THE
+             HANDOFF'S HERO. The line it replaced carried the only route from
+             this page into the seventy town pages, and dropping it would have
+             quietly cost them their entry point. It is a token rather than a
+             typed county because what we cover depends on who does the driving
+             - see the service area note in CLAUDE.md. -->
+        <!-- THREE LINES, BROKEN WHERE NEIL BROKE THEM, at every width. The
+             <br>s are deliberate: this is a stack of three claims rather than a
+             sentence that happens to wrap, so letting it reflow would turn it
+             into something else on a phone. What that costs is that the longest
+             line, "pickup & delivery", now sets the type size - see the cqi
+             rule in lyndry.css, which is measured against it.
 
-        <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:40ch;margin:0 0 30px;">
-          Leave it at your door. It comes back the {{TURNAROUND}} washed, folded and on time.
+             IT IS ALSO THE H1, which the old brand line could not be: "Text us.
+             We got your laundry." held no word anybody types into a search box,
+             so a small keyword line underneath carried the H1 instead. These
+             three lines are the search itself, so the two jobs are one element
+             again and that extra line is gone.
+
+             THERE IS NO EYEBROW ABOVE IT ANY MORE. It named the service area,
+             and Neil took it off on 26 September: "we are not just in northern
+             NJ anymore, our distance depends on our laundromat partners". A
+             fixed place-name in the loudest position on the site is a claim
+             that goes stale every time a partner is added.
+
+             That link was also the home page's route into the seventy town
+             pages. They are still reachable from Contact, from each other and
+             from the sitemap, which is what Google walks. -->
+        <h1 class="display-1 hero-stack"><span>Laundry</span><span>wash &amp; fold</span><span>pickup &amp; delivery</span></h1>
+
+        <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:42ch;margin:0 0 34px;">
+          Leave a bag at your door. We wash, dry and fold it and bring it back
+          the {{TURNAROUND}}.
         </p>
 
-        <!-- ONE LINE CARRYING THE WORDS SOMEBODY WOULD ACTUALLY TYPE, and a way
-             into the town pages. It is the H1 now, and it keeps the exact inline
-             styles it had as a paragraph, so nothing about the page moves - the
-             element changed and the rendering did not. A link inside an H1 is
-             fine and this one has always been there. -->
-        <h1 style="font-size:16px;line-height:1.5;color:var(--ink-800);max-width:38ch;margin:0 0 26px;">
-          Laundry pickup and wash-and-fold delivery
-          <a href="/locations">across {{SERVICE_AREA}}</a>.
-        </h1>
+        <!-- ONE WAY IN, AND IT IS THE SIZE OF THE THREE IT REPLACED.
+             Neil, 26 September: make it a giant button that takes over where
+             the call and email buttons are.
 
-        <!-- POST, not GET. A GET would put the visitor's mobile number in the
-             URL, which then sits in their browser history, in our server logs
-             and in the referrer header of every link they click next. A phone
-             number does not belong in any of those. -->
-        <!-- Every "Get started" on the site points at #get-started, which is
-             this field. There is nowhere else to send them: signing up now
-             happens in the text thread, and /signup is kept only as a fallback
-             that nothing links to. -->
-        <form id="get-started" action="/start" method="post">
-          <!-- The honeypot. A person never sees this; something filling every
-               field in the form does. Handled in POST /start. -->
-          <div aria-hidden="true" style="position:absolute;left:-9999px;">
-            <label for="heroWebsite">Website</label>
-            <input id="heroWebsite" name="website" type="text" tabindex="-1" autocomplete="off">
-          </div>
+             The Call and Email tiles that sat here are gone with them, and so
+             is the line under them that read "same order, whichever way you
+             book" - there is one way now, so it had stopped being true. Both
+             are still reachable from Contact in the nav and from the footer.
 
-          <div class="hero-form" style="display:flex;gap:12px;max-width:540px;">
-            <div style="flex:1;">
-              <label for="heroPhone" class="sr-only">Your mobile number</label>
-              <input id="heroPhone" name="phone" type="tel" autocomplete="tel" required
-                     class="input input-lg" placeholder="Your mobile number">
-            </div>
-            <div style="flex:0 0 auto;white-space:nowrap;">
-              <button type="submit" class="btn btn-ink btn-lg">
-                Text me {{ICON_ARROW}}
-              </button>
-            </div>
-          </div>
+             There is no text box here either: texting is strictly outbound, so
+             an sms: link would point at a number that answers nobody. -->
+        <div class="hero-actions">
+          <a href="/account/login" class="hero-cta">
+            <span>Place an order online</span>
+            {{ICON_ARROW}}
+          </a>
+        </div>
 
-          <!-- Consent, under the field, on every form that takes a number.
-               The wording is the design handoff's, verbatim — it is what
-               carriers read during registration, so it does not get reworded.
-
-               This box IS the consent record now. Ticking it is what makes the
-               text that follows legal, so it is submitted and stored against
-               the customer with a timestamp, the visitor's IP and a source of
-               WEB_HERO. It starts unticked and must stay that way — a
-               pre-ticked consent box is the single fastest way to fail carrier
-               review. -->
-          {{START_PROBLEM}}
-
-          <label class="check" style="margin-top:18px;max-width:540px;">
-            <input type="checkbox" name="sms_consent" value="yes" required>
-            <span class="check-box">{{ICON_CHECK}}</span>
-            <span class="check-text" style="color:var(--ink-800);">
-              By checking this box you agree to receive text messages from
-              lyndry at the number provided, including messages sent by
-              autodialer. Consent is not a condition of purchase. Message and
-              data rates may apply. Message frequency varies. Reply HELP for
-              help, STOP to cancel. See our <a href="/privacy">Privacy Policy</a>
-              and <a href="/sms-terms">SMS Terms</a>.
-            </span>
-          </label>
-
-          <p class="helper helper-brand">One text back &middot; no spam &middot; reply STOP any time</p>
-        </form>
       </div>
 
-      <!-- The phone mock. Static on purpose — an animated version was built,
-           reviewed and removed during the design. Every line in the thread is
-           wording our system really sends; a mock that promises something the
-           product doesn't do is a mock that creates complaints. -->
-      <div class="phone-wrap" data-parallax="-0.09" aria-hidden="true">
-        <div class="phone-bezel">
-          <div class="phone-screen">
-            <div class="phone-island"></div>
+      <!-- A MOCK PICKUP, IN PLACE OF THE PHONE THREAD THAT USED TO SIT HERE.
+           The thread showed a customer booking by text, which is not something
+           the product does any more.
 
-            <div class="phone-status">
-              <span>9:41</span>
-              <span style="letter-spacing:2px;">&#9679;&#9679;&#9679;</span>
+           Decoration, so it is hidden from screen readers exactly as the phone
+           mock was - everything it says is said properly in the copy beside it.
+
+           NO ORDER NUMBER IN THE HEADER. The handoff had "Order LY-4471"; a
+           number in our real format would be read as a real order by anybody
+           who has one, and an invented format is noise. Neil took the
+           placeholder out on sight, so the header carries the label alone. -->
+      <div class="pickup-wrap" data-parallax="-0.09" aria-hidden="true">
+        <div class="pickup-card">
+          <div class="pickup-card__head">
+            <span>Your pickup</span>
+          </div>
+
+          <div class="pickup-card__body">
+            <div class="pickup-when">
+              <span class="pickup-when__icon">{{ICON_TRUCK}}</span>
+              <div>
+                <div class="pickup-when__day">Tomorrow</div>
+                <div class="pickup-when__window">9am&ndash;12pm pickup window</div>
+              </div>
             </div>
 
-            <div class="phone-header">
-              <!-- The logo's avatar variant. The tail hangs below the box, so
-                   the wrapper needs bottom margin to keep it off the label. -->
-              <div style="margin-bottom:8px;">{{AVATAR}}</div>
-              <div class="phone-name">LYNDRY</div>
-            </div>
+            <dl class="pickup-rows">
+              <div><dt>Pickup</dt><dd>Outside your door</dd></div>
+              <div><dt>Service</dt><dd>Wash, dry &amp; fold</dd></div>
+              <div><dt>Back</dt><dd>{{TURNAROUND}}, same spot</dd></div>
+            </dl>
 
-            <div class="phone-thread">
-              <div class="phone-day">Today 7:42 PM</div>
-
-              <div class="bubble bubble-out">laundry tomorrow</div>
-              <div class="bubble bubble-in">Booked for tomorrow. Leave the bag outside your door, you don't need to be in.</div>
-              <div class="bubble bubble-out">make it monday</div>
-              <div class="bubble bubble-in">Moved to Monday.</div>
-              <!-- 18.5 lb at the real rate. If the price changes, this figure
-                   has to change with it — it is the one number on the site
-                   that a token can't fill in. -->
-              <div class="bubble bubble-in">Your laundry weighed 18.5 lb, so the total is $37.00 at {{PRICE_PER_LB}} a pound. Charged to your Visa ending 4242.</div>
-              <div class="bubble bubble-out">can you skip the softener</div>
-              <div class="bubble bubble-in">Done, and saved. We'll leave it out every time from now on.</div>
-              <div class="bubble bubble-out">where is it</div>
-              <div class="bubble bubble-in">Folded and on the van, back this evening. We'll text a photo when it's down.</div>
-
-              <div class="phone-receipt">Delivered</div>
-              <div class="phone-home"></div>
+            <div class="pickup-rail">
+              <span class="pickup-step pickup-step--done"><i></i>Booked</span>
+              <span class="pickup-step pickup-step--now"><i></i>Collected</span>
+              <span class="pickup-step"><i></i>Washing</span>
+              <span class="pickup-step"><i></i>On its way</span>
+              <span class="pickup-step"><i></i>Delivered</span>
             </div>
           </div>
         </div>
+
+        {{HERO_OFFER}}
       </div>
 
     </div>
 
-    <!-- THE OTHER WAY IN, AND IT IS DELIBERATELY THE SECOND ONE.
+    <!-- Pinned to the bottom of the green.
 
-         The box above is still the loud path: type a number, we text you,
-         and the whole thing happens in the thread. That is the product and it
-         is what the adverts point at.
+         "No membership" rather than the design handoff's fourth claim, which
+         said we do not run a subscription. We do, at the cheaper per-pound
+         rate, and Neil ruled on 21 September that no page may say otherwise.
+         What survives is the part that is still true: there is no club to
+         join, no joining fee and no minimum number of pickups.
 
-         This is for somebody who would rather tap than type - and for every
-         customer coming back, who until now had to know the address of
-         /account to find it. Lilac rather than suds so it reads as the
-         alternative rather than a second first choice, and ink on lilac
-         because white on any brand colour is a bug.
-
-         /account/login serves both people Neil named: it is the sign-in page,
-         it carries the link to create an account, and it sends anybody
-         already signed in straight through to their orders. -->
-    <!-- NO BUTTON INSIDE IT. The whole bar is the link, so a button drawn on
-         top of a link is a second target for one destination - and it made the
-         bar read as a banner with a control rather than as one thing you press.
-         Centred, so the words are the button. -->
-    <a href="/account/login" class="card card-xl order-online"
-       style="display:block;padding:26px 30px;margin:56px 0 0;text-align:center;text-decoration:none;">
-      <span class="eyebrow" style="display:block;margin-bottom:6px;">Rather not text?</span>
-      <span style="display:block;font-family:var(--font-display);font-weight:900;
-                   font-size:clamp(24px,4vw,32px);line-height:1.1;color:var(--ink-900);">
-        Place an order online
-      </span>
-    </a>
-
-    <!-- Pinned to the bottom of the green. -->
+         THE RATE IS NOT TYPED HERE and must not be. A price on a page is a
+         second copy of one that lives in site.js, and test/subscription.test.js
+         refuses both the figure and the old claim in this file - which is what
+         caught the first draft of this very comment. -->
     <div class="fact-rail">
       <span>{{TURNAROUND}} turnaround</span>
-      <span>Pickup whenever you need it</span>
+      <span>Pickup &amp; delivery</span>
       <span>Houses and apartments</span>
-      <span>Cancel any time by text</span>
+      <span>No membership</span>
     </div>
 
   </div>
@@ -287,18 +242,18 @@
 <!-- ===================================================================== -->
 <section class="container section-lg">
   <p class="eyebrow eyebrow-brand" data-reveal>How it works</p>
-  <h2 class="display-3" style="max-width:15ch;margin-bottom:52px;" data-reveal>Three texts, clean clothes.</h2>
+  <h2 class="display-3" style="max-width:15ch;margin-bottom:52px;" data-reveal>Three steps, clean clothes.</h2>
 
   <div class="grid-3">
 
     <div class="card card-xl" style="padding:28px;" data-reveal>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;">
-        <span class="icon-tile">{{ICON_MESSAGE}}</span>
+        <span class="icon-tile">{{ICON_CALENDAR}}</span>
         <span class="eyebrow" style="margin:0;color:var(--ink-300);">01</span>
       </div>
-      <h3 style="font-family:var(--font-display);font-weight:800;font-size:26px;margin:0 0 10px;">Text LYNDRY</h3>
+      <h3 style="font-family:var(--font-display);font-weight:800;font-size:26px;margin:0 0 10px;">Order online</h3>
       <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
-        Send one message. We ask for your address and preferences once, then never again.
+        Pick a day and a time. We ask for your address and preferences once, then never again.
       </p>
     </div>
 
@@ -350,10 +305,10 @@
          notes list it under placeholder content, so it is not going on a live
          site. This says something true instead. -->
     <div class="card card-lg card-xl card-accent" style="padding:34px;" data-parallax="0.05">
-      <span class="icon icon-message-circle icon-30" aria-hidden="true"></span>
+      <span class="icon icon-clock icon-30" aria-hidden="true"></span>
       <p style="font-family:var(--font-display);font-weight:800;font-size:27px;line-height:1.15;letter-spacing:-0.02em;color:var(--ink-900);margin:18px 0 0;">
-        No app to download. No account to log into. Text and it's booked, or
-        place an order online in about a minute.
+        No app to download. Place an order online in about a minute, tell us
+        where the bag will be, and we take it from there.
       </p>
       <p class="eyebrow" style="margin:20px 0 0;color:var(--ink-700);">That is the whole product</p>
     </div>

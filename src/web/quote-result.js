@@ -157,9 +157,8 @@ function priced(quote, address) {
       follows the actual weight. Nothing is taken when you book.
     </p>
 
-    <a href="${site.hasPublicPhone ? `sms:${escapeHtml(site.publicPhoneLink)}` : '/#get-started'}"
-       class="btn btn-brand" style="width:100%;">
-      Text us to book
+    <a href="/account/login" class="btn btn-brand" style="width:100%;">
+      Place an order online
     </a>
   </div>
 </section>`;

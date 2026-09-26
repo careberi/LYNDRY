@@ -66,7 +66,22 @@ test('a successful booking says so, and only a successful one', () => {
   assert.ok(booked > fn.indexOf('needsCard'), 'a card ask would be asked about the wash');
 
   const run = withoutComments(SRC('core', 'actions.js'));
-  assert.ok(run.includes("case 'create_order':\n      return createOrder(customer, input, helpers);"));
+
+  // createOrder() IS NO LONGER REACHABLE FROM run(), WHICH IS THE POINT.
+  // Neil, 26 September: Lyn may answer a text but may not take an order. The
+  // function itself is kept intact rather than deleted - this decision has been
+  // reversed twice in one day, and what makes it safe is that nothing can call
+  // it, not that it is gone.
+  const brain = require('../src/core/brain');
+  assert.ok(brain.CANNOT_BOOK.includes('create_order'), 'Lyn can book again');
+  assert.ok(
+    !brain.OFFERED_TOOLS.some((t) => t.name === 'create_order'),
+    'create_order is still being offered to the model'
+  );
+  assert.ok(
+    run.includes('if (brain.CANNOT_BOOK.includes(name)) {'),
+    'run() no longer refuses order-taking, so only the prompt is stopping her'
+  );
   assert.ok(run.includes("case 'save_details':\n      return saveDetails(customer, input, helpers);"));
 });
 

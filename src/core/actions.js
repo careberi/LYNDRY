@@ -112,8 +112,9 @@ async function createOrder(customer, input, helpers = null) {
         return `Almost there - what name should I put on it?`;
       case 'out_of_area':
         return (
-          `We don't reach ${customer.city || 'your area'} just yet, sorry. We cover ` +
-          `${site.serviceArea} right now, and we'll text you the moment that changes.`
+          `We don't reach ${customer.city || 'your area'} just yet, sorry. How far we ` +
+          `go depends on where our partner laundromats are, and we'll text you the ` +
+          `moment that changes.`
         );
       case 'bad_date':
       case 'bad_time':
@@ -885,8 +886,8 @@ async function saveDetails(customer, input, helpers = null) {
   if (!(await booking.inServiceArea(updated))) {
     return (
       `Thanks ${first}, all saved. One thing though: we don't reach ` +
-      `${updated.city || 'your area'} just yet. We cover ${site.serviceArea} right now, ` +
-      `and we'll text you the moment that changes.`
+      `${updated.city || 'your area'} just yet. How far we go depends on where our ` +
+      `partner laundromats are, and we'll text you the moment that changes.`
     );
   }
 
@@ -1104,12 +1105,41 @@ async function handoffToHuman(customer, input, helpers = {}) {
 // Run whichever action Claude chose
 // ---------------------------------------------------------------------------
 
+// WHAT SHE SAYS INSTEAD OF BOOKING. Neil, 26 September: she pushes people to
+// the online order.
+//
+// The DOMAIN rather than a link, which is the rule every texted address here
+// follows: something a customer can read and type is checkable, and a bare URL
+// in a text from a business they half-recognise is the shape of a phishing
+// message. Nothing is minted and nothing is looked up, so this is safe to say
+// as often as it comes up.
+function orderOnlineInstead() {
+  return (
+    `I can't book that from here, but you can place it at ${site.domain}/account ` +
+    `and it takes about a minute. Sign in with this number and it will know who you are.`
+  );
+}
+
 async function run(name, input, customer, helpers = {}) {
+  // THE SECOND HALF OF THE GATE. brain.js does not offer these tools, so the
+  // model cannot normally reach them - but a screen that hides a control while
+  // the route behind it still fires is not a guard, and this route is reachable
+  // by any future caller that hands `run()` a name. The prompt asks; this
+  // refuses. Same split as the closed sign.
+  // Required HERE rather than at the top of the file. brain.js does not reach
+  // back into this one today, so there is no loop - but this file is required
+  // by the thing brain.js's decisions are fed into, and a loop added later
+  // hands one of them `{}` silently and for good. Reading it inside the
+  // function that needs it is what makes that impossible, which is the rule
+  // `issues.listForDay()` already follows.
+  const brain = require('./brain');
+
+  if (brain.CANNOT_BOOK.includes(name)) {
+    console.warn(`Lyn tried to ${name}, which she is no longer allowed to do.`);
+    return orderOnlineInstead();
+  }
+
   switch (name) {
-    case 'create_order':
-      return createOrder(customer, input, helpers);
-    case 'check_slot':
-      return checkSlot(customer, input);
     case 'get_order_status':
       return getOrderStatus(customer);
     case 'reschedule_order':
