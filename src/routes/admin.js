@@ -66,6 +66,7 @@ const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/
 const { scheduledBody } = require('../web/scheduled-page');
 const { couriersBody } = require('../web/couriers-board');
 const partnerStaff = require('../core/partner-staff');
+const extraBag = require('../core/extra-bag');
 const courierLegs = require('../core/courier-legs');
 const couriers = require('../providers/couriers');
 const {
@@ -1175,6 +1176,101 @@ function heldWeightCard(order, maySettle) {
         : `<p class="ops-note__body"><strong>An admin has to settle this one.</strong></p>`
     }
   </section>`;
+}
+
+// ANOTHER BAG TURNED UP.
+//
+// Neil, 26 September, on #2081: a second bag on an order already weighed, priced
+// and charged. The order page could not add it (the count control only renders
+// while the count is unknown) and could not collect for it (`settleWeight()`
+// returns early once settled), so the order was permanently 20 lb light and $20
+// short with no way to fix either.
+//
+// IT SITS WITH THE CORRECTIONS, not with the bags, because it is the same kind of
+// act: the record was wrong and somebody is putting it right. The difference is
+// that this one moves money, which is why it says so on the button rather than in
+// a paragraph nobody reads.
+//
+// ONLY WHILE THE LAUNDRY IS STILL OURS. Past delivery the weight is a fact about
+// something that has already gone back, and charging somebody afterwards for work
+// they have received and been billed for is a conversation rather than a button.
+function extraBagCard(order, mayAdd) {
+  if (!mayAdd) return '';
+  if (extraBag.TOO_LATE.includes(order.status)) return '';
+
+  // Nothing to re-price yet. Before the weigh-in the ordinary bag steps still
+  // work, and this control would be a second way to do what they already do.
+  if (order.weight_lb == null) return '';
+
+  return `
+  <div class="card card-xl" style="padding:24px;margin-bottom:28px;">
+    <details>
+      <summary style="cursor:pointer;font-family:var(--font-mono);font-size:12px;font-weight:700;
+                      letter-spacing:0.12em;text-transform:uppercase;">
+        Another bag turned up
+      </summary>
+
+      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:16px 0 18px;max-width:60ch;">
+        Adds it, then re-prices the <strong>whole order</strong> on the new total -
+        the minimum, the wash options and any promotion all apply to an order
+        rather than to a bag, so pricing one bag on its own would give the wrong
+        answer. Whatever is owed on top is taken off the same card, and they are
+        texted to say the total changed and why.
+      </p>
+
+      <form method="post" action="/ops/orders/${order.order_number}/extra-bag"
+            style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="flex:1 1 170px;min-width:0;">
+          <label class="field-label" for="extra_code">Code off the tag</label>
+          <input class="input input-lg" type="text" id="extra_code" name="code" required
+                 placeholder="HBSS3X" autocapitalize="characters" autocomplete="off"
+                 style="width:100%;font-family:var(--font-mono);">
+        </div>
+        <div style="flex:0 1 120px;">
+          <label class="field-label" for="extra_lb">Pounds</label>
+          <input class="input input-lg" type="number" id="extra_lb" name="weight_lb" required
+                 step="0.01" min="0.1" max="200" inputmode="decimal" style="width:100%;">
+        </div>
+        <div style="flex:1 1 220px;min-width:0;">
+          <label class="field-label" for="extra_why">Why</label>
+          <input class="input input-lg" type="text" id="extra_why" name="reason" maxlength="200"
+                 placeholder="Second bag missed at the door" style="width:100%;">
+        </div>
+
+      <!-- TAKING THE MONEY IS OPTIONAL, AND THAT IS NEIL'S ASK ON THE DAY: "I can
+           charge his card in stripe 20$ but i want to add the extra bag."
+
+           IF HE TAKES IT AT STRIPE, WE MUST NOT TAKE IT AGAIN. Our ledger does
+           not know about a charge made in Stripe's own dashboard, so the amount
+           owed would still read $20 here and the card would be hit twice.
+           Unticking this is what stops that.
+
+           NOTE THE BACKTICKS THAT WERE HERE. This comment originally wrote that
+           word in backticks, inside a template literal, which is the exact bug
+           that deleted the booking form earlier today - and it broke this file
+           within minutes of the guard against it being written. Keep code
+           punctuation out of HTML comments. -->
+      <!--
+
+           ON BY DEFAULT, because the ordinary case is that the difference is
+           taken here - and an order left owed for with nobody having decided to
+           leave it that way is the state this control exists to prevent. -->
+      <label style="display:flex;gap:10px;align-items:flex-start;margin:16px 0 0;cursor:pointer;
+                    max-width:60ch;">
+        <input type="checkbox" name="charge" value="yes" checked style="margin-top:3px;">
+        <span style="font-size:14px;line-height:1.5;color:var(--ink-700);">
+          <strong>Take the difference off their card.</strong> Untick it if you are
+          charging them somewhere else - our ledger cannot see a payment made in
+          Stripe, so leaving it ticked would charge them twice.
+        </span>
+      </label>
+
+        <button class="btn btn-primary btn-lg" type="submit" style="margin-top:18px;">
+          Add the bag
+        </button>
+      </form>
+    </details>
+  </div>`;
 }
 
 function correctionsCard(order, labels, mayCorrect) {
@@ -3187,7 +3283,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // settles a wash and returns early without a price, which a pickup that
       // has never been weighed does not have. Its own section carries id="hold".
       showMoney ? refusedHoldCard(order, can.override) : '',
-      stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override)}</div>` : '',
+      stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override) + extraBagCard(order, can.override)}</div>` : '',
       orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
       // WHO DOES EACH LEG. Neil, 25 September: "There also needs for me to
       // override a pickup/delivery manually so i can assign a in house driver
@@ -5657,6 +5753,114 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
 // CHECKED AGAINST THE ACTIVE LIST, never trusted from the form. A select is the
 // submitter's to edit, and a pin to a shop that has been ended would quietly send
 // a courier to a closed door.
+// ANOTHER BAG TURNED UP AFTER THE ORDER WAS PRICED.
+//
+// Neil, 26 September, on order #2081: a second bag, 20 lb, on an order already
+// weighed at 20 lb and charged $20 with CLEAN50 - so 40 lb, $80, $40 after the
+// discount, and $20 still owed.
+//
+// NEITHER HALF WAS REACHABLE. The bag-count control only renders while the count
+// is unknown and `bind()` refuses a sticker beyond it; `settleWeight()` returns
+// early on anything already settled, so nothing re-prices and nothing charges.
+//
+// `orders.override`, Admin only - it takes money off a card, which is the line
+// the charge retry and the cancel already draw.
+router.post('/ops/orders/:id/extra-bag', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const back = `/ops/orders/${order.order_number}`;
+    const body = req.body || {};
+
+    const said = await extraBag.addAndReprice(order, {
+      code: body.code,
+      weightLb: body.weight_lb,
+      by: req.opsUser,
+      reason: String(body.reason || '').trim().slice(0, 200) || null,
+    });
+
+    if (!said.ok) {
+      const why = {
+        too_late: said.detail || 'That order has already gone back.',
+        bad_code: 'That is not one of our tag codes.',
+        bad_weight: 'That weight does not look right. Pounds, as a number.',
+        unknown: 'No label with that code.',
+        in_use: 'That label is already on another order.',
+      };
+      return res.redirect(
+        303,
+        `${back}?problem=${encodeURIComponent(why[said.reason] || said.detail || 'Could not add that bag.')}`
+      );
+    }
+
+    // THE MONEY, SECOND. The bag and the price are already written, so a card
+    // that refuses leaves an order that is CORRECT and owed for - which is a
+    // state the board already understands - rather than one that is wrong.
+    // UNTICKED MEANS WE DO NOT TOUCH THE CARD. See the note on the checkbox: a
+    // payment made in Stripe's own dashboard is invisible to our ledger, so
+    // charging here as well would take it twice.
+    const takeIt = String(body.charge || '') === 'yes';
+
+    let charged = null;
+    if (said.owed > 0 && takeIt) {
+      charged = await billing
+        .chargeOrder({ ...said.order, price_cents: said.priceCents }, said.order.customers)
+        .catch((err) => {
+          console.error(`Could not take the extra on ${said.order.id}: ${err.message}`);
+          return { ok: false };
+        });
+    }
+
+    // AND THE CUSTOMER IS TOLD. Neil: "we also need to text the customer and let
+    // him know the total was updated." A second charge with no explanation is a
+    // chargeback; the bag count is what makes the new number make sense.
+    let told = false;
+    if (said.order.customers && said.order.customers.phone) {
+      try {
+        await notify.sendAndLog(
+          said.order.customers.phone,
+          extraBag.updatedTotalMessage({
+            bags: said.bags,
+            billable: said.billable,
+            priceCents: said.priceCents,
+            discountCents: said.discountCents,
+            promotion: said.promotion,
+            extraCents: charged && charged.ok ? said.owed : 0,
+          }),
+          said.order.customer_id,
+          { sentBy: req.opsUser && !req.opsUser.isMachine ? req.opsUser.id : null, kind: 'SYSTEM' }
+        );
+        told = true;
+      } catch (err) {
+        console.error(`Re-priced ${said.order.id} but could not text them: ${err.message}`);
+      }
+    }
+
+    const note =
+      `${said.code} added, ${said.billable} lb in ${said.bags} bags, now ${extraBag.money(said.priceCents)}.` +
+      (said.owed > 0
+        ? !takeIt
+          ? ` ${extraBag.money(said.owed)} outstanding - you said you would take it elsewhere.`
+          : charged && charged.ok
+            ? ` ${extraBag.money(said.owed)} taken.`
+            : ` ${extraBag.money(said.owed)} still owed - the card did not take it.`
+        : ' Nothing more to pay.') +
+      (told ? ' They have been texted.' : ' They have NOT been texted.');
+
+    // NOT CHARGING ON PURPOSE IS NOT A FAILURE, so it does not paint the banner
+    // red - but the sentence still says what is outstanding.
+    const worked = said.owed === 0 || !takeIt || (charged && charged.ok);
+
+    return res.redirect(
+      303,
+      `${back}?${worked && told ? 'done' : 'problem'}=${encodeURIComponent(note)}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post('/ops/orders/:id/laundromat', guard, may('orders.override'), async (req, res, next) => {
   try {
     const order = await loadOrderForAction(req.params.id);
