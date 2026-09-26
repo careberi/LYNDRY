@@ -303,3 +303,44 @@ test('EVERY PORTAL PAGE IS NOINDEX', () => {
   assert.match(board, /noindex/);
   assert.match(page.phoneStep({ lang: 'en' }), /noindex/);
 });
+
+test('THE WASH INSTRUCTIONS ARE IN THE PAGE\'S LANGUAGE', () => {
+  // It shipped without this: a Spanish page whose wash instructions were in
+  // English - the one part an attendant actually acts on. `wash.washLines()` is
+  // the shared definition and returns English, so the page translates it through
+  // the same vocabulary the bag tag under it uses.
+  const order = { order_number: 9006, status: 'READY', partner_weight_lb: 31.4, bag_count: 3 };
+  const lines = [
+    ['Water temperature', 'Cold'],
+    ['Fabric softener', 'Standard scented'],
+    ['Detergent', 'Standard'],
+  ];
+
+  const es = page.orderPage({ lang: 'es', shopName: 'Riverside Wash Co', order, washLines: lines });
+
+  assert.match(es, /Temperatura del agua/, 'the wash instructions are still English on the Spanish page');
+  assert.match(es, /Suavizante/);
+  assert.doesNotMatch(es, /Water temperature/, 'an English wash label survived on the Spanish page');
+  assert.doesNotMatch(es, /Fabric softener/);
+
+  // And English is untouched.
+  const en = page.orderPage({ lang: 'en', shopName: 'Riverside Wash Co', order, washLines: lines });
+  assert.match(en, /Water temperature/);
+  assert.doesNotMatch(en, /Temperatura/);
+});
+
+test('ONE SPANISH VOCABULARY FOR EVERY LAUNDROMAT SCREEN', () => {
+  // It lived in routes/bag.js while the bag tag was the only screen a laundromat
+  // saw. Two copies would be two vocabularies for one person, one tap apart.
+  const root = path.join(__dirname, '..', 'src');
+
+  for (const file of ['routes/bag.js', 'web/shop-page.js']) {
+    const src = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.match(src, /laundromat-es/, `${file} no longer reads the shared Spanish`);
+    assert.doesNotMatch(
+      src,
+      /^const ES = Object\.freeze\(\{/m,
+      `${file} has grown its own Spanish table again`
+    );
+  }
+});

@@ -32,6 +32,8 @@ const SRC = (...bits) =>
     .split('\r\n')
     .join('\n');
 
+const spanish = SRC('web', 'laundromat-es.js');
+
 const guide = processingGuideBody();
 const bagRoute = SRC('routes', 'bag.js');
 
@@ -70,8 +72,14 @@ test('IT IS IN THE SHARED SHELL, so every bag screen has it', () => {
   const calls = bagRoute.split('return page({').length - 1;
   assert.ok(calls >= 6, `only ${calls} screens render through the shell`);
 
-  // And it is written once, not once per screen.
-  assert.equal(bagRoute.split('Processing Instructions').length - 1, 2, 'the label is duplicated');
+  // AND IT IS WRITTEN ONCE, NOT ONCE PER SCREEN. Once in the shell that renders
+  // the link, and once in the Spanish vocabulary - which moved to
+  // src/web/laundromat-es.js when the laundromat portal started reading the same
+  // words. Counted across both files, because "written once" is a fact about the
+  // codebase and not about one file.
+  const written =
+    bagRoute.split('Processing Instructions').length - 1 + spanish.split('Processing Instructions').length - 1;
+  assert.equal(written, 2, 'the label is duplicated');
 });
 
 test('and the guide does not link to itself', () => {
@@ -277,5 +285,8 @@ test('and the browser tab is translated with the page', () => {
   const body = bagRoute.slice(at, bagRoute.indexOf('\n});\n', at));
 
   assert.match(body, /title: say\('Processing guide'\)/);
-  assert.match(bagRoute, /'Processing guide': 'Guia de procesamiento'/);
+
+  // The Spanish for it lives in the shared laundromat vocabulary now, so the
+  // portal reads the same word.
+  assert.match(spanish, /'Processing guide': 'Guia de procesamiento'/);
 });

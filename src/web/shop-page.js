@@ -4,6 +4,7 @@ const { escapeHtml, CSS_BASE, logo, icon, ICON_LINKS } = require('./layout');
 const { site } = require('./site');
 const { config } = require('../config');
 const format = require('../core/format');
+const { translator } = require('./laundromat-es');
 
 // ---------------------------------------------------------------------------
 // The laundromat portal's pages.
@@ -420,6 +421,19 @@ function orderPage({ lang = 'en', shopName, order, washLines = [], flash = null 
   const en = lang !== 'es';
   const job = jobOf(order);
 
+  // THE WASH LINES GO THROUGH THE SHARED LAUNDROMAT VOCABULARY.
+  //
+  // They come out of `wash.washLines()` in English - it is the one definition
+  // shared with the AI's tool schema, the pricing and the account page, and it
+  // has no business knowing about languages. So it is translated here, by the
+  // same table the bag tag under this page uses.
+  //
+  // IT SHIPPED WITHOUT THIS and the result was a Spanish page whose wash
+  // instructions were in English - the one part of it an attendant actually acts
+  // on. The same shape as the processing guide shipping without its own language
+  // buttons: the translation existed and the screen could not reach it.
+  const say = translator(lang);
+
   const wash = `
     <h2 style="font-family:var(--font-display);font-weight:800;font-size:20px;margin:26px 0 12px;">
       ${s('howToWash', lang)}</h2>
@@ -428,8 +442,8 @@ function orderPage({ lang = 'en', shopName, order, washLines = [], flash = null 
         .map(
           ([label, value]) => `
         <div style="display:flex;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
-          <span style="font-size:16px;color:var(--ink-700);">${escapeHtml(label)}</span>
-          <span style="font-size:16px;font-weight:700;color:var(--ink-900);">${escapeHtml(value)}</span>
+          <span style="font-size:16px;color:var(--ink-700);">${escapeHtml(say(label))}</span>
+          <span style="font-size:16px;font-weight:700;color:var(--ink-900);">${escapeHtml(say(value))}</span>
         </div>`
         )
         .join('')}
