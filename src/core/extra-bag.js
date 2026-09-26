@@ -86,7 +86,16 @@ async function addAndReprice(order, { code, weightLb, by = null, reason = null }
   if (countError) throw countError;
 
   // --- 2. the bag ----------------------------------------------------------
-  const bound = await bags.bind(parsed.code, order, by && !by.isMachine ? by.id : null, {
+  //
+  // THE ORDER HANDED TO `bind()` CARRIES THE NEW COUNT, and the first version did
+  // not - which is the whole bug, found by running this against a real order
+  // rather than by reading it. `bind()` reads `order.bag_count` off the OBJECT to
+  // decide whether there is room, so passing the row as it was loaded a moment
+  // earlier meant it still said 2 bags, refused with `too_many`, and the rollback
+  // below put everything back. From the outside that is a button that does
+  // nothing at all: the count is restored, no bag is added, and the only sign is a
+  // banner saying the order is down as fewer bags than it now is.
+  const bound = await bags.bind(parsed.code, { ...order, bag_count: now }, by && !by.isMachine ? by.id : null, {
     leg: 'PICKUP',
     position: now,
   });
@@ -103,6 +112,29 @@ async function addAndReprice(order, { code, weightLb, by = null, reason = null }
   if (!weighed.ok) {
     return { ok: false, reason: 'weigh_failed', detail: weighed.detail };
   }
+
+  // --- 2b. the order's own total -------------------------------------------
+  //
+  // `recordBagWeight()` WRITES THE BAG AND NOT THE ORDER, which the first version
+  // assumed the other way round - so the bag bound, the count went to 3, and the
+  // order still said 22.5 lb at $45.00. Found by running it against a real order;
+  // reading the code, "record a bag weight" sounds like it does this.
+  //
+  // `orders.weight_lb` is the SUM of the pickup bags and is recomputed from them
+  // rather than added to, so a bag corrected later cannot drift the total. Same
+  // call the driver's own weigh step makes.
+  const totals = await bags.totalWeight(order.id, 'PICKUP');
+
+  if (!totals || totals.pounds == null) {
+    return { ok: false, reason: 'no_weight', detail: 'Nothing on this order has a weight.' };
+  }
+
+  const { error: totalError } = await db
+    .from('orders')
+    .update({ weight_lb: totals.pounds })
+    .eq('id', order.id);
+
+  if (totalError) throw totalError;
 
   // --- 3. what the order comes to now --------------------------------------
   //
