@@ -135,3 +135,63 @@ test('a courier that says nothing leaves the net unanswerable rather than wrong'
 
   assert.equal(nothing, null);
 });
+
+// --- what the card is asked to hold at booking ------------------------------
+
+test('THE HOLD IS AT LEAST THE DELIVERY, AND NEVER LESS THAN THE FLOOR', () => {
+  // Neil, 25 September: "hold gets placed on order (the hold shouls be at least
+  // the amount of the delivery). Then once the luandromat weights the order,
+  // the card should be charged."
+  const floor = config.pricing.authorizationCents;
+
+  assert.equal(quote.holdCents({}), floor, 'an order with no delivery fee stopped holding the floor');
+  assert.equal(quote.holdCents({ deliveryFeeCents: floor - 1 }), floor);
+  assert.equal(quote.holdCents({ deliveryFeeCents: floor + 1 }), floor + 1);
+});
+
+test('and New Jersey never reaches the floor, which is why New York is the case', () => {
+  // Every band doubled and grossed up runs $16.77 to $22.95 - all under the $25
+  // floor, so under the van and in Bergen the floor always won. Uber's $5-a-trip
+  // New York surcharge is $10 on a two-leg order and takes the fee past it. That
+  // is the one case where a flat hold would be less than what we had already
+  // spent before anybody weighed anything.
+  const floor = config.pricing.authorizationCents;
+
+  for (const band of config.courier.bands) {
+    const fee = quote.feeFromLegCents(band.legCents);
+    assert.ok(fee < floor, `a plain ${band.upToMiles}-mile fee of ${fee} already exceeds the floor`);
+    assert.equal(quote.holdCents({ deliveryFeeCents: fee }), floor);
+  }
+
+  const inNewYork = quote.feeFromLegCents(config.courier.bands[0].legCents + config.courier.nycSurchargeCents);
+  assert.ok(inNewYork > floor, 'the New York surcharge no longer takes a fee past the floor');
+  assert.equal(quote.holdCents({ deliveryFeeCents: inNewYork }), inNewYork);
+});
+
+test('A HOLD IS NEVER NaN, WHICH IS WHAT READING THE WRONG CONFIG BLOCK GAVE', () => {
+  // `authorizationCents` lives in config.pricing and the first version read it
+  // from config.courier, which is undefined - and Math.max(undefined, n) is NaN.
+  // A hold of NaN cents is refused by Stripe on every booking, and the symptom
+  // would have read as every card in the business failing at once.
+  for (const junk of [null, undefined, 'abc', NaN, -5, {}, []]) {
+    const held = quote.holdCents({ deliveryFeeCents: junk });
+    assert.ok(Number.isFinite(held), `${JSON.stringify(junk)} produced ${held}`);
+    assert.ok(held >= config.pricing.authorizationCents);
+  }
+
+  assert.ok(Number.isFinite(quote.holdCents()), 'called with nothing at all it is not a number');
+});
+
+test('THE FLOOR AND THE ORDER MINIMUM ARE NOT THE SAME NUMBER', () => {
+  // They were both $25 once and are not now: the minimum is the floor on what a
+  // wash COSTS and Neil moved it to $30; the authorization is what a wasted trip
+  // is worth. A test already refuses one being defined as the other, and this
+  // one refuses the hold rule quietly reaching for the wrong one.
+  assert.notEqual(
+    config.pricing.authorizationCents,
+    config.courier.minimumCents,
+    'the two have converged, so this test can no longer tell them apart'
+  );
+  assert.equal(quote.holdCents({}), config.pricing.authorizationCents);
+  assert.notEqual(quote.holdCents({}), config.courier.minimumCents);
+});

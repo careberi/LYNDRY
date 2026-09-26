@@ -132,6 +132,45 @@ function netCents({ total, pounds, partnerCentsPerLb, miles, legCents = null }) 
   return { partner, courier, stripe, net: total - partner - courier - stripe };
 }
 
+// --- what to hold at booking ------------------------------------------------
+
+// WHAT THE CARD IS ASKED TO HOLD WHEN A PICKUP IS BOOKED.
+//
+// Neil, 25 September: "hold gets placed on order (the hold shouls be at least
+// the amount of the delivery). Then once the luandromat weights the order, the
+// card should be charged."
+//
+// AT LEAST THE DELIVERY, AND NEVER LESS THAN THE FLOOR. Two different things are
+// being protected and the larger of them wins:
+//
+//   the floor    `config.pricing.authorizationCents`, $25 - what a wasted trip
+//                is worth. It was the whole hold under the van
+//   the delivery what we will have paid a courier before anybody weighs
+//                anything. If the card fails at the weigh-in we are already out
+//                of pocket for the trip that collected the bags
+//
+// UNDER THE VAN THE FLOOR ALWAYS WON, because there was no delivery fee at all.
+// Under a courier the fee runs from $16.77 to $22.95 - still under the floor -
+// until New York, where their $5-a-trip surcharge is $10 on a two-leg order and
+// takes the fee to $32.95. So this is not arithmetic for its own sake: it is the
+// one case where a flat $25 would be less than what we had already spent.
+//
+// IT DOES NOT COVER THE WASH, and cannot. The wash is unknown until a scale says
+// so, which is the entire reason the charge waits for the weigh-in. What this
+// covers is the part we commit to before anybody knows the weight.
+function holdCents({ deliveryFeeCents = 0 } = {}) {
+  const fee = Number(deliveryFeeCents);
+
+  // FROM `config.pricing`, NOT `config.courier`. The floor is what a wasted trip
+  // is worth and predates the courier entirely; `C()` here is the courier block
+  // and would have returned undefined, which Math.max turns into NaN - a hold of
+  // NaN cents, refused by Stripe, on every booking.
+  const floor = config.pricing.authorizationCents;
+
+  if (!Number.isFinite(fee) || fee <= 0) return floor;
+  return Math.max(floor, Math.ceil(fee));
+}
+
 // --- choosing a laundromat --------------------------------------------------
 
 // THE CHEAPEST ANSWER FOR THE CUSTOMER, which is not the nearest laundromat.
@@ -222,6 +261,7 @@ function quoteFor({ miles, partnerCentsPerLb, partnerName = null, legCents = nul
 
 module.exports = {
   bandFor,
+  holdCents,
   feeFromLegCents,
   deliveryFeeCents,
   courierCostCents,
