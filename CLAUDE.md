@@ -5545,12 +5545,53 @@ charged always comes from the courier** - Neil's instruction in as many words,
 "its a flat fee we need to connect to the api" - and `quoted` on the answer says
 which of the two it was, so the page can say "about" when it is guessing.
 
-**WHETHER A TRIP IS POSSIBLE IS A PROPERTY OF THE PAIR, NOT OF THE ADDRESS.**
-Mahwah to a Hackensack laundromat is refused and Mahwah to a Glen Rock one is
-$10.99. Newark to Hackensack is refused and Newark to Carlstadt is $10.99.
-Jersey City and Manhattan are refused from everywhere tried. **So every
-shortlisted laundromat is asked separately** and a refusal removes that
-laundromat rather than the customer.
+**IT IS THE TRIP, NOT THE PLACE, AND THE FIRST READING OF THIS WAS WRONG.**
+
+This paragraph said "Jersey City and Manhattan are refused from everywhere
+tried", and concluded that Uber's coverage was a polygon smaller than the
+county. Neil asked the question that took it apart: *"is it just that they wont
+deliver jersey city because of the distance from the laundromat or just because
+in general? like what if i had a laundromat partner in jersey city"*.
+
+**EVERY TOWN TESTED IS COVERED.** A short trip inside one town is priced
+everywhere: Jersey City to Jersey City $7.99, Newark to Newark $7.99, Hoboken
+$7.99, Paterson $7.99, Mahwah $7.99, and **Manhattan to Manhattan $12.99**. What
+had been measured before was only ever trips from those places to a BERGEN
+laundromat, which are all fifteen miles and up. **So a laundromat in Jersey City
+would serve Jersey City customers perfectly**, which is the answer to the
+question actually asked.
+
+**WHAT UBER REFUSES IS A LONG TRIP, AND THE CEILING IS ABOUT TEN STRAIGHT-LINE
+MILES.** Measured from the Carlstadt laundromat against real addresses, three
+consecutive passes with no result moving:
+
+| straight-line | |
+|---|---|
+| 0.9 mi | $7.99 |
+| 4.6, 5.2, 6.1, 9.4 mi | $10.99 |
+| 10.5 mi and beyond | refused, every time |
+
+**THE LIMIT IS ON THEIR ROUTED DISTANCE AND STRAIGHT-LINE IS A BAD PROXY FOR IT
+NEAR THE EDGE.** Belleville is 8.4 straight-line miles from the Hackensack
+laundromat and is refused, because the road route crosses water and doubles
+back. That is the whole reason the radius cannot be the promise.
+
+**AND `config.courier.maxMiles` IS 10, WHICH SITS EXACTLY ON THAT LINE.** 9.4
+works and 10.5 does not. That is luck rather than design, and it is too fine a
+margin to rely on: a customer at 9.8 straight-line miles can easily be thirteen
+by road and be refused. **Neil's instruction is what resolves it** - *"we should
+always check with uber to see if we can deliver to a location before we tell
+someone we can"* - which makes the radius a cheap pre-filter for deciding who to
+ASK, and never the answer.
+
+**A SINGLE QUOTE IS TRUSTWORTHY, AND ONLY FOR A MOMENT.** The same pair asked
+five times running gives the same answer every time; the same pair asked an hour
+apart can change, because courier availability is a real thing that moves. So
+asking at the moment it matters is not belt and braces, it is the only version
+that is true when it is read.
+
+**WHICH IS WHY EVERY SHORTLISTED LAUNDROMAT IS ASKED SEPARATELY** and a refusal
+removes that laundromat rather than the customer.
 
 **A LAUNDROMAT THE COURIER REFUSED IS OUT OF THE RUNNING, NEVER ESTIMATED.**
 Otherwise it falls back to the band table, can win on price, and is then the one
@@ -5595,10 +5636,10 @@ rather than trusting which credentials were loaded. Test mode also needs
 not start moving until `pickup_ready_dt` has passed - two minutes of watching a
 `pending` delivery is that, not a broken integration.
 
-**THE TEST ACCOUNT'S COVERAGE IS NOT PROOF OF THE LIVE ONE'S.** Newark and
-Jersey City being refused is surprising for Uber Eats territory and is most
-likely a restriction on this account. Nothing in the code depends on the shape
-of that area, which is the point - it asks.
+**THE TEST ACCOUNT'S LIMITS ARE NOT PROOF OF THE LIVE ONE'S.** The ten-mile
+ceiling above is what this account does today, and a real merchant account may
+be drawn differently. Nothing in the code depends on the shape of it, which is
+the point - it asks.
 
 ## Git
 

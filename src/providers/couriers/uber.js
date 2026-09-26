@@ -45,16 +45,25 @@ const { config } = require('../../config');
 //   - THERE ARE TWO REFUSALS AND THEY MEAN DIFFERENT THINGS.
 //     `unknown_location` is "I cannot place this at all" - gibberish got it.
 //     `address_undeliverable` is "I placed it and will not go there"
-//   - AND `address_undeliverable` IS STILL AMBIGUOUS, which is the one to be
-//     careful about. A nonsense house number in a town Uber covers is PRICED
-//     (9999 Nowhere Blvd, Fair Lawn came back $10.99), and a town with no house
-//     number at all is priced too - so it resolves loosely and prices what it
-//     landed on. `100 Grand Ave, Englewood` was refused while `350 Engle St,
-//     Englewood` quoted at $9.99, which is Englewood being covered and that one
-//     address resolving to some other Grand Avenue out of range. So the code
-//     means "the place I landed on is not deliverable", which is NOT the same
-//     as "your town is outside our area" - and nothing may tell a customer the
-//     latter on the strength of it
+//   - `address_undeliverable` IS ALMOST ALWAYS "THAT TRIP IS TOO LONG", not
+//     "we do not cover your town". EVERY town tested prices a short trip inside
+//     itself - Jersey City $7.99, Newark $7.99, Hoboken $7.99, Paterson $7.99,
+//     Mahwah $7.99, Manhattan $12.99. What is refused is DISTANCE: measured from
+//     the Carlstadt laundromat over three consecutive passes with nothing
+//     moving, 0.9 mi is $7.99, 4.6 to 9.4 mi is $10.99, and 10.5 mi and beyond
+//     is refused every time. The ceiling is about ten STRAIGHT-LINE miles
+//   - AND IT IS THEIR ROUTED DISTANCE, so a straight line is a bad proxy at the
+//     edge: Belleville is 8.4 straight-line miles from the Hackensack laundromat
+//     and is refused, because the road route crosses water and doubles back
+//   - SO NOTHING MAY TELL A CUSTOMER THEIR TOWN IS OUTSIDE OUR AREA on the
+//     strength of this code. It is a fact about one pair of addresses at one
+//     moment. It is also why a nonsense house number in a nearby town is still
+//     PRICED (9999 Nowhere Blvd, Fair Lawn came back $10.99) - Uber resolves
+//     loosely and prices whatever it landed on
+//   - THE SAME PAIR ASKED FIVE TIMES GIVES THE SAME ANSWER; the same pair asked
+//     an hour later can differ, because courier availability moves. Ask at the
+//     moment it matters. Neil, 25 September: "we should always check with uber
+//     to see if we can deliver to a location before we tell someone we can"
 //   - a quote expires after 15 minutes
 //
 // FROM THEIR DOCS, NOT WATCHED: a package is capped at 50 lb and a courier may
@@ -191,12 +200,13 @@ async function quote({ from, to, pickupReadyAt, pickupDeadlineAt, dropoffReadyAt
     // useful rather than an error.
     //
     // THE CODE IS PASSED THROUGH UNTRANSLATED, on purpose.
-    // `unknown_location` is Uber unable to place the address at all, and
-    // `address_undeliverable` is Uber placing it somewhere it will not drive -
-    // which covers both a town outside the area AND an address that resolved to
-    // the wrong Grand Avenue. Turning either into "we do not serve you" would
-    // tell a Bergen County customer something false; the caller says something
-    // true of both instead.
+    // `unknown_location` is Uber unable to place the address at all;
+    // `address_undeliverable` is Uber placing it and refusing the trip, which
+    // is nearly always the trip being longer than about ten miles rather than
+    // anything about the town. Turning either into "we do not serve you" would
+    // tell a customer something false about where they live, when the true
+    // statement is about the distance to THAT laundromat - so the caller says
+    // something true of both instead, and tries the next laundromat.
     if (err.status === 400 || err.status === 404) {
       return { ok: false, reason: err.code || 'no_quote', detail: err.message };
     }

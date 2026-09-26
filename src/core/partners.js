@@ -266,6 +266,117 @@ function fromForm(form) {
 // form and the database cannot disagree about what is allowed.
 const BILLING_PERIODS = Object.freeze(['DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY']);
 
+// --- the laundromat's own URL -----------------------------------------------
+//
+// Neil, 25 September: "when I add a laundromat, they should get their own url
+// that they can log into".
+//
+// `/shop/riverside-wash-co` is what a shop bookmarks on the tablet behind the
+// counter. IT IS NOT A CREDENTIAL and must never become one - it names which
+// laundromat you are signing in to, and a texted six-digit code is still the
+// only thing that gets anybody in.
+
+// Paths the portal itself uses. A laundromat called "Orders" would otherwise
+// take a slug that shadows `/shop/orders/9005`, and Express answers whichever
+// route was declared first - so the shop would be unreachable and nobody would
+// know why. Refused at the source instead.
+const RESERVED_SLUGS = Object.freeze([
+  'login',
+  'logout',
+  'orders',
+  'order',
+  'team',
+  'staff',
+  'people',
+  'new',
+  'admin',
+  'api',
+  'health',
+  'css',
+  'assets',
+]);
+
+// A NAME INTO SOMETHING TYPABLE, and nothing else. Pure, so the rule can be
+// tested without a database - which matters because this decides a URL that
+// gets printed, bookmarked and read out over the phone.
+//
+// Accents are folded rather than dropped: "Lavandería" becomes "lavanderia"
+// and not "lavandera", which is what stripping them would give.
+function slugify(name) {
+  const slug = String(name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    // The slice can leave a trailing hyphen behind.
+    .replace(/-+$/g, '');
+
+  if (!slug) return null;
+
+  // A NUMBER ON THE END OF A RESERVED WORD, not a refusal. Somebody genuinely
+  // called "New Laundry" should get a URL, and `new-laundry` is not reserved -
+  // only a slug that is EXACTLY a path the portal uses.
+  return RESERVED_SLUGS.includes(slug) ? `${slug}-laundromat` : slug;
+}
+
+// The first free one. Two laundromats called "Main Street Laundry" are a real
+// possibility in a county this size, and the second must not silently take the
+// first one's URL - so it gets `main-street-laundry-2`.
+//
+// NOT A LOOP THAT RUNS FOR EVER: past a handful of collisions something is
+// wrong with the name rather than with the world, and returning null lets the
+// caller save the partner without a URL rather than hanging on the insert.
+async function freeSlug(name, { exceptId = null } = {}) {
+  const base = slugify(name);
+  if (!base) return null;
+
+  for (let n = 1; n <= 20; n += 1) {
+    const candidate = n === 1 ? base : `${base}-${n}`;
+
+    let query = db.from('partners').select('id').eq('slug', candidate);
+    if (exceptId) query = query.neq('id', exceptId);
+
+    const { data, error } = await query.limit(1);
+    if (error) throw error;
+    if (!data || !data.length) return candidate;
+  }
+
+  return null;
+}
+
+// Give a laundromat its URL if it has not got one.
+//
+// ONLY A LAUNDROMAT, because a property manager has no portal to sign in to and
+// a slug on one would be a URL that renders nothing.
+//
+// AND NEVER CHANGED ONCE SET. Renaming a partner must not move their URL: the
+// old one is bookmarked on a tablet behind a counter, and a sign-in page that
+// stops existing is indistinguishable from the business having gone away.
+async function ensureSlug(partner) {
+  if (!partner || partner.type !== 'LAUNDROMAT' || partner.slug) return partner ? partner.slug : null;
+
+  const slug = await freeSlug(partner.name, { exceptId: partner.id }).catch((err) => {
+    console.error(`Could not work out a URL for ${partner.name}: ${err.message}`);
+    return null;
+  });
+
+  if (!slug) return null;
+
+  const { error } = await db.from('partners').update({ slug }).eq('id', partner.id).is('slug', null);
+  if (error) {
+    // Best effort, like the geocode beside it. A partner with no URL yet is a
+    // partner somebody can still work with; a failed save here must not be
+    // what stops them being added.
+    console.error(`Could not save a URL for ${partner.name}: ${error.message}`);
+    return null;
+  }
+
+  return slug;
+}
+
 async function create(form) {
   const row = fromForm(form);
   if (!row.name) return { ok: false, detail: 'A partner needs a name.' };
@@ -277,7 +388,11 @@ async function create(form) {
   // stop somebody adding a partner.
   locate(data).catch(() => {});
 
-  return { ok: true, partner: data };
+  // Their portal URL, the same way: best effort, after the row exists, and a
+  // failure leaves a partner with no URL rather than no partner.
+  const slug = await ensureSlug(data).catch(() => null);
+
+  return { ok: true, partner: slug ? { ...data, slug } : data };
 }
 
 async function update(id, form) {
