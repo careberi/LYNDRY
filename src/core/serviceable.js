@@ -28,24 +28,50 @@ const couriers = require('../providers/couriers');
 // factor ranges from about 1.0 to over 2.2 inside one county, so there is no
 // multiplier that makes a straight line into Uber's miles.
 //
-// AND UBER STOPS AT TEN ROUTED MILES. Their published table has no band past
-// 7-10, so a longer trip comes back `address_undeliverable`. That reads like a
-// coverage refusal and is not one: every town tested prices a short trip inside
-// itself, Manhattan included. A laundromat in Jersey City would serve Jersey
-// City customers perfectly. What is refused is the TRIP.
+// A REFUSAL REMOVES A LAUNDROMAT AND NEVER A CUSTOMER. Somebody fifteen miles
+// from the nearest shop today is somebody the next shop serves. Every town
+// tested prices a short trip inside itself, Manhattan included, so a laundromat
+// in Jersey City would serve Jersey City customers perfectly. What a courier
+// refuses is the TRIP, which reads like a coverage refusal and is not one.
 //
-// WHICH IS WHY A REFUSAL REMOVES A LAUNDROMAT AND NEVER A CUSTOMER. Somebody
-// fifteen miles from the nearest shop today is somebody the next shop serves.
+// HOW FAR UBER WILL ACTUALLY GO IS NOT KNOWN, AND THIS FILE MUST NOT PRETEND
+// OTHERWISE. Two figures are in front of us and they disagree:
+//
+//   10 routed miles   Uber's published pricing table has no band past 7-10,
+//                     which is where the earlier "Uber stops at ten" came from.
+//                     It is a fact about their PRICE LIST, not an answer they
+//                     have ever given us.
+//   20 miles          CleanCloud's Uber FAQ, 25 September: "Uber covers
+//                     deliveries up to 20 miles from your store address."
+//                     CleanCloud is a reseller, so that may be a different
+//                     product, a different tier, or simply their own number.
+//
+// AND TEST MODE CANNOT SETTLE IT, which is the thing worth knowing before
+// anybody trusts a dev booking. Uber's test API quotes Fair Lawn to LOS ANGELES
+// at $7.99 and 63 minutes - the identical canned answer it gives for Hackensack
+// four miles away. It refuses nothing and it prices nothing, so on the
+// development site the courier is not deciding the service area at all. What
+// keeps dev sane is `inNewJersey()` below and this shortlist; neither is Uber.
 // ---------------------------------------------------------------------------
 
 // HOW FAR OUT WE BOTHER ASKING, as the crow flies.
 //
-// This is NOT the service area and must never be described as one. It exists so
-// that a page anybody can type into does not fire a courier quote at all fifty
-// laundromats. It is deliberately WIDER than Uber's own ten routed miles,
-// because a straight line understates road distance and a shortlist that was
-// tight would drop the exact customers this is meant to find.
-const SHORTLIST_MILES = 15;
+// THIS IS NOT THE SERVICE AREA AND MUST NEVER BECOME ONE. It exists so that a
+// page anybody can type into does not fire a courier quote at all fifty
+// laundromats.
+//
+// IT WAS 15 AND THAT WAS TOO TIGHT TO BE SAFE. `SHORTLIST_SIZE` caps the number
+// of API calls at three however wide this is, so widening it costs nothing at
+// all - it changes WHICH laundromats get asked, never HOW MANY. Which means a
+// number that sits below the courier's real limit has only one effect: it turns
+// away customers the courier would have carried, silently, as though they were
+// out of area. At 15 that was live risk, because one of the two figures above is
+// 20.
+//
+// So it is set above BOTH of them. If Uber's limit is 10 the refusals draw the
+// line, as designed; if it is 20 they still do. The only thing this number can
+// now do is stop a booking form asking about a laundromat in another state.
+const SHORTLIST_MILES = 30;
 
 // How many get a live quote. Every one is an API call on a public page.
 const SHORTLIST_SIZE = 3;

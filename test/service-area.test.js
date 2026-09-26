@@ -270,3 +270,40 @@ test('NOTHING SAYS BERGEN COUNTY WHEN THE BOUNDARY IS NOT BERGEN COUNTY', () => 
     assert.match(words, /Bergen/);
   }
 });
+
+// --- the shortlist is a bound on API calls, not a service area ---------------
+
+test('THE SHORTLIST BOUND CANNOT QUIETLY BECOME THE SERVICE AREA', () => {
+  // WHY THIS IS A TEST AND NOT A COMMENT. `SHORTLIST_SIZE` caps the number of
+  // courier quotes at three however wide the mile bound is, so the bound changes
+  // WHICH laundromats get asked and never HOW MANY. That means a bound set below
+  // the courier's real limit costs nothing visible and turns away customers the
+  // courier would have carried - as though they were out of area.
+  //
+  // Two figures for Uber's limit are in front of us and they disagree: 10 routed
+  // miles from their published price table, and 20 miles from CleanCloud's Uber
+  // FAQ. The bound has to sit above BOTH, so that a refusal from the courier is
+  // always what draws the line.
+  //
+  // AND TEST MODE CANNOT CHECK ANY OF IT. Uber's test API quotes Fair Lawn to Los
+  // Angeles at $7.99 - the same canned answer as Hackensack - so it refuses
+  // nothing. On the development site this bound IS the outer edge, which is
+  // exactly why it must not be mistaken for a decision about who we serve.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'serviceable.js'), 'utf8');
+
+  const bound = /const SHORTLIST_MILES = (\d+)/.exec(src);
+  assert.ok(bound, 'SHORTLIST_MILES has been renamed or removed');
+  assert.ok(
+    Number(bound[1]) > 20,
+    `the shortlist bound is ${bound[1]} miles, which is inside a figure we have been given for ` +
+      "Uber's own limit - so it, and not the courier, would be deciding who is out of area"
+  );
+
+  const size = /const SHORTLIST_SIZE = (\d+)/.exec(src);
+  assert.ok(size, 'SHORTLIST_SIZE has been renamed or removed');
+  assert.ok(
+    Number(size[1]) <= 5,
+    'the number of live courier quotes per booking is no longer bounded, which is what made the ' +
+      'mile bound free to widen'
+  );
+});
