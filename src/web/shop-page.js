@@ -125,6 +125,11 @@ const T = Object.freeze({
     en: 'We could not get a courier just now. Try again in a few minutes, or ring us.',
     es: 'No pudimos conseguir un mensajero ahora. Intente en unos minutos, o llamenos.',
   },
+  oursToDrive: {
+    en: 'One of our own drivers is collecting this one. Nothing to do.',
+    es: 'Uno de nuestros conductores viene por este. No hay que hacer nada.',
+  },
+  drivingItOurselves: { en: 'We are collecting this one', es: 'Nosotros lo recogemos' },
   weighFirst: {
     en: 'Weigh every bag before we send a courier.',
     es: 'Pese todas las bolsas antes de enviar un mensajero.',

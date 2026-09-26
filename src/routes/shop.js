@@ -8,6 +8,7 @@ const wash = require('../core/wash');
 const fulfilment = require('../core/fulfilment');
 const partnerWeighIn = require('../core/partner-weighin');
 const courierLegs = require('../core/courier-legs');
+const carriers = require('../core/carriers');
 const page = require('../web/shop-page');
 const signInTap = require('../web/sign-in-tap');
 const { normalisePhone } = require('../core/phone');
@@ -71,7 +72,8 @@ const router = express.Router();
 // raised: the price held, the card was not charged, and nobody was told.
 const ORDER_FIELDS =
   'id, customer_id, order_number, status, bag_count, weight_lb, partner_weight_lb, ' +
-  'partner_weight_at, at_partner_at, ready_at, partner_id, preferences, customers(preferences)';
+  'partner_weight_at, at_partner_at, ready_at, partner_id, return_carrier, ' +
+  'preferences, customers(preferences)';
 
 // The two statuses that mean the bags are physically in their building.
 const IN_THE_SHOP = ['AT_PARTNER', 'READY'];
@@ -348,6 +350,7 @@ function flashOf(req) {
     'problem:early': 'weightEarly',
     'problem:courier': 'collectFailed',
     'problem:weighfirst': 'weighFirst',
+    'problem:oursToDrive': 'oursToDrive',
     'problem:phone': 'staffBadPhone',
     'problem:taken': 'staffTaken',
     'problem:notyours': 'staffNotYours',
@@ -408,7 +411,11 @@ router.get('/shop/orders/:number', async (req, res, next) => {
         flash: flashOf(req),
         // THE BUTTON EXISTS ONCE THE WORK IS WEIGHED AND NO COURIER IS COMING.
         // The route checks both again, because markup guards nothing.
-        canSendCourier: order.partner_weight_lb != null && !coming,
+        // THREE THINGS, AND ONE OF THEM IS NEIL'S DECISION. `carriers` answers
+        // whether this leg is ours to drive; a courier booked on a leg he has
+        // taken is a second vehicle sent for bags somebody is already on the way
+        // for, and we pay for it.
+        canSendCourier: carriers.mayBookReturnCourier(order).ok && !coming,
       })
     );
   } catch (err) {
@@ -484,12 +491,13 @@ router.post('/shop/orders/:number/collect', async (req, res, next) => {
 
     const back = `/shop/orders/${encodeURIComponent(order.order_number)}?lang=${lang}`;
 
-    // WEIGHED FIRST. The laundromat's scale is the only one there is under a
-    // courier, so the weight has to exist before the bags leave the counter -
-    // and the page hides the button until it does, which guards nothing on its
-    // own.
-    if (order.partner_weight_lb == null) {
-      return res.redirect(303, `${back}&problem=weighfirst`);
+    // THE SAME QUESTION THE PAGE ASKED, ASKED AGAIN. A screen that hides a
+    // control while the route behind it still fires is not a guard, and this one
+    // spends money at a vendor.
+    const may = carriers.mayBookReturnCourier(order);
+    if (!may.ok) {
+      const problem = may.reason === 'ours_to_drive' ? 'oursToDrive' : 'weighfirst';
+      return res.redirect(303, `${back}&problem=${problem}`);
     }
 
     // The customer, for the courier and for nothing else.

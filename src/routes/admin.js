@@ -234,6 +234,7 @@ const STATUS_TONE = {
 // shell, because the laundromat portal draws the same banners. Re-exported
 // from this file so every existing caller and test is untouched.
 const { opsShell, devBand: opsDevBand, opsNote } = require('../web/ops-shell');
+const carriers = require('../core/carriers');
 
 // REQUESTED IS TWO DIFFERENT THINGS AND THE BOARD SAID THE SAME WORD FOR BOTH.
 //
@@ -1627,6 +1628,13 @@ const ORDER_FIELDS =
   // show the wrong rate beside it. Same trap as every other field in this
   // list, and the money is on this one.
   'subscription_id, price_per_lb_cents, ' +
+  // WHO DRIVES EACH LEG. Unselected, both read as undefined, and
+  // `carriers.carrierFor()` answers undefined with the DEFAULT - so a leg Neil
+  // had taken in house rendered as "a courier" on the one screen he uses to
+  // check it, with a button offering to do what he had already done. Caught on
+  // screen within a minute of the card existing, which is the only reason this
+  // list is now the right length.
+  'pickup_carrier, return_carrier, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
   // which is the half the driver actually needs.
@@ -2518,6 +2526,59 @@ function extraPickupCard(customer, schedules, { back = '', mayBook = false } = {
   </div>`;
 }
 
+// WHO DOES EACH LEG OF THIS ORDER.
+//
+// The value is read through `carriers.carrierFor()` rather than off the column,
+// so what this screen shows and what the portal acts on cannot disagree - the
+// column is null for an order nobody has decided about, and null means
+// "whatever the model does", which is a different answer under the van than
+// under a courier.
+//
+// "CHOSEN BY HAND" IS SAID OUT LOUD, the same way the routing board says it for
+// a pinned laundromat. An override that looks identical to the default is one
+// nobody can check.
+function carrierCard(order) {
+  // STACKED, NOT A TABLE. The first version put the state and two buttons in
+  // three columns, in the order page's side rail - which is about 180px wide, so
+  // the row scrolled sideways and "Back to automatic" was off the edge. A
+  // control with a button you cannot see is worse than no control.
+  const leg = (name, label) => {
+    const now = carriers.carrierFor(order, name);
+    const byHand = carriers.chosenByHand(order, name);
+    const other = now === carriers.DRIVER ? carriers.COURIER : carriers.DRIVER;
+    const which = name === carriers.PICKUP ? 'pickup' : 'return';
+
+    const button = (carrier, words) => `
+      <form method="post" action="/ops/orders/${order.order_number}/carrier" style="margin:0;">
+        <input type="hidden" name="leg" value="${which}">
+        <input type="hidden" name="carrier" value="${carrier}">
+        <button class="cbtn" type="submit">${escapeHtml(words)}</button>
+      </form>`;
+
+    return `
+      <div style="padding:8px 0;border-bottom:1px solid var(--c-line);">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${now === carriers.DRIVER ? 'One of ours' : 'A courier'}</span>
+        </div>
+        ${byHand ? '<div><span class="chip">chosen by hand</span></div>' : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          ${button(other, other === carriers.DRIVER ? 'We will drive it' : 'Send a courier')}
+          ${byHand ? button('', 'Back to automatic') : ''}
+        </div>
+      </div>`;
+  };
+
+  return `<h2>Who drives it</h2>
+    <div id="carrier">
+      ${leg(carriers.PICKUP, 'Pickup')}
+      ${leg(carriers.RETURN, 'Delivery')}
+    </div>
+    <p class="hint">Changing this books nothing and cancels nothing. It decides
+      what the next screen offers: a laundromat cannot send a courier for a leg
+      we have taken, and a leg a courier has is off the driver's round.</p>`;
+}
+
 function cancelCard(order, mayCancel) {
   if (!mayCancel) return '';
   if (order.status === 'CANCELED') return '';
@@ -2948,6 +3009,18 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       showMoney ? refusedHoldCard(order, can.override) : '',
       stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override)}</div>` : '',
       orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
+      // WHO DOES EACH LEG. Neil, 25 September: "There also needs for me to
+      // override a pickup/delivery manually so i can assign a in house driver
+      // to it".
+      //
+      // TWO LEGS, DECIDED SEPARATELY, because that is the point of it: a courier
+      // collects and our own van brings it back, or the other way round when the
+      // courier refused the return or the bags are late.
+      //
+      // ONLY WHILE THE ORDER IS LIVE. Past delivery there is nothing left to
+      // decide, and a control that changes nothing is one somebody presses and
+      // then rings up about.
+      can.override && stillRunning ? carrierCard(order) : '',
       can.customers && stillRunning
         ? `<h2>Driver</h2><div id="driver"><form method="post" action="/ops/orders/${order.order_number}/driver" style="margin:0;display:flex;gap:8px;flex-wrap:wrap;">
              <select name="driver_id" style="font:inherit;padding:4px 6px;border:1px solid #9ca3af;border-radius:3px;min-height:30px;">
@@ -5296,6 +5369,83 @@ router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, 
       (req.body || {}).from === 'board'
         ? `/ops?note=${note}`
         : `/ops/orders/${order.order_number}?note=${note}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// WHO DOES THIS LEG: A COURIER, OR ONE OF OURS.
+//
+// Neil, 25 September: "There also needs for me to override a pickup/delivery
+// manually so i can assign a in house driver to it".
+//
+// BEHIND `orders.override`, WHICH IS ADMIN ONLY, and that is a deliberate line
+// rather than a copy of the one next to it. Reassigning a DRIVER is behind
+// `customers.view` because it is scheduling - the same work, somebody else's
+// van. This is not: taking a leg in house or handing it to a courier decides
+// whether we spend money at a vendor, which is the line cancelling a pickup and
+// retrying a card already draw.
+//
+// NULL PUTS IT BACK TO AUTOMATIC. There has to be a way back: an override with
+// no undo is one nobody dares press, and "whatever the model does" is a real
+// answer rather than the absence of one.
+//
+// IT MOVES NOTHING ELSE. No courier is booked, none is cancelled, no status
+// changes and nobody is texted. It records a decision; the screens that act on
+// it read it next time they draw. A button that quietly did a second thing is
+// one nobody trusts.
+router.post('/ops/orders/:id/carrier', guard, may('orders.override'), async (req, res, next) => {
+  try {
+    const order = await loadOrderForAction(req.params.id);
+    if (!order) return notFoundPage(res, 'No order with that number.');
+
+    const body = req.body || {};
+    const leg = body.leg === 'pickup' ? carriers.PICKUP : body.leg === 'return' ? carriers.RETURN : null;
+
+    if (!leg) {
+      return res.redirect(
+        303,
+        `/ops/orders/${order.order_number}?problem=${encodeURIComponent('Which leg?')}`
+      );
+    }
+
+    const asked = String(body.carrier || '').toUpperCase();
+    const wanted = carriers.CARRIERS.includes(asked) ? asked : null;
+
+    const column = carriers.COLUMN[leg];
+    const was = carriers.carrierFor(order, leg);
+
+    const { error } = await db
+      .from('orders')
+      .update({ [column]: wanted })
+      .eq('id', order.id);
+
+    if (error) throw error;
+
+    // THE CHANGE LOG GETS THE EFFECT, NOT THE COLUMN. "Back to automatic" is
+    // what a person did; `null` is how it is stored. An order's history is read
+    // by somebody asking what happened, not by somebody reading the schema.
+    const nowIs = carriers.carrierFor({ ...order, [column]: wanted }, leg);
+
+    await orderEvents.record(order.id, {
+      kind: 'COURIER',
+      summary:
+        `${leg === carriers.PICKUP ? 'Pickup' : 'Delivery'} is ` +
+        `${nowIs === carriers.DRIVER ? 'ours to drive' : 'a courier job'}` +
+        `${wanted ? '' : ', back to automatic'}`,
+      was,
+      became: nowIs,
+      by: { opsUser: req.opsUser },
+    });
+
+    return res.redirect(
+      303,
+      `/ops/orders/${order.order_number}?done=${encodeURIComponent(
+        nowIs === carriers.DRIVER
+          ? `${leg === carriers.PICKUP ? 'Pickup' : 'Delivery'} is ours to drive.`
+          : `${leg === carriers.PICKUP ? 'Pickup' : 'Delivery'} goes to a courier.`
+      )}`
     );
   } catch (err) {
     return next(err);
