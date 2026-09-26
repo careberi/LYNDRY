@@ -10,6 +10,8 @@ const partnerWeighIn = require('../core/partner-weighin');
 const page = require('../web/shop-page');
 const signInTap = require('../web/sign-in-tap');
 const { normalisePhone } = require('../core/phone');
+const partnersCore = require('../core/partners');
+const { site } = require('../web/site');
 
 // ---------------------------------------------------------------------------
 // The laundromat portal, at /shop.
@@ -95,6 +97,15 @@ function safeNext(value) {
 }
 
 const html = (res, body) => res.type('html').send(body);
+
+// WHO MAY MANAGE THE SHOP'S OWN STAFF. Neil, 25 September: "i should be able to
+// assign the owner of the laundromat to be the admin of that account. the owner
+// should be able to add and remove attendants."
+//
+// ONE QUESTION, ASKED IN ONE PLACE, the rule `roles.js` already sets for the ops
+// screens: `if (user.role === 'OWNER')` scattered through templates is how a
+// screen ends up showing somebody a control they would be refused at.
+const isOwner = (req) => Boolean(req.partnerUser && req.partnerUser.role === 'OWNER');
 
 // --- signing in -------------------------------------------------------------
 
@@ -190,6 +201,95 @@ router.post('/shop/logout', (req, res) => {
   return res.redirect(303, '/shop/login');
 });
 
+// --- the shop's own URL and its home-screen app -----------------------------
+
+// ITS OWN MANIFEST, SCOPED TO /shop.
+//
+// Sharing `/ops/app.webmanifest` would give a laundromat's tablet a home-screen
+// app scoped to /ops, opening on the driver's route, bouncing to a sign-in they
+// can never pass. The scope is what makes the installed app stay inside the
+// portal instead of spilling into the browser the first time somebody taps
+// something.
+router.get('/shop/app.webmanifest', (req, res) => {
+  res.type('application/manifest+json');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+
+  return res.send(
+    JSON.stringify({
+      name: `${site.name} laundromat`,
+      short_name: site.name,
+      start_url: '/shop',
+      scope: '/shop',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#FFF8EC',
+      theme_color: '#101210',
+      icons: [
+        { src: '/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/app-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      ],
+    })
+  );
+});
+
+// A LAUNDROMAT'S OWN ADDRESS, `/shop/riverside-wash-co`.
+//
+// Neil, 25 September: "when I add a laundromat, they should get their own url
+// that they can log into".
+//
+// IT IS NOT A CREDENTIAL AND MUST NEVER BECOME ONE. It names which laundromat
+// you are signing in to; a texted six-digit code is still the only thing that
+// gets anybody in. What it buys is that an attendant lands on a page with her
+// own shop's name on it rather than a generic box, which is the difference
+// between a bookmark somebody trusts and one they ring us about.
+//
+// AN UNKNOWN SLUG REDIRECTS RATHER THAN 404ING, so the page is not a way of
+// finding out which laundromats we work with - and a typo'd bookmark still gets
+// somebody to a sign-in they can use.
+//
+// SOMEBODY ALREADY SIGNED IN GOES STRAIGHT TO THEIR BOARD, including when the
+// slug names a different shop: the session decides which orders they see, never
+// the URL. A bookmark pointing at the wrong shop must not be a way to look at it.
+router.get('/shop/:slug', async (req, res, next) => {
+  const lang = langOf(req);
+  const asked = String(req.params.slug || '').toLowerCase();
+
+  try {
+    // A PATH THE PORTAL USES IS NOT A SHOP, SO IT FALLS THROUGH - `next()`, never
+    // a redirect.
+    //
+    // This route is declared before the sign-in guard, so it sits in front of
+    // `/shop/staff` in the table and Express answers whichever matched first.
+    // Redirecting here would have made the Staff page unreachable: the slug
+    // `staff` is reserved, the reserved branch fired, and an owner tapping their
+    // own nav landed back on the sign-in page.
+    //
+    // `RESERVED_SLUGS` is the one list, shared with the slug generator, so a
+    // path added to this file cannot be taken by a laundromat tomorrow.
+    if (!/^[a-z0-9-]{1,60}$/.test(asked) || partnersCore.RESERVED_SLUGS.includes(asked)) {
+      return next();
+    }
+
+    const { data: shop, error } = await db
+      .from('partners')
+      .select('id, name, slug, status, type')
+      .eq('slug', asked)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!shop || shop.status !== 'ACTIVE' || shop.type !== 'LAUNDROMAT') {
+      return res.redirect(303, `/shop/login?lang=${lang}`);
+    }
+
+    res.set('Cache-Control', 'no-store');
+    return html(res, page.phoneStep({ lang, shop, next: '/shop' }));
+  } catch (err) {
+    return next(err);
+  }
+});
+
+
 // --- everything below needs a signed-in attendant ---------------------------
 
 router.use('/shop', auth.requirePartner);
@@ -215,7 +315,8 @@ router.get('/shop', async (req, res, next) => {
       res,
       page.board({
         lang,
-        shopName: req.partner.name,
+        shop: req.partner,
+        isOwner: isOwner(req),
         orders: data || [],
         flash: flashOf(req),
       })
@@ -231,10 +332,23 @@ function flashOf(req) {
   const done = String((req.query || {}).done || '');
   const problem = String((req.query || {}).problem || '');
 
-  if (done === 'weight') return 'weightSaved';
-  if (problem === 'bad') return 'weightBad';
-  if (problem === 'early') return 'weightEarly';
-  return null;
+  const said = {
+    'done:weight': 'weightSaved',
+    'done:courier': 'collectSent',
+    'done:added': 'staffAdded',
+    'done:removed': 'staffRemoved',
+    'done:restored': 'staffRestored',
+    'problem:bad': 'weightBad',
+    'problem:early': 'weightEarly',
+    'problem:courier': 'collectFailed',
+    'problem:weighfirst': 'weighFirst',
+    'problem:phone': 'staffBadPhone',
+    'problem:taken': 'staffTaken',
+    'problem:notyours': 'staffNotYours',
+    'problem:self': 'staffNotYou',
+  };
+
+  return said[`done:${done}`] || said[`problem:${problem}`] || null;
 }
 
 // ONE ORDER, LOOKED UP BY ORDER NUMBER AND BY THEIR partner_id TOGETHER.
@@ -279,7 +393,8 @@ router.get('/shop/orders/:number', async (req, res, next) => {
       res,
       page.orderPage({
         lang,
-        shopName: req.partner.name,
+        shop: req.partner,
+        isOwner: isOwner(req),
         order,
         washLines: wash.washLines(preferences),
         flash: flashOf(req),
@@ -335,3 +450,126 @@ module.exports = router;
 // open redirector on lyndry.com, which is a ready-made phishing link - so it is
 // held against its own rules rather than only being read.
 module.exports.safeNext = safeNext;
+
+// --- the shop's own staff, run by its owner ---------------------------------
+//
+// Neil, 25 September: "the owner should be able to add and remove attendants."
+//
+// EVERY ROUTE CHECKS, NOT JUST THE NAV. The Staff tab only renders for an owner,
+// and a menu that hides a link whose route still fires is not a guard - the rule
+// the ops screens already follow for a driver and the money columns.
+//
+// AN OWNER CANNOT PROMOTE ANYBODY. Nothing here writes `role`, so the worst an
+// owner can do is add and remove people at the shop they already run. Who owns a
+// shop is LYNDRY's decision and is made on the partner's own page.
+function requireOwner(req, res, next) {
+  if (!isOwner(req)) return res.redirect(303, `/shop?lang=${langOf(req)}`);
+  return next();
+}
+
+router.get('/shop/staff', requireOwner, async (req, res, next) => {
+  const lang = langOf(req);
+
+  try {
+    const { data, error } = await db
+      .from('partner_users')
+      .select('id, name, phone, role, status, created_at')
+      .eq('partner_id', req.partner.id)
+      .order('role', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    res.set('Cache-Control', 'no-store');
+    return html(
+      res,
+      page.staffPage({
+        lang,
+        shop: req.partner,
+        me: req.partnerUser,
+        staff: data || [],
+        flash: flashOf(req),
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/shop/staff', requireOwner, async (req, res, next) => {
+  const lang = langOf(req);
+  const body = req.body || {};
+  const back = `/shop/staff?lang=${lang}`;
+
+  try {
+    const phone = normalisePhone(body.phone);
+    const name = String(body.name || '').trim().slice(0, 60);
+
+    if (!phone || !name) return res.redirect(303, `${back}&problem=phone`);
+
+    // ALWAYS AN ATTENDANT. `role` is not read off the form and must not be: a
+    // hidden field is the submitter's to edit, and an owner minting another
+    // owner is exactly what the two ladders exist to prevent.
+    const { error } = await db.from('partner_users').insert({
+      partner_id: req.partner.id,
+      phone,
+      name,
+      role: 'ATTENDANT',
+    });
+
+    if (error) {
+      // The phone column is unique across every laundromat, deliberately: a
+      // number that signs in has to resolve to exactly one shop.
+      if (String(error.message).includes('duplicate') || error.code === '23505') {
+        return res.redirect(303, `${back}&problem=taken`);
+      }
+      throw error;
+    }
+
+    // NOBODY IS TEXTED. They are added to a list; they sign in when they choose
+    // to, from the shop's own URL, and the code goes then. An unprompted text
+    // saying "you have been added to a system" is a message nobody asked for.
+    return res.redirect(303, `${back}&done=added`);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/shop/staff/:id', requireOwner, async (req, res, next) => {
+  const lang = langOf(req);
+  const back = `/shop/staff?lang=${lang}`;
+  const wanted = String((req.body || {}).status || '') === 'ACTIVE' ? 'ACTIVE' : 'DISABLED';
+
+  try {
+    // NOBODY CAN REMOVE THEMSELVES. The form does not offer it and the route
+    // refuses it anyway - it is the one action that can leave a shop with no
+    // owner and no way to add one, which would take a phone call to us to undo.
+    if (String(req.params.id) === String(req.partnerUser.id)) {
+      return res.redirect(303, `${back}&problem=self`);
+    }
+
+    // SCOPED TO THIS SHOP IN THE QUERY, never after it. An owner typing another
+    // laundromat's user id into the address bar changes nothing there.
+    const { data, error } = await db
+      .from('partner_users')
+      .update({
+        status: wanted,
+        // SWITCHING SOMEBODY OFF ENDS THEIR SESSION NOW, not in eight hours.
+        // `requirePartner` re-reads the row every request, so clearing the token
+        // is belt and braces - and somebody just let go is where both belts
+        // matter.
+        ...(wanted === 'ACTIVE' ? {} : { session_token: null }),
+      })
+      .eq('id', req.params.id)
+      .eq('partner_id', req.partner.id)
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return res.redirect(303, `${back}&problem=notyours`);
+
+    return res.redirect(303, `${back}&done=${wanted === 'ACTIVE' ? 'restored' : 'removed'}`);
+  } catch (err) {
+    return next(err);
+  }
+});

@@ -1,8 +1,8 @@
 'use strict';
 
-const { escapeHtml, CSS_BASE, logo, icon, ICON_LINKS } = require('./layout');
+const { escapeHtml, icon } = require('./layout');
+const { opsShell, opsNote } = require('./ops-shell');
 const { site } = require('./site');
-const { config } = require('../config');
 const format = require('../core/format');
 const { translator } = require('./laundromat-es');
 
@@ -12,56 +12,57 @@ const { translator } = require('./laundromat-es');
 // Neil's ask, 25 September: "I need an interface as to where the laundromat
 // attendant can log into and see the current orders at her store... they will
 // also need to enter the weight into the order of all the bags and then go back
-// into that order to tell uber to come get it."
+// into that order to tell uber to come get it." And, the same day: "the style of
+// the laundromat back end should be the exact same style as the /ops backend".
+//
+// SO IT RENDERS THROUGH `ops-shell.js`, THE SAME SHELL `/ops` USES. It had its
+// own hand-rolled shell for a day, which looked like the marketing site - the
+// ops look is `public/css/ops.css` plus `class="ops-terminal"` on the body, and
+// nothing here was loading either. `terminal` and `touch` are both on: terminal
+// is the style Neil asked for, and touch is what keeps buttons at 52px, which is
+// what a counter needs.
 //
 // WHO IS HOLDING THIS: somebody on minimum wage, behind a counter, with a
-// tablet, doing us a favour between customers. That is the whole design brief
-// and every decision below comes out of it.
+// tablet, doing us a favour between customers. That is the design brief and most
+// of what follows comes out of it.
 //
-//   NO JAVASCRIPT, ANYWHERE. The same rule the driver's screens follow, for a
-//   better reason: this is a borrowed device on somebody else's wifi. A page
-//   either worked or it did not, rather than a spinner that lies.
+//   NO JAVASCRIPT beyond the shell's own menu script. A borrowed device on
+//   somebody else's wifi: a page either worked or it did not.
 //
 //   ONE THING TO DO PER ORDER, and the card says which. An attendant is not
 //   learning our state machine.
 //
-//   BIG CONTROLS. 56px, the same as the driver's, because it is the same
-//   situation: standing up, hands full, in a hurry.
-//
-//   BILINGUAL, LIKE THE BAG PAGES UNDER IT. `/o/<code>` and `/processing`
-//   already switch language, and a portal that did not would be an English
-//   screen hanging off a Spanish one. Every visible string is an { en, es }
-//   pair picked by `s()`.
+//   BILINGUAL, LIKE THE BAG PAGES UNDER IT. Every visible string is an
+//   { en, es } pair picked by `s()`, and the wash lines go through the shared
+//   laundromat vocabulary.
 //
 // WHAT AN ATTENDANT MUST NEVER SEE, and it is enforced by what these functions
-// are handed rather than by what they choose to render:
+// are HANDED rather than by what they choose to render:
 //
-//   the customer's NAME, PHONE OR ADDRESS. They have no reason for any of it and
-//   holding it is a liability we would be handing to somebody else's employee.
-//   The order number identifies the work; that is the same argument
-//   `/o/<code>` already makes for a bag tag
+//   the customer's NAME, PHONE OR ADDRESS. They have no reason for any of it,
+//   and holding it is a liability we would be handing to somebody else's
+//   employee. The order number identifies the work.
 //
 //   ANY MONEY. Not the price, not the per-pound rate, and above all not what we
-//   pay THEM per pound, which is on the partner record two tables away. The ops
-//   screens keep the wholesale rate behind `money.view` so a driver cannot
-//   browse it; an attendant is further out than a driver
+//   pay THEM per pound. The ops screens keep the wholesale rate behind
+//   `money.view` so a driver cannot browse it; an attendant is further out.
 //
-//   FREE TEXT THE CUSTOMER TYPED. The allowlist rule from the bag page, which
-//   exists because a real saved preference reads "Deliver to 16-51 Chandler Dr"
-//   and no regex catches "the Bergen Pediatrics name tags". Wash fields are
-//   structured and go through; instructions never do.
+//   FREE TEXT THE CUSTOMER TYPED. The allowlist rule from the bag page: a real
+//   saved preference reads "Deliver to 16-51 Chandler Dr", and no regex catches
+//   "the Bergen Pediatrics name tags". Wash fields are structured and go
+//   through; instructions never do.
 // ---------------------------------------------------------------------------
 
 // --- language ---------------------------------------------------------------
 //
-// Plain ASCII in the Spanish, matching the sixty ES entries in `bag.js` and the
-// guide under it. Two conventions on one screen reads as a mistake.
+// Plain ASCII in the Spanish, matching the sixty ES entries in the shared
+// vocabulary and the processing guide.
 
 const T = Object.freeze({
   portal: { en: 'Laundromat', es: 'Lavanderia' },
   signIn: { en: 'Sign in.', es: 'Iniciar sesion.' },
   signInIntro: {
-    en: "Enter your mobile number and we'll text you a code.",
+    en: 'Enter your mobile number and we will text you a code.',
     es: 'Escriba su numero de movil y le enviaremos un codigo.',
   },
   mobile: { en: 'Mobile number', es: 'Numero de movil' },
@@ -70,10 +71,6 @@ const T = Object.freeze({
   sixDigits: { en: 'Six-digit code', es: 'Codigo de seis digitos' },
   signInButton: { en: 'Sign in', es: 'Entrar' },
   sendAnother: { en: 'Send another code', es: 'Enviar otro codigo' },
-  needsScript: {
-    en: 'Signing in needs JavaScript switched on. Everything after that does not.',
-    es: 'Para entrar hace falta JavaScript. Despues de eso no se necesita.',
-  },
 
   today: { en: 'Your laundry today', es: 'Su ropa de hoy' },
   nothingHere: { en: 'Nothing here right now.', es: 'Nada por ahora.' },
@@ -84,17 +81,16 @@ const T = Object.freeze({
   order: { en: 'Order', es: 'Pedido' },
   bags: { en: 'bags', es: 'bolsas' },
   oneBag: { en: 'bag', es: 'bolsa' },
-  arrived: { en: 'Arrived', es: 'Llego' },
-  dueBack: { en: 'Due back', es: 'Debe volver' },
 
   needsWeight: { en: 'Needs weighing', es: 'Falta pesar' },
-  weighed: { en: 'Weighed', es: 'Pesado' },
   washing: { en: 'Being washed', es: 'Lavandose' },
   readyLabel: { en: 'Finished', es: 'Terminado' },
+  onItsWay: { en: 'Courier on the way', es: 'Mensajero en camino' },
 
-  open: { en: 'Open', es: 'Abrir' },
   back: { en: 'Back to the list', es: 'Volver a la lista' },
   signOut: { en: 'Sign out', es: 'Salir' },
+  orders: { en: 'Orders', es: 'Pedidos' },
+  staff: { en: 'Staff', es: 'Personal' },
 
   howToWash: { en: 'How to wash it', es: 'Como lavarla' },
   weightTitle: { en: 'What does it weigh?', es: 'Cuanto pesa?' },
@@ -115,6 +111,25 @@ const T = Object.freeze({
   },
   alreadyWeighed: { en: 'You weighed this at', es: 'Usted lo peso en' },
 
+  collectTitle: { en: 'Finished with it?', es: 'Ya termino?' },
+  collectHelp: {
+    en: 'We will send a courier to collect these bags and take them back to the customer.',
+    es: 'Enviaremos un mensajero a recoger estas bolsas y llevarlas al cliente.',
+  },
+  collectButton: { en: 'Send a courier for these bags', es: 'Enviar un mensajero por estas bolsas' },
+  collectSent: {
+    en: 'A courier is on the way. Keep the bags by the counter.',
+    es: 'Un mensajero viene en camino. Deje las bolsas cerca del mostrador.',
+  },
+  collectFailed: {
+    en: 'We could not get a courier just now. Try again in a few minutes, or ring us.',
+    es: 'No pudimos conseguir un mensajero ahora. Intente en unos minutos, o llamenos.',
+  },
+  weighFirst: {
+    en: 'Weigh every bag before we send a courier.',
+    es: 'Pese todas las bolsas antes de enviar un mensajero.',
+  },
+
   processingLink: { en: 'Processing Instructions', es: 'Instrucciones de Procesamiento' },
   questions: { en: 'Any problem, ring us on', es: 'Cualquier problema, llamenos al' },
 
@@ -126,7 +141,6 @@ const T = Object.freeze({
     en: 'This laundromat is not set up for pickups at the moment. Please ring us.',
     es: 'Esta lavanderia no esta activa por ahora. Por favor llamenos.',
   },
-  signInAgain: { en: 'Please sign in again.', es: 'Por favor inicie sesion otra vez.' },
   badCode: {
     en: 'That code did not work. Check it, or send another.',
     es: 'Ese codigo no funciono. Revise, o pida otro.',
@@ -140,127 +154,185 @@ const T = Object.freeze({
     es: 'Demasiados intentos. Espere unos minutos.',
   },
   tapToFinish: { en: 'Tap Sign in to finish', es: 'Toque Entrar para terminar' },
+
+  staffTitle: { en: 'Who works here', es: 'Quien trabaja aqui' },
+  staffHelp: {
+    en: 'Anybody here can sign in, see these orders and enter weights. Remove somebody the day they leave.',
+    es: 'Cualquiera de esta lista puede entrar, ver estos pedidos y anotar pesos. Quitelo el dia que se vaya.',
+  },
+  name: { en: 'Name', es: 'Nombre' },
+  role: { en: 'Role', es: 'Puesto' },
+  roleOwner: { en: 'Owner', es: 'Dueno' },
+  roleAttendant: { en: 'Attendant', es: 'Empleado' },
+  thatsYou: { en: 'That is you', es: 'Es usted' },
+  removed: { en: 'Removed', es: 'Quitado' },
+  removeButton: { en: 'Remove', es: 'Quitar' },
+  restoreButton: { en: 'Put back', es: 'Reactivar' },
+  nobodyYet: { en: 'Nobody yet.', es: 'Nadie todavia.' },
+  addTitle: { en: 'Add somebody', es: 'Agregar a alguien' },
+  addButton: { en: 'Add them', es: 'Agregar' },
+  addHint: {
+    en: 'They sign in with this mobile number and a code we text them. Use their own phone.',
+    es: 'Entrara con este numero de movil y un codigo que le enviamos. Use su propio telefono.',
+  },
+  staffAdded: { en: 'Added. They can sign in now.', es: 'Agregado. Ya puede entrar.' },
+  staffRemoved: { en: 'Removed. They cannot sign in any more.', es: 'Quitado. Ya no puede entrar.' },
+  staffRestored: { en: 'Put back. They can sign in again.', es: 'Reactivado. Ya puede entrar otra vez.' },
+  staffBadPhone: {
+    en: 'That does not look like a mobile number.',
+    es: 'Eso no parece un numero de movil.',
+  },
+  staffTaken: {
+    en: 'That number can already sign in somewhere. Use another, or ring us.',
+    es: 'Ese numero ya puede entrar en otro lugar. Use otro, o llamenos.',
+  },
+  staffNotYours: { en: 'That person does not work here.', es: 'Esa persona no trabaja aqui.' },
+  staffNotYou: { en: 'You cannot remove yourself.', es: 'No puede quitarse a usted mismo.' },
 });
 
-// Escaped text. The default is English, so a missing language falls back rather
-// than rendering `undefined` into a page an attendant has to act on.
+// Escaped text. English is the fallback, so a missing Spanish string renders as
+// readable English rather than as a hole. That is the opposite of the processing
+// guide's rule, and deliberate: the guide is a fixed document where every line is
+// known in advance, and this file grows.
 function s(key, lang) {
   const pair = T[key];
   if (!pair) return '';
   return escapeHtml(lang === 'es' && pair.es ? pair.es : pair.en);
 }
 
-// --- the shell --------------------------------------------------------------
+const en = (lang) => lang !== 'es';
+const word = (key, lang) => (en(lang) ? T[key].en : T[key].es);
 
-// ONE SHELL, LIKE THE BAG PAGE'S. Every state - signed out, the list, one order,
-// an error - renders through this, which is what makes the language toggle and
-// the processing link true on all of them without a branch for any.
-function shell({ lang, title, inner, shopName = null, showSignOut = false, here = '/shop' }) {
-  const other = lang === 'es' ? 'en' : 'es';
-  const toggleHref = `${here}${here.includes('?') ? '&' : '?'}lang=${other}`;
+// --- the chrome -------------------------------------------------------------
 
-  return `<!doctype html>
-<html lang="${lang === 'es' ? 'es' : 'en'}" data-theme="light">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>${escapeHtml(title)} | LYNDRY</title>
-${ICON_LINKS}
-<link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
-<link rel="stylesheet" href="${CSS_BASE}/icons.css">
-<link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
-</head>
-<body>
-  ${devBand()}
-  <header class="container" style="padding-top:20px;padding-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-    <div style="display:flex;align-items:center;gap:14px;">
-      ${logo('compact', { href: null })}
-      <div>
-        <p class="eyebrow" style="margin:0;">${s('portal', lang)}</p>
-        ${shopName ? `<p style="margin:2px 0 0;font-size:15px;font-weight:700;color:var(--ink-900);">${escapeHtml(shopName)}</p>` : ''}
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <a class="btn btn-ghost" href="${escapeHtml(toggleHref)}" hreflang="${other}">${other === 'es' ? 'Espanol' : 'English'}</a>
-      ${
-        showSignOut
-          ? `<form method="post" action="/shop/logout" style="margin:0;">
-               <button type="submit" class="btn btn-ghost">${s('signOut', lang)}</button>
-             </form>`
-          : ''
-      }
-    </div>
-  </header>
+// THE SHOP'S OWN NAME IN THE BAR, not LYNDRY's.
+//
+// The /ops bar says LYNDRY OPS because that is whose screen it is. This one is
+// Riverside Wash Co's screen, and an attendant with three tabs open needs to
+// know which shop she is looking at - especially somebody who works two of them,
+// which `partner_users` allows.
+//
+// The STYLE is identical, which is what was asked for. The words are not the
+// style.
+function shopNav(lang, { active = '', isOwner = false } = {}) {
+  const items = [{ href: '/shop', label: word('orders', lang) }];
+  if (isOwner) items.push({ href: '/shop/staff', label: word('staff', lang) });
 
-  <main class="container" style="padding-bottom:56px;">
-    ${inner}
-  </main>
-
-  <footer class="container" style="padding-bottom:40px;">
-    <p style="font-size:14px;line-height:1.6;color:var(--ink-600);margin:0 0 6px;">
-      <a href="/processing?lang=${lang === 'es' ? 'es' : 'en'}">${s('processingLink', lang)}</a>
-    </p>
-    <p style="font-size:14px;line-height:1.6;color:var(--ink-600);margin:0;">
-      ${s('questions', lang)} <strong>${escapeHtml(site.opsPhoneDisplay)}</strong>
-    </p>
-  </footer>
-</body>
-</html>`;
+  // A MENU WITH ONE THING IN IT IS NOT A MENU - the same rule `opsNav()`
+  // follows, and the same markup, so the bar behaves identically.
+  return items
+    .map(
+      (i) =>
+        `<a class="ops-menu-solo" href="${escapeHtml(i.href)}${lang === 'es' ? '?lang=es' : ''}"${
+          i.href === active ? ' aria-current="page"' : ''
+        }>${escapeHtml(i.label)}</a>`
+    )
+    .join('');
 }
 
-// The same band the ops screens carry, so nobody weighs a real order on the
-// development site by accident.
-function devBand() {
-  if (config.supabase.isProduction) return '';
-  return `<div style="background:var(--sunbeam-500);border-bottom:2px solid var(--ink-900);padding:6px 16px;text-align:center;">
-    <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-900);">
-      Development - nothing here is real
-    </span>
-  </div>`;
+// The language toggle, in the slot where /ops puts the signed-in person's name.
+// It keeps whatever else is on the query string, the way `langToggleHere()` does
+// on the bag pages.
+function langToggle(lang, here) {
+  const other = lang === 'es' ? 'en' : 'es';
+  const [path, query = ''] = String(here || '/shop').split('?');
+  const params = new URLSearchParams(query);
+  params.set('lang', other);
+
+  return `<a class="btn btn-outline btn-sm" href="${escapeHtml(
+    `${path}?${params.toString()}`
+  )}" hreflang="${other}">${other === 'es' ? 'Espanol' : 'English'}</a>`;
+}
+
+function shopFooter(lang) {
+  return `<footer class="container" style="padding-bottom:40px;">
+    <p style="font-size:13px;line-height:1.6;margin:0 0 4px;">
+      <a href="/processing?lang=${en(lang) ? 'en' : 'es'}">${s('processingLink', lang)}</a>
+    </p>
+    <p style="font-size:13px;line-height:1.6;margin:0;">
+      ${s('questions', lang)} <strong>${escapeHtml(site.opsPhoneDisplay)}</strong>
+    </p>
+  </footer>`;
+}
+
+// ONE DOOR ONTO THE SHELL, so every portal screen gets the same bar, the same
+// footer and the same language handling without a branch for any of them.
+// `signedIn` DECIDES THE BAR, NOT WHETHER A SHOP IS KNOWN. The sign-in page at
+// `/shop/<slug>` knows perfectly well which laundromat it is - that is the whole
+// point of the URL - and putting a Sign out button and a nav on a page nobody
+// has signed into yet would be nonsense.
+function page({
+  lang = 'en',
+  title,
+  body,
+  shop = null,
+  signedIn = false,
+  here = '/shop',
+  active = '',
+  isOwner = false,
+  notes = [],
+}) {
+  return opsShell({
+    title,
+    titleSuffix: shop ? shop.name : site.name,
+    lang: en(lang) ? 'en' : 'es',
+    body,
+    mark: shop
+      ? { text: shop.name, href: '/shop', label: shop.name }
+      : { text: site.name, href: '/shop', label: site.name },
+    nav: signedIn ? shopNav(lang, { active, isOwner }) : '',
+    aside: langToggle(lang, here),
+    signOut: signedIn ? { action: '/shop/logout', label: word('signOut', lang) } : null,
+    // ITS OWN, SCOPED TO /shop. Sharing the ops one would give a laundromat's
+    // tablet a home-screen app scoped to /ops that opens on the driver's route
+    // and bounces to a sign-in they can never pass.
+    manifest: '/shop/app.webmanifest',
+    notes,
+    footer: shopFooter(lang),
+    terminal: true,
+    // A COUNTER IS A DOORSTEP. 52px controls and real input targets, the same
+    // reason the driver's screens set it.
+    touch: true,
+  });
 }
 
 // --- signing in -------------------------------------------------------------
 
-function signInShell({ lang, heading, intro, error, form, here }) {
-  return shell({
+function signInShell({ lang, heading, intro, error, form, here, shop = null }) {
+  return page({
     lang,
     here,
+    shop,
     title: heading,
-    inner: `
+    notes: error ? [opsNote({ tone: 'bad', title: escapeHtml(error) })] : [],
+    body: `
       <div style="max-width:440px;">
-        <h1 class="display-4" style="margin:18px 0 10px;">${escapeHtml(heading)}</h1>
-        <p style="font-size:17px;line-height:1.5;color:var(--ink-800);margin:0 0 24px;">${intro}</p>
-        ${
-          error
-            ? `<div role="alert" class="card" style="border-color:var(--stain-500);padding:14px 16px;margin-bottom:20px;">
-                 <p style="margin:0;font-size:16px;line-height:1.5;color:var(--ink-900);">${escapeHtml(error)}</p>
-               </div>`
-            : ''
-        }
+        <h1>${escapeHtml(heading)}</h1>
+        <p>${intro}</p>
         ${form}
       </div>`,
   });
 }
 
-function phoneStep({ lang = 'en', error = '', phone = '', next = '/shop' } = {}) {
+function phoneStep({ lang = 'en', error = '', phone = '', next = '/shop', shop = null } = {}) {
   return signInShell({
     lang,
-    here: '/shop/login',
-    heading: T.signIn[lang === 'es' ? 'es' : 'en'],
+    shop,
+    here: shop && shop.slug ? `/shop/${shop.slug}` : '/shop/login',
+    heading: word('signIn', lang),
     intro: s('signInIntro', lang),
     error,
     form: `
-      <form method="post" action="/shop/login" class="card card-xl" style="padding:24px;">
+      <form method="post" action="/shop/login" class="card" style="margin-top:14px;">
         <input type="hidden" name="next" value="${escapeHtml(next)}">
-        <input type="hidden" name="lang" value="${lang === 'es' ? 'es' : 'en'}">
+        <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
         <div class="field">
           <label class="field-label" for="phone">${s('mobile', lang)}</label>
           <input class="input input-lg" type="tel" id="phone" name="phone" required
                  autocomplete="tel" inputmode="tel" placeholder="201-555-0142"
                  value="${escapeHtml(phone)}" autofocus>
         </div>
-        <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:18px;">
+        <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
           ${s('textMeACode', lang)} ${icon('arrow-right', '22')}
         </button>
       </form>`,
@@ -268,42 +340,44 @@ function phoneStep({ lang = 'en', error = '', phone = '', next = '/shop' } = {})
 }
 
 function codeStep({ lang = 'en', error = '', phone = '', code = '', next = '/shop', ttlMinutes = 5, tapGate = '' } = {}) {
-  const en = lang !== 'es';
-
   return signInShell({
     lang,
     here: '/shop/login/code',
-    heading: T.checkPhone[en ? 'en' : 'es'],
+    heading: word('checkPhone', lang),
     // ON ITS WAY, NOT ALREADY SENT. The text goes a few seconds after the number
     // is entered, so "we texted you a code" is a sentence the phone contradicts
     // for the first moment - which reads as broken and starts somebody tapping.
-    intro: en
-      ? `A six-digit code is on its way to <strong>${escapeHtml(format.displayPhone(phone))}</strong>. Give it a few seconds. It expires ${ttlMinutes} minutes after it lands.`
-      : `Un codigo de seis digitos va en camino a <strong>${escapeHtml(format.displayPhone(phone))}</strong>. Espere unos segundos. Vence ${ttlMinutes} minutos despues de llegar.`,
+    intro: en(lang)
+      ? `A six-digit code is on its way to <strong>${escapeHtml(
+          format.displayPhone(phone)
+        )}</strong>. Give it a few seconds. It expires ${ttlMinutes} minutes after it lands.`
+      : `Un codigo de seis digitos va en camino a <strong>${escapeHtml(
+          format.displayPhone(phone)
+        )}</strong>. Espere unos segundos. Vence ${ttlMinutes} minutos despues de llegar.`,
     error,
     form: `
-      <form method="post" action="/shop/login/code" class="card card-xl" style="padding:24px;">
+      <form method="post" action="/shop/login/code" class="card" style="margin-top:14px;">
         <input type="hidden" name="next" value="${escapeHtml(next)}">
         <input type="hidden" name="phone" value="${escapeHtml(phone)}">
-        <input type="hidden" name="lang" value="${en ? 'en' : 'es'}">
+        <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
         <div class="field">
           <label class="field-label" for="code">${s('sixDigits', lang)}</label>
           <input class="input input-lg" type="text" id="code" name="code" required
                  inputmode="numeric" pattern="[0-9]*" maxlength="6"
                  autocomplete="one-time-code" autofocus value="${escapeHtml(code)}"
-                 style="letter-spacing:0.4em;font-size:24px;text-align:center;">
+                 style="letter-spacing:0.4em;text-align:center;">
         </div>
-        <button type="submit" data-sign-in class="btn btn-ink btn-lg btn-full" style="margin-top:18px;">
+        <button type="submit" data-sign-in class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
           ${s('signInButton', lang)} ${icon('arrow-right', '22')}
         </button>
         ${tapGate}
       </form>
 
-      <form method="post" action="/shop/login" style="margin-top:16px;">
+      <form method="post" action="/shop/login" style="margin-top:14px;">
         <input type="hidden" name="phone" value="${escapeHtml(phone)}">
         <input type="hidden" name="next" value="${escapeHtml(next)}">
-        <input type="hidden" name="lang" value="${en ? 'en' : 'es'}">
-        <button type="submit" class="btn btn-ghost">${s('sendAnother', lang)}</button>
+        <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
+        <button type="submit" class="btn btn-outline">${s('sendAnother', lang)}</button>
       </form>`,
   });
 }
@@ -312,17 +386,17 @@ function codeStep({ lang = 'en', error = '', phone = '', code = '', next = '/sho
 
 // WHAT AN ATTENDANT HAS TO DO ABOUT THIS ORDER, IN ONE PHRASE.
 //
-// It is derived from the order, never stored. A "portal stage" column would be a
-// second copy of facts the order already holds, and would go stale the first time
-// anybody moved an order from the ops screens - the rule the intake table and the
-// guided run both follow.
+// Derived from the order, never stored. A "portal stage" column would be a
+// second copy of facts the order already holds and would go stale the first time
+// anybody moved an order from the ops screens.
 //
 // THE STATUSES ARE THE SYSTEM'S AND THE WORDS ARE NOT. `AT_PARTNER` means
-// nothing to somebody behind a counter; "needs weighing" does.
+// nothing behind a counter; "needs weighing" does.
 function jobOf(order) {
   if (order.status === 'AT_PARTNER' && order.partner_weight_lb == null) return 'WEIGH';
   if (order.status === 'AT_PARTNER') return 'WASH';
   if (order.status === 'READY') return 'DONE';
+  if (order.status === 'OUT_FOR_DELIVERY') return 'GONE';
   return 'OTHER';
 }
 
@@ -330,16 +404,18 @@ const JOB_LABEL = Object.freeze({
   WEIGH: 'needsWeight',
   WASH: 'washing',
   DONE: 'readyLabel',
+  GONE: 'onItsWay',
   OTHER: 'washing',
 });
 
-// Sunbeam for the one that needs doing, plain for the rest. One colour carrying
-// one meaning, which is the whole reason the palette has a "good news" yellow.
-const JOB_TONE = Object.freeze({
-  WEIGH: 'card card-brand',
-  WASH: 'card',
-  DONE: 'card',
-  OTHER: 'card',
+// The ops chip vocabulary, so a status here reads the way a status does on the
+// board Neil looks at.
+const JOB_CHIP = Object.freeze({
+  WEIGH: 'chip warn',
+  WASH: 'chip',
+  DONE: 'chip ok',
+  GONE: 'chip ok',
+  OTHER: 'chip',
 });
 
 function bagCount(order, lang) {
@@ -350,173 +426,296 @@ function bagCount(order, lang) {
 
 function orderRow(order, lang) {
   const job = jobOf(order);
-  const count = bagCount(order, lang);
+  const weighed =
+    order.partner_weight_lb != null
+      ? ` &middot; ${escapeHtml(Number(order.partner_weight_lb).toFixed(1))} lb`
+      : '';
 
-  return `<a class="${JOB_TONE[job]}" href="/shop/orders/${encodeURIComponent(order.order_number)}?lang=${lang === 'es' ? 'es' : 'en'}"
-     style="display:block;padding:18px 20px;margin-bottom:14px;text-decoration:none;">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;">
-      <span style="font-family:var(--font-display);font-weight:900;font-size:24px;color:var(--ink-900);">
-        ${s('order', lang)} ${escapeHtml(String(order.order_number))}
-      </span>
-      <span class="eyebrow" style="margin:0;">${s(JOB_LABEL[job], lang)}</span>
+  return `<a class="card" href="/shop/orders/${encodeURIComponent(order.order_number)}?lang=${
+    en(lang) ? 'en' : 'es'
+  }" style="display:block;margin-bottom:10px;text-decoration:none;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <strong style="font-size:17px;">${s('order', lang)} ${escapeHtml(String(order.order_number))}</strong>
+      <span class="${JOB_CHIP[job]}">${s(JOB_LABEL[job], lang)}</span>
     </div>
-    <p style="margin:6px 0 0;font-size:15px;color:var(--ink-700);">
-      ${escapeHtml(count)}${
-        order.partner_weight_lb != null
-          ? ` &middot; ${escapeHtml(Number(order.partner_weight_lb).toFixed(1))} lb`
-          : ''
-      }
-    </p>
+    <p style="margin:4px 0 0;">${escapeHtml(bagCount(order, lang))}${weighed}</p>
   </a>`;
+}
+
+// THROUGH `opsNote()`, NEVER AN INLINE-STYLED BOX. `test/ops-notices.test.js`
+// refuses a hand-styled banner anywhere in the ops screens, and this file is held
+// to the same rule now that it renders through the same shell.
+function flashNotes(flash, lang) {
+  if (!flash) return [];
+
+  const good = flash === 'weightSaved' || flash === 'collectSent';
+  return [opsNote({ tone: good ? 'good' : 'bad', title: s(flash, lang) })];
 }
 
 // THE ONES NEEDING SOMETHING FIRST. Not by arrival time: the question the page
 // answers is "what do I do next", and an order waiting to be weighed is that
 // whatever time it came in.
-function board({ lang = 'en', shopName, orders = [], flash = null } = {}) {
-  const sorted = [...orders].sort((a, b) => {
-    const rank = { WEIGH: 0, WASH: 1, OTHER: 2, DONE: 3 };
-    const byJob = rank[jobOf(a)] - rank[jobOf(b)];
-    if (byJob !== 0) return byJob;
-    return String(a.at_partner_at || '').localeCompare(String(b.at_partner_at || ''));
-  });
+function board({ lang = 'en', shop, orders = [], flash = null, isOwner = false } = {}) {
+  const rank = { WEIGH: 0, WASH: 1, OTHER: 2, DONE: 3, GONE: 4 };
+  const sorted = [...orders].sort(
+    (a, b) =>
+      rank[jobOf(a)] - rank[jobOf(b)] ||
+      String(a.at_partner_at || '').localeCompare(String(b.at_partner_at || ''))
+  );
 
-  const inner = `
-    ${flash ? flashNote(flash, lang) : ''}
-    <h1 class="display-4" style="margin:18px 0 20px;">${s('today', lang)}</h1>
+  const body = `
+    <h1>${s('today', lang)}</h1>
     ${
       sorted.length
         ? sorted.map((o) => orderRow(o, lang)).join('')
-        : `<div class="card card-xl" style="padding:26px;">
-             <p style="margin:0 0 8px;font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--ink-900);">
-               ${s('nothingHere', lang)}</p>
-             <p style="margin:0;font-size:16px;line-height:1.6;color:var(--ink-700);">
-               ${s('nothingHereMore', lang)}</p>
+        : `<div class="card">
+             <strong>${s('nothingHere', lang)}</strong>
+             <p style="margin:4px 0 0;">${s('nothingHereMore', lang)}</p>
            </div>`
     }`;
 
-  return shell({ lang, here: '/shop', title: T.today[lang === 'es' ? 'es' : 'en'], inner, shopName, showSignOut: true });
+  return page({
+    lang,
+    shop,
+    signedIn: true,
+    isOwner,
+    active: '/shop',
+    here: '/shop',
+    title: word('today', lang),
+    notes: flashNotes(flash, lang),
+    body,
+  });
 }
 
 // --- one order --------------------------------------------------------------
 
-function flashNote(flash, lang) {
-  const good = flash === 'weightSaved';
-  return `<div role="status" class="card" style="padding:14px 16px;margin:16px 0 0;border-color:${
-    good ? 'var(--suds-500)' : 'var(--stain-500)'
-  };">
-    <p style="margin:0;font-size:16px;line-height:1.5;color:var(--ink-900);">${s(flash, lang)}</p>
-  </div>`;
-}
-
 // ONE ORDER, AND EVERYTHING AN ATTENDANT NEEDS TO DO WITH IT.
 //
 // `washLines` comes from `wash.washLines()`, which is the allowlist - the same
-// five structured fields the bag page shows, and nothing the customer typed. The
-// rule is on the bag page for a page with no login at all, and it holds here for
-// the same reason: a real saved preference reads "Deliver to 16-51 Chandler Dr",
-// and no regex catches "the Bergen Pediatrics name tags", so the fix is an
-// allowlist rather than redaction.
-function orderPage({ lang = 'en', shopName, order, washLines = [], flash = null } = {}) {
-  const en = lang !== 'es';
+// five structured fields the bag page shows, and nothing the customer typed.
+function orderPage({
+  lang = 'en',
+  shop,
+  order,
+  washLines = [],
+  flash = null,
+  isOwner = false,
+  canSendCourier = false,
+} = {}) {
   const job = jobOf(order);
 
-  // THE WASH LINES GO THROUGH THE SHARED LAUNDROMAT VOCABULARY.
-  //
-  // They come out of `wash.washLines()` in English - it is the one definition
-  // shared with the AI's tool schema, the pricing and the account page, and it
-  // has no business knowing about languages. So it is translated here, by the
-  // same table the bag tag under this page uses.
-  //
-  // IT SHIPPED WITHOUT THIS and the result was a Spanish page whose wash
-  // instructions were in English - the one part of it an attendant actually acts
-  // on. The same shape as the processing guide shipping without its own language
-  // buttons: the translation existed and the screen could not reach it.
+  // THE WASH LINES GO THROUGH THE SHARED LAUNDROMAT VOCABULARY. They come out of
+  // `wash.washLines()` in English - it is the one definition shared with the AI's
+  // tool schema, the pricing and the account page, and it has no business knowing
+  // about languages.
   const say = translator(lang);
 
+  const rows = washLines
+    .map(([label, value]) => `<tr><th>${escapeHtml(say(label))}</th><td>${escapeHtml(say(value))}</td></tr>`)
+    .join('');
+
   const wash = `
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:20px;margin:26px 0 12px;">
-      ${s('howToWash', lang)}</h2>
-    <div class="card card-xl" style="padding:4px 20px;">
-      ${washLines
-        .map(
-          ([label, value]) => `
-        <div style="display:flex;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
-          <span style="font-size:16px;color:var(--ink-700);">${escapeHtml(say(label))}</span>
-          <span style="font-size:16px;font-weight:700;color:var(--ink-900);">${escapeHtml(say(value))}</span>
-        </div>`
-        )
-        .join('')}
+    <h2>${s('howToWash', lang)}</h2>
+    <div class="tablewrap">
+      <table class="kv">${rows}</table>
     </div>`;
 
   // THE FORM IS ABSENT UNLESS IT IS THEIRS TO FILL IN, not disabled. The same
   // doctrine as the driver's screens - a disabled control invites somebody to
   // find the way round it - and the route refuses independently, because markup
   // guards nothing.
-  const weight =
-    job === 'WEIGH'
-      ? `
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:20px;margin:26px 0 8px;">
-      ${s('weightTitle', lang)}</h2>
-    <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">${s('weightHelp', lang)}</p>
-    <form method="post" action="/shop/orders/${encodeURIComponent(order.order_number)}/weight" class="card card-xl" style="padding:22px;">
-      <input type="hidden" name="lang" value="${en ? 'en' : 'es'}">
+  const weighed = `
+    <div class="card" style="margin-top:14px;">
+      <p style="margin:0;">
+        ${s('alreadyWeighed', lang)}
+        <strong>${
+          order.partner_weight_lb == null ? '' : escapeHtml(Number(order.partner_weight_lb).toFixed(1))
+        } lb</strong>${
+          order.partner_weight_at ? ` &middot; ${escapeHtml(format.displayDateTime(order.partner_weight_at))}` : ''
+        }
+      </p>
+    </div>`;
+
+  const weighForm = `
+    <h2>${s('weightTitle', lang)}</h2>
+    <p>${s('weightHelp', lang)}</p>
+    <form method="post" action="/shop/orders/${encodeURIComponent(
+      order.order_number
+    )}/weight" class="card">
+      <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
       <div class="field">
         <label class="field-label" for="weight_lb">${s('pounds', lang)}</label>
         <input class="input input-lg" type="text" id="weight_lb" name="weight_lb" required
                inputmode="decimal" autocomplete="off" placeholder="24.5" autofocus
-               style="font-size:26px;text-align:center;">
+               style="text-align:center;">
       </div>
-      <button type="submit" class="btn btn-ink btn-lg btn-full" style="margin-top:18px;">
+      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
         ${s('saveWeight', lang)} ${icon('arrow-right', '22')}
       </button>
-    </form>`
-      : order.partner_weight_lb != null
-        ? `
-    <div class="card card-xl" style="padding:20px;margin-top:26px;">
-      <p style="margin:0;font-size:16px;line-height:1.6;color:var(--ink-700);">
-        ${s('alreadyWeighed', lang)}
-        <strong style="color:var(--ink-900);">${escapeHtml(Number(order.partner_weight_lb).toFixed(1))} lb</strong>${
-          order.partner_weight_at
-            ? ` &middot; ${escapeHtml(format.displayDateTime(order.partner_weight_at))}`
-            : ''
-        }
-      </p>
-    </div>`
-        : '';
+    </form>`;
 
-  const inner = `
-    ${flash ? flashNote(flash, lang) : ''}
-    <p style="margin:18px 0 0;">
-      <a class="btn btn-ghost" href="/shop?lang=${en ? 'en' : 'es'}">${icon('arrow-left', '16')} ${s('back', lang)}</a>
+  const weight = job === 'WEIGH' ? weighForm : order.partner_weight_lb != null ? weighed : '';
+
+  // THE COURIER BUTTON. Neil: "in the order screen, there should be a button of
+  // the attendant to tell the uber driver to come get the bags."
+  //
+  // IT ONLY EXISTS ONCE THE WORK IS WEIGHED AND FINISHED. The route refuses
+  // independently on both counts - a button that is merely absent guards nothing
+  // - and the attendant never sees where the bags are going: the courier is told
+  // the address, this page is not.
+  const courier = canSendCourier
+    ? `
+    <h2>${s('collectTitle', lang)}</h2>
+    <p>${s('collectHelp', lang)}</p>
+    <form method="post" action="/shop/orders/${encodeURIComponent(
+      order.order_number
+    )}/collect" class="card">
+      <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
+      <button type="submit" class="btn btn-primary btn-lg btn-full">
+        ${s('collectButton', lang)} ${icon('truck', '22')}
+      </button>
+    </form>`
+    : '';
+
+  const body = `
+    <p style="margin:0 0 10px;">
+      <a class="btn btn-outline btn-sm" href="/shop?lang=${en(lang) ? 'en' : 'es'}">${icon(
+        'arrow-left',
+        '16'
+      )} ${s('back', lang)}</a>
     </p>
 
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:14px 0 0;">
-      <h1 class="display-4" style="margin:0;">${s('order', lang)} ${escapeHtml(String(order.order_number))}</h1>
-      <span class="eyebrow" style="margin:0;">${s(JOB_LABEL[job], lang)}</span>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <h1 style="margin:0;">${s('order', lang)} ${escapeHtml(String(order.order_number))}</h1>
+      <span class="${JOB_CHIP[job]}">${s(JOB_LABEL[job], lang)}</span>
     </div>
-    <p style="margin:6px 0 0;font-size:16px;color:var(--ink-700);">${escapeHtml(bagCount(order, lang))}</p>
+    <p style="margin:4px 0 0;">${escapeHtml(bagCount(order, lang))}</p>
 
     ${wash}
-    ${weight}`;
+    ${weight}
+    ${courier}`;
 
-  return shell({
+  return page({
     lang,
-    here: `/shop/orders/${encodeURIComponent(order.order_number)}`,
-    title: `${T.order[en ? 'en' : 'es']} ${order.order_number}`,
-    inner,
-    shopName,
-    showSignOut: true,
+    shop,
+    signedIn: true,
+    isOwner,
+    here: `/shop/orders/${order.order_number}`,
+    title: `${word('order', lang)} ${order.order_number}`,
+    notes: flashNotes(flash, lang),
+    body,
+  });
+}
+
+
+// --- the shop's own staff ---------------------------------------------------
+//
+// Neil, 25 September: "i should be able to assign the owner of the laundromat to
+// be the admin of that account. the owner should be able to add and remove
+// attendants."
+//
+// SO THERE ARE TWO LADDERS AND THEY DO NOT MEET. LYNDRY says who owns a shop;
+// the owner says who works there. An owner cannot promote anybody, which is the
+// whole point of the split: a shop manages its own staff and cannot grow its own
+// admin rights, so the worst an owner can do is add and remove people at the
+// shop they already run.
+//
+// REMOVING KEEPS THE ROW. `partner_users.status` goes to DISABLED and the record
+// of who weighed which bag survives - the same rule `ops_users` follows, and for
+// the same reason: deleting people loses the history.
+function staffPage({ lang = 'en', shop, staff = [], me, flash = null } = {}) {
+  const rows = staff.map((person) => {
+    const isMe = person.id === me.id;
+    const active = person.status === 'ACTIVE';
+
+    // NOBODY CAN REMOVE THEMSELVES. The same rule the ops Team page follows, and
+    // here it is the one action that can leave a shop with no owner and no way
+    // to add one - which would need a phone call to us to undo.
+    const action = isMe
+      ? `<span class="chip">${s('thatsYou', lang)}</span>`
+      : `<form method="post" action="/shop/staff/${encodeURIComponent(person.id)}" style="margin:0;">
+           <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
+           <input type="hidden" name="status" value="${active ? 'DISABLED' : 'ACTIVE'}">
+           <button type="submit" class="btn ${active ? 'btn-outline' : 'btn-primary'} btn-sm">${
+             active ? s('removeButton', lang) : s('restoreButton', lang)
+           }</button>
+         </form>`;
+
+    return [
+      escapeHtml(person.name),
+      escapeHtml(format.displayPhone(person.phone)),
+      `<span class="chip${person.role === 'OWNER' ? ' ok' : ''}">${
+        person.role === 'OWNER' ? s('roleOwner', lang) : s('roleAttendant', lang)
+      }</span>`,
+      active ? '' : `<span class="chip warn">${s('removed', lang)}</span>`,
+      action,
+    ];
+  });
+
+  const body = `
+    <h1>${s('staffTitle', lang)}</h1>
+    <p>${s('staffHelp', lang)}</p>
+
+    ${
+      rows.length
+        ? `<div class="ops-table-wrap">
+             <table class="ops-table">
+               <thead><tr>
+                 <th>${s('name', lang)}</th>
+                 <th>${s('mobile', lang)}</th>
+                 <th>${s('role', lang)}</th>
+                 <th></th>
+                 <th></th>
+               </tr></thead>
+               <tbody>${rows
+                 .map((cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`)
+                 .join('')}</tbody>
+             </table>
+           </div>`
+        : `<p class="ops-empty">${s('nobodyYet', lang)}</p>`
+    }
+
+    <h2>${s('addTitle', lang)}</h2>
+    <form method="post" action="/shop/staff" class="card">
+      <input type="hidden" name="lang" value="${en(lang) ? 'en' : 'es'}">
+      <div class="field">
+        <label class="field-label" for="name">${s('name', lang)}</label>
+        <input class="input input-lg" type="text" id="name" name="name" required
+               autocomplete="off" maxlength="60">
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label class="field-label" for="phone">${s('mobile', lang)}</label>
+        <input class="input input-lg" type="tel" id="phone" name="phone" required
+               autocomplete="off" inputmode="tel" placeholder="201-555-0142">
+      </div>
+      <p class="field-hint" style="margin-top:8px;">${s('addHint', lang)}</p>
+      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
+        ${s('addButton', lang)} ${icon('arrow-right', '22')}
+      </button>
+    </form>`;
+
+  return page({
+    lang,
+    shop,
+    signedIn: true,
+    isOwner: true,
+    active: '/shop/staff',
+    here: '/shop/staff',
+    title: word('staffTitle', lang),
+    notes: flashNotes(flash, lang),
+    body,
   });
 }
 
 module.exports = {
   T,
   s,
-  shell,
+  page,
   phoneStep,
   codeStep,
   board,
   orderPage,
+  staffPage,
   jobOf,
+  shopNav,
 };

@@ -324,7 +324,7 @@ async function requirePartner(req, res, next) {
 
   const { data: user, error } = await db
     .from('partner_users')
-    .select('id, name, phone, status, partner_id, session_token')
+    .select('id, name, phone, status, role, partner_id, session_token')
     .eq('id', session.userId)
     .maybeSingle();
 
@@ -341,7 +341,7 @@ async function requirePartner(req, res, next) {
 
   const { data: partner, error: partnerError } = await db
     .from('partners')
-    .select('id, name, status, type, turnaround_minutes')
+    .select('id, name, slug, status, type, turnaround_minutes, address_line1, address_line2, city, state, postal_code, phone')
     .eq('id', user.partner_id)
     .maybeSingle();
 

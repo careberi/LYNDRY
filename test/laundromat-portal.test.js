@@ -33,6 +33,7 @@ const weighIn = require('../src/core/partner-weighin');
 const { config } = require('../src/config');
 
 const USER = '11111111-2222-3333-4444-555555555555';
+const SHOP = { id: 'aaaa', name: 'Riverside Wash Co', slug: 'riverside-wash-co' };
 const TOKEN = 'a'.repeat(36);
 
 // --- the session ------------------------------------------------------------
@@ -146,7 +147,13 @@ test('THE JOB IS DERIVED FROM THE ORDER, NEVER STORED', () => {
   assert.equal(page.jobOf({ status: 'AT_PARTNER', partner_weight_lb: null }), 'WEIGH');
   assert.equal(page.jobOf({ status: 'AT_PARTNER', partner_weight_lb: 31.4 }), 'WASH');
   assert.equal(page.jobOf({ status: 'READY', partner_weight_lb: 31.4 }), 'DONE');
-  assert.equal(page.jobOf({ status: 'OUT_FOR_DELIVERY', partner_weight_lb: 31.4 }), 'OTHER');
+
+  // OUT_FOR_DELIVERY IS ITS OWN STATE NOW, and it used to fall through to the
+  // catch-all reading "being washed" - which is wrong on a counter where the
+  // bags have physically gone. An attendant who cannot see that a courier has
+  // taken them rings us to ask.
+  assert.equal(page.jobOf({ status: 'OUT_FOR_DELIVERY', partner_weight_lb: 31.4 }), 'GONE');
+  assert.equal(page.jobOf({ status: 'IN_PROCESS', partner_weight_lb: null }), 'OTHER');
 });
 
 test('NO CUSTOMER NAME, PHONE, ADDRESS OR MONEY IS EVEN SELECTED', () => {
@@ -278,14 +285,15 @@ test('A PAGE IS NEVER RENDERED WITH A HOLE IN IT', () => {
     const code = page.codeStep({ lang, phone: '+12015550171', ttlMinutes: 5 });
     const board = page.board({
       lang,
-      shopName: 'Riverside Wash Co',
+      shop: SHOP,
       orders: [{ order_number: 9005, status: 'AT_PARTNER', partner_weight_lb: null, bag_count: 2 }],
     });
     const one = page.orderPage({
       lang,
-      shopName: 'Riverside Wash Co',
+      shop: SHOP,
       order: { order_number: 9005, status: 'AT_PARTNER', partner_weight_lb: null, bag_count: 2 },
       washLines: [['Water temperature', 'Cold']],
+      canSendCourier: true,
     });
 
     for (const [name, html] of [['phoneStep', signIn], ['codeStep', code], ['board', board], ['orderPage', one]]) {
@@ -299,7 +307,7 @@ test('A PAGE IS NEVER RENDERED WITH A HOLE IN IT', () => {
 test('EVERY PORTAL PAGE IS NOINDEX', () => {
   // They carry order numbers and wash instructions, and the sign-in page is the
   // one URL anybody could find.
-  const board = page.board({ lang: 'en', shopName: 'Riverside Wash Co', orders: [] });
+  const board = page.board({ lang: 'en', shop: SHOP, orders: [] });
   assert.match(board, /noindex/);
   assert.match(page.phoneStep({ lang: 'en' }), /noindex/);
 });
@@ -316,7 +324,7 @@ test('THE WASH INSTRUCTIONS ARE IN THE PAGE\'S LANGUAGE', () => {
     ['Detergent', 'Standard'],
   ];
 
-  const es = page.orderPage({ lang: 'es', shopName: 'Riverside Wash Co', order, washLines: lines });
+  const es = page.orderPage({ lang: 'es', shop: SHOP, order, washLines: lines });
 
   assert.match(es, /Temperatura del agua/, 'the wash instructions are still English on the Spanish page');
   assert.match(es, /Suavizante/);
@@ -324,7 +332,7 @@ test('THE WASH INSTRUCTIONS ARE IN THE PAGE\'S LANGUAGE', () => {
   assert.doesNotMatch(es, /Fabric softener/);
 
   // And English is untouched.
-  const en = page.orderPage({ lang: 'en', shopName: 'Riverside Wash Co', order, washLines: lines });
+  const en = page.orderPage({ lang: 'en', shop: SHOP, order, washLines: lines });
   assert.match(en, /Water temperature/);
   assert.doesNotMatch(en, /Temperatura/);
 });
@@ -343,4 +351,130 @@ test('ONE SPANISH VOCABULARY FOR EVERY LAUNDROMAT SCREEN', () => {
       `${file} has grown its own Spanish table again`
     );
   }
+});
+
+// --- the shop's own URL, its owner, and its staff ---------------------------
+
+test('THE STAFF TAB IS AN OWNER\'S, AND THE ROUTE CHECKS TOO', () => {
+  const shop = { id: 'a', name: 'Riverside Wash Co', slug: 'riverside-wash-co' };
+
+  assert.doesNotMatch(page.shopNav('en', { isOwner: false }), /\/shop\/staff/);
+  assert.match(page.shopNav('en', { isOwner: true }), /\/shop\/staff/);
+
+  // A MENU THAT HIDES A LINK WHOSE ROUTE STILL FIRES IS NOT A GUARD. Every
+  // staff route carries requireOwner, not just the nav.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  const staffRoutes = [...src.matchAll(/router\.(get|post)\('\/shop\/staff[^']*',\s*([^,]+),/g)];
+
+  assert.ok(staffRoutes.length >= 3, `found ${staffRoutes.length} staff routes`);
+  for (const [, method, guard] of staffRoutes) {
+    assert.equal(guard.trim(), 'requireOwner', `a ${method} staff route is not behind requireOwner`);
+  }
+});
+
+test('AN OWNER CANNOT MINT ANOTHER OWNER', () => {
+  // The whole point of the split: LYNDRY says who owns a shop, the owner says
+  // who works there. Nothing in the portal writes `role`, so the worst an owner
+  // can do is add and remove people at the shop they already run.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+
+  assert.match(src, /role: 'ATTENDANT'/, 'the portal stopped pinning new people to ATTENDANT');
+  assert.doesNotMatch(
+    src,
+    /role:\s*(req\.body|body)\./,
+    'the portal reads a role off the form, so an owner can promote themselves'
+  );
+  assert.doesNotMatch(
+    src,
+    /role:\s*'OWNER'/,
+    'the portal can now write OWNER, which is LYNDRY\'s decision and not a shop\'s'
+  );
+});
+
+test('EVERY STAFF WRITE IS SCOPED TO THE SIGNED-IN SHOP', () => {
+  // An owner typing another laundromat's user id into the address bar must
+  // change nothing there. Filtered in the query, never after it.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  const writes = [...src.matchAll(/\.from\('partner_users'\)([\s\S]*?);/g)].map((m) => m[1]);
+
+  assert.ok(writes.length >= 2, 'the portal stopped touching partner_users');
+  for (const q of writes) {
+    assert.match(
+      q,
+      /partner_id: req\.partner\.id|\.eq\('partner_id', req\.partner\.id\)/,
+      'a partner_users query is not scoped to the signed-in laundromat'
+    );
+  }
+});
+
+test('A RESERVED SLUG FALLS THROUGH, IT DOES NOT REDIRECT', () => {
+  // `/shop/:slug` is declared before the sign-in guard, so it sits in front of
+  // `/shop/staff` in the route table. Redirecting on a reserved word made the
+  // Staff page unreachable - an owner tapping their own nav landed back on the
+  // sign-in page. It must call next() so Express reaches the real route.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  const slugRoute = /router\.get\('\/shop\/:slug'[\s\S]*?\n}\);/.exec(src);
+
+  assert.ok(slugRoute, 'the slug route has been renamed or removed');
+  assert.match(
+    slugRoute[0],
+    /RESERVED_SLUGS\.includes\(asked\)[\s\S]{0,80}return next\(\)/,
+    'a reserved slug redirects again, which hides every fixed path declared after it'
+  );
+});
+
+test('and every fixed portal path is in the reserved list', () => {
+  // The list and the router cannot be allowed to disagree: a laundromat that
+  // slugged to one of these would shadow a screen, or be shadowed by one.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  const partners = require('../src/core/partners');
+
+  const firstSegments = new Set(
+    [...src.matchAll(/router\.(?:get|post)\('\/shop\/([a-z0-9.-]+)/g)].map((m) => m[1])
+  );
+
+  for (const segment of firstSegments) {
+    // A SEGMENT WITH A DOT IN IT CAN NEVER BE A SLUG, so it needs no reserving:
+    // `slugify()` strips dots and the route only matches [a-z0-9-]. That is why
+    // /shop/app.webmanifest is safe without being on the list - and why reading
+    // this as "app" would have been wrong, since /shop/app is not a real path.
+    if (segment.includes('.')) continue;
+
+    assert.ok(
+      partners.RESERVED_SLUGS.includes(segment),
+      `/shop/${segment} is a real path but "${segment}" is not reserved, so a laundromat could take it`
+    );
+  }
+});
+
+test('THE PORTAL HAS ITS OWN HOME-SCREEN MANIFEST, SCOPED TO /shop', () => {
+  // Sharing /ops/app.webmanifest would give a laundromat's tablet an app scoped
+  // to /ops, opening on the driver's route, bouncing to a sign-in they can
+  // never pass.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
+  const manifest = /router\.get\('\/shop\/app\.webmanifest'[\s\S]*?\n}\);/.exec(src);
+
+  assert.ok(manifest, 'the portal has no manifest route');
+  assert.match(manifest[0], /scope: '\/shop'/);
+  assert.match(manifest[0], /start_url: '\/shop'/);
+
+  const rendered = page.board({ lang: 'en', shop: SHOP, orders: [] });
+  assert.match(rendered, /href="\/shop\/app\.webmanifest"/);
+  assert.doesNotMatch(rendered, /\/ops\/app\.webmanifest/, 'the portal links the ops manifest');
+});
+
+test('THE PORTAL WEARS THE OPS SKIN, WHICH IS WHAT WAS ASKED FOR', () => {
+  // Neil: "the style of the laundromat back end should be the exact same style
+  // as the /ops backend". The look is public/css/ops.css plus ops-terminal on
+  // the body, and the portal loaded neither for a day - which is why it looked
+  // like the marketing site.
+  const rendered = page.board({ lang: 'en', shop: SHOP, orders: [] });
+
+  assert.match(rendered, /ops\.css/, 'the portal is not loading the ops stylesheet');
+  assert.match(rendered, /class="ops-terminal ops-touch"/, 'the portal is not wearing the terminal skin');
+
+  // AND NOT A SINGLE /ops LINK. An attendant must never be offered an internal
+  // screen - the shell cannot see a user, so it cannot derive a driver's nav.
+  const opsLinks = [...rendered.matchAll(/href="(\/ops[^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(opsLinks, [], `the portal links internal screens: ${opsLinks.join(', ')}`);
 });
