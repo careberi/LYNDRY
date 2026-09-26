@@ -3914,18 +3914,8 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
           customer.address_line2 ? `, ${escapeHtml(customer.address_line2)}` : ''
         }${customer.city ? `, ${escapeHtml(customer.city)}` : ''}<br>
         Bag goes: ${spot ? escapeHtml(spot) : '<strong>not recorded</strong>'}<br>
-        <!-- CHOSEN OR DEFAULTED, SAID OUT LOUD. describeSaved() falls back to
-             cold and softener when nothing is set, so `|| 'not set'` could never
-             fire and this panel read a default back as though the customer had
-             picked it. That is the distinction the intake table exists to draw,
-             and it belongs here too. -->
         Wash: ${escapeHtml(wash.describeSaved(prefs))}${
           booking.hasPreferences(customer) ? '' : ' <strong>(default, they have not said)</strong>'
-        }<br>
-        Card: ${
-          customer.default_payment_method_id
-            ? `${escapeHtml(customer.card_brand || 'card')} ending ${escapeHtml(customer.card_last4 || '')}`
-            : '<strong>none on file</strong>, so this will not be confirmed until they add one'
         }
       </div>
     </div>
@@ -3949,7 +3939,21 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
              value="${v('notes')}" placeholder="two bags, one is bedding"
              style="width:100%;margin-bottom:24px;">
 
-      <button class="btn btn-primary btn-lg" type="submit">Book it and text them</button>
+      <!-- BOOKING WITHOUT TELLING THEM. Neil, 26 September: "i should have the
+           option to net text the customer once its booked."
+
+           OFF BY DEFAULT, so the button still says what it does. The pickup is
+           identical either way - same rules, same hold, same rate, same board.
+           This decides whether it is announced, not what it is. -->
+      <label style="display:flex;gap:10px;align-items:flex-start;margin:0 0 20px;cursor:pointer;">
+        <input type="checkbox" name="silent" value="yes" style="margin-top:3px;">
+        <span style="font-size:14px;line-height:1.5;color:var(--ink-700);">
+          <strong>Do not text them.</strong> The pickup is booked either way - they
+          simply will not hear about it from us, so tell them yourself.
+        </span>
+      </label>
+
+      <button class="btn btn-primary btn-lg" type="submit">Book it</button>
       <a class="btn btn-ghost btn-lg" href="/ops/customers/${customer.id}">Cancel</a>
     </form>`;
 }
@@ -4048,6 +4052,22 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
       }[result.reason];
 
       return reshow(message || 'That pickup could not be booked.');
+    }
+
+    // BOOKING WITHOUT TELLING THEM. Neil, 26 September: "i should have the option
+    // to net text the customer once its booked."
+    //
+    // NOTHING IS SENT AND NOTHING IS LOGGED, rather than a send being swallowed.
+    // `messages` is the record of what reached a phone, so a row there would show
+    // in the thread as though we had confirmed it - which is the one thing
+    // somebody reading that thread later must not be told.
+    if (String((req.body || {}).silent || '') === 'yes') {
+      return res.redirect(
+        303,
+        `/ops/orders/${result.order.order_number}?problem=${encodeURIComponent(
+          'Booked. They have NOT been texted, so tell them yourself.'
+        )}`
+      );
     }
 
     // Confirm by text, from the same function every other door uses, so the
