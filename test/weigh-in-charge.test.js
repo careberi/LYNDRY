@@ -59,36 +59,38 @@ const FLOOR = config.pricing.authorizationCents;
 
 // --- 1. what gets held ------------------------------------------------------
 
-test('THE HOLD IS THE FLOOR OR THE DELIVERY, WHICHEVER IS BIGGER', () => {
-  assert.equal(quote.holdCents({ deliveryFeeCents: 0 }), FLOOR, 'no delivery fee is not a smaller hold');
-  assert.equal(quote.holdCents({ deliveryFeeCents: 100 }), FLOOR, 'a cheap delivery dropped the hold below the floor');
-  assert.equal(
-    quote.holdCents({ deliveryFeeCents: FLOOR + 600 }),
-    FLOOR + 600,
-    'a delivery dearer than the floor is not covered by the hold'
-  );
+test('THE HOLD COVERS THE DEAREST PAIR OF COURIER LEGS', () => {
+  // IT WAS `holdCents({ deliveryFeeCents })` AND NOTHING COULD SUPPLY THE FEE.
+  // `orders.delivery_fee_cents` was never written by anything, so this answered the
+  // flat floor on every booking. And no per-order figure exists when a hold is
+  // placed: the pickup is booked today and no courier has been quoted for it.
+  // Derived from the band table now, so it self-corrects.
+  const dearest = Math.max(...config.courier.bands.map((b) => b.legCents));
+
+  assert.equal(quote.holdCents(), Math.max(FLOOR, dearest * 2));
+  assert.ok(quote.holdCents() >= dearest * 2, 'the hold no longer covers the dearest pair of legs');
 });
 
 test('and a hold is never a number Stripe would refuse', () => {
   // A hold of NaN cents is refused on every booking, and `Math.max(undefined, n)`
   // is how that happened once already - the floor was read off the courier block
   // of config, where it does not live.
-  for (const fee of [null, undefined, 0, -1, 'abc', NaN, Infinity, {}, [], '1200']) {
-    const held = quote.holdCents({ deliveryFeeCents: fee });
-    assert.ok(Number.isFinite(held), `a fee of ${JSON.stringify(fee)} produced ${held}`);
-    assert.ok(held >= FLOOR, `a fee of ${JSON.stringify(fee)} held less than the floor`);
-    assert.equal(held, Math.round(held), `a fee of ${JSON.stringify(fee)} produced a fraction of a cent`);
-  }
+  const held = quote.holdCents();
+
+  assert.ok(Number.isFinite(held), `holdCents() produced ${held}`);
+  assert.ok(held >= FLOOR, 'the hold dropped below the floor');
+  assert.equal(held, Math.round(held), 'a fraction of a cent');
 });
 
-test('billing reads the amount off the order, not out of config', () => {
-  assert.equal(billing.holdFor({ delivery_fee_cents: FLOOR + 900 }), FLOOR + 900);
+test('billing agrees with it, whatever it is handed', () => {
+  // `holdFor()` keeps the order in its signature and must not read it: the column
+  // it used to read never existed in practice, and a caller passing a stale one
+  // must not change the amount.
+  const held = quote.holdCents();
 
-  // NULL IS A REAL STATE AND MEANS THE FLOOR. Every order taken under the van
-  // has no delivery fee, because we drove.
-  assert.equal(billing.holdFor({ delivery_fee_cents: null }), FLOOR, 'a van-era order changed amount');
-  assert.equal(billing.holdFor({}), FLOOR);
-  assert.equal(billing.holdFor(null), FLOOR, 'no order at all threw instead of answering the floor');
+  for (const order of [null, undefined, {}, { delivery_fee_cents: 999999 }]) {
+    assert.equal(billing.holdFor(order), held, `holdFor(${JSON.stringify(order)}) read the order`);
+  }
 });
 
 test('THE AMOUNT IS DECIDED IN ONE PLACE, NOT AT THE FOUR CALL SITES', () => {

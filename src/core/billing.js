@@ -930,8 +930,21 @@ function showUpCents() {
 //
 // `amountCents` on authorizeShowUp() survives as a deliberate override for a
 // caller that genuinely knows better. Nothing passes it today.
+// IT IGNORES THE ORDER, AND THE ORDER IS KEPT IN THE SIGNATURE ON PURPOSE.
+//
+// The first version read `order.delivery_fee_cents`, a column NOTHING WROTE - so
+// it answered the flat floor on every booking and the change was inert. And no
+// per-order figure can exist here: the hold is placed when the pickup is booked
+// and no courier has been quoted for that order yet, because a quote lasts fifteen
+// minutes and the van comes tomorrow. `quote.holdCents()` derives the amount from
+// the band table instead, so it self-corrects if a band rises.
+//
+// The argument stays because every caller has an order in hand and the day a
+// per-order exposure IS knowable at booking - a courier quote held against a
+// specific pickup, say - this is the one place that has to change.
 function holdFor(order) {
-  return quote.holdCents({ deliveryFeeCents: order && order.delivery_fee_cents });
+  void order;
+  return quote.holdCents();
 }
 
 // A LIVE hold on this order, or null. Live means still sitting at Stripe

@@ -166,17 +166,39 @@ function netCents({ total, pounds, partnerCentsPerLb, miles, legCents = null }) 
 // IT DOES NOT COVER THE WASH, and cannot. The wash is unknown until a scale says
 // so, which is the entire reason the charge waits for the weigh-in. What this
 // covers is the part we commit to before anybody knows the weight.
-function holdCents({ deliveryFeeCents = 0 } = {}) {
-  const fee = Number(deliveryFeeCents);
-
+// IT TAKES NO ARGUMENTS, AND THE FIRST VERSION TOOK A PER-ORDER FEE IT COULD
+// NEVER HAVE BEEN GIVEN.
+//
+// It read `orders.delivery_fee_cents`, which NOTHING WROTE - so it returned the
+// flat floor on every booking and the whole thing was inert. Worse, no per-order
+// figure can exist at the moment the hold is placed: the hold goes on when the
+// pickup is booked, and no courier has been quoted for that order yet, because a
+// quote is good for fifteen minutes and the van comes tomorrow.
+//
+// SO THE RULE IS DERIVED FROM THE BAND TABLE INSTEAD, AND SELF-CORRECTS. The
+// dearest pair of legs Uber's published table allows is 2 x $10.99 = $21.98,
+// which the $25 floor already covers - so Neil's instruction that the hold must
+// be at least the delivery is satisfied structurally today rather than by
+// arithmetic on a column. Read off the bands rather than compared against a typed
+// $21.98, so the day a band rises past $12.50 a leg the hold rises with it and
+// nobody has to remember this paragraph.
+//
+// NEW YORK IS WHY THE MAX IS THERE AT ALL. Their $5-a-trip surcharge is $10 on a
+// two-leg order and would take a pair of legs to $31.98, well over the floor. NYC
+// is outside the service area, so it cannot happen today - and `inNewJersey()` is
+// a rule somebody could relax, while this is the line that would quietly
+// under-hold if they did.
+function holdCents() {
   // FROM `config.pricing`, NOT `config.courier`. The floor is what a wasted trip
   // is worth and predates the courier entirely; `C()` here is the courier block
   // and would have returned undefined, which Math.max turns into NaN - a hold of
   // NaN cents, refused by Stripe, on every booking.
   const floor = config.pricing.authorizationCents;
 
-  if (!Number.isFinite(fee) || fee <= 0) return floor;
-  return Math.max(floor, Math.ceil(fee));
+  const bands = C().bands || [];
+  const dearestLeg = bands.reduce((most, b) => Math.max(most, Number(b.legCents) || 0), 0);
+
+  return Math.max(floor, dearestLeg * 2);
 }
 
 // --- choosing a laundromat --------------------------------------------------

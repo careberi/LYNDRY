@@ -22,8 +22,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const quote = require('../src/core/quote');
+const billing = require('../src/core/billing');
 const fake = require('../src/providers/couriers/fake');
 const { config } = require('../src/config');
 
@@ -138,34 +141,57 @@ test('a courier that says nothing leaves the net unanswerable rather than wrong'
 
 // --- what the card is asked to hold at booking ------------------------------
 
-test('THE HOLD IS AT LEAST THE DELIVERY, AND NEVER LESS THAN THE FLOOR', () => {
+test('THE HOLD IS AT LEAST THE DELIVERY, AND IT IS DERIVED, NOT PASSED IN', () => {
   // Neil, 25 September: "hold gets placed on order (the hold shouls be at least
   // the amount of the delivery). Then once the luandromat weights the order,
   // the card should be charged."
+  //
+  // IT TOOK A PER-ORDER FEE AND NOTHING COULD EVER HAVE SUPPLIED ONE. The first
+  // version read `orders.delivery_fee_cents`, a column nothing wrote - so it
+  // answered the floor on every booking and the rule was inert. And no per-order
+  // figure exists at the moment a hold is placed: the pickup is booked today and no
+  // courier has been quoted for it, because a quote lasts fifteen minutes.
+  //
+  // So the rule reads the BAND TABLE. The dearest pair of legs it allows is what
+  // the hold must cover, whatever that becomes.
   const floor = config.pricing.authorizationCents;
+  const dearest = Math.max(...config.courier.bands.map((b) => b.legCents));
 
-  assert.equal(quote.holdCents({}), floor, 'an order with no delivery fee stopped holding the floor');
-  assert.equal(quote.holdCents({ deliveryFeeCents: floor - 1 }), floor);
-  assert.equal(quote.holdCents({ deliveryFeeCents: floor + 1 }), floor + 1);
+  assert.equal(quote.holdCents(), Math.max(floor, dearest * 2));
+  assert.ok(quote.holdCents() >= floor, 'the hold dropped below the floor');
+  assert.ok(quote.holdCents() >= dearest * 2, 'the hold no longer covers the dearest pair of legs');
+
+  // AND IT TAKES NOTHING, so nobody can quietly re-introduce a caller-supplied
+  // amount that reads undefined and holds too little.
+  assert.equal(quote.holdCents.length, 0, 'holdCents takes an argument again');
 });
 
-test('and New Jersey never reaches the floor, which is why New York is the case', () => {
-  // Every band doubled and grossed up runs $16.77 to $22.95 - all under the $25
-  // floor, so under the van and in Bergen the floor always won. Uber's $5-a-trip
-  // New York surcharge is $10 on a two-leg order and takes the fee past it. That
-  // is the one case where a flat hold would be less than what we had already
-  // spent before anybody weighed anything.
+test('THE FLOOR COVERS THE DEAREST PAIR OF LEGS TODAY, AND SAYS SO IF IT STOPS', () => {
+  // This is the assertion that replaces a per-order column. Every band doubled
+  // runs $15.98 to $21.98 - all inside the $25 floor - so Neil's rule holds
+  // structurally in Bergen County rather than by arithmetic on each order.
+  //
+  // THE DAY A BAND RISES PAST HALF THE FLOOR, `holdCents()` RISES WITH IT rather
+  // than this failing, which is the point of deriving it. What this pins is that
+  // the relationship is still the one described above, so the reasoning in the
+  // code stays true or somebody reads this message.
   const floor = config.pricing.authorizationCents;
 
   for (const band of config.courier.bands) {
-    const fee = quote.feeFromLegCents(band.legCents);
-    assert.ok(fee < floor, `a plain ${band.upToMiles}-mile fee of ${fee} already exceeds the floor`);
-    assert.equal(quote.holdCents({ deliveryFeeCents: fee }), floor);
+    const pair = band.legCents * 2;
+    assert.ok(
+      pair <= floor,
+      `a ${band.upToMiles}-mile pair of legs now costs ${pair} against a ${floor} floor - ` +
+        'the floor is no longer what covers the delivery, and holdCents() is carrying it instead'
+    );
   }
 
-  const inNewYork = quote.feeFromLegCents(config.courier.bands[0].legCents + config.courier.nycSurchargeCents);
-  assert.ok(inNewYork > floor, 'the New York surcharge no longer takes a fee past the floor');
-  assert.equal(quote.holdCents({ deliveryFeeCents: inNewYork }), inNewYork);
+  // NEW YORK IS THE CASE THE MAX EXISTS FOR, and it is outside the service area.
+  // Their $5-a-trip surcharge is $10 on a two-leg order, which would take the
+  // dearest pair to $31.98 - well over the floor. `inNewJersey()` is what keeps it
+  // out, and that is a rule somebody could relax.
+  const nyPair = (config.courier.bands[0].legCents + config.courier.nycSurchargeCents) * 2;
+  assert.ok(nyPair > floor, 'the New York surcharge no longer takes a pair of legs past the floor');
 });
 
 test('A HOLD IS NEVER NaN, WHICH IS WHAT READING THE WRONG CONFIG BLOCK GAVE', () => {
@@ -173,25 +199,40 @@ test('A HOLD IS NEVER NaN, WHICH IS WHAT READING THE WRONG CONFIG BLOCK GAVE', (
   // from config.courier, which is undefined - and Math.max(undefined, n) is NaN.
   // A hold of NaN cents is refused by Stripe on every booking, and the symptom
   // would have read as every card in the business failing at once.
-  for (const junk of [null, undefined, 'abc', NaN, -5, {}, []]) {
-    const held = quote.holdCents({ deliveryFeeCents: junk });
-    assert.ok(Number.isFinite(held), `${JSON.stringify(junk)} produced ${held}`);
-    assert.ok(held >= config.pricing.authorizationCents);
-  }
+  const held = quote.holdCents();
+  assert.ok(Number.isFinite(held), `holdCents() produced ${held}`);
+  assert.ok(held > 0, 'a hold of nothing is not a hold');
+  assert.equal(held, Math.round(held), 'a hold of a fraction of a cent');
 
-  assert.ok(Number.isFinite(quote.holdCents()), 'called with nothing at all it is not a number');
+  // And the same through billing, which is what the four hold-placing doors call.
+  for (const order of [null, undefined, {}, { delivery_fee_cents: 999999 }]) {
+    assert.equal(
+      billing.holdFor(order),
+      held,
+      `holdFor(${JSON.stringify(order)}) disagreed with holdCents() - something is reading the order again`
+    );
+  }
 });
 
-test('THE FLOOR AND THE ORDER MINIMUM ARE NOT THE SAME NUMBER', () => {
-  // They were both $25 once and are not now: the minimum is the floor on what a
-  // wash COSTS and Neil moved it to $30; the authorization is what a wasted trip
-  // is worth. A test already refuses one being defined as the other, and this
-  // one refuses the hold rule quietly reaching for the wrong one.
-  assert.notEqual(
-    config.pricing.authorizationCents,
-    config.courier.minimumCents,
-    'the two have converged, so this test can no longer tell them apart'
+test('THE HOLD RULE NEVER READS THE ORDER MINIMUM', () => {
+  // THEY ARE THE SAME NUMBER UNDER THE VAN, so this cannot compare values - and the
+  // first version did, which is why it passed in development and failed under the
+  // model production runs. `authorizationCents` is $25 and the van minimum is $25;
+  // config.js says outright that this "is a coincidence of arithmetic, not a
+  // relationship. Do not collapse them into one constant."
+  //
+  // What is testable is that the hold rule does not REACH for the minimum. The
+  // minimum is the floor on what a wash costs; the authorization is what a wasted
+  // trip is worth. `test/show-up-hold.test.js` already refuses one being DEFINED as
+  // the other in config; this refuses `holdCents()` reading it.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'quote.js'), 'utf8');
+  const fn = /function holdCents\([\s\S]*?\n}/.exec(src);
+
+  assert.ok(fn, 'holdCents() has been renamed or removed');
+  assert.match(fn[0], /authorizationCents/, 'the hold no longer starts from the trip floor');
+  assert.ok(
+    !/minimumCents/.test(fn[0]),
+    'the hold rule is reading the order minimum, which is what a WASH costs rather than what a ' +
+      'wasted trip is worth - they happen to be equal under the van and would silently diverge'
   );
-  assert.equal(quote.holdCents({}), config.pricing.authorizationCents);
-  assert.notEqual(quote.holdCents({}), config.courier.minimumCents);
 });
