@@ -230,35 +230,10 @@ const STATUS_TONE = {
 // emphasis and their own escaped values, exactly as the rest of this file
 // does. `label` is the only one taken as plain text, because it is always a
 // short fixed phrase written here.
-function opsNote({
-  tone = 'info',
-  label = null,
-  title = null,
-  body = '',
-  go = null,
-  href = null,
-  role = null,
-} = {}) {
-  const tones = { bad: ' ops-note--bad', warn: ' ops-note--warn', good: ' ops-note--good', info: '' };
-  const cls = `ops-note${tones[tone] || ''}`;
-
-  const inner =
-    (label ? `<span class="ops-note__label">${escapeHtml(label)}</span>` : '') +
-    (title ? `<span class="ops-note__title">${title}</span>` : '') +
-    (body ? `<p class="ops-note__body">${body}</p>` : '');
-
-  // A banner that is a link puts where it goes on the right, so the whole
-  // panel is the target and the words still say what tapping it does.
-  const content = go
-    ? `<div class="ops-note__row"><div>${inner}</div><span class="ops-note__go">${escapeHtml(go)}</span></div>`
-    : inner;
-
-  const attrs = `class="${cls}"${role ? ` role="${role}"` : ''}`;
-
-  return href
-    ? `<a href="${escapeHtml(href)}" ${attrs}>${content}</a>`
-    : `<div ${attrs}>${content}</div>`;
-}
+// `opsNote` and the development band moved to src/web/ops-shell.js with the
+// shell, because the laundromat portal draws the same banners. Re-exported
+// from this file so every existing caller and test is untouched.
+const { opsShell, devBand: opsDevBand, opsNote } = require('../web/ops-shell');
 
 // REQUESTED IS TWO DIFFERENT THINGS AND THE BOARD SAID THE SAME WORD FOR BOTH.
 //
@@ -639,14 +614,6 @@ function opsNav(user, active) {
 // environment check would leave it looking exactly like the real thing. What
 // makes a board real is whose orders are on it.
 // ---------------------------------------------------------------------------
-function opsDevBand() {
-  if (config.supabase.isProduction) return '';
-
-  return `<div role="status" style="background:#E8412F;color:#FFFDF7;font:700 12px/1.4 ui-monospace,monospace;
-    letter-spacing:.06em;text-transform:uppercase;text-align:center;padding:7px 16px;border-bottom:2px solid #101210;">
-    Development &middot; ${escapeHtml(config.supabase.projectRef)} &middot; these are not real orders
-  </div>`;
-}
 
 function adminPage({
   title,
@@ -664,188 +631,66 @@ function adminPage({
   // guessed from the URL, so a page that moves keeps the right targets.
   touch = false,
 }) {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${config.supabase.isProduction ? '' : '[DEV] '}${escapeHtml(title)} — ${site.name} ops</title>
-  <!-- Internal, and full of customer addresses. Never index it. -->
-  <meta name="robots" content="noindex, nofollow">
-
-  <!-- ADDED TO THE HOME SCREEN, THIS IS THE APP. Neil runs the ops site as a
-       home-screen bookmark and said it does not feel like one - and it did not,
-       because nothing here ever told the phone it was an app. Every tap ran
-       inside full Safari with its chrome and its reload spinner.
-
-       standalone drops the browser furniture. black-translucent puts the page
-       under the status bar so the top of the screen is ours. The theme colour
-       is the ops bar's ink, so the status bar matches it instead of flashing
-       white on every navigation.
-
-       It does not make the server faster. It removes the thing that made it
-       LOOK slow: a visible browser reloading a page on every tap. -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="${escapeHtml(site.name)}">
-  <meta name="theme-color" content="#101210">
-  <link rel="manifest" href="/ops/app.webmanifest">
-  <!-- The same icons as the public site, from the same list. The ops screens
-       had no icon link at all and fell back to /favicon.ico, which was the
-       hand-drawn green shape on a one-year immutable cache. -->
-  ${ICON_LINKS}
-  <meta name="theme-color" content="#101210">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grandstander:wght@900&display=swap">
-  <link rel="stylesheet" href="${CSS_BASE}/ds/styles.css">
-  <link rel="stylesheet" href="${CSS_BASE}/icons.css">
-  <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
-  <!-- THE OPS SKIN, LAST, SO IT WINS. Every /ops page gets it, including the
-       ones nobody has rewritten yet - which is the point: they inherit the bar
-       and the ground before their bodies are touched.
-
-       ONE FILE OWNS THE LOOK, Neil's instruction, 14 September. The order
-       console used to link this itself; loading it here means there is one
-       loader and no page can be missed. Through CSS_BASE, so it is
-       fingerprinted like every other stylesheet in public/css and a change
-       reaches a phone on the next deploy.
-
-       NEVER ADD IT TO THE PUBLIC LAYOUT. It names the body element, so it would repaint
-       the marketing site - and the bag tag page at /o/<code>, which a
-       laundromat scans and which is deliberately the public look. The only two
-       places it is linked are this wrapper and the sign-in shell below. -->
-  <link rel="stylesheet" href="${CSS_BASE}/ops.css">
-${head}
-</head>
-<body${terminal ? ` class="ops-terminal${touch ? ' ops-touch' : ''}"` : ''}>
-  ${opsDevBand()}
-  ${
-    // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
-    // should look like the bag tag page - the logo and nothing else.
-    //
-    // The reason is what that screen is for. It shows ONE stop and ONE thing to
-    // do, and a nav offering nine other places to be is an invitation to read
-    // ahead - which is the thing this screen was built not to allow. Four
-    // dropdowns, a name, a role and a Sign out button is also 130px of a phone
-    // spent on nothing he needs while standing at a door.
-    //
-    // The mark still goes back to /ops, so nothing is trapped here: it is one
-    // tap to the board and every other screen from there.
-    bare
-      ? // Centred, to match the bag tag page this was modelled on.
-        `<div class="container" style="padding-top:22px;text-align:center;">
-           ${logo('compact', { href: '/ops', label: 'LYNDRY ops' })}
-         </div>`
-      : `<header class="site-header">
-    <div class="container site-header-bar ops-bar">
-      <!-- A WORD, NOT THE ARTWORK, and only here. CLAUDE.md records that the
-           compact logo at 38px is the smallest the wordmark stays readable at;
-           the ops bar is 40px tall, so the mark would have to shrink below its
-           own documented floor and LYNDRY becomes a smear. The supplied
-           mockups use a text wordmark for the same reason.
-
-           The artwork is untouched and is still the mark on the public site,
-           on the bag tag page, and on the driver's bare route screen. -->
-      <a class="ops-mark" href="/ops" aria-label="LYNDRY ops">LYNDRY OPS</a>
-      <!-- Only the tabs this person may actually open. A driver never sees a
-           Customers link they would be refused at. -->
-      <nav class="site-nav">
-        ${opsNav(user, active)}
-      </nav>
-      <form method="post" action="/ops/logout" style="margin:0;display:flex;align-items:center;gap:12px;">
-        ${
-          user
-            ? `<span class="eyebrow" style="margin:0;color:var(--paper-300);">${escapeHtml(
-                user.name
-              )} &middot; ${escapeHtml(roles.labelFor(roles.roleOf(user)))}</span>`
-            : ''
-        }
-        <button type="submit" class="btn btn-outline btn-sm">Sign out</button>
-      </form>
-    </div>
-  </header>`
-  }
-
-  <!-- Less air above the content on a bare page: the logo is already sitting
-       in its own padding, and 36px more pushes the first stop down the screen
-       for no reason. -->
-  <main class="container" style="padding-top:${bare ? '18px' : '36px'};padding-bottom:96px;">
-${
-    // SHUT. Sunbeam rather than Stain, because this is a state Neil chose
-    // rather than a problem to fix - but it is on every page for the same
-    // reason the issues banner is: a switch on a screen nobody visits daily is
-    // a switch that gets left on by accident.
-    serviceClosed
-      ? opsNote({
-          tone: 'warn',
-          label: 'Pre-launch',
-          title: 'Not taking orders',
-          go: 'Change it',
-          href: '/ops/settings',
-        })
-      : ''
-}
-${
-    // THE FLAG THAT WILL NOT GO AWAY.
-    //
-    // On every ops page, on every load, until a person resolves it. There is
-    // deliberately no dismiss button: a customer whose shirt was ruined should
-    // be impossible to forget, and a banner you can close is a banner that
-    // gets closed.
-    openIssues
-      ? opsNote({
-          tone: 'bad',
-          label: 'Needs a person',
-          title: `${openIssues} unresolved ${openIssues === 1 ? 'issue' : 'issues'}`,
-          go: 'Open them',
-          href: '/ops/issues',
-          role: 'alert',
-        })
-      : ''
-  }
-${body}
-  </main>
-  <script>
-  // One menu open at a time.
+  // A THIN WRAPPER OVER `src/web/ops-shell.js`, WHICH THE LAUNDROMAT PORTAL
+  // ALSO RENDERS THROUGH. Neil, 25 September: "the style of the laundromat back
+  // end should be the exact same style as the /ops backend" - so there is one
+  // shell rather than two that drift.
   //
-  // <details> has no idea its siblings exist, so opening a second panel leaves
-  // the first one hanging underneath it - three overlapping white boxes across
-  // the top of the page. Closing the others is the one thing the markup cannot
-  // do by itself.
+  // THIS STAYS HERE, AND SO DO `OPS_MENUS` AND `opsNav()`, because they know
+  // about roles and about /ops paths. The shell deliberately cannot see a user:
+  // handed null, `opsNav` renders a DRIVER's menu rather than nothing, so a
+  // portal calling a user-shaped shell would have shown an attendant five
+  // internal screens. The nav crosses as already-rendered HTML.
   //
-  // ENHANCEMENT ONLY. Without this the menus still open, still close, and still
-  // navigate; they just overlap. Nothing here is load-bearing, which is why it
-  // is eight lines at the bottom of the page rather than a dependency.
-  (function () {
-    var menus = [].slice.call(document.querySelectorAll('.ops-menu'));
-    if (!menus.length) return;
-
-    function closeAll(except) {
-      menus.forEach(function (m) { if (m !== except) m.open = false; });
-    }
-
-    menus.forEach(function (menu) {
-      // 'toggle' rather than a click on the summary: it fires however the menu
-      // was opened, including by keyboard.
-      menu.addEventListener('toggle', function () {
-        if (menu.open) closeAll(menu);
-      });
-    });
-
-    // Clicking anywhere else puts them all away, the way a menu should behave.
-    document.addEventListener('click', function (e) {
-      if (!e.target.closest || !e.target.closest('.ops-menu')) closeAll(null);
-    });
-
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeAll(null);
-    });
-  })();
-  </script>
-</body>
-</html>`;
+  // Every argument below reproduces what this function emitted before the
+  // extraction, byte for byte.
+  return opsShell({
+    title,
+    titleSuffix: `${site.name} ops`,
+    body,
+    head,
+    mark: { text: 'LYNDRY OPS', href: '/ops', label: 'LYNDRY ops' },
+    nav: opsNav(user, active),
+    aside: user
+      ? `<span class="eyebrow" style="margin:0;color:var(--paper-300);">${escapeHtml(
+          user.name
+        )} &middot; ${escapeHtml(roles.labelFor(roles.roleOf(user)))}</span>`
+      : '',
+    signOut: { action: '/ops/logout', label: 'Sign out' },
+    manifest: '/ops/app.webmanifest',
+    notes: [
+      // SHUT. Sunbeam rather than Stain, because this is a state Neil chose
+      // rather than a problem to fix - but it is on every page for the same
+      // reason the issues banner is: a switch on a screen nobody visits daily
+      // is a switch that gets left on by accident.
+      serviceClosed
+        ? opsNote({
+            tone: 'warn',
+            label: 'Pre-launch',
+            title: 'Not taking orders',
+            go: 'Change it',
+            href: '/ops/settings',
+          })
+        : '',
+      // THE FLAG THAT WILL NOT GO AWAY. On every ops page, on every load, until
+      // a person resolves it. There is deliberately no dismiss button: a
+      // customer whose shirt was ruined should be impossible to forget, and a
+      // banner you can close is a banner that gets closed.
+      openIssues
+        ? opsNote({
+            tone: 'bad',
+            label: 'Needs a person',
+            title: `${openIssues} unresolved ${openIssues === 1 ? 'issue' : 'issues'}`,
+            go: 'Open them',
+            href: '/ops/issues',
+            role: 'alert',
+          })
+        : '',
+    ],
+    bare,
+    terminal,
+    touch,
+  });
 }
 
 // A compact table. Plain HTML - this is a list of orders, not an app.
@@ -11892,4 +11737,4 @@ function notFoundPage(res, message) {
 // opsNote is exported for the same reason statusBadge and labelState are: the
 // rule it carries is worth pinning, and the only way to pin "a notice writes no
 // colour into its own markup" is to call it and look at what comes back.
-module.exports = { router, statusBadge, labelState, opsNote };
+module.exports = { router, statusBadge, labelState, opsNote, adminPage };
