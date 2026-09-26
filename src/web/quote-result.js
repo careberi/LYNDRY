@@ -123,18 +123,22 @@ function priced(quote, address) {
     <p class="eyebrow" style="margin:0 0 10px;">Your price</p>
     <h2 class="display-3" style="margin:0 0 6px;">${perLb(one.perLbCents)} a pound.</h2>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 20px;">
-      Plus ${quote.quoted ? '' : 'about '}${money(quote.deliveryFeeCents)} for the courier, there and
-      back, at ${escapeHtml(address)}.${
-        quote.quoted
-          ? ''
-          : ' We could not reach the courier just now, so that part is our estimate.'
-      }
+      At ${escapeHtml(address)}, with a ${money(quote.minimumCents)} smallest order.
+      <strong>No delivery fee</strong> &mdash; the round trip is in the price.
     </p>
 
     <div class="card card-xl" style="padding:10px 26px;margin-bottom:18px;">
       ${row('One-time pickup', `${perLb(one.perLbCents)}/lb`, 'Book whenever you need us')}
       ${row('On a subscription', `${perLb(sub.perLbCents)}/lb`, 'Weekly, fortnightly or monthly')}
-      ${row('Pickup and delivery', money(quote.deliveryFeeCents), 'Both journeys, charged once')}
+      ${/*
+        THE COURIER LINE IS GONE, AND NOTHING REPLACES IT. It read "Pickup and
+        delivery - both journeys, charged once" with a figure beside it. Neil's
+        decision of 25 September was to raise the minimum and keep "no delivery fee"
+        true, rather than charge the courier as its own line - so a row naming one
+        would be advertising a charge that is not made. The round trip is paid for
+        by the smallest order below.
+      */ ''}
+      ${row('Pickup and delivery', 'Included', 'No delivery fee, ever')}
       ${row('Smallest order', money(quote.minimumCents), 'However little you send')}
     </div>
 

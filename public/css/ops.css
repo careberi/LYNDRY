@@ -271,6 +271,29 @@ body > main.container {
   padding-bottom: 48px !important;
 }
 
+/* AND THE FOOTER HAS TO LINE UP WITH IT, WHICH IT DID NOT.
+
+   Neil, 26 September, on the laundromat portal's sign-in page: the Processing
+   Instructions link and the phone number "should be aligned with the sign in and
+   button". They were 48px to the right of the card above them.
+
+   The cause is that this override names `main` and the portal is the only ops
+   screen with a FOOTER. So `main.container` was flattened to the full width with
+   a 12px gutter while `footer.container` kept the marketing site's rules - a
+   1240px max-width, `margin: 0 auto` and the 40px desktop gutter. Measured at
+   1280px: the card's content began at 12px and the footer's at 60px.
+
+   It is a sibling selector rather than a wider one on purpose. `.container` is
+   the public site's wrapper and is used inside ops cards; flattening every one of
+   them would reach markup this rule has no business touching. */
+body > footer.container {
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .console {
   --c-bg: #f3f4f6;
   --c-ink: #111827;

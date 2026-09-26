@@ -78,7 +78,13 @@ test('A REAL LEG PRICE IGNORES THE TABLE ENTIRELY', () => {
   });
 
   assert.equal(priced.ok, true, 'a trip the courier priced was refused because our own table stops at ten miles');
-  assert.equal(priced.deliveryFeeCents, quote.feeFromLegCents(1099));
+  // WHAT WE PAY, NOT A CUSTOMER FEE. `quoteFor()` used to return
+  // `deliveryFeeCents` - both legs grossed up for Stripe - and the page showed it
+  // as a courier line. Neil's decision of 25 September removed that line, so the
+  // object carries our COST instead and there is no customer-facing fee on it at
+  // all. Two legs of what Uber quoted, ungrossed.
+  assert.equal(priced.courierCostCents, 1099 * 2);
+  assert.equal(priced.deliveryFeeCents, undefined, 'a customer-facing fee is back on the quote');
   assert.equal(priced.quoted, true);
 });
 
@@ -87,7 +93,7 @@ test('and a price off the table says so, so the page can be honest', () => {
 
   assert.equal(estimated.ok, true);
   assert.equal(estimated.quoted, false, 'an estimate claimed to be a quote');
-  assert.equal(estimated.deliveryFeeCents, quote.deliveryFeeCents(1));
+  assert.equal(estimated.courierCostCents, quote.courierCostCents(1));
 });
 
 test('CHOOSING BETWEEN LAUNDROMATS USES THE REAL PRICE WHERE THERE IS ONE', () => {
@@ -117,7 +123,9 @@ test('WHAT IS LEFT OVER IS COUNTED ON WHAT UBER ACTUALLY CHARGED', () => {
   // difference is $6 an order - which is most of the margin on a small one.
   const priced = quote.quoteFor({ miles: 4, legCents: 1099, partnerCentsPerLb: 95 });
   const rate = priced.categories.ONE_TIME.perLbCents;
-  const { total } = quote.orderTotalCents({ pounds: 20, ratePerLbCents: rate, feeCents: priced.deliveryFeeCents });
+  // NO FEE IN THE CUSTOMER TOTAL, because there is no fee. The minimum is what
+  // covers the round trip - see `pricing.minimumCents`.
+  const { total } = quote.orderTotalCents({ pounds: 20, ratePerLbCents: rate, feeCents: 0 });
 
   const real = quote.netCents({ total, pounds: 20, partnerCentsPerLb: 95, miles: 4, legCents: 1099 });
   const guessed = quote.netCents({ total, pounds: 20, partnerCentsPerLb: 95, miles: 4 });

@@ -267,9 +267,15 @@ function quoteFor({ miles, partnerCentsPerLb, partnerName = null, legCents = nul
     const rate = perPoundCents(partnerCentsPerLb, name);
     if (rate == null) return { ok: false, reason: 'no_rate' };
 
-    // What a typical load actually comes to, so the page can show a number a
-    // person can picture rather than only a rate.
-    const typical = orderTotalCents({ pounds: 20, ratePerLbCents: rate, feeCents: fee });
+    // WHAT A TYPICAL LOAD COMES TO, WITH NO FEE ADDED, because there is no fee.
+    //
+    // It was `feeCents: fee`, so the page quoted a full machine at $58.83 - the
+    // wash plus a courier line. Neil's decision of 25 September was to raise the
+    // minimum and keep "no delivery fee" TRUE, rather than charge the courier as
+    // its own line and make the live ads, the home page, /pricing, /faq and seventy
+    // town pages false the same day. The round trip is paid for by the minimum,
+    // which `orderTotalCents()` floors at.
+    const typical = orderTotalCents({ pounds: 20, ratePerLbCents: rate, feeCents: 0 });
     categories[name] = { perLbCents: rate, typical20lbCents: typical.total };
   }
 
@@ -277,7 +283,16 @@ function quoteFor({ miles, partnerCentsPerLb, partnerName = null, legCents = nul
     ok: true,
     miles,
     partnerName,
-    deliveryFeeCents: fee,
+
+    // WHAT THE COURIER COSTS US, WHICH IS NOT A CUSTOMER FEE AND MUST NOT BE
+    // RENDERED AS ONE. It was returned as `deliveryFeeCents` and the page showed it
+    // as "Plus about $18.83 for the courier, there and back" - a line Neil's
+    // minimum decision removed. Renamed so a page cannot show a charge that does
+    // not exist: there is no customer-facing fee on this object at all now.
+    //
+    // It survives because the margin maths needs it - `netCents()` subtracts what
+    // we pay the courier - and because the routing board reads it.
+    courierCostCents: legCents != null ? Number(legCents) * 2 : courierCostCents(miles),
     minimumCents: config.pricing.minimumCents,
     categories,
 

@@ -545,3 +545,52 @@ test('THE PORTAL WEARS THE OPS SKIN, WHICH IS WHAT WAS ASKED FOR', () => {
   const opsLinks = [...rendered.matchAll(/href="(\/ops[^"]*)"/g)].map((m) => m[1]);
   assert.deepEqual(opsLinks, [], `the portal links internal screens: ${opsLinks.join(', ')}`);
 });
+
+// --- the footer lines up with the page --------------------------------------
+
+test('THE PORTAL FOOTER IS FLATTENED WITH THE PAGE, NOT LEFT ON THE SITE RULES', () => {
+  // Neil, 26 September, on the sign-in page: the Processing Instructions link and
+  // the phone number "should be aligned with the sign in and button". They sat 48px
+  // to the right of the card above them.
+  //
+  // THE PORTAL IS THE ONLY OPS SCREEN WITH A FOOTER, which is why nobody had hit
+  // it. `ops.css` flattens `body > main.container` to full width with a 12px
+  // gutter; `footer.container` kept the marketing site's rules - a 1240px
+  // max-width, `margin: 0 auto` and the 40px desktop gutter. Measured at 1280px:
+  // the card began at 12px and the footer at 60px.
+  //
+  // LAYOUT CANNOT BE MEASURED HERE, so what this pins is the pair: if `main` is
+  // flattened then `footer` must be too, with the same gutter. A rule that applied
+  // to one and not the other is exactly the bug.
+  const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'ops.css'), 'utf8');
+
+  const rule = (selector) => {
+    const at = css.indexOf(selector);
+    return at === -1 ? null : css.slice(at, css.indexOf('}', at));
+  };
+
+  const main = rule('body > main.container {');
+  const footer = rule('body > footer.container {');
+
+  assert.ok(main, 'the ops container override has been renamed');
+  assert.ok(footer, 'the portal footer is back on the marketing site\'s container rules');
+
+  for (const [name, block] of [['main', main], ['footer', footer]]) {
+    assert.match(block, /max-width:\s*none/, `${name} is not flattened`);
+    assert.match(block, /padding-left:\s*12px/, `${name} does not use the ops gutter`);
+  }
+
+  // And the footer must not be centred, which is what put it in the middle.
+  assert.match(footer, /margin-left:\s*0/, 'the footer is centred again');
+});
+
+test('and the portal footer really is a container, so the rule reaches it', () => {
+  // The CSS above is keyed on `footer.container`. If the markup stopped using that
+  // class the rule would silently stop applying and the alignment would drift back
+  // with nothing failing.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'web', 'shop-page.js'), 'utf8');
+  const fn = /function shopFooter\([\s\S]*?\n}/.exec(src);
+
+  assert.ok(fn, 'shopFooter() has been renamed or removed');
+  assert.match(fn[0], /<footer class="container"/, 'the footer no longer matches the CSS rule that aligns it');
+});
