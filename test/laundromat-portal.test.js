@@ -156,32 +156,76 @@ test('THE JOB IS DERIVED FROM THE ORDER, NEVER STORED', () => {
   assert.equal(page.jobOf({ status: 'IN_PROCESS', partner_weight_lb: null }), 'OTHER');
 });
 
-test('NO CUSTOMER NAME, PHONE, ADDRESS OR MONEY IS EVEN SELECTED', () => {
+test('NO CUSTOMER NAME, PHONE OR ADDRESS IS EVEN SELECTED', () => {
   // Not hidden in a template - absent from the process, the rule the ops screens
   // follow for a driver and prices. A value that never reaches the page cannot
   // leak from it, and this page is in somebody else's shop.
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'shop.js'), 'utf8');
-  const fields = /const ORDER_FIELDS =[\s\S]*?;/.exec(src);
+  const fields = /const ORDER_FIELDS =[\s\S]*?';$/m.exec(src);
 
   assert.ok(fields, 'ORDER_FIELDS has been renamed or removed');
   const selected = fields[0];
 
-  for (const forbidden of ['price_cents', 'address_line1', 'postal_code', 'payment_status', 'amount_paid']) {
-    assert.doesNotMatch(selected, new RegExp(`\\b${forbidden}\\b`), `the portal now selects ${forbidden}`);
+  for (const forbidden of ['address_line1', 'postal_code']) {
+    assert.doesNotMatch(selected, new RegExp(forbidden), `the portal now selects ${forbidden}`);
   }
 
-  // `customers(preferences)` is the wash, which they need. A bare name or phone
+  // `customers(preferences)` is the wash, which they need. A name or a phone
   // inside that join is the thing to catch.
   const join = /customers\(([^)]*)\)/.exec(selected);
   if (join) {
     for (const forbidden of ['name', 'phone', 'address']) {
-      assert.doesNotMatch(join[1], new RegExp(`\\b${forbidden}\\b`), `the customer's ${forbidden} is joined onto a portal query`);
+      assert.doesNotMatch(
+        join[1],
+        new RegExp(forbidden),
+        `the customer's ${forbidden} is joined onto a portal query`
+      );
     }
   }
 
   // customer_id IS allowed and is not a name: the weigh-in needs it to raise an
   // issue when the two scales disagree.
   assert.match(selected, /\bcustomer_id\b/, 'without customer_id a scale mismatch raises no issue at all');
+});
+
+test('AN ORDER CARRIES ITS OWN MONEY AND NEVER SHOWS IT, AND THAT IS A REFINEMENT', () => {
+  // THIS TEST USED TO REFUSE THE MONEY COLUMNS OUTRIGHT, on the reasoning that a
+  // value which never reaches the page cannot leak from it. That is exactly
+  // right for a CUSTOMER's name and address, which nothing here needs.
+  //
+  // It is wrong for the ORDER's own money, and holding it cost a real bug: the
+  // portal hands the order to `settleWeight()`, which reads `price_per_lb_cents`
+  // to price it and falls back to today's default rate when it is missing - so a
+  // subscriber sold $1.80 would have been billed at $2.00. There is no way to
+  // price an order without its own rate.
+  //
+  // SO THE RULE MOVED FROM "NOT SELECTED" TO "NOT RENDERED", which is where it
+  // belongs: what a caller must load is decided by the function it calls, and
+  // what a page may show is decided by who is reading it.
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'web', 'shop-page.js'), 'utf8');
+
+  const money = [
+    'price_cents',
+    'price_per_lb_cents',
+    'minimum_cents',
+    'deposit_cents',
+    'surcharge_cents',
+    'discount_cents',
+    'amount_paid_cents',
+    'payment_status',
+    'wholesale_per_lb_cents',
+  ];
+
+  for (const field of money) {
+    assert.doesNotMatch(
+      page,
+      new RegExp(field),
+      `the laundromat's pages read ${field} - an attendant must never be shown money`
+    );
+  }
+
+  // And no currency anywhere on the screens they see.
+  assert.doesNotMatch(page, /\$\$\{/, 'a dollar figure is being rendered on a laundromat screen');
 });
 
 test('EVERY PORTAL QUERY IS SCOPED TO THE SIGNED-IN SHOP', () => {

@@ -73,6 +73,33 @@ const router = express.Router();
 const ORDER_FIELDS =
   'id, customer_id, order_number, status, bag_count, weight_lb, partner_weight_lb, ' +
   'partner_weight_at, at_partner_at, ready_at, partner_id, return_carrier, ' +
+  // WHETHER THIS ORDER HAS ALREADY BEEN PRICED AND PAID, and leaving it out was
+  // a live bug rather than a tidiness point.
+  //
+  // `settleWeight()` opens `if (order.weight_settled_at)` and returns early - it
+  // records the laundromat's scale and touches no money, because a van order was
+  // charged at the doorstep before it ever reached a laundromat. Unselected the
+  // column arrives undefined, which is falsy, so that early return never fired
+  // from here: a PAID order weighed in the portal fell through to the two-scale
+  // branch, and a disagreement wrote `weight_held_at` on it and raised an issue
+  // reading "NOTHING HAS BEEN CHARGED and the customer has not been told a
+  // price" - both false, about an order that was settled days earlier.
+  //
+  // The bag tag page never had this because `tags.findByTag()` selects `*`.
+  'weight_settled_at, price_cents, payment_status, ' +
+  // AND EVERY COLUMN THE PRICING BRANCH READS, because the weigh-in is what
+  // prices the order and all four arrive undefined without this.
+  //
+  // `price_per_lb_cents` is the serious one: settleWeight falls back to
+  // `config.pricing.perPoundCents` when it is missing, so a subscriber sold
+  // $1.80 would be billed at today's default - which is the exact rule
+  // CLAUDE.md states, that changing a price must not re-price work already
+  // quoted. The other three are the floor, its fallback and any surcharge.
+  //
+  // NONE OF THEM IS RENDERED. They are loaded because the function this order is
+  // handed to reads them, which is the whole point: what a caller must select is
+  // decided by the callee, not by what the page happens to show.
+  'price_per_lb_cents, minimum_cents, deposit_cents, surcharge_cents, ' +
   'preferences, customers(preferences)';
 
 // The two statuses that mean the bags are physically in their building.

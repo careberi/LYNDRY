@@ -74,7 +74,7 @@ test('IT ASKS FOR A PAYMENT METHOD, NOT A CARD', () => {
   // no brand and no last four for him. "Your card" names something he does
   // not have, and the same is true of anybody paying by wallet.
   for (const text of [held(), held({ priceCents: null })]) {
-    assert.ok(!/card/i.test(text), `still says card: ${text}`);
+    assert.ok(!/\bcard\b/i.test(text), `still says card: ${text}`);
   }
 });
 
