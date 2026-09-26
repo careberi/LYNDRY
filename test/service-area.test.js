@@ -253,7 +253,19 @@ test('NOTHING SAYS BERGEN COUNTY WHEN THE BOUNDARY IS NOT BERGEN COUNTY', () => 
   if (config.courier.model === 'DYNAMIC') {
     assert.doesNotMatch(words, /bergen/i, 'the service area still calls itself Bergen County');
     assert.match(words, /New Jersey/);
-    assert.match(words, new RegExp(String(MAX)), 'the radius is not named, so it is a second copy waiting to drift');
+
+    // AND IT NAMES NO MILEAGE, which reverses what this test asserted an hour
+    // ago. It used to require the radius to appear, on the reasoning that an
+    // unnamed number is a second copy waiting to drift. That was right while a
+    // radius WAS the rule. It is not: the boundary is New Jersey plus whatever
+    // a courier will actually drive, so a number here would be a second copy of
+    // a rule that is not ours to state - ours is measured across a map and
+    // Uber's along a road, and the two disagree by up to a factor of two.
+    assert.doesNotMatch(
+      words,
+      /\d/,
+      'the service area sentence names a number again, and no number decides it'
+    );
   } else {
     assert.match(words, /Bergen/);
   }
