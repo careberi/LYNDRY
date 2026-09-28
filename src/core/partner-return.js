@@ -73,10 +73,12 @@ function createRequester({store,provider,load,enabled,now=Date.now}) {
         const {order,shop,customer}=context;
         const endpoint=(row,contact,notes)=>({name:row.name,line1:row.address_line1,line2:row.address_line2,city:row.city,state:row.state||'NJ',postalCode:row.postal_code,phone:contact,notes});
         mutation=true;
+        // Requested delivery is a 30-minute service target; tracking ETA stays separate.
+        const pickupAt=now();
         const created=await provider.createOrder({externalId:reference,
           from:endpoint(shop,'+12017712933','Collect LYNDRY #'+order.order_number+' from the attendant. Match the original bag photo.'),
           to:endpoint(customer,customer.phone,order.preferences?.dropoff_spot||customer.preferences?.dropoff_spot||''),
-          pickupReadyAt:new Date(now()).toISOString(),dropoffDeadlineAt:new Date(now()+4*3600000).toISOString(),manifest:[{name:'Development laundry return #'+order.order_number,quantity:1}]});
+          pickupReadyAt:new Date(pickupAt).toISOString(),dropoffDeadlineAt:new Date(pickupAt+30*60000).toISOString(),manifest:[{name:'Development laundry return #'+order.order_number,quantity:1}]});
         await save({shipday_order_id:String(created.id)},'SHIPDAY_RETURN_CREATED');
       }
       context=await load(orderId,partnerId);refusal=eligibility(context);if(refusal)throw Error(refusal);

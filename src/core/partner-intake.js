@@ -64,6 +64,19 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
     })));
     return views;
   }
+  async function history(partner, requestedPage=1) {
+    const page=/^[1-9]\d{0,4}$/.test(String(requestedPage)) ? Number(requestedPage) : 1;
+    const size=10, start=(page-1)*size;
+    // Completion here means this shop confirmed handoff, not customer delivery.
+    const rows=await data(db.from('partner_order_intakes')
+      .select('weight_lb,collected_at,orders!inner(order_number)')
+      .eq('partner_id',partner).not('collected_at','is',null)
+      .order('collected_at',{ascending:false}).order('order_id',{ascending:false})
+      .range(start,start+size));
+    return {page,hasNext:rows.length>size,orders:rows.slice(0,size).map(row=>({
+      number:row.orders.order_number,weight:row.weight_lb,collectedAt:row.collected_at,
+    }))};
+  }
   async function detail(partner, number) {
     if (!validNumber(number)) return null;
     const view = (await list(partner)).find(o => String(o.number) === String(number));
@@ -148,6 +161,6 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
       return { ok: true, notice: action };
     } finally { working.delete(order.id); }
   }
-  return { list, detail, deliveryPhoto, act };
+  return { list, history, detail, deliveryPhoto, act };
 }
 module.exports = { createService, validIntake, validNumber, complete };

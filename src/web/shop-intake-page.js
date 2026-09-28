@@ -84,6 +84,16 @@ const badge=(lang,stage)=>`<span class="shop-status shop-status--${stage.toLower
 function boardUrl(lang,stage='',query='') {
   const params=new URLSearchParams({lang});if(stage)params.set('stage',stage);if(query)params.set('q',query);return '/shop?'+params;
 }
+function completedOrders(ctx) {
+  const {lang}=ctx,history=ctx.history||{page:1,orders:[],hasNext:false};
+  const date=value=>{
+    const time=new Date(value);
+    return Number.isFinite(time.getTime()) ? time.toLocaleString(lang==='es'?'es-US':'en-US',{timeZone:'America/New_York',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+  };
+  const rows=history.orders.map(o=>`<tr><th scope="row">#${e(o.number)}</th><td>${e(o.weight)} lb</td><td>${e(date(o.collectedAt))}</td></tr>`).join('');
+  const link=(page,text)=>`<a class="btn btn-outline" href="/shop?lang=${lang}&amp;history_page=${page}#section-history">${e(text)}</a>`;
+  return `<section id="section-history" class="card shop-orders-panel shop-delivery-section"><div class="shop-panel-heading"><div><h2>${e(say(lang,'Completed orders','Pedidos completados'))}</h2><p>${e(say(lang,'Your finished orders, handed to the return driver. Collection times are Eastern time.','Sus pedidos terminados y entregados al conductor de vuelta. Horas del este.'))}</p></div></div><div class="shop-delivery-scroll"><table class="shop-delivery-table"><thead><tr><th scope="col">${e(say(lang,'Order','Pedido'))}</th><th scope="col">${e(say(lang,'Weight','Peso'))}</th><th scope="col">${e(say(lang,'Collected','Recogido'))}</th></tr></thead><tbody>${rows||`<tr><td colspan="3" class="shop-section-empty">${e(say(lang,'No completed orders yet','Aun no hay pedidos completados'))}</td></tr>`}</tbody></table></div>${history.page>1||history.hasNext?`<nav class="shop-panel-heading" aria-label="${e(say(lang,'Completed order pages','Paginas de pedidos completados'))}">${history.page>1?link(history.page-1,say(lang,'Newer orders','Pedidos mas recientes')):''}<span>${e(say(lang,'Page','Pagina'))} ${history.page}</span>${history.hasNext?link(history.page+1,say(lang,'Older orders','Pedidos anteriores')):''}</nav>`:''}</section>`;
+}
 function board(ctx) {
   const {lang,orders}=ctx,query=ctx.query||'',stage=ctx.stage||'';
   const counts=Object.fromEntries(Object.keys(labels).map(s=>[s,orders.filter(o=>o.stage===s).length]));
@@ -106,7 +116,7 @@ function board(ctx) {
   const time=new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',second:'2-digit'});
   return shell({...ctx,here:boardUrl(lang,stage,query)},say(lang,'Laundry board','Panel de pedidos'),`<header class="shop-workspace-heading"><div><p class="eyebrow">${e(ctx.shop.name)}</p><h1>${e(say(lang,'Laundry board','Panel de pedidos'))}</h1><p>${e(say(lang,'Receive. Wash. Return.','Recibir. Lavar. Devolver.'))}</p></div><a class="btn btn-outline" href="${e(boardUrl(lang,stage,query))}">${e(say(lang,'Refresh orders','Actualizar pedidos'))}</a></header>
     <div class="shop-board-toolbar"><p id="shop-sync-note" role="status" data-updated="${e(say(lang,'Updated','Actualizado'))}" data-unavailable="${e(say(lang,'Unavailable','No disponible'))}" data-failed="${e(say(lang,'Updates unavailable. Displayed details may be out of date. Refresh or sign in again.','No hay actualizaciones. Los datos pueden estar desactualizados. Actualice o inicie sesion.'))}">${e(say(lang,'Updates every 30 seconds','Actualiza cada 30 segundos'))} · ${e(time)}</p><form class="shop-search" method="get" action="/shop"><input type="hidden" name="lang" value="${lang}"><label class="shop-sr-only" for="order-search">${e(say(lang,'Search order','Buscar pedido'))}</label><input id="order-search" name="q" type="search" maxlength="64" value="${e(query)}" placeholder="${e(say(lang,'LYNDRY order #','Numero de pedido'))}"><button class="btn btn-outline" type="submit">${e(say(lang,'Search','Buscar'))}</button></form></div>
-    <div id="shop-board-live"><section class="shop-stats shop-stats-three" aria-label="${e(say(lang,'Order overview','Resumen de pedidos'))}">${stats}</section>${Object.keys(labels).map(section).join('')}</div>${require('./shop-board-refresh').script}`);
+    <div id="shop-board-live"><section class="shop-stats shop-stats-three" aria-label="${e(say(lang,'Order overview','Resumen de pedidos'))}">${stats}</section>${Object.keys(labels).map(section).join('')}${completedOrders(ctx)}</div>${require('./shop-board-refresh').script}`);
 }
 function deliveryProof(o,lang) {
   const count=Number.isInteger(o.deliveryPhotoCount) ? Math.min(20,Math.max(0,o.deliveryPhotoCount)) : 0;

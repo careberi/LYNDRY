@@ -162,22 +162,13 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
   return `
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:560px;padding-top:80px;padding-bottom:72px;">
-    <h1 class="display-2">Start with your number.</h1>
-    <!-- IT SAYS WHAT HAPPENS TO BOTH PEOPLE, BECAUSE NEITHER OF THEM KNOWS YET.
-
-         This read "Your cell number is your account. No password." - which is
-         about how the sign-in is built rather than about what the visitor is
-         here to do, and lands as a wall on somebody who has just clicked an ad
-         and read "no account to log into" on the home page. The flow was always
-         right: a new number never sees a code and goes straight into the order.
-         Only the words were wrong.
-
-         THE PRICES ARE READ, NEVER TYPED. Same rule as every other page: one
-         copy of the rate, in config, or the day it moves this line is the one
-         nobody remembers. -->
+    <h1 class="display-2">Book a pickup or sign in.</h1>
+    <!-- One field starts both paths. The visitor needs the outcome here; the
+         distinction between a new booking and a returning-account code is
+         explained in one sentence instead of making them choose a path. -->
     <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
-      New here? You go straight to your order.
-      Ordered before? We text you a code.
+      Enter your mobile number. If you are new, we will take you through booking.
+      If you already have an account, we will text you a secure sign-in code.
     </p>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:14px 0 0;">
       ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, operational fee, minimum total, and maximum at 50 lb before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
@@ -191,11 +182,11 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
   <form method="post" action="/account/login" class="card card-xl" style="padding:30px;">
     <input type="hidden" name="next" value="${escapeHtml(next)}">
     <div class="field">
-      <label class="field-label" for="phone">Cell number</label>
+      <label class="field-label" for="phone">Mobile number</label>
       <input class="input input-lg" type="tel" id="phone" name="phone" required
              autocomplete="tel" inputmode="tel" placeholder="201-555-0142"
              value="${escapeHtml(phone)}" autofocus>
-      <span class="field-hint">Has to be able to get texts.</span>
+      <span class="field-hint">Use a number that can receive text messages.</span>
     </div>
 
     <!-- NO CONSENT BOX HERE, AND THAT IS THE POINT OF THIS SCREEN.
@@ -2256,7 +2247,7 @@ function repeatForm(given, estimate) {
     ? estimateView.planEstimate(estimate.categories[category]) : '';
   const estimateNote = estimate ? '<p class="field-hint">' + (estimate.unavailable
     ? 'An address estimate is unavailable. Choose a pickup date and time to try again.'
-    : 'Preliminary estimates for your address. We will confirm pricing after you choose a pickup date and time. Development courier costs are simulated.') + '</p>' : '';
+    : 'Preliminary estimates for your address. Shipday confirmed current Uber and DoorDash availability for both trips. We check again after you choose a pickup date and time.') + '</p>' : '';
   const chosen = String(given.plan || '');
   // HOW OFTEN, ASKED ON THE SAME SCREEN AS THE PLAN IT BELONGS TO.
   //

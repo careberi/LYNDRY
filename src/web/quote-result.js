@@ -76,6 +76,47 @@ function unavailable() {
   );
 }
 
+function serviceArea({ address, fields = {}, interest = '' }) {
+  const hidden = (name, value) => `<input type="hidden" name="${name}" value="${escapeHtml(value || '')}">`;
+  const message = interest === 'thanks'
+    ? `<div class="notice notice-success" role="status" style="margin:20px 0 0;">
+         Thanks. We saved your number and will text you when LYNDRY is available in your area.
+       </div>`
+    : `<form method="post" action="/quote/interest" class="stack" style="margin-top:22px;">
+         ${hidden('address', address)}
+         ${hidden('street', fields.street)}
+         ${hidden('unit', fields.unit)}
+         ${hidden('town', fields.town)}
+         ${hidden('zip', fields.zip)}
+         <div class="field">
+           <label class="field-label" for="area-phone">Mobile number</label>
+           <input class="input" id="area-phone" name="phone" type="tel" inputmode="tel"
+                  autocomplete="tel" placeholder="201-555-0142" required>
+         </div>
+         <div style="position:absolute;left:-9999px;" aria-hidden="true">
+           <label for="area-website">Website</label>
+           <input id="area-website" name="website" tabindex="-1" autocomplete="off">
+         </div>
+         <label style="display:flex;align-items:flex-start;gap:10px;font-size:14px;line-height:1.45;">
+           <input type="checkbox" name="sms_consent" value="yes" required style="margin-top:3px;">
+           <span>I agree to receive text messages from LYNDRY about service availability.
+             Message frequency varies. Message and data rates may apply. Reply STOP to end.</span>
+         </label>
+         ${interest === 'phone' ? '<p role="alert">Enter a valid US mobile number.</p>' : ''}
+         ${interest === 'consent' ? '<p role="alert">Tick the box so we are allowed to text you.</p>' : ''}
+         <button class="btn btn-primary btn-full" type="submit">Text me when you reach my area</button>
+       </form>`;
+
+  return shell(
+    `<p class="eyebrow" style="margin:0 0 10px;">Not in your area yet</p>
+     <h2 style="font-family:var(--font-display);font-weight:900;font-size:28px;margin:0 0 14px;">
+       Unfortunately, we are not operating in your area at this time.</h2>
+     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0;">
+       Leave your mobile number and we will text you when LYNDRY is up and running near you.</p>
+     ${message}`
+  );
+}
+
 // THE COURIER WOULD NOT TAKE THE TRIP, and the honest part is that we do not
 // know which of two reasons it is.
 //
@@ -138,15 +179,16 @@ function priced(quote, address) {
 
 // ONE DOOR, so a caller cannot render a price for a refusal or the other way
 // round. Everything that decides the answer has already happened.
-function render({ quote, address, error }) {
+function render({ quote, address, error, fields, interest }) {
   if (error === 'not_found') return notFound(address);
+  if (error === 'unavailable_area') return serviceArea({ address, fields, interest });
   if (error) return unavailable();
   if (!quote) return '';
 
   if (!quote.ok) {
     // OUR OWN ESTIMATE PUT THEM PAST THE LAST BAND, reached only when no courier
     // could be asked - so the mileage is ours and the wording is about our round.
-    if (quote.reason === 'too_far') return tooFar(quote);
+    if (quote.reason === 'too_far') return serviceArea({ address, fields, interest });
 
     // THE COURIER COULD NOT PLACE THE ADDRESS AT ALL. Their own code for it, and
     // it is the same problem as our geocoder missing it, so it gets the same
@@ -164,23 +206,7 @@ function render({ quote, address, error }) {
   return quote.dynamic ? dynamicPriced(quote,address) : priced(quote, address);
 }
 
-module.exports = { render, escapeHtml, scheduleForm };
-
-// Public previews never create an order or authorize payment.
-function scheduleForm({address,pickupDate='',pickupTime='',error=''}) {
-  return `<section class="container quote-schedule"><div class="quote-column">
-    <div class="card card-xl"><h2>Refine your estimate</h2>
-    <p>${escapeHtml(address)}</p>
-    <p>Available laundromats and pricing depend on your pickup date and time.</p>
-    ${error ? `<p role="alert">${escapeHtml(error)}</p>` : ''}
-    <form method="get" action="/quote">
-      <input type="hidden" name="address" value="${escapeHtml(address)}">
-      <label>Pickup date<input type="date" name="pickup_date" value="${escapeHtml(pickupDate)}" required></label>
-      <label>Pickup time (Eastern)<input type="time" name="pickup_time" value="${escapeHtml(pickupTime)}" required></label>
-      <button class="btn btn-primary" type="submit">Calculate my price</button>
-    </form></div>
-  </div></section>`;
-}
+module.exports = { render, escapeHtml };
 
 function dynamicPriced(quote,address) {
   const one=quote.categories.ONE_TIME;
@@ -198,7 +224,7 @@ function dynamicPriced(quote,address) {
     ${plan('One-time pickup',one)}${plan('Subscription pickup',quote.categories.SUBSCRIPTION)}
     <p class="quote-address">No separate pickup or delivery charge. The operational fee is included in the minimum and estimated totals.</p>
     <p class="quote-address">Final weight determines your bill. Review and confirm your price when booking. Each subscription pickup receives its own quote.</p>
-    <p class="quote-address">Development estimate: courier costs are simulated. No payment is collected here.</p>
+    <p class="quote-address">Uber and DoorDash availability was checked through Shipday for both trips. Availability is checked again when you book. No driver is requested and no payment is collected here.</p>
     <a href="/account/login" class="btn btn-primary btn-lg btn-full quote-order-button">Place an order online</a>
     <a href="/pricing" class="quote-change-address">Change address</a>
   </div></section>`;

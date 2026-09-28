@@ -4,7 +4,10 @@ const { config } = require('../config');
 const economics = require('./pricing-economics');
 const dynamic = require('./dynamic-order-pricing');
 const { dispatchInstant } = require('./shipday-dispatch');
+const { createClient: createShipdayClient } = require('../providers/couriers/shipday');
+const courierAvailability = require('./public-courier-availability');
 const enabled = config.env === 'development' && !config.supabase.isProduction;
+const shipday = createShipdayClient({ apiKey: config.shipday.apiKey, allowWrites: false });
 function guard() { if (!enabled) throw Error('Development checkout is unavailable.'); }
 async function data(query) { const { data, error } = await query; if (error) throw error; return data; }
 function address(customer) { return Object.fromEntries(['address_line1','address_line2','city','postal_code'].map(k => [k,customer[k] || null])); }
@@ -35,7 +38,6 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
   const [home, shops, hours, loads, planned] = await Promise.all([publicPreview ? geo.locate(customer) : geo.lookupOnce(geo.addressLine(customer)),partners.list({type:'LAUNDROMAT'}).then(rows=>rows.filter(p=>p.status==='ACTIVE')),partners.hoursForAll(),partners.loadByPartner(),partners.plannedByPartner(addressEstimate ? [] : [date])]);
   if (!home) throw Error('The pickup address could not be located. Check the street and ZIP.');
   const weekday = new Date(date+'T12:00:00Z').getUTCDay();
-  const expiresAt = new Date(Date.now()+30*60000).toISOString();
   const candidates = [];
   for (const shop of shops) {
     if (partnerId && shop.id !== partnerId) continue;
@@ -57,13 +59,18 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
     }
     const miles = geo.milesBetween(home,{lat:Number(shop.lat),lng:Number(shop.lng)});
     if (!Number.isFinite(miles) || miles > 15) continue;
-    // Explicit development quote adapter: distance-sensitive fixtures, never
-    // described as actual Shipday rates and never sent to a live courier.
-    const legCents = 799 + Math.max(0,Math.ceil(miles)-5)*100;
+    const verified = await courierAvailability.verifyRoundTrip(shipday, {
+      customer: { line1: customer.address_line1, line2: customer.address_line2,
+        city: customer.city, state: customer.state || 'NJ', postalCode: customer.postal_code },
+      partner: { line1: shop.address_line1, line2: shop.address_line2,
+        city: shop.city, state: shop.state || 'NJ', postalCode: shop.postal_code },
+    });
+    if (!verified) continue;
     candidates.push({id:shop.id,eligible:true,wholesaleCentsPerLb:shop.wholesale_per_lb_cents,
-      pickupCents:legCents,returnCents:legCents,source:'SIMULATION',expiresAt});
+      ...verified});
   }
   const categories = Object.fromEntries(['ONE_TIME','SUBSCRIPTION','WHOLESALE'].map(key => [key,dynamic.quoteCandidates(candidates,{policy:current,category:key})]));
+  const expiresAt = categories[category].expiresAt;
   return {pickup_date:date,pickup_time:time,address:address(customer),snapshot:categories[category],categories,expires_at:expiresAt};
 }
 async function estimateAddress(customer) {

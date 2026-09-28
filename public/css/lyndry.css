@@ -1017,8 +1017,8 @@ button {
    and email tiles were - so its height is deliberately about what that whole
    stack came to, rather than a number picked to look big.
 
-   Ink, and the shadow is PAPER rather than ink: this sits on green, and an ink
-   offset under an ink button is invisible. */
+   The lavender dot field echoes the pricing section below and keeps the main
+   action distinct from the smaller solid buttons around the site. */
 .hero-cta {
   display: flex;
   align-items: center;
@@ -1026,11 +1026,13 @@ button {
   gap: 24px;
   min-height: 158px;
   padding: 28px 32px 28px 36px;
-  background: var(--ink-900);
-  color: var(--paper-050);
+  background-color: var(--lilac-100);
+  background-image: radial-gradient(var(--ink-200) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+  color: var(--ink-900);
   border: 3px solid var(--ink-900);
   border-radius: 18px;
-  box-shadow: 6px 6px 0 var(--paper-050);
+  box-shadow: 6px 6px 0 var(--ink-900);
   text-decoration: none;
   font-family: var(--font-display);
   font-weight: 800;
@@ -1044,12 +1046,12 @@ button {
 }
 .hero-cta:hover {
   transform: translate(-2px, -2px);
-  box-shadow: 9px 9px 0 var(--paper-050);
-  color: var(--paper-050);
+  box-shadow: 9px 9px 0 var(--ink-900);
+  color: var(--ink-900);
 }
 .hero-cta:active {
   transform: translate(3px, 3px);
-  box-shadow: 2px 2px 0 var(--paper-050);
+  box-shadow: 2px 2px 0 var(--ink-900);
 }
 
 /* The arrow ships at 22px from the token, which is right beside 22px type and
@@ -1772,7 +1774,7 @@ button {
   line-height: 1;
   flex: 0 0 auto;
 }
-.faq details[open] summary::after { content: "3"; }
+.faq details[open] summary::after { content: "−"; }
 
 .faq summary:focus-visible {
   outline: 3px solid var(--lilac-500);

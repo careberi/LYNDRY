@@ -18,7 +18,10 @@ function createRouter(service) {
   }
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/shop', async (req, res, next) => {
-    try { res.type('html').send(view.board({ ...context(req), orders: await service.list(req.partner.id) })); }
+    try {
+      const [orders,history]=await Promise.all([service.list(req.partner.id),service.history ? service.history(req.partner.id,req.query.history_page) : null]);
+      res.type('html').send(view.board({ ...context(req),orders,history }));
+    }
     catch (error) { next(error); }
   });
   router.get('/shop/orders/:number/delivery-photos/:index', async (req,res) => {

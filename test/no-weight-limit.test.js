@@ -68,16 +68,11 @@ test('NO PUBLIC PAGE CLAIMS A CEILING', () => {
   assert.deepEqual(guilty, [], 'a page is quoting a maximum load again');
 });
 
-test('AND THE PAGES THAT USED TO SAY IT NOW SAY THE OPPOSITE', () => {
+test('AND THE HOW-IT-WORKS PAGE THAT ANSWERS LOAD SIZE SAYS THE OPPOSITE', () => {
   // Removing the sentence is not enough on its own: "how much fits in a bag" is
   // a question a reader actually has, and leaving it unanswered is how somebody
-  // fills the gap with the old number. The two pages that carried the cap
-  // answer it the true way instead.
-  for (const file of ['faq.html', 'how-it-works.html']) {
-    const html = fs.readFileSync(path.join(PAGES, file), 'utf8');
-    // \s+ because the copy is wrapped: faq.html breaks the line between "no"
-    // and "maximum", and a plain space would have failed on the formatting
-    // rather than on the claim.
-    assert.match(html, /no\s+maximum/i, `${file} no longer answers how much you can send`);
-  }
+  // fills the gap with the old number. The FAQ now sends pricing questions to
+  // the live address quote, so this promise belongs only on the process page.
+  const html = fs.readFileSync(path.join(PAGES, 'how-it-works.html'), 'utf8');
+  assert.match(html, /no\s+maximum/i, 'how-it-works.html no longer answers how much you can send');
 });

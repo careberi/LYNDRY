@@ -89,7 +89,7 @@ async function quoteFor(address) {
     })
     .sort((a, b) => a.straightMiles - b.straightMiles);
 
-  if (!usable.length) return { quote: null, error: 'unavailable' };
+  if (!usable.length) return { quote: null, error: 'unavailable_area' };
 
   // THE SERVICE AREA IS MEASURED AS THE CROW FLIES, and that is deliberate.
   //
@@ -276,7 +276,7 @@ const PAGES = [
   {
     path: '/faq',
     file: 'faq.html',
-    title: 'Questions',
+    title: 'FAQ',
     fullTitle: 'Laundry Pickup Questions in Bergen County, NJ | LYNDRY',
 
     // THE SAME WORDS THAT ARE ON THE PAGE, AND THE SAME TOKENS.
@@ -919,14 +919,17 @@ router.get('/quote', async (req, res) => {
   const pickupDate = part('pickup_date',10), pickupTime = part('pickup_time',5);
   const dynamicPreview = checkout.enabled;
   let result = { quote: null, error: null };
-  let previewError = '';
+  const addressEstimate = !pickupDate && !pickupTime;
   if (dynamicPreview && address && !isBot) {
     try {
       const place = await geocode.lookupOnce(address);
       if (!place) throw Error('We could not locate this address. Check the street, town, and ZIP.');
-      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:part('town',80),postal_code:part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME'}, {publicPreview:true,addressEstimate:!pickupDate && !pickupTime});
+      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:part('town',80),postal_code:part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME'}, {publicPreview:true,addressEstimate});
       result.quote = {ok:true,dynamic:true,indicative:!pickupDate && !pickupTime,...preview};
-    } catch (err) { previewError = err.message; }
+    } catch (err) {
+      if (/No eligible laundromat/i.test(err.message)) result.error = 'unavailable_area';
+      else result.error = 'unavailable';
+    }
   }
   if (!dynamicPreview && address && !isBot) {
     try {
@@ -947,13 +950,80 @@ router.get('/quote', async (req, res) => {
       tracking: true,
       extra: {
         QUOTE_FORM: address && !isBot ? '' : readPageBody('quote-form.html').replace('{{ADDRESS_VALUE}}', quoteResult.escapeHtml(address)),
-        QUOTE_RESULT: dynamicPreview && address && !isBot
-          ? (result.quote ? quoteResult.render({...result,address}) : '') + quoteResult.scheduleForm({address,pickupDate,pickupTime,error:previewError})
-          : quoteResult.render({ ...result, address }),
+        // The pricing page owns address input; the result has no second scheduling form.
+        QUOTE_RESULT: quoteResult.render({ ...result, address,
+          fields: { street, unit: part('unit', 60), town: part('town', 80), zip: part('zip', 5) },
+          interest: part('interest', 20) }),
         COURIER_MINIMUM: money(config.pricing.minimumCents),
       },
     })
   );
+});
+
+// A SERVICE-AREA REQUEST IS INTEREST, NOT AN ORDER OR A CUSTOMER.
+// Nothing is dispatched, charged or texted when this form is submitted. The
+// consent record and address are kept together so expansion outreach can later
+// target only people a new laundromat actually reaches.
+const QUOTE_INTEREST_LIMIT = 8;
+const QUOTE_INTEREST_WINDOW_MS = 10 * 60 * 1000;
+
+router.post('/quote/interest', async (req, res, next) => {
+  const form = req.body || {};
+  const value = (key, limit) => typeof form[key] === 'string' ? form[key].trim().slice(0, limit) : '';
+  const fields = {
+    street: value('street', 120),
+    unit: value('unit', 60),
+    town: value('town', 80),
+    zip: value('zip', 5),
+  };
+  const address = fields.street
+    ? [fields.street, fields.unit, fields.town, 'NJ', fields.zip].filter(Boolean).join(', ')
+    : value('address', 200);
+  const back = (interest) => {
+    const query = new URLSearchParams({
+      ...(fields.street ? fields : { address }),
+      interest,
+    });
+    return res.redirect(303, `/quote?${query.toString()}`);
+  };
+
+  try {
+    if (value('website', 200)) return back('thanks');
+    if (form.sms_consent !== 'yes') return back('consent');
+
+    const phone = normalisePhone(form.phone);
+    if (!phone) return back('phone');
+    if (!address) return res.redirect(303, '/pricing');
+    if (throttle.hit(`quote-interest:${req.ip}`, QUOTE_INTEREST_LIMIT, QUOTE_INTEREST_WINDOW_MS)) {
+      return back('thanks');
+    }
+
+    const place = await geocode.lookupOnce(address).catch(() => null);
+    const interestKey = crypto.createHash('sha256')
+      .update(`${phone}|${address.toLowerCase()}`)
+      .digest('hex');
+    const { error } = await db.from('service_area_interests').upsert({
+      interest_key: interestKey,
+      phone,
+      address_text: address,
+      address_line1: fields.street || null,
+      address_line2: fields.unit || null,
+      city: fields.town || null,
+      state: 'NJ',
+      postal_code: fields.zip || null,
+      lat: place && Number.isFinite(place.lat) ? place.lat : null,
+      lng: place && Number.isFinite(place.lng) ? place.lng : null,
+      consent_source: 'WEB_QUOTE',
+      consent_ip: req.ip || null,
+      consented_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'interest_key' });
+    if (error) throw error;
+
+    return back('thanks');
+  } catch (err) {
+    return next(err);
+  }
 });
 
 router.get('/bergen', (req, res) => {

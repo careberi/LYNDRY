@@ -1,3 +1,16 @@
+## 2026-09-28: Shipday-verified public quotes
+Neil requires the public quote to confirm through Shipday that both Uber and DoorDash currently offer both legs between the customer and an eligible laundromat before showing a price. Missing either courier or either direction excludes that shop; provider failures withhold the price. Use the higher confirmed fee per leg so the displayed economics support either approved courier. These are read-only availability calls: no order, driver request, charge or future promise. Recheck at booking. Remove the public “Refine your estimate” date/time card. This supersedes simulated courier costs for new development quotes; preserve saved quotes and production behavior.
+
+Validation: all 1,462 tests pass. A read-only Shipday check for 16-50 Chandler Dr, Fair Lawn and the active Fancy K Laundry location returned Uber and DoorDash offers in both directions ($6.74 Uber and $7.50 DoorDash per leg). The rendered quote used the conservative $7.50 leg cost, stated that both services were checked, and omitted the refinement card. No Shipday order or driver request was created.
+
+## 2026-09-28: Laundromat completed-order history
+Neil requested a high-level record of work after return pickup is confirmed. Add Completed orders below the three active queues, showing only order number, measured weight and collection date/time (Eastern), newest first, ten per page with older/newer navigation. Scope records to the signed-in shop through its confirmed collection record. Completion means laundromat handoff; never mark the customer delivery complete. Keep customer details, charges, vendor IDs, editing and intake actions out of history. Refresh history with the existing board update. No order mutation, migration or courier request is needed.
+
+## 2026-09-28: Return delivery time target
+Neil flagged the four-hour requested-delivery offset on the in-house return. Replace it with a 30-minute target after the requested pickup instant. This is a scheduling target, not a travel-time estimate or confirmation of pickup. Preserve Shipday live ETA and custody checks. Correct the existing development #9015 return in place only if Shipday confirms the same pre-start in-house assignment; do not create, reassign or cancel a trip.
+
+Validation: all 1,456 npm tests pass, including an exact 30-minute requested pickup-to-delivery interval. Shipday return #54002936 changed from NOT_ACCEPTED to STARTED during verification; the pre-start guard refused the existing-order edit, so its original schedule and driver remain unchanged. New return requests use the corrected target. Local development correction on codex/return-delivery-target; not yet committed or pushed.
+
 ## 2026-09-28: In-house return collection in development
 Neil assigned implementation: Ready to return requests a real Shipday return trip from the laundromat to the customer, assigned to the single active/on-shift in-house driver. Existing ready simulated records offer Request return driver. Never book a third-party courier here. Require completed verified intake, readiness, and settled/waived payment. Preserve shop scope and administrator audit identity. Claims, stable references, saved remote IDs and readback prevent duplicate requests; uncertain mutations require review.
 

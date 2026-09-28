@@ -377,14 +377,19 @@ test('NO PAGE STILL CLAIMS THERE IS NO SUBSCRIPTION', () => {
 
 test('AND "NO MEMBERSHIP" SURVIVES, because it is still true', () => {
   // Neil's rule: a subscription is a RATE, not a membership. There is no club,
-  // no joining fee and no minimum number of pickups - so the promise stays on
-  // the page, and the word must never be attached to the $1.80 plan.
+  // no joining fee and no minimum number of pickups - so the promise stays in
+  // the FAQ, and the word must never be attached to the $1.80 plan.
   const pricing = fs.readFileSync(
     path.join(__dirname, '..', 'public', 'pages', 'pricing.html'),
     'utf8'
   );
+  const faq = fs.readFileSync(
+    path.join(__dirname, '..', 'public', 'pages', 'faq.html'),
+    'utf8'
+  );
 
-  assert.match(pricing, /a rate rather than a membership/i);
+  assert.match(faq, /a rate, not a membership/i);
+  assert.doesNotMatch(pricing, /Is there a subscription\?/i);
   assert.doesNotMatch(pricing, /Everything below|What a bag costs/);
   for (const field of ["street", "town", "zip"]) {
     assert.ok(pricing.includes("name=\"" + field + "\""));
@@ -392,7 +397,7 @@ test('AND "NO MEMBERSHIP" SURVIVES, because it is still true', () => {
 
   // And nowhere calls the plan itself a membership.
   const web = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'web.js'), 'utf8');
-  for (const body of [pricing, web]) {
+  for (const body of [pricing, faq, web]) {
     assert.ok(
       !/subscription is a membership|membership plan|join the subscription/i.test(body),
       'the plan is described as a membership'

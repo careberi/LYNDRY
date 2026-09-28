@@ -15,6 +15,7 @@ function fixture(){
 test('ready creates one real in-house return and repeated/concurrent requests do not book twice',async()=>{
  const f=fixture();await Promise.all([f.request('order','shop','admin'),f.request('order','shop','admin')]);
  assert.deepEqual(f.calls.map(c=>c[0]),['create','assign']);assert.equal(f.plan.state,'ASSIGNED');assert.equal(f.plan.simulation,false);assert.equal(f.plan.mode,'IN_HOUSE');
+ assert.equal(Date.parse(f.calls[0][1].dropoffDeadlineAt)-Date.parse(f.calls[0][1].pickupReadyAt),30*60000);
  assert.equal(f.calls[0][1].externalId,'LYNDRY-DEV-9015-RETURN');assert.equal(f.calls[0][1].from.name,'Cedar');assert.equal(f.calls[0][1].to.name,'PRIVATE_CUSTOMER');
  assert.equal((await f.request('order','shop','admin')).already,true);assert.equal(f.calls.length,2);
 });

@@ -4,10 +4,15 @@ const economics=require('../src/core/pricing-economics'),dynamic=require('../src
 const policy={marginBps:{ONE_TIME:2000,SUBSCRIPTION:1000,WHOLESALE:500},processingBps:290,processingFixedCents:30,operationalFeeBps:2500,referenceWeightLb:33};
 function fixture(){
  let writes=0;
+ const shipdayClient={quote:async()=>({ok:true,expiresAt:'2030-01-01T00:05:00.000Z',options:[
+  {service:'Uber',feeCents:674},{service:'DoorDash',feeCents:750}
+ ]})};
  const chain={select(){return this;},lte(){return this;},order(){return this;},limit(){return {data:[{id:'policy',policy}]};}};
  const modules={
   '../db':{from(table){if(table==='dev_pricing_policies')return chain;if(table==='dev_order_quotes')return {insert(q){writes++;return {select(){return {single(){return {data:q};}};}};}};throw Error('Unexpected table '+table);}},
-  '../config':{config:{env:'development',supabase:{isProduction:false}}},
+  '../config':{config:{env:'development',supabase:{isProduction:false},shipday:{apiKey:'test'}}},
+  '../providers/couriers/shipday':{createClient:()=>shipdayClient},
+  './public-courier-availability':require('../src/core/public-courier-availability'),
   './pricing-economics':economics,'./dynamic-order-pricing':dynamic,
   './shipday-dispatch':{dispatchInstant:()=> '2030-01-01T17:00:00Z'},
   './booking':{normaliseTime:x=>x,dateProblem:()=>null,timeProblem:()=>null,checkSlot:async()=>({ok:true})},
@@ -17,7 +22,7 @@ function fixture(){
  };
  const context={require:n=>modules[n],module:{exports:{}},structuredClone};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../src/core/dev-checkout.js'),'utf8'),context);
- return {service:context.module.exports,writes:()=>writes,modules};
+ return {service:context.module.exports,writes:()=>writes,modules,shipdayClient};
 }
 test('public preview shares checkout terms and creates no quote or order record',async()=>{
  const f=fixture(),customer={id:'customer',address_line1:'Test',city:'Test',postal_code:'07452'},form={pickup_date:'2030-01-01',pickup_time:'12:00',plan:'ONE_TIME'};
@@ -33,14 +38,36 @@ test('dynamic quote shows one fee and inclusive totals, never a separate deliver
  assert.match(html,/Operational fee/);assert.match(html,/Minimum total/);assert.match(html,/30–40 lb/);assert.match(html,/\$4.50/);
  assert.doesNotMatch(html,/\$17.98|charged separately|Round trip/);assert.match(html,/&lt;Test&gt;/);
 });
-test('address-only quote asks for schedule without inventing a price',()=>{
- const html=view.scheduleForm({address:'25 Windham Pl'});assert.match(html,/name="pickup_date"/);assert.match(html,/name="pickup_time"/);assert.doesNotMatch(html,/\$\d/);
+test('public quote does not show a schedule refinement card',()=>{
+ const input={wholesaleCentsPerLb:100,pickupCents:750,returnCents:750,policy};
+ const categories=Object.fromEntries(['ONE_TIME','SUBSCRIPTION'].map(category=>[category,economics.preview({...input,category})]));
+ const html=view.render({quote:{ok:true,dynamic:true,categories},address:'25 Windham Pl'});
+ assert.doesNotMatch(html,/Refine your estimate|name="pickup_date"|Calculate my price/);
+});
+
+test('an address with no eligible laundromat gets one service-area answer and a consented notification form',()=>{
+ const args={quote:null,error:'unavailable_area',address:'14-18 Renwick Pl, Long Branch, NJ, 07740',fields:{street:'14-18 Renwick Pl',town:'Long Branch',zip:'07740'}};
+ const html=view.render(args);
+ assert.match(html,/not operating in your area at this time/i);
+ assert.match(html,/action="\/quote\/interest"/);
+ assert.match(html,/name="phone"/);
+ assert.match(html,/name="sms_consent"/);
+ assert.match(html,/14-18 Renwick Pl/);
+ assert.doesNotMatch(html,/Refine your estimate|Calculate my price|price per pound/i);
+
+ const tooFar=view.render({quote:{ok:false,reason:'too_far',miles:20,maxMiles:15},address:args.address,fields:args.fields});
+ assert.match(tooFar,/not operating in your area at this time/i);
+ assert.doesNotMatch(tooFar,/outside the round|20\.0 miles/i);
+
+ const saved=view.render({...args,interest:'thanks'});
+ assert.match(saved,/saved your number/i);
+ assert.doesNotMatch(saved,/name="phone"/);
 });
 
 test('preliminary address estimate shares economics without booking or needing a date',async()=>{
  const f=fixture();
  const q=await f.service.previewQuote({lat:0,lng:0},{},{publicPreview:true,addressEstimate:true});
- assert.ok(q.categories.ONE_TIME.estimated30LbCents>0);assert.equal(f.writes(),0);
+ assert.ok(q.categories.ONE_TIME.estimated30LbCents>0);assert.equal(q.snapshot.source,'SHIPDAY');assert.equal(q.snapshot.pickupCents,750);assert.equal(f.writes(),0);
  await assert.rejects(f.service.previewQuote({}, {}, {addressEstimate:true}),/cannot be booked/);
 });
 test('50 lb maximum includes the fee once and respects a higher minimum',()=>{

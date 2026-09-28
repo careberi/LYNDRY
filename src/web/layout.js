@@ -55,16 +55,14 @@ const NAV_LINKS = [
   // it, so deleting it would orphan the lot; taking it off the menu only stops
   // people browsing into it. It stays in the sitemap, in llms.txt, and linked
   // from the hero eyebrow and Contact, which is what keeps it reachable.
-  { href: '/faq', label: 'Questions' },
-  { href: '/partners', label: 'Partners' },
+  { href: '/faq', label: 'FAQ' },
   { href: '/contact', label: 'Contact' },
+  { href: '/partners', label: 'Partners' },
 
-  // ALWAYS "ACCOUNT", SIGNED IN OR NOT. Neil's call. It briefly said "Sign in"
-  // and swapped to "Account" once a session existed, which meant threading the
-  // session through every page render to change one word. /account/login sends
-  // anybody already signed in straight on to /account, so the one label is true
-  // both ways: it is where your account is, whether or not you are in yet.
-  { href: '/account/login', label: 'Account' },
+  // One direct label for the one account door. /account/login sends anybody
+  // already signed in straight on to /account, so the navigation does not need
+  // to render differently for each session state.
+  { href: '/account/login', label: 'Log in' },
 ];
 
 // Replaces every {{TOKEN}} in a chunk of HTML with its value.
@@ -279,8 +277,7 @@ function footer() {
           <div style="display:flex;flex-direction:column;gap:10px;">
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
-            <a href="/faq">Questions</a>
-            <a href="/account/login">Place an order</a>
+            <a href="/faq">FAQ</a>
           </div>
         </div>
 
@@ -293,11 +290,7 @@ function footer() {
         <div>
           <p class="footer-head">Your account</p>
           <div style="display:flex;flex-direction:column;gap:10px;">
-            <!-- THE SAME WORDS THE HOME PAGE USES on the button that points
-                 here. "Sign in or sign up" asks a visitor to decide which of
-                 the two they are before they have typed anything, which is
-                 exactly what this one screen exists not to ask. -->
-            <a href="/account/login">Place an order online</a>
+            <a href="/account/login">Log in</a>
           </div>
         </div>
 

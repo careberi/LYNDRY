@@ -1,9 +1,9 @@
-<section class="container" style="padding:88px 40px 32px;">
+<section class="container" style="padding:88px 40px 32px;text-align:center;">
   <p class="eyebrow eyebrow-brand">Pricing</p>
   <h1 class="display-2">What it costs at your door.</h1>
-  <p class="lead" style="max-width:46ch;">
-    The rate is the same everywhere. The total is not, because it depends on which
-    laundromat serves your address. Put yours in and see the real number.
+  <p class="lead" style="max-width:46ch;margin-inline:auto;">
+    Your price depends on which laundromat can serve your address. Enter yours
+    to see the current per-pound rate, order minimum and operational fee.
   </p>
 </section>
 
@@ -30,48 +30,4 @@
     <button type="submit" class="btn btn-ink btn-full">See my price {{ICON_ARROW}}</button>
     <p class="pricing-address-hint">We only use this to work out the distance. Nothing is saved and you are not signed up for anything.</p>
   </form>
-</section>
-
-<section style="background:var(--ink-900);padding:88px 0 96px;">
-  <div class="container grid-2 grid-2-narrow" style="gap:56px;align-items:start;">
-
-    <div>
-      <div class="sticky-col" style="position:sticky;top:108px;">
-        <p class="eyebrow eyebrow-paper">Help</p>
-        <h2 class="display-3" style="color:var(--paper-050);margin:0;">Questions</h2>
-      </div>
-    </div>
-
-    <div class="card card-xl card-on-ink" style="padding:8px 34px;">
-      <div class="qa" style="border-top:none;">
-        <h3>Is there a subscription?</h3>
-        <p>Yes, and it is a rate rather than a membership. A subscription is cheaper per pound than a one-time pickup, with pickups {{SUBSCRIPTION_FREQUENCIES}}. Both rates are worked out from your address, so put it in the box at the top of this page to see yours. There is nothing to join, no joining fee and no minimum number of pickups, you still pay only for the laundry you send, and you can change how often we come or cancel at any time. Cancelling never changes the price of a pickup you have already had.</p>
-      </div>
-      <div class="qa">
-        <h3>How do I know what I'll be charged?</h3>
-        <p>We weigh your laundry after picking it up and multiply by your rate, which the box at the top of this page will tell you for your address. A {{MINIMUM}} minimum per pickup applies either way. You get the exact figure by text as the charge goes through.</p>
-      </div>
-      <div class="qa">
-        <h3>How do I pay?</h3>
-        <p>Before your first pickup we text you a secure link to add a card. It's handled by Stripe, our payment processor. The card number never touches this website and we never see it.</p>
-      </div>
-      <div class="qa">
-        <h3>When exactly am I charged?</h3>
-        <p>Once per pickup, after we weigh it, and you are told as it happens. Nothing is taken when you book. The text with the weight and the total arrives at the moment your card is charged. You are only ever charged for a pickup, never for having an account and never on a subscription cycle: a subscription books pickups and each one is charged after it is weighed, exactly like a one-time pickup. We text you the evening before every pickup, so nothing is ever charged without warning.</p>
-      </div>
-      <div class="qa">
-        <h3>What if my laundry weighs very little?</h3>
-        <p>The {{MINIMUM}} minimum per pickup is the price, and it is the same {{MINIMUM}} on either rate. A small load still gets a full pickup, a full wash and fold, and a full delivery, which is what the minimum covers. Cancel before we pick up and there is nothing to pay.</p>
-      </div>
-      <div class="qa">
-        <h3>Do you charge for pickup or delivery?</h3>
-        <p>No. Both are included in the per-pound rate, whichever one you are on.</p>
-      </div>
-      <div class="qa" style="border-bottom:none;">
-        <h3>What if something needs special handling?</h3>
-        <p>Mention it when you book and we'll take care of it. If it's something we can't do, we'll tell you before we pick up, not after.</p>
-      </div>
-    </div>
-
-  </div>
 </section>

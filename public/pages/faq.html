@@ -18,7 +18,7 @@
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:760px;padding-top:88px;padding-bottom:72px;">
     <p class="eyebrow eyebrow-brand">Help</p>
-    <h1 class="display-2" style="margin-bottom:14px;">Questions.</h1>
+    <h1 class="display-2" style="margin-bottom:14px;">Frequently Asked Questions</h1>
     <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:46ch;margin:0;">
       The things people ask before their first pickup. Anything else, just text
       us on <a href="{{SMS_LINK}}">{{PHONE}}</a>.
@@ -27,38 +27,41 @@
 </section>
 
 <section class="container" style="max-width:760px;padding-top:64px;padding-bottom:40px;">
+  <div class="faq">
 
-  <div class="qa">
-    <h3>Do I need an app?</h3>
+  <details>
+    <summary>Do I need an app?</summary>
+    <div class="faq-answer">
     <p>
       No. There is nothing to download and nothing to install. You place the
       order on this website, which takes about a minute, and you sign in with
       your mobile number rather than a password to remember.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>Do I have to be home?</h3>
+  <details>
+    <summary>Do I have to be home?</summary>
+    <div class="faq-answer">
     <p>
       No. Leave the bag where you tell us to leave it: the front door, a side
       gate, with a doorman. That is where we pick it up and where we bring it
-      back. We text you when it has been picked up, and again
-      with a photo when it is back at your door.
+      back.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>How does the price work?</h3>
+  <details>
+    <summary>How does the price work?</summary>
+    <div class="faq-answer">
     <p>
-      {{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it
-      up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with
-      pickups {{SUBSCRIPTION_FREQUENCIES}}. A {{MINIMUM}} minimum per pickup
-      applies either way, and there is no delivery fee.
+      Pricing is calculated for your address. Enter your address on our
+      <a href="/pricing">pricing page</a> to see your current price per pound,
+      order minimum and operational fee before you book.
     </p>
     <p>
-      A subscription is a rate, not a membership. There is nothing to join, no
-      joining fee and no minimum number of pickups, and you can change how often
-      we come or cancel at any time.
+      We charge one operational fee per order. Your minimum total includes that
+      fee, and your final laundry weight determines the rest of your bill.
     </p>
     <p>
       <strong>Nothing is charged when you book.</strong> Before your first
@@ -67,16 +70,12 @@
       moment your card is charged. We text you the weight and the total at the
       same time, so you are told the figure every time.
     </p>
-    <p>
-      A typical bag is {{BAG_WEIGHT}}, which comes to about
-      {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order and no
-      maximum: send as much as you have in one pickup. See
-      <a href="/pricing">pricing</a>.
-    </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>What bags can I put it in?</h3>
+  <details>
+    <summary>What bags can I put it in?</summary>
+    <div class="faq-answer">
     <p>
       Any bag at all. A laundry sack, a duffel, a tote, a trash bag, whatever
       you have. You do not need to buy anything.
@@ -85,26 +84,32 @@
       It comes back to you in a fresh plastic bag, and anything reusable you sent
       it in comes back with it.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>How long does it take?</h3>
+  <details>
+    <summary>How long does it take?</summary>
+    <div class="faq-answer">
     <p>
       Back to you the {{TURNAROUND}}. Picked up one day, returned the next.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>What if I need to cancel?</h3>
+  <details>
+    <summary>What if I need to cancel?</summary>
+    <div class="faq-answer">
     <p>
       Free, right up until your bag is picked up. Cancel by text, or from your
       account. Once it is with us it is already being washed, so it cannot be
       cancelled after that.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>How is it washed?</h3>
+  <details>
+    <summary>How is it washed?</summary>
+    <div class="faq-answer">
     <p>
       You choose the water temperature and whether you want fabric softener. We
       ask once, when you set up, and then never again. Every order uses the
@@ -115,25 +120,33 @@
       and everything is tumble dried. We wash, dry and fold only. No dry
       cleaning, pressing or alterations.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>Do you serve my area?</h3>
+  <details>
+    <summary>Do you serve my area?</summary>
+    <div class="faq-answer">
     <p>
       Tell us the address and we will tell you. Sign up even if you are not sure and we
       will tell you when we reach you.
     </p>
-  </div>
+    </div>
+  </details>
 
-  <div class="qa">
-    <h3>Can I have pickups booked automatically?</h3>
+  <details>
+    <summary>Can I have pickups booked automatically?</summary>
+    <div class="faq-answer">
     <p>
-      Yes, that is a subscription, and it is {{SUBSCRIPTION_PRICE_PER_LB}} a
-      pound instead of {{PRICE_PER_LB}}. Pick the day that suits you and we come
-      {{SUBSCRIPTION_FREQUENCIES}}, at the same time. We text you the evening
-      before each one, and you can skip one, change how often we come, or cancel
-      whenever you like.
+      Yes. That is a subscription. A subscription is a rate, not a membership,
+      and the rate is calculated for your address. Pick the day and frequency
+      that suit you and we come at the same time. We text you the evening before
+      each pickup, and you can skip one, change the frequency or cancel whenever
+      you like. Enter your address on our <a href="/pricing">pricing page</a> to
+      see the current price per pound, order minimum and operational fee.
     </p>
+    </div>
+  </details>
+
   </div>
 
 </section>
