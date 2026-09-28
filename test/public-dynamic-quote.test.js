@@ -70,11 +70,11 @@ test('preliminary address estimate shares economics without booking or needing a
  assert.ok(q.categories.ONE_TIME.estimated30LbCents>0);assert.equal(q.snapshot.source,'SHIPDAY');assert.equal(q.snapshot.pickupCents,750);assert.equal(f.writes(),0);
  await assert.rejects(f.service.previewQuote({}, {}, {addressEstimate:true}),/cannot be booked/);
 });
-test('50 lb maximum includes the fee once and respects a higher minimum',()=>{
+test('price review shows the minimum and weight limit without a maximum charge',()=>{
  const view=require('../src/web/booking-price');
  const p={rateCentsPerLb:165,operationalFeeCents:450,minimumTotalCents:2214,estimated30LbCents:5400,estimated40LbCents:7050,estimatedReferenceTotalCents:5895,referenceWeightLb:33};
  const html=view.review({id:'test',snapshot:p},'');
- assert.match(html,/50 lb per order/);assert.match(html,/\$87.00/);assert.doesNotMatch(html,/name="spending_limit"|Set your spending limit|type="checkbox"/);assert.match(html,/name="price_consent" value="yes"/);
+ assert.match(html,/50 lb per order/);assert.doesNotMatch(html,/Maximum at|maximum charge|booking-maximum|\$87.00/);assert.doesNotMatch(html,/name="spending_limit"|Set your spending limit|type="checkbox"/);assert.match(html,/name="price_consent" value="yes"/);
  assert.match(view.review({id:'test',snapshot:{...p,minimumTotalCents:10000}},''),/\$100.00/);
  assert.match(view.planEstimate(p),/\$54.00–\$70.50/);
 });

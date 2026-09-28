@@ -171,7 +171,7 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
       If you already have an account, we will text you a secure sign-in code.
     </p>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:14px 0 0;">
-      ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, operational fee, minimum total, and maximum at 50 lb before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
+      ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, operational fee and minimum total before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
     </p>
   </div>
 </section>
