@@ -164,7 +164,7 @@ async function list({ type = null, includeEnded = false } = {}) {
 async function activeLaundromats() {
   const { data, error } = await db
     .from('partners')
-    .select('id, name, city, daily_capacity_lb, lat, lng')
+    .select('id, name, address_line1, address_line2, city, state, postal_code, daily_capacity_lb, lat, lng')
     .eq('type', 'LAUNDROMAT')
     .eq('status', 'ACTIVE')
     .order('name', { ascending: true });

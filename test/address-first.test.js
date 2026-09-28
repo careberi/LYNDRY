@@ -7,10 +7,12 @@ const settings=require('../src/core/settings');
 const booking=require('../src/core/booking');
 const onboarding=require('../src/core/onboarding');
 const db=require('../src/db');
+const checkout=require('../src/core/dev-checkout');
 
 test('booking starts with saved-address confirmation and removes premature plan prices',async t=>{
   const customer={id:'test-customer',name:'Test Customer',phone:'+12015550100',address_line1:'1 Test Street',city:'Lodi',postal_code:'07644',preferences:{water_temp:'cold',fabric_softener:'standard',special_instructions:'Front door'}};
-  const originals={attach:auth.attachCustomer,opens:settings.opensOn,zip:booking.zipInServiceArea,refresh:booking.refreshBookedOrders,from:db.from,preferences:booking.hasPreferences};
+  const originals={preview:checkout.previewQuote,attach:auth.attachCustomer,opens:settings.opensOn,zip:booking.zipInServiceArea,refresh:booking.refreshBookedOrders,from:db.from,preferences:booking.hasPreferences};
+  checkout.previewQuote=async()=>({});
   auth.attachCustomer=async req=>{req.customer=customer;};
   settings.opensOn=async()=>null;
   booking.zipInServiceArea=async()=>true;
@@ -18,7 +20,7 @@ test('booking starts with saved-address confirmation and removes premature plan 
   booking.hasPreferences=()=>true;
   let writes=0;
   db.from=table=>{assert.equal(table,'customers');return {update:()=>({eq:async()=>{writes++;return {error:null};}})};};
-  t.after(()=>{auth.attachCustomer=originals.attach;settings.opensOn=originals.opens;booking.zipInServiceArea=originals.zip;booking.refreshBookedOrders=originals.refresh;booking.hasPreferences=originals.preferences;db.from=originals.from;});
+  t.after(()=>{checkout.previewQuote=originals.preview;auth.attachCustomer=originals.attach;settings.opensOn=originals.opens;booking.zipInServiceArea=originals.zip;booking.refreshBookedOrders=originals.refresh;booking.hasPreferences=originals.preferences;db.from=originals.from;});
   const app=express();app.use(express.urlencoded({extended:false}));app.use(require('../src/routes/account').router);
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
   const base='http://127.0.0.1:'+server.address().port;
@@ -36,12 +38,13 @@ test('booking starts with saved-address confirmation and removes premature plan 
 });
 
 test('guest address saves before wash preferences without inventing answers',async t=>{
- const originals={attach:auth.attachCustomer,read:auth.readGuest,opens:settings.opensOn,zip:booking.zipInServiceArea,refresh:booking.refreshBookedOrders,from:db.from,start:onboarding.startConversation};
+ const originals={preview:checkout.previewQuote,attach:auth.attachCustomer,read:auth.readGuest,opens:settings.opensOn,zip:booking.zipInServiceArea,refresh:booking.refreshBookedOrders,from:db.from,start:onboarding.startConversation};
+ checkout.previewQuote=async()=>({});
  auth.attachCustomer=async()=>{};auth.readGuest=()=>'+12015550100';settings.opensOn=async()=>null;
  booking.zipInServiceArea=async()=>true;booking.refreshBookedOrders=async()=>{};
  const changes=[];db.from=()=>({update:change=>({eq:async()=>{changes.push(change);return {error:null};}})});
  let started=0;onboarding.startConversation=async()=>{started++;return {ok:true,created:false,customer:{id:'test-guest',phone:'+12015550100',preferences:{}}};};
- t.after(()=>{auth.attachCustomer=originals.attach;auth.readGuest=originals.read;settings.opensOn=originals.opens;booking.zipInServiceArea=originals.zip;booking.refreshBookedOrders=originals.refresh;db.from=originals.from;onboarding.startConversation=originals.start;});
+ t.after(()=>{checkout.previewQuote=originals.preview;auth.attachCustomer=originals.attach;auth.readGuest=originals.read;settings.opensOn=originals.opens;booking.zipInServiceArea=originals.zip;booking.refreshBookedOrders=originals.refresh;db.from=originals.from;onboarding.startConversation=originals.start;});
  const app=express();app.use(express.urlencoded({extended:false}));app.use(require('../src/routes/account').router);
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
  const base='http://127.0.0.1:'+server.address().port;
@@ -50,4 +53,35 @@ test('guest address saves before wash preferences without inventing answers',asy
  response=await post({step:'address',sms_consent:'yes',name:'Test Customer',address_line1:'1 Test Street',city:'Lodi',postal_code:'07644',spot:'Front door'});
  assert.equal(response.status,200);const html=await response.text();assert.match(html,/How would you like it washed/);assert.match(html,/name="address_confirmed" value="yes"/);assert.equal(started,1);
  assert.ok(changes.every(c=>!c.preferences.water_temp&&!c.preferences.fabric_softener));
+});
+
+
+test('Fair Lawn signup uses the full address and handles coverage separately from lookup failure',async t=>{
+ const originals={attach:auth.attachCustomer,opens:settings.opensOn,zip:booking.zipInServiceArea,refresh:booking.refreshBookedOrders,from:db.from,preview:checkout.previewQuote};
+ const customer={id:'test-customer',phone:'+12015550100',lat:1,lng:2,preferences:{water_temp:'cold',fabric_softener:'standard'}};
+ auth.attachCustomer=async req=>{req.customer=customer;}; settings.opensOn=async()=>null;
+ booking.refreshBookedOrders=async()=>{};
+ let legacyCalls=0,writes=0,checked=[];
+ booking.zipInServiceArea=async()=>{legacyCalls++;return false;};
+ checkout.previewQuote=async(address,form,options)=>{checked.push({address,options});return {};};
+ db.from=table=>{assert.equal(table,'customers');return {update:()=>({eq:async()=>{writes++;return {error:null};}})};};
+ t.after(()=>{auth.attachCustomer=originals.attach;settings.opensOn=originals.opens;booking.zipInServiceArea=originals.zip;booking.refreshBookedOrders=originals.refresh;db.from=originals.from;checkout.previewQuote=originals.preview;});
+ const app=express();app.use(express.urlencoded({extended:false}));app.use(require('../src/routes/account').router);
+ const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
+ const form={step:'address',name:'Test Customer',address_line1:'16-50 Chandler Dr.',address_line2:'Unit 2',city:'Fair Lawn',postal_code:'07410',spot:'Front door'};
+ const post=extra=>fetch('http://127.0.0.1:'+server.address().port+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({...form,...extra})});
+ let response=await post({});assert.equal(response.status,200);assert.match(await response.text(),/One-Time or Subscription/);
+ assert.equal(legacyCalls,0);assert.equal(writes,1);
+ assert.deepEqual(checked[0],{address:{address_line1:'16-50 Chandler Dr.',address_line2:'Unit 2',city:'Fair Lawn',state:'NJ',postal_code:'07410'},options:{publicPreview:true,addressEstimate:true}});
+ response=await post({postal_code:'10036'});assert.equal(response.status,400);assert.match(await response.text(),/serve New Jersey/);assert.equal(checked.length,1);
+ for(const [failure,expected] of [
+  ['No eligible laundromat is available for this pickup.',/not operating at this address/],
+  ['Shipday is unavailable.',/could not verify pickup availability/],
+  ['The pickup address could not be located.',/could not find that address/]
+ ]) {
+  checkout.previewQuote=async()=>{throw Error(failure);};
+  response=await post({});assert.equal(response.status,400);
+  const html=await response.text();assert.match(html,expected);assert.doesNotMatch(html,/cannot pick up from 07410|only cover New Jersey/);
+  assert.equal(writes,1);
+ }
 });

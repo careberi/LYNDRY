@@ -1567,23 +1567,31 @@ async function saveAddress(customer, form) {
     return { ok: false, error: 'Please enter a five-digit ZIP code.' };
   }
 
-  // THE ZIP IS CHECKED HERE, NOT ONLY AT BOOKING. Saving an address outside the
-  // area and then refusing the booking tells somebody twice, the second time
-  // after they have picked a day.
-  //
-  // IT IS THE SAME RULE `bookPickup()` USES AND NOT THE SAME EVIDENCE, which is
-  // the honest version of what this comment used to claim. There are no
-  // coordinates on a half-typed address, so `zipInServiceArea()` places the ZIP
-  // itself; `bookPickup()` measures from the saved address. A ZIP straddling the
-  // boundary can therefore pass here and be refused there, which is the right
-  // way round - this one is a courtesy and that one is the decision.
-  if (!(await booking.zipInServiceArea(postalCode))) {
-    return {
-      ok: false,
-      error:
-        `We only cover ${site.serviceArea} at the moment, so we cannot pick up from ` +
-        `${postalCode} yet. Text us and we will let you know when that changes.`,
-    };
+  // The development quote already verifies both courier legs for an exact
+  // address. A ZIP-only legacy quote cannot overrule that result or establish
+  // that a New Jersey ZIP is outside New Jersey.
+  const checkout = require('../core/dev-checkout');
+  if (checkout.enabled) {
+    if (!booking.inNewJersey({ postal_code: postalCode })) {
+      return { ok: false, error: 'We currently serve New Jersey addresses. Please check your ZIP code.' };
+    }
+    try {
+      await checkout.previewQuote({
+        address_line1: addressLine1,
+        address_line2: String(form.address_line2 || '').trim() || null,
+        city, state: 'NJ', postal_code: postalCode,
+      }, {}, { publicPreview: true, addressEstimate: true });
+    } catch (err) {
+      const message = String(err.message || '');
+      const error = /No eligible laundromat/i.test(message)
+        ? 'Unfortunately, we are not operating at this address at this time.'
+        : /could not be located/i.test(message)
+          ? 'We could not find that address. Please check the street, town and ZIP code.'
+          : 'We could not verify pickup availability right now. Please try again in a moment.';
+      return { ok: false, error };
+    }
+  } else if (!(await booking.zipInServiceArea(postalCode))) {
+    return { ok: false, error: 'We do not currently offer pickup at this address. Please check your address or contact us.' };
   }
 
   if (chosen === 'OTHER' && !spot) {

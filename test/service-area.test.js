@@ -165,6 +165,9 @@ test('and the query that feeds it selects the two columns', () => {
   assert.ok(body, 'activeLaundromats() has been renamed or removed');
   assert.match(body[0], /\blat\b/, 'lat is no longer selected, so the service area cannot be measured');
   assert.match(body[0], /\blng\b/, 'lng is no longer selected, so the service area cannot be measured');
+  for (const column of ['address_line1', 'address_line2', 'state', 'postal_code']) {
+    assert.ok(body[0].includes(column), column + ' must reach the courier with the laundromat address');
+  }
 });
 
 // --- the two together -------------------------------------------------------
