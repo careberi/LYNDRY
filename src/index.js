@@ -87,6 +87,9 @@ app.use((req, res, next) => {
 // because we record the customer's IP as legal proof of SMS consent.
 app.set('trust proxy', 1);
 
+// The POS subdomain reuses the guarded operations routes, including login.
+app.use(require('./web/pos-host').posHost({ ...config.pos, publicHost: 'lyndry.com', publicOrigin: config.baseUrl }));
+
 // THE GOOGLE AD CLICK, remembered for 90 days from whichever page an ad lands
 // on. Before every route so no landing page can be missed, and harmless to the
 // payment webhook beneath it: it only ever acts on a GET that carries gclid,
@@ -408,6 +411,8 @@ const server = app.listen(config.port, () => {
   // see src/core/scheduler.js for why a dev server doing this would be a
   // disaster.
   scheduler.start();
+  require('./core/shipday-dispatch-runtime').start();
+  require('./core/shipday-order-sync-runtime').start();
 });
 
 // When the host wants to stop or redeploy us it sends SIGTERM. Finish the

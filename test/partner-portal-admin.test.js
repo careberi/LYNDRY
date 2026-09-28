@@ -113,13 +113,11 @@ test('ONLY OPS MAY NAME AN OWNER, AND THE PAGE IS WHERE THAT RUNG IS', () => {
 });
 
 test('"sign into it as well" is answered without an impersonation feature', () => {
-  // NEIL ASKED TO BE ABLE TO SIGN IN AND THE ANSWER IS THAT HE ALREADY CAN: add
-  // his own number as an owner and sign in at the shop's address, as HIMSELF.
-  // An impersonation feature would put his actions in an attendant's name, which
-  // is the one thing a staff list exists to prevent - so the page says how
-  // instead, and a test pins that nothing anywhere signs in as somebody else.
+  // Admin entry must not require a shop-owner record or impersonate staff.
   const html = render();
-  assert.match(html, /add your own number as an\s*owner/i, 'the page no longer says how to get in');
+  assert.doesNotMatch(html, /add your own number as an\s*owner/i);
+  assert.match(render({canOpenPortal:true}), /Open portal as admin/);
+  assert.doesNotMatch(html, /Open portal as admin/);
 
   // A LAUNDROMAT SESSION, NOT ANY SESSION. The first version matched
   // `setSessionCookie` outright and caught `admin-auth`'s own - which is Neil

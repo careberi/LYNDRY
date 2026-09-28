@@ -290,7 +290,7 @@ test('THE SAVING IS WORKED OUT, NOT TYPED', () => {
   // round percentage the clause disappears rather than going stale, because
   // both prices are on the screen beside it either way.
   const screen = withoutComments(SRC('routes', 'account.js'));
-  assert.match(screen, /subscription\.savingPercent\(\)/);
+  assert.doesNotMatch(screen, /subscription\.savingPercent\(\)/, 'booking must not promise savings before an address-based quote');
   assert.ok(!/Save 10%/.test(screen), 'the saving is typed into the checkout');
 });
 
@@ -384,8 +384,11 @@ test('AND "NO MEMBERSHIP" SURVIVES, because it is still true', () => {
     'utf8'
   );
 
-  assert.match(pricing, /no membership/i, 'the no-membership promise was dropped');
-  assert.match(pricing, /not a club/i);
+  assert.match(pricing, /a rate rather than a membership/i);
+  assert.doesNotMatch(pricing, /Everything below|What a bag costs/);
+  for (const field of ["street", "town", "zip"]) {
+    assert.ok(pricing.includes("name=\"" + field + "\""));
+  }
 
   // And nowhere calls the plan itself a membership.
   const web = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'web.js'), 'utf8');
@@ -513,13 +516,12 @@ test('THE SUBSCRIPTION RATE IS THE BIG NUMBER, not the one-time rate', () => {
     '/pricing is quoting a flat per-pound rate again, which contradicts its own quote box'
   );
 
-  // Home: the heading names the subscription rate.
-  const home = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'home.html'), 'utf8');
-  assert.match(
-    home,
-    /<h2 class="display-3">\{\{SUBSCRIPTION_PRICE_PER_LB\}\}/,
-    'the home headline no longer leads with the subscription rate'
-  );
+  // Home directs customers to their address-based quote.
+  const home = fs.readFileSync(path.join(__dirname, "..", "public", "pages", "home.html"), "utf8");
+  assert.ok(home.includes("href=\"/pricing\""));
+  assert.match(home, /Check my price/);
+  assert.doesNotMatch(home, /{{(?:SUBSCRIPTION_PRICE_PER_LB|PRICE_PER_LB|MINIMUM)}}/);
+  assert.doesNotMatch(home, /No membership|No app to download|never again|the moment it.s down/i);
 
   // How it works: the big figure in the price card.
   const hiw = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'how-it-works.html'), 'utf8');

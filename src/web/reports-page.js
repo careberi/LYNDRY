@@ -61,20 +61,20 @@ function reportsBody({ report, partners = [], form = {} }) {
   const gaps = [];
   if (totals.partnerWeighed < totals.orders) {
     gaps.push(
-      `${totals.orders - totals.partnerWeighed} of ${totals.orders} have no laundromat weight, so they are missing from the invoice total.`
+      `${totals.orders - totals.partnerWeighed} of ${totals.orders} orders are missing laundromat weights and are excluded from the invoice total.`
     );
   }
   if (totals.additionsCents > 0) {
     gaps.push(
-      `${cash(totals.additionsCents).replace(/<[^>]*>/g, '')} of add-ons were chosen and none of it was billed - the pricing code has never charged them.`
+      `${cash(totals.additionsCents).replace(/<[^>]*>/g, '')} in selected add-ons has not been billed.`
     );
   }
 
   const th = (label, extra = '') =>
     `<th style="text-align:${
       extra || 'left'
-    };padding:10px 12px;border-bottom:2px solid var(--ink-900);white-space:nowrap;
-        font-family:var(--font-mono);font-size:11px;letter-spacing:0.07em;text-transform:uppercase;">${label}</th>`;
+    };padding:10px 12px;border-bottom:1px solid var(--c-line);white-space:nowrap;
+        text-transform:uppercase;">${label}</th>`;
 
   const td = (content, align = 'left', extra = '') =>
     `<td style="padding:11px 12px;border-bottom:1px solid var(--ink-100);text-align:${align};
@@ -83,23 +83,14 @@ function reportsBody({ report, partners = [], form = {} }) {
   return `
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
     <h1 style="font-family:var(--font-display);font-weight:900;font-size:34px;line-height:1;margin:0;">
-      Weight and money report
+      Weight and payment report
     </h1>
     <a class="btn btn-sm" href="${escapeHtml(csvHref)}">Export CSV</a>
   </div>
 
-  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:70ch;margin:0 0 22px;">
-    Every order that went to a laundromat, with all three weights side by side.
-    <strong>The customer is billed on the heavier of the two scales, and we pay
-    the laundromat on the lighter</strong> - so a disagreement between two
-    scales never costs us money at either end. Nothing here changes anything;
-    it is a reading of what happened.
-  </p>
 
-  <form method="get" action="/ops/reports"
-        style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:0 0 24px;
-               padding:18px 20px;border:2px solid var(--ink-900);border-radius:14px;
-               background:var(--paper-050);box-shadow:var(--shadow-pop-xs);">
+
+  <form method="get" action="/ops/reports" class="ops-filter-panel">
     <div>
       <label class="field-label" for="from">From</label>
       <input class="input" type="date" id="from" name="from" value="${escapeHtml(start)}">
@@ -111,7 +102,7 @@ function reportsBody({ report, partners = [], form = {} }) {
     <div>
       <label class="field-label" for="partner">Laundromat</label>
       <select class="select" id="partner" name="partner">
-        <option value="">All of them</option>
+        <option value="">All laundromats</option>
         ${partners
           .map(
             (p) =>
@@ -122,13 +113,13 @@ function reportsBody({ report, partners = [], form = {} }) {
           .join('')}
       </select>
     </div>
-    <button class="btn" type="submit">Show it</button>
+    <button class="btn" type="submit">Apply filters</button>
   </form>
 
   ${
     gaps.length
       ? `<div class="ops-note ops-note--warn">
-           <span class="ops-note__label">Read this before you invoice</span>
+           <span class="ops-note__label">Invoice data warnings</span>
            <ul style="margin:0;padding-left:20px;font-size:15px;line-height:1.6;">
              ${gaps.map((g) => `<li>${escapeHtml(g)}</li>`).join('')}
            </ul>
@@ -139,10 +130,8 @@ function reportsBody({ report, partners = [], form = {} }) {
   ${
     rows.length
       ? `
-  <div style="overflow-x:auto;border:2px solid var(--ink-900);border-radius:14px;
-              background:var(--paper-050);box-shadow:var(--shadow-pop-sm);">
-    <table style="width:100%;border-collapse:collapse;font-size:15px;
-                  font-variant-numeric:tabular-nums;">
+  <div class="ops-table-wrap">
+    <table class="ops-table">
       <thead>
         <tr>
           <!-- NAMED BY WHO WEIGHED IT. "In, ours" and "They said" meant nothing
@@ -153,15 +142,15 @@ function reportsBody({ report, partners = [], form = {} }) {
           ${th('Order')}
           ${th('LYNDRY weight', 'right')}
           ${th('Partner weight', 'right')}
-          ${th('Drift', 'right')}
-          ${th('Weight back out', 'right')}
+          ${th('Weight difference (lb)', 'right')}
+          ${th('Return weight (lb)', 'right')}
           ${th('Add-ons', 'right')}
-          ${th('Billed on&nbsp;&middot;&nbsp;higher', 'right')}
+          ${th('Billed weight (higher)', 'right')}
           ${th('Customer paid', 'right')}
-          ${th('Should be', 'right')}
-          ${th('We pay on&nbsp;&middot;&nbsp;lower', 'right')}
-          ${th('We pay partner', 'right')}
-          ${th('Left over', 'right')}
+          ${th('Expected charge', 'right')}
+          ${th('Payable weight (lower)', 'right')}
+          ${th('Partner payable', 'right')}
+          ${th('Gross balance', 'right')}
         </tr>
       </thead>
       <tbody>
@@ -174,9 +163,9 @@ function reportsBody({ report, partners = [], form = {} }) {
 
             return `
         <tr>
-          ${td(escapeHtml(r.partnerName || 'not sent to one'))}
+          ${td(escapeHtml(r.partnerName || 'Not assigned'))}
           ${td(
-            `<a href="/ops/orders/${escapeHtml(r.orderNumber)}" style="font-weight:700;color:inherit;">#${escapeHtml(
+            `<a href="/ops/orders/${escapeHtml(r.orderNumber)}">#${escapeHtml(
               r.orderNumber
             )}</a>`
           )}
@@ -216,17 +205,13 @@ function reportsBody({ report, partners = [], form = {} }) {
   </div>
 
   <p style="font-size:14px;line-height:1.6;color:var(--ink-500);margin:18px 0 0;max-width:70ch;">
-    <strong>Drift</strong> is their scale against ours, and the sign is kept on
-    purpose: heavier than us costs money, lighter is the ordinary direction.
-    <strong>Should be</strong> is the billed weight at this order's own stored
-    rate plus its add-ons - what the rules say, not what was taken.
-    <strong>We pay on</strong> is the lighter of the two scales, which is the
-    mirror of billing on the heavier.
-    <strong>Left over</strong> is what the customer paid minus what the
-    laundromat is owed, before the van, the wage and the card fees.
+    <strong>Weight difference</strong>: partner weight minus LYNDRY weight.
+    <strong>Expected charge</strong>: billed weight at the stored order rate, plus add-ons.
+    <strong>Payable weight</strong>: the lower of the two recorded weights.
+    <strong>Gross balance</strong>: customer payment minus partner payable, before transport, labor, and payment processing costs.
   </p>`
       : `<p style="font-size:16px;color:var(--ink-500);">
-           Nothing between those dates.
+           No orders found for the selected filters.
          </p>`
   }`;
 }

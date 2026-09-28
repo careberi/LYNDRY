@@ -1269,6 +1269,11 @@ async function recordPartnerScale(order, { by = {} } = {}) {
 }
 
 async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null, note = null } = {}) {
+  if(order.dev_quote_id && !order.weight_settled_at){
+    const weight=chosenLb==null?Math.max(Number(order.weight_lb)||0,Number(order.partner_weight_lb)||0):Number(chosenLb);
+    const checked=await require('./dev-checkout').evaluateWeight(order,weight);
+    if(!checked.ok)return {ok:false,held:true,detail:checked.reason||'The order weight could not be recorded.'};
+  }
   if (order.weight_settled_at) {
     // ALREADY PRICED AND ALREADY PAID, because since loadVan() that happens at
     // the customer's door. Their laundromat's figure still has two jobs though

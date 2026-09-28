@@ -32,7 +32,7 @@ const bookingIntents = require('../core/booking-intents');
 
 function when(intent) {
   const date = bookingIntents.firstDateFor(intent);
-  if (!date) return 'No day chosen';
+  if (!date) return 'Date not selected';
 
   // MM/DD/YYYY, not readableDate(). That one writes 'Monday 14 Sep', which is
   // right in a text message and wrong in a column - see src/core/format.js.
@@ -67,32 +67,18 @@ function row(intent, { showNames }) {
   // ring, and a different thing to say, from somebody who never came back at
   // all. Saying "no payment method" about the first would be wrong.
   const stuck = intent.blocked_reason
-    ? `<span class="badge" style="background:var(--sunbeam-500);">Card saved, needs a new time</span>`
+    ? `<span class="badge" style="background:var(--sunbeam-500);">Pickup time required</span>`
     : `<span class="badge">No payment method</span>`;
 
   const chased = intent.card_link_sent_at
-    ? '<span style="color:var(--ink-500);">texted</span>'
-    : '<span style="color:var(--ink-500);">not texted</span>';
+    ? '<span style="color:var(--ink-500);">Reminder sent</span>'
+    : '<span style="color:var(--ink-500);">Reminder not sent</span>';
 
   return `
   <tr>
-    <td style="padding:12px 14px;vertical-align:top;">
-      <div style="font-weight:700;">${
-        showNames ? escapeHtml(customer.name || 'No name yet') : 'Customer'
-      }</div>
-      ${
-        showNames && digits
-          ? `<div style="font-size:14px;"><a href="tel:${escapeHtml(digits)}">${escapeHtml(
-              customer.phone
-            )}</a></div>`
-          : ''
-      }
-      ${
-        customer.city
-          ? `<div style="font-size:14px;color:var(--ink-500);">${escapeHtml(customer.city)}</div>`
-          : ''
-      }
-    </td>
+    <td>${showNames ? escapeHtml(customer.name || 'Not provided') : 'Customer'}</td>
+    <td>${showNames && digits ? `<a href="tel:${escapeHtml(digits)}">${escapeHtml(format.displayPhone(customer.phone))}</a>` : '—'}</td>
+    <td>${escapeHtml(customer.city || '—')}</td>
     <td style="padding:12px 14px;vertical-align:top;">${escapeHtml(when(intent))}</td>
     <td style="padding:12px 14px;vertical-align:top;">${stuck}${
       intent.blocked_reason
@@ -108,7 +94,7 @@ function row(intent, { showNames }) {
     <td style="padding:12px 14px;vertical-align:top;white-space:nowrap;">
       ${
         showNames && digits
-          ? `<a class="btn btn-sm" href="/ops/messages/${encodeURIComponent(digits)}">Thread</a>`
+          ? `<a class="btn btn-sm" href="/ops/messages/${encodeURIComponent(digits)}">View messages</a>`
           : ''
       }
     </td>
@@ -116,43 +102,14 @@ function row(intent, { showNames }) {
 }
 
 function checkoutsBody({ intents = [], showNames = true, minutes = 20 }) {
-  if (!intents.length) {
-    return `
-  <div class="card card-xl" style="padding:26px 30px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Unfinished checkouts</p>
-    <p style="font-size:17px;line-height:1.5;margin:0;">
-      Nobody is stalled. Everyone who started an order online in the last while
-      either finished it or has only just begun.
-    </p>
-  </div>`;
-  }
-
   return `
-  <div class="card card-xl" style="padding:26px 30px;margin-bottom:26px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Unfinished checkouts</p>
-    <p style="font-size:17px;line-height:1.5;margin:0 0 6px;">
-      ${intents.length} ${intents.length === 1 ? 'person' : 'people'} chose a day
-      and did not finish adding a payment method.
-    </p>
-    <p style="font-size:15px;line-height:1.55;color:var(--ink-500);margin:0;">
-      No order exists for these, so they are not on the board and no driver is
-      going. They keep everything they typed - if they come back, they carry on
-      where they stopped. Anything started in the last ${minutes} minutes is left
-      off, because somebody may still be typing.
-    </p>
-  </div>
-
-  <div class="card card-xl" style="padding:0;overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:16px;">
-      <thead>
-        <tr style="text-align:left;border-bottom:2px solid var(--ink-900);">
-          <th style="padding:12px 14px;">Who</th>
-          <th style="padding:12px 14px;">Wanted</th>
-          <th style="padding:12px 14px;">Stuck on</th>
-          <th style="padding:12px 14px;">Since</th>
-          <th style="padding:12px 14px;"></th>
-        </tr>
-      </thead>
+  <h1>Unfinished checkouts</h1>
+  <div class="ops-table-wrap">
+    <table class="ops-table">
+      <thead><tr>
+        <th>Customer</th><th>Phone</th><th>City</th><th>Requested pickup</th>
+        <th>Status</th><th>Started</th><th>Actions</th>
+      </tr></thead>
       <tbody>
         ${intents.map((i) => row(i, { showNames })).join('')}
       </tbody>

@@ -69,6 +69,7 @@ function addressOf(row, { name, phone, businessName = null, notes = null }) {
 async function sendForReturn(order, { by = null, customer = null, partner = null, courier = couriers } = {}) {
   // ALREADY GONE. Pressing twice must not book two couriers to one counter -
   // which is the obvious thing to happen on a tablet with a slow connection.
+  if(order.dev_quote_id)return {ok:false,reason:'shipday_managed',detail:'Use Shipday assignments for this development order.'};
   const existing = await findLeg(order.id, 'TO_CUSTOMER');
   if (existing && existing.delivery_id) {
     return { ok: true, already: true, delivery: existing };
@@ -86,12 +87,12 @@ async function sendForReturn(order, { by = null, customer = null, partner = null
   // A LAUNDROMAT WITH NO PHONE CANNOT BE COLLECTED FROM. `partners.phone` is
   // nullable and a hand-added shop may have none; Uber needs somebody to ring
   // when the courier cannot find the door.
-  if (!partner.phone) return { ok: false, reason: 'no_partner_phone' };
+
   if (!customer.phone) return { ok: false, reason: 'no_customer_phone' };
 
   const from = addressOf(partner, {
     name: partner.name,
-    phone: partner.phone,
+    phone: '+12017712933',
     businessName: partner.name,
     notes: `Collect the LYNDRY bags for order ${order.order_number}.`,
   });
@@ -105,9 +106,16 @@ async function sendForReturn(order, { by = null, customer = null, partner = null
     notes: order.dropoff_spot || order.special_instructions || null,
   });
 
+  const spend = await require('./courier-quote-check').beforeDispatch(order, {
+    leg: 'TO_CUSTOMER', courier, from, to,
+    miles: require('./geocode').milesBetween(customer, partner),
+  });
+  if (!spend.ok) return spend;
+
   let booked = null;
   try {
     booked = await courier.book({
+      quoteId: spend.quoteId || null,
       from,
       to,
       // OUR ORDER NUMBER, WHICH IS ALL THE COURIER EVER LEARNS ABOUT US.
@@ -177,6 +185,7 @@ async function sendForReturn(order, { by = null, customer = null, partner = null
 // the return leg follows. What moves an order to AT_PARTNER is the bags actually
 // being at a counter, which `arrived()` below records.
 async function sendForPickup(order, { by = null, customer = null, partner = null, courier = couriers } = {}) {
+  if(order.dev_quote_id)return {ok:false,reason:'shipday_managed',detail:'Use Shipday assignments for this development order.'};
   const existing = await findLeg(order.id, 'TO_PARTNER');
   if (existing && existing.delivery_id) {
     return { ok: true, already: true, delivery: existing };
@@ -184,7 +193,7 @@ async function sendForPickup(order, { by = null, customer = null, partner = null
 
   if (!partner) return { ok: false, reason: 'no_partner' };
   if (!customer) return { ok: false, reason: 'no_customer' };
-  if (!partner.phone) return { ok: false, reason: 'no_partner_phone' };
+
   if (!customer.phone) return { ok: false, reason: 'no_customer_phone' };
 
   // THE CARD MUST HAVE TAKEN THE HOLD FIRST. Neil's rule: a pickup is confirmed
@@ -204,14 +213,21 @@ async function sendForPickup(order, { by = null, customer = null, partner = null
 
   const to = addressOf(partner, {
     name: partner.name,
-    phone: partner.phone,
+    phone: '+12017712933',
     businessName: partner.name,
     notes: `LYNDRY order ${order.order_number}. The counter has a code for you.`,
   });
 
+  const spend = await require('./courier-quote-check').beforeDispatch(order, {
+    leg: 'TO_PARTNER', courier, from, to,
+    miles: require('./geocode').milesBetween(customer, partner),
+  });
+  if (!spend.ok) return spend;
+
   let booked = null;
   try {
     booked = await courier.book({
+      quoteId: spend.quoteId || null,
       from,
       to,
       externalId: `LYNDRY-${order.order_number}-IN`,

@@ -40,6 +40,7 @@ const PERMISSIONS = Object.freeze({
   // we give away.
   'service.manage': 'Open or close the service, run promotions, send a text blast',
   'partners.view': 'See partner enquiries',
+  'partners.portal': 'Open every laundromat portal as a LYNDRY administrator',
   'partners.manage': 'Mark enquiries contacted or closed',
   'team.manage': 'Add people, change roles, switch people off',
   // Raised when the AI hands a conversation over. Holding this permission is

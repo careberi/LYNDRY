@@ -903,15 +903,32 @@ router.get('/bergen/sent', (req, res) => {
 router.get('/quote', async (req, res) => {
   if (config.courier.model !== 'DYNAMIC') return res.redirect(302, '/pricing');
 
-  const address = String(req.query.address || '').trim().slice(0, 200);
+  // Pricing submits separate address fields; existing quote links keep working.
+  const part = (key, limit) => typeof req.query[key] === 'string'
+    ? req.query[key].trim().slice(0, limit) : '';
+  const street = part('street', 120);
+  const address = street
+    ? [street, part('unit', 60), part('town', 80), 'NJ', part('zip', 5)].filter(Boolean).join(', ')
+    : part('address', 200);
 
   // The honeypot, same as every other public form: anything that fills it gets
   // the ordinary page and no clue that it was noticed.
   const isBot = Boolean(String(req.query.company || '').trim());
 
+  const checkout = require('../core/dev-checkout');
+  const pickupDate = part('pickup_date',10), pickupTime = part('pickup_time',5);
+  const dynamicPreview = checkout.enabled;
   let result = { quote: null, error: null };
-
-  if (address && !isBot) {
+  let previewError = '';
+  if (dynamicPreview && address && !isBot) {
+    try {
+      const place = await geocode.lookupOnce(address);
+      if (!place) throw Error('We could not locate this address. Check the street, town, and ZIP.');
+      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:part('town',80),postal_code:part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME'}, {publicPreview:true,addressEstimate:!pickupDate && !pickupTime});
+      result.quote = {ok:true,dynamic:true,indicative:!pickupDate && !pickupTime,...preview};
+    } catch (err) { previewError = err.message; }
+  }
+  if (!dynamicPreview && address && !isBot) {
     try {
       result = await quoteFor(address);
     } catch (err) {
@@ -924,13 +941,15 @@ router.get('/quote', async (req, res) => {
     renderPage({
       title: 'Your price',
       fullTitle: `What Laundry Pickup Costs at Your Address | ${site.name}`,
-      description: `Type your address and see what wash and fold pickup costs in ${site.serviceArea}. Weighed after collection, no membership, ${money(config.pricing.minimumCents)} minimum.`,
+      description: `See wash and fold pricing for your address and pickup schedule, including the operational fee and minimum total.`,
       path: '/quote',
       body: readPageBody('quote.html'),
       tracking: true,
       extra: {
-        ADDRESS_VALUE: quoteResult.escapeHtml(address),
-        QUOTE_RESULT: quoteResult.render({ ...result, address }),
+        QUOTE_FORM: address && !isBot ? '' : readPageBody('quote-form.html').replace('{{ADDRESS_VALUE}}', quoteResult.escapeHtml(address)),
+        QUOTE_RESULT: dynamicPreview && address && !isBot
+          ? (result.quote ? quoteResult.render({...result,address}) : '') + quoteResult.scheduleForm({address,pickupDate,pickupTime,error:previewError})
+          : quoteResult.render({ ...result, address }),
         COURIER_MINIMUM: money(config.pricing.minimumCents),
       },
     })

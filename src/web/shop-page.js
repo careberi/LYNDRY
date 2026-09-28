@@ -3,6 +3,8 @@
 const { escapeHtml, icon } = require('./layout');
 const { opsShell, opsNote } = require('./ops-shell');
 const { site } = require('./site');
+const { config } = require('../config');
+const { posIcon } = require('./pos-layout');
 const format = require('../core/format');
 const { translator } = require('./laundromat-es');
 
@@ -270,6 +272,14 @@ function shopNav(lang, { active = '', isOwner = false } = {}) {
 // The language toggle, in the slot where /ops puts the signed-in person's name.
 // It keeps whatever else is on the query string, the way `langToggleHere()` does
 // on the bag pages.
+function shopPosNav(lang, { active, isOwner, signedIn }) {
+  const navItem = (href, text, iconName, selected) => '<a class="pos-nav-link" href="' + escapeHtml(href) + '"' + (selected ? ' aria-current="page"' : '') + '>' + posIcon(iconName) + '<span>' + escapeHtml(text) + '</span></a>';
+  const items = signedIn ? navItem('/shop?lang=' + lang, en(lang) ? 'Laundry board' : 'Panel de pedidos', 'orders', active === '/shop') +
+    (isOwner ? navItem('/shop/staff?lang=' + lang, word('staff',lang), 'people', active === '/shop/staff') : '') : '';
+  return (items ? '<div class="pos-nav-group"><p class="pos-nav-label">' + (en(lang) ? 'Workspace' : 'Area de trabajo') + '</p>' + items + '</div>' : '') +
+    '<div class="pos-nav-group"><p class="pos-nav-label">' + (en(lang) ? 'Need help?' : 'Ayuda') + '</p>' + navItem('tel:+12017712933', en(lang) ? 'Contact LYNDRY' : 'Contacte a LYNDRY','messages',false) + '</div>';
+}
+
 function langToggle(lang, here) {
   const other = lang === 'es' ? 'en' : 'es';
   const [path, query = ''] = String(here || '/shop').split('?');
@@ -281,11 +291,11 @@ function langToggle(lang, here) {
   )}" hreflang="${other}">${other === 'es' ? 'Espanol' : 'English'}</a>`;
 }
 
-function shopFooter(lang) {
+function shopFooter(lang, showProcessingGuide = true) {
   return `<footer class="container" style="padding-bottom:40px;">
-    <p style="font-size:13px;line-height:1.6;margin:0 0 4px;">
+    ${showProcessingGuide ? `<p style="font-size:13px;line-height:1.6;margin:0 0 4px;">
       <a href="/processing?lang=${en(lang) ? 'en' : 'es'}">${s('processingLink', lang)}</a>
-    </p>
+    </p>` : ''}
     <p style="font-size:13px;line-height:1.6;margin:0;">
       ${s('questions', lang)} <strong>${escapeHtml(site.opsPhoneDisplay)}</strong>
     </p>
@@ -308,7 +318,9 @@ function page({
   active = '',
   isOwner = false,
   notes = [],
+  showProcessingGuide = true,
 }) {
+  const usePos = config.env === 'development' && !config.supabase.isProduction;
   return opsShell({
     title,
     titleSuffix: shop ? shop.name : site.name,
@@ -317,7 +329,7 @@ function page({
     mark: shop
       ? { text: shop.name, href: '/shop', label: shop.name }
       : { text: site.name, href: '/shop', label: site.name },
-    nav: signedIn ? shopNav(lang, { active, isOwner }) : '',
+    nav: usePos ? shopPosNav(lang, { active, isOwner, signedIn }) : signedIn ? shopNav(lang, { active, isOwner }) : '',
     aside: langToggle(lang, here),
     signOut: signedIn ? { action: '/shop/logout', label: word('signOut', lang) } : null,
     // ITS OWN, SCOPED TO /shop. Sharing the ops one would give a laundromat's
@@ -325,7 +337,8 @@ function page({
     // and bounces to a sign-in they can never pass.
     manifest: '/shop/app.webmanifest',
     notes,
-    footer: shopFooter(lang),
+    footer: usePos ? '' : shopFooter(lang, showProcessingGuide),
+    pos: usePos,
     terminal: true,
     // A COUNTER IS A DOORSTEP. 52px controls and real input targets, the same
     // reason the driver's screens set it.
@@ -372,7 +385,8 @@ function phoneStep({ lang = 'en', error = '', phone = '', next = '/shop', shop =
         <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
           ${s('textMeACode', lang)} ${icon('arrow-right', '22')}
         </button>
-      </form>`,
+      </form>
+      ${config.env === "development" && !config.supabase.isProduction ? `<p style="margin-top:24px;"><a href="http://pos.localhost:${config.port}/${shop ? "partners/" + escapeHtml(shop.id) + "/portal" : "partners"}">Sign in as a LYNDRY administrator</a></p>` : ""}`,
   });
 }
 

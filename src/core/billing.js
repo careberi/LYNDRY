@@ -1122,6 +1122,7 @@ async function captureShowUp(order, { amountCents }) {
   const amount = Math.min(hold.cents, Math.max(0, Math.round(Number(amountCents || 0))));
   if (!(amount > 0)) return { ok: false, reason: 'nothing_to_capture' };
 
+
   const result = await payments.capture({
     paymentIntentId: hold.intentId,
     amountCents: amount,

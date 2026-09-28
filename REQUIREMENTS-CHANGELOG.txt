@@ -1,0 +1,395 @@
+LYNDRY COURIER REQUIREMENTS CHANGE LOG
+Started: 2026-09-26
+Project: C:\Users\neil\Desktop\LYNDRY-dev
+Owner: Neil
+Purpose: Running record of the courier-process discussion. Requirements only;
+not an implementation report, approved Issue, or replacement for DECISIONS.md.
+No application code has been changed during this discussion.
+
+DISCUSSION STATUS
+There are 13 stages. Neil controls when discussion advances.
+Stages 1 and 2 discussed; currently on stage 3, pricing.
+Advancing a stage does not resolve its open questions.
+
+CONFIRMED DECISIONS AND REQUIREMENTS
+
+001 - Laundromat availability control (stage 1)
+Neil controls whether a laundromat accepts new orders. Do not give laundromats
+a self-service pause option for now.
+
+002 - Serviceability belongs in stage 1
+Determine whether Uber can collect laundry at the customer's address and take
+it to an eligible laundromat. Include customer location and courier reach in
+the stage definition, not just laundromat readiness.
+
+003 - Complete stage discussions
+For each stage, cover the relevant inputs, people, screens, records, conditions
+for advancing, and failures. Distinguish existing code, missing work, proposals,
+and decisions. Discuss one stage at a time; advance only when Neil says so.
+
+004 - Required pickup information (stage 2)
+Complete pickup/bag-location and building-access instructions are required
+before booking confirmation. Explain how to handle locations needing no special
+access without forcing customers to invent instructions.
+
+005 - Credit card is part of intake (stage 2)
+Include saving or checking a card in the intake checklist. Saving a card and
+successfully authorizing a payment hold are separate steps. No-card orders
+must not become real pickups or receive bag-out reminders, per project rules.
+
+006 - One combined delivery charge (stage 3)
+Present one aggregate delivery charge covering both courier trips, rather than
+two separate trip charges. Exact fee calculation still needs reconciliation.
+
+007 - Admin margin settings (stage 3)
+Neil must be able to adjust the three target margins in the admin dashboard:
+one-time, subscription, and wholesale. These settings drive the calculated
+laundry pricing for the corresponding category. Delivery is separate from this
+margin adjustment. A minimum can prevent a small order's total from changing.
+
+008 - Actual completed-order margin (stage 3)
+Show the actual margin earned on each completed order in the admin dashboard.
+The user explicitly requested actual margin visibility. Proposed presentation:
+profit dollars and percentage after laundromat costs, both courier trips, and
+payment processing. Confirm the percentage denominator and treatment of
+refunds, failed trips, adjustments, and unavailable final costs.
+
+009 - Control when margin changes take effect (stage 3)
+Neil explicitly requested an admin control for when margin changes apply.
+Exact options are NOT yet approved; see proposals below.
+
+PROPOSALS / OPEN QUESTIONS - NOT FINAL DECISIONS
+- Effective-date control offering 'effective now' and a scheduled future date.
+  This was proposed; Neil interrupted to request this log before answering.
+- Preserve prices already agreed for confirmed orders; do not retroactively
+  rewrite completed-order history. Recommended, but not separately finalized.
+- How new margins affect future recurring pickups and outstanding quotes.
+- Whether courier lookup failure may permit a distance-estimate fallback or
+  must prevent confirmation. Existing fallback is not a newly approved rule.
+- Full laundromat hours/capacity rules and their enforcement at requested times.
+- Exact customer-price formula, aggregate delivery fee, minimum treatment,
+  quote validity, and responsibility for later courier price changes.
+
+CODE OBSERVATIONS - READ-ONLY, NOT END-TO-END VERIFIED
+The first inspection was mistakenly of LYNDRY, not LYNDRY-dev. Neil corrected
+the folder. Findings about no Uber integration do NOT apply to LYNDRY-dev.
+
+In LYNDRY-dev:
+- Courier address checks are called from booking. They ask for quotes between
+  customer addresses and nearby laundromats, but can accept an estimate on
+  lookup failure. Other missing-location cases can also bypass confirmation.
+- Provider selection supports Uber live, Uber test, simulated, or disabled
+  modes. The actual running site's selected mode has not been verified.
+- Code exists to book customer-to-laundromat collection, but its normal automatic
+  trigger was not found in the inspected routes/scripts.
+- The shop portal has an incoming-delivery/PIN view and an arrival confirmation.
+- Shop weight recording feeds billing. The return-courier button is connected.
+- An Uber status webhook connection advancing orders was not found. This is a
+  scoped inspection finding, not a complete audit of every file.
+- Pricing configuration defines targets of 20% one-time, 10% subscription,
+  and 5% wholesale; the courier minimum constant is 45 dollars. Runtime mode
+  and end-to-end billing have not been verified.
+- Quote calculations contain inconsistencies: delivery can use twice one leg's
+  quote; comparison adds processing recovery; quote output exposes unmarked-up
+  delivery; the sample laundry total excludes delivery. Reconcile behavior
+  before treating the customer quote and final charge as consistent.
+
+PROCESS OUTLINE - 13 DISCUSSION STAGES
+1. Service readiness and customer-to-laundromat serviceability.
+2. Customer intake: identity, contact, address, timing, access, bag location,
+   and saved-card readiness. Supplies inputs to stage 1 checks.
+3. Laundromat selection and customer pricing.
+4. Booking confirmation and payment authorization.
+5. Customer/bag preparation and reminders.
+6. Requesting and assigning the pickup courier.
+7. Collection at the customer's home.
+8. Transport and laundromat handover.
+9. Intake, weighing, and billing.
+10. Washing, packing, and readiness for return.
+11. Return courier request and handover.
+12. Customer delivery and proof/completion exceptions.
+13. Order closure, cost reconciliation, issues, and recurring pickups.
+
+LOG MAINTENANCE
+Continue updating this same file as the discussion proceeds. Preserve changes
+of direction and label superseded decisions. Do not silently promote proposals
+to requirements or mark requirements implemented without verification.
+UPDATE - STAGE 3 CUSTOMER QUOTE TRACE (2026-09-26)
+Read-only trace of src/routes/web.js, src/core/quote.js, and
+src/web/quote-result.js; not a live browser or billing test.
+- Public quote locates the address, filters active laundromats with coordinates
+  and a wash rate to a 10-mile straight-line radius, then asks up to 3 nearest.
+  This public quote filter differs from the broader serviceability helper.
+- Explicit courier refusals remove a shop; lookup errors can use estimates.
+- Shop comparison uses a 20-pound one-time order and a delivery calculation
+  including processing recovery. It is not a cheapest-shop guarantee at every
+  actual weight or subscription category.
+- Customer wash rate = partner cost / (1 - target margin - 0.029), rounded up
+  to a cent per pound. These are configured assumptions, not independently
+  verified current payment-provider fees.
+- Customer-facing aggregate delivery equals twice the selected single-trip
+  quote, with no processing recovery in that displayed delivery value.
+- Result panel displays customer address, one-time per-pound rate, subscription
+  per-pound rate, and one pickup-and-delivery charge labeled round trip or
+  estimated round trip, plus an online-order button.
+- That result panel does not show a final total or the order minimum. The sample
+  20-pound total calculated elsewhere is not rendered in this panel.
+- No new pricing policy was approved during this explanation.
+010 - Customer bag-price estimate (stage 3; 2026-09-26)
+Neil requested an estimated price range using the customer's quoted rate.
+His observed working range is 30-40 pounds per bag. This is an estimate,
+not a fixed bag price or a verified universal bag weight.
+Proposed display: estimated total for one 30-40 lb bag, including the single
+aggregate pickup-and-delivery charge and the applicable order minimum.
+Calculate lower and upper endpoints with the SAME final pricing rule used to
+bill orders, after the outstanding pricing inconsistencies are reconciled.
+Show one-time/subscription estimates using their corresponding rates where
+both are offered. Label the range as an estimate; actual weight determines the
+final laundry charge. Apply delivery once per order, not once per bag.
+Illustration only: at 1.30 dollars/lb and 20 dollars combined delivery, a
+30-40 lb single-bag order estimates at 59-72 dollars if the minimum is 45 dollars.
+The delivery amount and washing rate in this illustration are not live quotes.
+Do not automatically change the existing 20-lb laundromat comparison weight;
+Neil requested a displayed estimate, not a new shop-selection rule.
+No application code changed. Display wording and final minimum treatment remain
+subject to the pricing discussion.
+MARKET CHECK - 2026-09-27 (stage 3; research, not a pricing decision)
+Neil stated average order weight is 33 lb. Current illustrative LYNDRY price:
+33 x 1.30 dollars + 17.98 estimated delivery = 60.88 dollars, or 1.845/lb all-in.
+Published local standard wash-and-fold pickup/delivery comparison:
+- Pressly, Bergen County: 1.67/lb, free pickup/delivery, 30-dollar minimum;
+  33 lb = 55.11 dollars. https://trypressly.com/new-jersey/bergen-county
+- Soap Gnome, serving Fair Lawn/Saddle Brook and nearby towns: 1.85/lb for
+  pickup/delivery; 33 lb = 61.05 dollars. Minimum not stated on reviewed page.
+  https://soapgnome.com/pickup-and-delivery
+- NJ Laundry Services, including Bergen County: 2.25/lb, free pickup/delivery,
+  45-dollar minimum; 33 lb = 74.25 dollars.
+  https://www.njlaundryservices.com/pricing
+- Poplin Lyndhurst advertises starting at 1 dollar/lb with free pickup/delivery
+  and a 30-dollar standard minimum. Starting-price illustration = 33 dollars;
+  exact address price/fees not verified. Do not treat as an exact checkout quote.
+  https://poplin.co/laundry-service/lyndhurst-new-jersey
+Assessment: LYNDRY's example is competitive with these local operators, nearly
+identical to Soap Gnome, about 10.5% above Pressly, and about 18% below NJ Laundry
+Services. It is not the lowest advertised option. This is a small published-price
+sample, not a market average or service-quality endorsement. No discounts,
+optional tips, special garments, or checkout-only fees included; address-specific
+availability and final checkout prices were not tested. No new policy approved.
+MARGIN DISCUSSION - 2026-09-27 (proposal only, no approved setting change)
+Distinguish the configured laundry-component target from actual whole-order
+contribution and from net business profit. Earlier statements calling configured
+percentages net margin were too broad.
+Illustration: 33 lb, partner cost 33 dollars, total courier cost 17.98 dollars,
+processing assumed from current config at 2.9% + 0.30, rounded up to cents.
+Laundry setting / customer rate / total bill / remainder / share of total:
+20% / 1.30 per lb / 60.88 / 7.83 / 12.9%
+25% / 1.39 per lb / 63.85 / 10.71 / 16.8%
+30% / 1.50 per lb / 67.48 / 14.24 / 21.1%
+35% / 1.62 per lb / 71.44 / 18.08 / 25.3%
+These remainders exclude other variable expenses, support, refunds, customer
+acquisition, insurance, software, owner compensation, and overhead. They are not
+net profit. Courier cost is illustrative and actual costs may differ.
+Recommendation for testing: about 30% laundry setting for one-time orders,
+working toward 20-25% whole-order contribution after ALL variable costs.
+This is a judgment based on this example and researched local prices, not an
+established laundry-industry benchmark or a guarantee of viability. Validate
+customer acceptance, repeat orders, overhead, and true costs before adoption.
+Do not automatically apply the same target to subscriptions or wholesale.
+Accounting reference: https://legacy.sba.gov/business-guide/plan-your-business/calculate-your-startup-costs/break-even-point
+No margin controls implemented and no pricing configuration changed.
+MARKET CHECK CORRECTION / BUSINESS MODEL - 2026-09-27
+Poplin's official help center lists a per-order Trust & Safety Fee and an
+Operational Fee, plus possible surge charges. The earlier 33-dollar example
+is the laundry base at the advertised starting rate, NOT a verified all-in bill.
+No exact fee amount or customer-address checkout was verified.
+https://poplin.zendesk.com/hc/en-us/articles/24436347827995-Potential-Fees
+Poplin recruits independent Laundry Pros to accept jobs, collect laundry,
+wash/dry/fold, and return it, advertising work from home and requiring access
+to washer/dryer and transportation. Standard Pro earnings start at 0.75/lb plus
+tips; this is earnings before the Pro's expenses, not net profit.
+https://poplin.co/work-from-home
+This differs from LYNDRY's proposed separate laundromat and courier payments.
+No requirement or business-model change approved by Neil.
+USER-REPORTED POPLIN QUOTE - 2026-09-27
+Neil reports his Poplin quote is 1.40 dollars/lb, plus a 1-dollar Operational Fee
+and 3-dollar Trust & Safety Fee. This is user-reported, not independently viewed.
+For 33 lb: 46.20 laundry + 4.00 fees = 50.20 dollars before any optional tip
+or other charges not reported. Use this instead of the 1-dollar advertised
+starting rate for this particular comparison.
+LYNDRY illustrative subscription total 55.93: 5.73 more, approximately 11.4%.
+LYNDRY illustrative one-time total 60.88: 10.68 more, approximately 21.3%.
+LYNDRY totals retain the assumed 17.98-dollar courier fee, not a live quote.
+No pricing change approved.
+POP LIN QUOTE ADDENDUM - 2026-09-27
+Neil also reports a 42-dollar minimum. At 33 lb, the laundry subtotal is
+46.20 dollars, so the minimum does not change the 50.20-dollar comparison.
+Whether the minimum includes fees matters for smaller loads and is unverified.
+
+PICKUP-WINDOW COMPARISON - 2026-09-27
+Neil says LYNDRY offers pickups throughout the day and reports Poplin charges
+extra for morning or certain pickup windows. Exact Poplin window, surcharge,
+and whether this is express service have not been verified. LYNDRY's offered
+windows and courier availability have not been end-to-end tested here.
+Compare equivalent pickup windows and return timing, not only standard rates.
+Base Poplin example is 50.20 dollars. An applicable extra fee of 5.73 dollars
+would equal the illustrative LYNDRY subscription total; 10.68 dollars would
+equal the illustrative one-time total. These are comparison thresholds, not
+claims about Poplin's actual surcharge. No pricing changes approved.
+PRICING EXPLORATION - 2026-09-27 (NOT APPROVED)
+Neil asked about incorporating part of delivery cost into the per-pound price
+and reducing the displayed delivery fee. Treat as bundled pricing with clear
+customer-facing rates and total, not an undisclosed charge.
+Illustrative subscription comparison using the existing 33-lb example:
+Current: 1.15/lb + 17.98 delivery = 55.93 dollars at 33 lb.
+Alternative: 1.45/lb + 8.08 delivery = 55.93 dollars at 33 lb.
+This shifts 9.90 dollars at the reference weight into the laundry component.
+It is NOT an equivalent total at every weight: relative change before minimums
+is 0.30 dollars multiplied by (actual pounds minus 33). Lighter orders recover
+less delivery cost; heavier orders pay more. Minimums can change the effect.
+Unresolved: amount to shift, per-order versus per-bag treatment, margin formula,
+processing cost, distance variation, minimum, and customer presentation.
+No pricing implementation or approved new rate.
+PRICING PRESENTATION COMPARISON - 2026-09-27 (exploration only)
+Neil compares 1.15/lb + 20-dollar delivery with 1.48/lb + 8.99-dollar combined
+delivery, against his stated local walk-in benchmark of 1.25/lb.
+At 33 lb: first option 57.95 dollars, second 57.83; walk-in benchmark 41.25.
+Second option has a 16.58-dollar convenience premium over that walk-in example.
+Recommendation: test the second presentation with the full estimated total,
+per-pound price, combined pickup/return charge, and minimum shown together.
+Hypothesis: a smaller explicit delivery fee may be more acceptable; this is not
+proven for LYNDRY customers. General Baymard research identifies extra costs and
+unclear totals as checkout friction, but does not establish the winner here.
+https://baymard.com/blog/reduce-cart-abandonment
+These two examples differ from prior 17.98-delivery and 1.45-plus-8.08 scenarios.
+Weight affects totals differently; do not adopt without checking order economics.
+No final rate or pricing change approved.
+MINIMUM ORDER EXPLORATION - 2026-09-27
+Neil favors exploring 1.48/lb + 8.99 combined delivery and asks what minimum
+covers a 5-lb load and margin. No final price or minimum approved.
+Assumptions: partner bills actual 5 lb at 1 dollar/lb with no partner minimum;
+actual round-trip courier cost 17.98; processing 2.9% + 0.30; no other costs.
+Customer total needed = (5 + 17.98 + 0.30)/(1 - 0.029 - target whole-order margin).
+At 10% whole-order margin: minimum total approximately 26.73 dollars.
+At 20%: approximately 30.20 dollars. At 30%: approximately 34.70 dollars.
+These are all-in order totals INCLUDING the displayed 8.99 delivery, not an
+additional laundry minimum plus that fee. Rounding actual processor fees may
+require a cent of adjustment. These are before unmodeled expenses, not net profit.
+Without a floor: 5 x 1.48 + 8.99 = 16.39, below 22.98 direct wash/courier cost.
+A floor calibrated only on 5 lb does NOT guarantee target margins at every
+weight: costs rise while the minimum stays fixed. Validate near the weight
+where per-pound-plus-delivery overtakes the minimum and across courier costs.
+Partner minimums, other variable costs, actual trip costs, and intended margin
+basis remain unresolved. Existing 45-dollar courier floor has not been changed.
+MINIMUM RECOMMENDATION CLARIFICATION - 2026-09-27
+Neil asks for a direct recommended minimum, not a competitor recap or choice
+of margin definitions. Recommendation: retain the existing 45-dollar all-in
+minimum provisionally, including the displayed delivery charge; do not lower
+it based only on the 5-lb example. Not a newly approved pricing change.
+At 5 lb, assumed partner cost 5 dollars and courier cost 17.98, a 45-dollar
+charge leaves approximately 20.41 after configured processing, before other
+expenses. This does NOT guarantee the target margin on larger loads.
+Example: 24 lb still billed at 45 under proposed 1.48/lb + 8.99 structure leaves
+about 1.41 after those same direct costs/processing. Therefore the proposed
+per-pound rate and floor must be checked together before adoption. Do not
+represent a 45-dollar floor as solving the full-order margin problem.
+FIVE-DOLLAR DELIVERY EXPLORATION - 2026-09-27
+Neil proposes roughly a 30-dollar minimum after the 5-lb example, then asks
+about reducing displayed delivery from 8.99 to 5 dollars. Final full pricing
+schedule not approved; 30 dollars is an exploratory all-in floor, not pounds.
+Correction: at 5 lb and assumed 17.98 courier cost, a 30-dollar total leaves
+5.85 after 1.17 processing = 19.5%, not approximately 10%.
+At the 33-lb reference, preserving the 1.48/lb + 8.99 total (57.83) with 5-dollar
+delivery requires 1.600909/lb. Rounded to 1.60, total is 57.80 (3 cents lower).
+If targeting 10% of the WHOLE bill after partner, courier, and configured
+processing at 33 lb, required total is about 58.88; with 5-dollar displayed
+delivery the per-pound rate rounds upward to 1.64. Total 59.12; remainder 6.12,
+about 10.35%. Assumes partner cost 1/lb, courier 17.98, processing 2.9% + 0.30,
+and no other costs. This does not guarantee 10% at all order weights.
+The 62.50 minimum earlier addressed an all-weight whole-order target under
+1.48/lb + 8.99, not Neil's original 5-lb question. Do not treat it as approved.
+No implementation or final price change approved.
+FEE LABEL EXPLORATION - 2026-09-27 (NOT APPROVED)
+Neil asks about 1.60/lb plus a 2-dollar operational fee and a 3-dollar trust
+and safety fee instead of a single 5-dollar delivery charge.
+At 33 lb the total remains 57.80 dollars. Relabeling does not change economics.
+Recommendation: retain one clearly described 5-dollar pickup-and-delivery fee
+if that is what it recovers. A trust/safety label should reflect actual relevant
+services or protections, and must not imply unprovided coverage or guarantees.
+Any mandatory fees should be clear with the rate and estimated total upfront.
+No separate trust/safety program, fee policy, or final pricing has been approved.
+Reminder: 1.60/lb + 5 dollars does not yield 10% whole-order remainder at the
+assumed 33-lb costs; the previous upward-rounded 10% example used 1.64/lb.
+CONFIRMED PRICING DIRECTION - 2026-09-27
+Neil selects the latest preferred presentation, replacing the proposed 2-dollar
+operational fee plus 3-dollar trust/safety fee with ONE operational fee.
+- Working reference laundry rate: 1.60 dollars/lb from the prior example.
+- One operational fee: 5 dollars in the reference example, dynamically adjusted
+  based on delivery costs. It is not a universal fixed 5-dollar fee.
+- No separate trust-and-safety fee and no separate delivery line item.
+- This supersedes the earlier split-fee proposal.
+The scope across one-time/subscription/wholesale and varying laundromat costs
+is not yet settled; do not silently replace all category rates with 1.60.
+
+OPEN FORMULA / PROPOSAL (NOT YET APPROVED)
+Possible rule: adjust the operational fee dollar-for-dollar with round-trip
+courier cost relative to the 17.98-dollar cost behind the 5-dollar example.
+Examples: 17.98 courier cost => 5.00 operational fee;
+21.98 courier cost => 9.00 operational fee;
+15.98 courier cost => 3.00 operational fee.
+This leaves 12.98 of the reference courier cost to be recovered through the
+laundry rate. Treatment of processing, rounding, floor/cap, quote expiry,
+changes after booking, unknown return-trip cost, and minimum order remains open.
+Do not implement this proposed formula until Neil confirms it.
+Display the operational fee with the rate and estimated total before confirmation.
+No application code changed. The provisional minimum and whole-order margin
+questions remain unresolved. Discussion remains stage 3 of 13.
+CONFIRMED OPERATIONAL PERCENTAGE / DYNAMIC MINIMUM - 2026-09-27
+Neil approves the operational fee as 25% of the combined courier estimate.
+Neil requests a dynamic minimum rather than a fixed dollar minimum.
+Fee rounding still needs an explicit implementation convention.
+Category contribution targets have NOT been approved by this decision; the
+10% whole-order target in the worked examples remains illustrative.
+
+Dynamic-minimum formula remains a proposal. Recommended invariant if Neil
+wants target protection: customer revenue after partner wash cost, both courier
+trips, and configured processing must meet the category contribution target
+at all supported order weights. Verify any partner minimums and other costs.
+For a quoted rate r, operational fee f, wholesale rate c, round-trip cost d,
+processing percentage s, fixed processing b, target whole-order margin m:
+Let T(w) = max(M, r*w + f). Under linear wholesale cost c*w, a sufficient
+minimum at the crossover is M >= (d+b-c*f/r)/(1-s-m-c/r), assuming the
+denominator is positive. Also validate zero-weight and permitted weight range,
+rounding, provider minimums, and cases with a nonpositive denominator.
+Example only: c=1, d=17.98, s=.029, b=.30, m=.10, r=1.65, f=4.50 gives
+approximately 58.71 total minimum before small rounding adjustments, NOT 30.
+The per-pound rate was itself calibrated to a 33-lb reference at the target,
+so a margin-protecting floor lands near the reference order's full price.
+Alternative dynamic floors based only on a small reference load can recover
+that small load's costs but do not guarantee the same margin at every weight.
+No dynamic-minimum formula approved and no application code changed.
+CONFIRMED MINIMUM RULE - 2026-09-27 (SUPERSEDES PRIOR FLOOR PROPOSALS)
+Neil specifies: always hit the target margin. Calculate the minimum total as
+what a 1-lb order must pay to achieve the target after wash, courier, and
+processing costs. This replaces proposals for flat 30/45-dollar minimums and
+the suggested approximately 58.71 floor for the earlier fixed-rate schedule.
+For wholesale c, combined courier estimate d, processor fixed fee b, processor
+percentage s, category target m:
+One-pound minimum total = (c + d + b)/(1 - s - m), rounded upward with actual
+processing rounding checked. It INCLUDES the operational fee; do not add it twice.
+Illustrative c=1, d=17.98, b=.30, s=.029, m=.10 => 22.14 total; approximately
+.95 processing and 2.21 contribution. This is after listed direct costs only,
+not net business profit unless all other relevant costs are included.
+10% remains the specified example; this message does not set all category targets.
+
+IMPLEMENTATION CONSTRAINT TO RESOLVE
+The one-pound minimum alone cannot ensure target margins at larger weights
+under the earlier 1.65/lb + 4.50 fee. Example: 10 lb at that schedule floors
+at 22.14, but wash plus courier costs already total 27.98 before processing.
+To honor always-hit-target, apply a cost-based revenue requirement at actual
+weight too, or change the displayed pricing structure. Candidate revenue rule:
+required total at weight w = (c*w + d + b)/(1 - s - m), with 1-lb minimum.
+This does not preserve a flat 1.65/lb plus 4.50 presentation. Do not silently
+raise a confirmed price; agree upfront how actual-weight pricing works.
+Fee remains approved at 25% of combined courier estimate, within the total.
+No implementation changes made. No guarantee against unanticipated actual
+courier or other cost changes has been established.

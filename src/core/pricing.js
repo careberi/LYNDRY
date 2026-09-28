@@ -66,8 +66,9 @@ function priceOn(order, weightLb) {
   const floor = floorFor(order);
   const surcharge = surchargeFor(order);
 
-  const byWeight = Math.round(weight * rate);
-  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
+  const byWeight = order?.pricing_snapshot ? require('./pricing-economics').quotedTotal({weightLb:weight,rateCentsPerLb:rate,operationalFeeCents:0,minimumTotalCents:0}) : Math.round(weight * rate);
+  const operationalFee = order?.pricing_snapshot?.operationalFeeCents || 0;
+  const beforeDiscount = Math.max(byWeight + operationalFee, floor) + surcharge;
 
   return {
     weightLb: weight,
@@ -75,7 +76,8 @@ function priceOn(order, weightLb) {
     floor,
     surcharge,
     byWeight,
-    atMinimum: byWeight < floor,
+    atMinimum: byWeight + operationalFee < floor,
+    operationalFee,
     beforeDiscount,
   };
 }

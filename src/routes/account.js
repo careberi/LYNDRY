@@ -180,10 +180,7 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
       Ordered before? We text you a code.
     </p>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:14px 0 0;">
-      ${escapeHtml(site.pricePerLb)} a pound one-time,
-      ${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription.
-      $${(config.pricing.minimumCents / 100).toFixed(0)} minimum,
-      back the ${escapeHtml(site.turnaround)}.
+      ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, operational fee, minimum total, and maximum at 50 lb before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
     </p>
   </div>
 </section>
@@ -571,7 +568,7 @@ function bookingRefusal(result) {
 }
 
 function whenLineMdy(order) {
-  const window = booking.arrivalWindow(order);
+  const window = order.pricing_snapshot ? 'at '+booking.normaliseTime(order.pickup_time)+' Eastern' : booking.arrivalWindow(order);
   return [mdy(order.pickup_date), window].filter(Boolean).join(' ');
 }
 
@@ -903,7 +900,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
         day(o.delivered_at),
         lbs ? `${escapeHtml(String(lbs))} lb` : '<span style="color:var(--ink-500);">&mdash;</span>',
         o.price_cents != null
-          ? `<strong>${escapeHtml(money(o.price_cents))}</strong>`
+          ? `<details class="account-charge"><summary aria-label="View charge for order #${escapeHtml(String(o.order_number))}">View charge</summary><span>Total: ${escapeHtml(money(o.price_cents))}</span></details>`
           : '<span style="color:var(--ink-500);">&mdash;</span>',
       ];
     });
@@ -984,7 +981,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
 
   ${table(
     { eyebrow: 'Finished', title: 'Past orders' },
-    ['Order', 'Plan', 'Picked up', 'Delivered', 'Weight', 'Billed'],
+    ['Order', 'Plan', 'Picked up', 'Delivered', 'Weight', 'Details'],
     pastRows,
     'Nothing yet. Your first order will show here once it is done.'
   )}
@@ -993,13 +990,6 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
     <form method="post" action="/account/logout" style="margin:0;">
       <button class="btn btn-ghost">Sign out</button>
     </form>
-    <!-- THE NUMBER, NOT JUST THE OFFER. "Everything here works by text too" is
-         useless without the number to text, and it is the one place on this
-         page somebody is being sent somewhere else. -->
-    <span style="font-size:15px;color:var(--ink-500);">
-      Prefer texting? Everything here works by text -
-      <a href="sms:${escapeHtml(site.publicPhoneLink)}">${escapeHtml(site.publicPhoneDisplay)}</a>.
-    </span>
   </div>
 </section>`;
 
@@ -1432,21 +1422,18 @@ function orderConfirmedPage({ customer, order, others, free }) {
     .map((line) => escapeHtml(line))
     .join('<br>');
 
-  const row = (label, value, last = false) => `
-    <div style="display:flex;justify-content:space-between;gap:18px;${last ? '' : 'padding-bottom:14px;'}">
-      <span style="font-size:16px;color:var(--ink-700);">${label}</span>
-      <span style="font-size:16px;font-weight:700;color:var(--ink-900);text-align:right;">${value}</span>
-    </div>`;
-
-  const detail = (label, value) => `
-    <div style="border-top:1px solid var(--ink-100);margin-top:16px;padding-top:14px;">
-      <p class="eyebrow" style="margin:0 0 6px;">${label}</p>
-      <p style="font-size:16px;line-height:1.5;color:var(--ink-800);margin:0;">${value}</p>
-    </div>`;
+  const row = (label, value) => `<div class="confirmation-detail"><p class="eyebrow">${label}</p><p class="confirmation-value">${value}</p></div>`;
+  const detail = row;
+  const pickupTime = booking.normaliseTime(order.pickup_time);
+  const pickupLabel = order.pickup_date && pickupTime
+    ? new Date(String(order.pickup_date).slice(0,10)+'T'+pickupTime+':00Z').toLocaleString('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'})+' (Eastern)'
+    : whenLineMdy(order);
 
   // THE PRICE, SAID THE WAY THE TEXT SAYS IT. A free order with a ceiling names
   // the ceiling, because nobody has seen the laundry yet.
-  const price = free.freeOrder
+  const price = order.pricing_snapshot
+    ? `${billing.money(order.pricing_snapshot.rateCentsPerLb)}/lb + ${billing.money(order.pricing_snapshot.operationalFeeCents)} operational fee per order; ${billing.money(order.pricing_snapshot.minimumTotalCents)} minimum total, including the fee`
+    : free.freeOrder
     ? free.freeUpToLb
       ? `Free up to ${free.freeUpToLb} lb, then ${site.pricePerLb} a pound`
       : 'Free, nothing to pay'
@@ -1464,23 +1451,18 @@ function orderConfirmedPage({ customer, order, others, free }) {
     <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
     <h1 class="display-2" style="margin-bottom:10px;">Thank you for your order.</h1>
     <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
-      Please check your texts${textUs}. Your confirmation is there.
+      ${order.pricing_snapshot ? 'Development booking confirmed. Text messages and courier trips are simulated.' : `Please check your texts${textUs}. Your confirmation is there.`}
     </p>
   </div>
 </section>
 
-<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+<section class="container order-confirmation" style="max-width:700px;padding-top:40px;padding-bottom:96px;">
 
   <div class="card card-xl" style="padding:26px 30px;">
     <p class="eyebrow" style="margin:0 0 4px;">Order number</p>
     <p class="display-4" style="margin:0;font-variant-numeric:tabular-nums;">#${escapeHtml(String(order.order_number))}</p>
 
-    <div style="border-top:1px solid var(--ink-100);margin-top:18px;padding-top:16px;">
-      <p class="eyebrow" style="margin:0 0 6px;">We will pick it up</p>
-      <p style="font-size:18px;line-height:1.45;font-weight:600;color:var(--ink-900);margin:0;">
-        ${escapeHtml(whenLineMdy(order))}
-      </p>
-    </div>
+    ${detail('Pickup date and time', escapeHtml(pickupLabel))}
 
     ${detail(
       'Pickup address',
@@ -1494,7 +1476,11 @@ function orderConfirmedPage({ customer, order, others, free }) {
   <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
     ${row('Charged today', '$0.00')}
     ${card ? row('Card on file', escapeHtml(card)) : ''}
-    ${row('Price', escapeHtml(price), free.freeOrder && !free.freeUpToLb)}
+    ${order.pricing_snapshot ? [
+      row('Wash, dry &amp; fold', billing.money(order.pricing_snapshot.rateCentsPerLb)+'/lb'),
+      row('Operational fee · once per order', billing.money(order.pricing_snapshot.operationalFeeCents)),
+      row('Minimum total · includes the fee', billing.money(order.pricing_snapshot.minimumTotalCents))
+    ].join('') : row('Price', escapeHtml(price))}
     ${free.freeOrder && !free.freeUpToLb ? '' : row('You are charged', 'after we weigh it', true)}
   </div>
 
@@ -1778,13 +1764,12 @@ function withAnswers(customer, given) {
 //
 // A GUEST HAS NO ROW, so a guest walks all four, always, in the same order
 // every time.
-const ORDER = ['wash', 'repeat', 'when', 'address'];
+const ORDER = ['address', 'wash', 'repeat', 'when'];
 
 function alreadySaved(step, customer) {
   if (step === 'wash') return booking.hasPreferences(customer);
-  if (step === 'address') {
-    return setup.hasName(customer) && booking.hasAddress(customer) && Boolean(setup.spotOf(customer));
-  }
+  // Confirm the pickup location on each new booking, including saved addresses.
+  if (step === 'address') return false;
   return false;
 }
 
@@ -1840,7 +1825,7 @@ function unanswered(step, given) {
 
   if (step === 'when') {
     if (subscribing(given) && !String(given.weekdays || '').trim()) {
-      return 'Please pick at least one day.';
+      return 'Please choose one pickup day.';
     }
     if (!subscribing(given) && !given.pickup_date) return 'Please pick a day.';
     if (!given.pickup_time) return 'Please pick a time.';
@@ -1853,6 +1838,8 @@ function unanswered(step, given) {
 // This is the one place it is right to ask, because they have not been shown
 // anything yet.
 function bookingStep(customer, given) {
+  if (given.address_confirmed !== 'yes' || !setup.hasName(customer) ||
+      !booking.hasAddress(customer) || !setup.spotOf(customer)) return 'address';
   if (!booking.hasPreferences(customer)) return 'wash';
 
   // REGULAR OR NOT COMES FIRST, because the answer decides what the next
@@ -1875,7 +1862,7 @@ function bookingStep(customer, given) {
 
 // Everything the wizard has been told so far, in the order it was asked for.
 const ANSWERS = [
-  'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
+  'dev_quote_id', 'address_confirmed', 'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
   'water_temp', 'fabric_softener', 'name', 'address_line1', 'address_line2',
   'city', 'postal_code', 'spot', 'access_notes',
 ];
@@ -1982,12 +1969,17 @@ function backControl(step, guest, customer) {
                   color:var(--suds-700);text-decoration:underline;cursor:pointer;">Back</button>`;
 }
 
-function stepPage({ customer, step, given, error = '', opensOn = null, guest = false }) {
+async function stepPage({ customer, step, given, error = '', opensOn = null, guest = false }) {
   // NAMED, NOT NUMBERED. This counted "step N of M", and M was recomputed from
   // the customer on every render - so the moment the wash step saved, the total
   // dropped while the index kept climbing and it read "step 3 of 2". Carrying a
   // total through the flow would fix the arithmetic and still be a number nobody
   // needs; the step's own name says where you are and cannot go wrong.
+  let estimate = null;
+  if (step === 'repeat' && require('../core/dev-checkout').enabled) {
+    try { estimate = await require('../core/dev-checkout').estimateAddress(customer); }
+    catch (_) { estimate = { unavailable: true }; }
+  }
   const labels = { wash: 'wash preferences', repeat: 'your option', when: 'when', address: 'where' };
 
   const regular = subscribing(given);
@@ -1996,9 +1988,9 @@ function stepPage({ customer, step, given, error = '', opensOn = null, guest = f
     wash: ['How would you like it washed?', 'We save this and use it on every pickup. Change it any time by text.'],
     repeat: ['One-Time or Subscription?', 'Choose what works for you. You can change or cancel your subscription anytime.'],
     when: regular
-      ? ['Which days?', 'Pick as many as you like. We come at the same time on each.']
+      ? ['Which day?', 'Choose one pickup day for your subscription.']
       : ['Schedule your pickup', 'Any day. There are no fixed route days.'],
-    address: ['Where should we pick up?', 'Address, and where to leave the bag.'],
+    address: ['Where should we pick up?', 'Confirm your pickup address first. Pricing depends on your location and pickup schedule.'],
   };
 
   const [title, blurb] = heads[step];
@@ -2008,7 +2000,7 @@ function stepPage({ customer, step, given, error = '', opensOn = null, guest = f
   // details with it rather than saving and dropping them.
   const form =
     step === 'repeat'
-      ? repeatForm(given)
+      ? repeatForm(given, estimate)
       : step === 'when'
       ? whenForm(customer, given, opensOn)
       : (step === 'wash' ? setup.washForm(customer) : setup.addressForm(customer))
@@ -2178,9 +2170,7 @@ function cardStep({ customer, intent }) {
       A payment method is required to confirm your pickup.
     </p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      {{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a
-      subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on
-      file and charge it after we weigh your laundry at your door.
+      ${intent.dev_quote_id ? 'Your quoted per-pound rate, operational fee, and inclusive minimum apply. Payment is collected after weighing. If your quote expires before card setup finishes, request a new quote.' : '{{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on file and charge it after we weigh your laundry at your door.'}
     </p>
 
     <form method="post" action="/account/card" style="margin:0;">
@@ -2253,22 +2243,21 @@ function planChoice({ value, title, price, blurb, checked, children = '' }) {
             <span style="flex:1;min-width:0;">
               <span style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;">
                 <span style="font-size:16px;font-weight:600;color:var(--ink-900);">${escapeHtml(title)}</span>
-                <span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--ink-900);">${escapeHtml(price)}</span>
+                <span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--ink-900);">${escapeHtml(price || '')}</span>
               </span>
               <span style="display:block;font-size:14px;color:var(--ink-500);margin-top:2px;">${escapeHtml(blurb)}</span>
             </span>
           </label>${children}`;
 }
 
-function repeatForm(given) {
+function repeatForm(given, estimate) {
+  const estimateView = require('../web/booking-price');
+  const planEstimate = category => estimate && !estimate.unavailable
+    ? estimateView.planEstimate(estimate.categories[category]) : '';
+  const estimateNote = estimate ? '<p class="field-hint">' + (estimate.unavailable
+    ? 'An address estimate is unavailable. Choose a pickup date and time to try again.'
+    : 'Preliminary estimates for your address. We will confirm pricing after you choose a pickup date and time. Development courier costs are simulated.') + '</p>' : '';
   const chosen = String(given.plan || '');
-  const saving = subscription.savingPercent();
-
-  // The saving is derived from the two rates, so it disappears rather than
-  // going stale if either of them moves to a figure that is not a round
-  // percentage. Both prices are on the screen either way.
-  const savingWord = saving ? `Save ${saving}% with automatic service ` : 'Automatic service ';
-
   // HOW OFTEN, ASKED ON THE SAME SCREEN AS THE PLAN IT BELONGS TO.
   //
   // Neil: if they pick Subscription they must also pick how often. Nested under
@@ -2301,6 +2290,7 @@ function repeatForm(given) {
     <form method="post" action="/account/book" id="wizard">
       <input type="hidden" name="step" value="repeat">
       ${carried(given, 'repeat')}
+      ${estimateNote}
 
       <fieldset style="border:0;padding:0;margin:0;">
         <legend class="field-label" style="padding:0;">Choose your option</legend>
@@ -2308,18 +2298,19 @@ function repeatForm(given) {
           ${planChoice({
             value: subscription.PLANS.ONE_TIME,
             title: 'One-Time Pickup',
-            price: subscription.oneTimeRate(),
+            price: '',
             blurb: 'Book whenever you need us.',
             checked: chosen === subscription.PLANS.ONE_TIME,
+            children: planEstimate('ONE_TIME'),
           })}
 
           ${planChoice({
             value: subscription.PLANS.SUBSCRIPTION,
             title: 'Subscription',
-            price: subscription.subscriptionRate(),
-            blurb: `${savingWord}${subscription.FREQUENCIES.map((f) => f.label).join(', ')}.`,
+            price: '',
+            blurb: `Automatic service ${subscription.FREQUENCIES.map((f) => f.label).join(', ')}.`,
             checked: chosen === subscription.PLANS.SUBSCRIPTION,
-            children: frequencies,
+            children: planEstimate('SUBSCRIPTION') + frequencies,
           })}
         </div>
       </fieldset>
@@ -2372,12 +2363,12 @@ function whenForm(customer, given, opensOn) {
 
   const days = `
         <fieldset style="border:0;padding:0;margin:0;">
-          <legend class="field-label" style="padding:0;">Which days?</legend>
+          <legend class="field-label" style="padding:0;">Which day?</legend>
           <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px;">
             ${WEEKDAY_LABELS.map(
               (label, i) => `
             <label class="check">
-              <input type="checkbox" name="weekday" value="${i}"${
+              <input type="radio" name="weekday" required value="${i}"${
                 picked.has(String(i)) ? ' checked' : ''
               }>
               <span class="check-box">{{ICON_CHECK}}</span>
@@ -2385,7 +2376,7 @@ function whenForm(customer, given, opensOn) {
             </label>`
             ).join('')}
           </div>
-          <p class="field-hint" style="margin-top:12px;">Pick as many as you like.</p>
+          <p class="field-hint" style="margin-top:12px;">Choose one day.</p>
         </fieldset>
 
         <!-- HOW OFTEN IS NOT ASKED HERE ANY MORE. It was an "every other week"
@@ -2443,11 +2434,7 @@ function whenForm(customer, given, opensOn) {
         <div class="card" id="repeat-summary" data-fallback="1"
              style="background:var(--paper-200);padding:18px 20px;box-shadow:none;">
           <p style="margin:0;font-size:15px;line-height:1.55;color:var(--ink-800);">
-            <strong>How this works:</strong> we pick up on every day you tick, at the
-            time you choose, and bring it back the ${escapeHtml(site.turnaround)}.
-            Tick <em>every other week</em> and we come one week and skip the next. We
-            text you the evening before every pickup, and you can skip a week or stop
-            the lot whenever you like.
+            Choose one weekday and a pickup time. Your selected frequency determines how often we collect. If today’s pickup time has passed, your first pickup will be on the next occurrence of that weekday.
           </p>
         </div>` : ''}
 
@@ -2583,7 +2570,7 @@ router.get('/account/book', async (req, res, next) => {
     // the order is created - see POST /account/book.
     return accountPage(res, {
       title: 'Place an order',
-      body: stepPage({ customer, step: shown, given, opensOn, guest: who.guest }),
+      body: await stepPage({ customer, step: shown, given, opensOn, guest: who.guest }),
     });
   } catch (err) {
     return next(err);
@@ -2606,10 +2593,10 @@ router.post('/account/book', async (req, res, next) => {
     let guest = who.guest;
     let customer = guest ? withAnswers(who.customer, form) : who.customer;
 
-    const reshow = (step, error) =>
+    const reshow = async (step, error) =>
       accountPage(res, {
         title: 'Place an order',
-        body: stepPage({ customer, step, given: form, error, opensOn, guest }),
+        body: await stepPage({ customer, step, given: form, error, opensOn, guest }),
         status: error ? 400 : 200,
       });
 
@@ -2700,10 +2687,8 @@ router.post('/account/book', async (req, res, next) => {
       // brought them in the first time. See src/core/ad-attribution.js.
       if (started.created) await adAttribution.recordAdClick(req, started.customer.id);
 
-      const washed = await saveWash(started.customer, form);
-      if (!washed.ok) return reshow('wash', washed.error);
-
-      const saved = await saveAddress(washed.customer, form);
+      // Address is now first; wash preferences are collected on the next step.
+      const saved = await saveAddress(started.customer, form);
       if (!saved.ok) return reshow('address', saved.error);
       customer = saved.customer;
     }
@@ -2726,6 +2711,7 @@ router.post('/account/book', async (req, res, next) => {
     // ticked day, and the rest of the flow carries them as a comma-separated
     // hidden field - so they are normalised here, once, on the way through.
     if (form.step === 'when' && subscribing(form)) {
+      if (weekdaysFrom(form).length !== 1) return reshow('when', 'Please choose one pickup day.');
       form.weekdays = weekdaysFrom(form).join(',');
     }
 
@@ -2742,9 +2728,27 @@ router.post('/account/book', async (req, res, next) => {
       if (blank) return reshow(from, blank);
     }
 
-    const step = from ? nextStep(from, who.customer) : bookingStep(customer, form);
+    if (from === 'address') form.address_confirmed = 'yes';
+    const step = form.address_confirmed !== 'yes'
+      ? 'address'
+      : from ? nextStep(from, customer) : bookingStep(customer, form);
     if (step !== 'book') return reshow(step);
-
+    if (subscribing(form) && !/^[0-6]$/.test(String(form.weekdays || '').trim())) return reshow('when', 'Please choose one pickup day.');
+    const checkout = require('../core/dev-checkout');
+    if (checkout.enabled) {
+      if (req.get('origin') !== req.protocol+'://'+req.get('host')) return res.status(403).send('Open booking on LYNDRY and try again.');
+      try {
+        if (form.step !== 'quote') {
+          const quote = await checkout.createQuote(customer,form);
+          delete form.dev_quote_id;
+          return accountPage(res,{title:'Review your price',body:
+            require('../web/booking-price').review(quote,carried(form,'quote'))});
+        }
+        if (form.price_consent !== 'yes') throw Error('Confirm the displayed prices to continue.');
+        const approved = await checkout.approve(form.dev_quote_id,customer);
+        if (approved.order_id) return res.redirect(303,'/account');
+      } catch (error) { return reshow('when',error.message); }
+    }
     // -----------------------------------------------------------------------
     // NO PAYMENT METHOD, NO ORDER. Neil's decision lock, 14 September.
     //
@@ -2774,6 +2778,7 @@ router.post('/account/book', async (req, res, next) => {
     // -----------------------------------------------------------------------
     if (billing.needsCardOnFile(customer)) {
       const wanted = {
+        devQuoteId: form.dev_quote_id || null,
         pickupDate: String(form.pickup_date || ''),
         pickupTime: String(form.pickup_time || ''),
         notes: String(form.notes || '').trim().slice(0, 500) || null,
@@ -2794,6 +2799,7 @@ router.post('/account/book', async (req, res, next) => {
       const check = await booking.checkSlot(customer, {
         pickupDate: bookingIntents.firstDateFor(shape),
         pickupTime: wanted.pickupTime,
+        exactTime: Boolean(wanted.devQuoteId),
       });
 
       if (!check.ok) {
@@ -2850,6 +2856,7 @@ router.post('/account/book', async (req, res, next) => {
     // function turns a booking intent into an order, so the two doors cannot
     // drift.
     const result = await recurring.bookAndSchedule(customer, {
+      devQuoteId: form.dev_quote_id || null,
       pickupDate: String(form.pickup_date || ''),
       pickupTime: String(form.pickup_time || ''),
       // pickupMethod is not passed. The bag is always left out - see the note
@@ -3200,5 +3207,7 @@ router.post('/account/cancel', auth.requireCustomer, async (req, res, next) => {
     return next(err);
   }
 });
+
+require('./spending-routes').registerCustomer(router, { requireCustomer: auth.requireCustomer, accountPage });
 
 module.exports = { router };

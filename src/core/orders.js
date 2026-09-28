@@ -209,6 +209,7 @@ async function findMostRecent(customerId) {
 // ---------------------------------------------------------------------------
 
 async function create({
+  devQuoteId = null,
   customerId,
   pickupDate,
   pickupTime,
@@ -235,6 +236,7 @@ async function create({
   const { data, error } = await db
     .from('orders')
     .insert({
+      dev_quote_id: devQuoteId,
       customer_id: customerId,
       status: 'REQUESTED',
       service: 'WASH_DRY_FOLD',
@@ -314,7 +316,7 @@ async function create({
   // and an unassigned one is a real state that the boards show as its own row.
   try {
     const drivers = require('./drivers');
-    const driverId = await drivers.assign(data);
+    const driverId = data.dev_quote_id ? null : await drivers.assign(data);
     if (driverId) data.driver_id = driverId;
   } catch (err) {
     console.warn(`could not assign order ${data.order_number} to a driver:`, err.message);
@@ -547,6 +549,7 @@ async function uncollect(order, { by = null, reason = null } = {}) {
 }
 
 async function reschedule(order, newDate, newTime, window, by = null) {
+  if(order.pricing_snapshot)throw new Error('This pickup has an approved dynamic quote. Request a new quote for the new date and time before changing this order.');
   if (!isCancellable(order.status)) {
     throw new Error('That order has already been collected, so it cannot be rescheduled.');
   }

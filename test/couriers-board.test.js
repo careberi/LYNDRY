@@ -210,11 +210,11 @@ test('IT SAYS WHEN NOTHING BOOKED HERE REACHES A DRIVER', () => {
   // books couriers that dispatch nobody, and the way you find out is that no car
   // ever arrives.
   const fake = render({ courier: { name: 'uber-test', isFake: true, configured: true } });
-  assert.match(fake, /Nothing booked here reaches a driver/);
+  assert.match(fake, /Test mode — no driver dispatched/);
   assert.match(fake, /uber-test/, 'the driver is not named, so test and live look alike');
 
   const real = render({ courier: { name: 'uber', isFake: false, configured: true } });
-  assert.doesNotMatch(real, /Nothing booked here reaches a driver/);
+  assert.doesNotMatch(real, /Test mode — no driver dispatched/);
 });
 
 // --- 7. the controls never move an order -----------------------------------

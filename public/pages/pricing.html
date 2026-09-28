@@ -1,11 +1,3 @@
-<!-- Pricing. Built to the LYNDRY design handoff (v2).
-
-     The handoff's pricing page has three plan cards — locker drop, wash &
-     fold, standing order. We sell one service at one price, and inventing two
-     more tiers to fill a layout would be inventing business decisions. So the
-     three-card band is kept and the outer two say what is in the price and
-     what isn't, instead of quoting plans we don't offer. -->
-
 <section class="container" style="padding:88px 40px 32px;">
   <p class="eyebrow eyebrow-brand">Pricing</p>
   <h1 class="display-2">What it costs at your door.</h1>
@@ -15,210 +7,31 @@
   </p>
 </section>
 
-<!-- =====================================================================
-     THE ADDRESS BOX, ABOVE THE RATES. Neil, 26 September: the pricing page
-     needs dynamic quote pricing instead of the flat pricing.
-
-     It GETs to /quote rather than answering here, which is what stops this
-     being a second implementation of a price: /quote asks a courier about the
-     real address and renders the answer, and this page only asks the question.
-     A quote is then a URL somebody can send on, and refreshing it can never
-     do anything twice.
-
-     THE BOX CARRIES NO VALUE ATTRIBUTE, and that is deliberate. The copy of
-     this form on /quote fills one from a token that the /quote route supplies;
-     nothing supplies it here, and an unreplaced token renders as its own
-     literal text sitting in the box. Empty is right anyway - this is the first
-     time anybody is being asked.
-
-     (Naming that token here would put it in the page too: an HTML comment is
-     served to the browser, so it is inside the markup like everything else.)
-     ===================================================================== -->
-<section class="container" style="padding-bottom:56px;">
-  <form method="get" action="/quote" class="card card-xl" style="padding:26px 28px;max-width:52ch;" data-reveal>
-    <label for="address" style="display:block;font:700 12px/1 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-700);margin-bottom:10px;">
-      Your street address
-    </label>
-
-    <input id="address" name="address" type="text" required
-           placeholder="16 Chandler Dr, Fair Lawn NJ"
-           autocomplete="street-address"
-           style="width:100%;margin-bottom:14px;">
-
-    <!-- A hidden field a person never sees. Anything that fills it is not a
-         person, and gets the same answer as everybody else. -->
+<section class="container" style="padding-bottom:72px;">
+  <form method="get" action="/quote" class="card card-lg card-xl pricing-address-form">
+    <div class="field">
+      <label class="field-label" for="pricing-street">Street address</label>
+      <input class="input" id="pricing-street" name="street" autocomplete="address-line1" required maxlength="120">
+    </div>
+    <div class="pricing-address-row">
+      <div class="field">
+        <label class="field-label" for="pricing-town">Town</label>
+        <input class="input" id="pricing-town" name="town" autocomplete="address-level2" required maxlength="80">
+      </div>
+      <div class="field">
+        <label class="field-label" for="pricing-zip">ZIP code</label>
+        <input class="input" id="pricing-zip" name="zip" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" required>
+      </div>
+    </div>
     <div style="position:absolute;left:-9999px;" aria-hidden="true">
       <label for="p-company">Company</label>
-      <input id="p-company" name="company" type="text" tabindex="-1" autocomplete="off">
+      <input id="p-company" name="company" tabindex="-1" autocomplete="off">
     </div>
-
-    <button type="submit" class="btn btn-ink" style="width:100%;">
-      See my price {{ICON_ARROW}}
-    </button>
-
-    <p style="font-size:13px;line-height:1.5;color:var(--ink-500);margin:14px 0 0;">
-      We only use this to work out the distance. Nothing is saved and you are not
-      signed up for anything.
-    </p>
+    <button type="submit" class="btn btn-ink btn-full">See my price {{ICON_ARROW}}</button>
+    <p class="pricing-address-hint">We only use this to work out the distance. Nothing is saved and you are not signed up for anything.</p>
   </form>
 </section>
 
-<!-- ===================================================================== -->
-<!-- The plan band                                                          -->
-<!-- ===================================================================== -->
-<section class="dotfield" style="padding:80px 0 88px;">
-  <!-- No align-items:start here: the default stretch is what makes all three
-       cards the same height regardless of how much copy each holds. -->
-  <div class="container grid-3">
-
-    <div class="card card-xl" style="padding:30px;" data-reveal>
-      <p class="eyebrow" style="margin-bottom:18px;">In the price</p>
-      <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;letter-spacing:-0.03em;margin:0 0 18px;">Everything below</h2>
-      <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;">
-        <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
-          <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Pickup from your door, whenever you need it, no fixed route days</span>
-        </li>
-        <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
-          <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Washed to your saved preferences: temperature, detergent, softener</span>
-        </li>
-        <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
-          <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Dried and folded</span>
-        </li>
-        <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
-          <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Delivered back the {{TURNAROUND}}, with a photo of where it was left</span>
-        </li>
-        <li style="display:flex;gap:10px;font-size:15px;line-height:1.5;color:var(--ink-700);">
-          <span class="icon icon-check icon-16" style="margin-top:3px;color:var(--suds-600);" aria-hidden="true"></span>
-          <span>Free cancellation right up until your bag is picked up</span>
-        </li>
-      </ul>
-    </div>
-
-    <!-- The emphasis card: Sunbeam fill and the badge. A flex column so the
-         button sits on the bottom edge however tall the row grows.
-
-         NOT lifted. The design handoff offset this card by -14px, and because
-         all three are the same height the only visible effect was three cards
-         whose tops and bottoms did not line up, which reads as a mistake
-         rather than as emphasis. The fill and the badge carry it. -->
-    <div class="card card-lg card-xl card-accent"
-         style="padding:30px;display:flex;flex-direction:column;" data-reveal>
-      <span class="badge badge-ink" style="margin-bottom:18px;">Wash &amp; fold</span>
-      <p class="eyebrow" style="margin:14px 0 12px;color:var(--ink-700);">Your rate</p>
-
-      <!-- NO FIXED PER-POUND FIGURE HERE ANY MORE. Neil, 26 September: the
-           pricing page needs dynamic quote pricing instead of the flat pricing.
-
-           IT WAS NOT MERELY OUT OF DATE, IT CONTRADICTED THE BOX ABOVE IT. The
-           same page asked for an address, answered with one rate for a real
-           Fair Lawn one, and then printed a different figure here - because
-           under a courier the rate is worked out from the laundromat that
-           serves the street, and no single number is true everywhere.
-
-           WHAT IS STILL FLAT IS STATED, because it genuinely is: the smallest
-           order, no delivery fee, no membership, and the fact that nothing is
-           charged until the bag is weighed. The rate itself is the quote's to
-           give. -->
-      <div style="display:flex;align-items:baseline;gap:8px;">
-        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.045em;line-height:0.95;">Worked out from your address</span>
-      </div>
-      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:14px 0 0;">
-        One rate per pound, weighed after we collect it. Which rate depends on the
-        laundromat that serves your street, so the box above gives you the real
-        number rather than an average.
-      </p>
-
-      <div style="display:flex;align-items:baseline;gap:8px;margin-top:18px;padding-top:18px;border-top:2px solid var(--ink-100);">
-        <span style="font-family:var(--font-display);font-weight:900;font-size:44px;letter-spacing:-0.04em;line-height:0.85;">{{MINIMUM}}</span>
-        <span style="font-size:15px;font-weight:600;">smallest order, everywhere</span>
-      </div>
-      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:10px 0 0;">
-        However little you send. A subscription is cheaper per pound than a
-        one-time pickup, on whichever rate your address gets.
-      </p>
-
-      <p style="font-size:15px;line-height:1.55;color:var(--ink-800);margin:20px 0 26px;">
-        Nothing is charged when you book. We weigh your bag after pickup, text you
-        the total, and charge once. No delivery fee and no membership.
-      </p>
-      <a href="/account/login" class="btn btn-ink btn-full">Place an order {{ICON_ARROW_SM}}</a>
-    </div>
-
-    <div class="card card-xl" style="padding:30px;" data-reveal>
-      <p class="eyebrow" style="margin-bottom:18px;">Not in the price</p>
-      <h2 style="font-family:var(--font-display);font-weight:900;font-size:32px;letter-spacing:-0.03em;margin:0 0 18px;">Nothing</h2>
-      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">
-        There is no delivery fee, no rush fee and no membership.
-        The rate you choose with a {{MINIMUM}} minimum is the entire price.
-        A subscription is a lower rate, not a club: nothing to join, no joining
-        fee, and no minimum number of pickups.
-      </p>
-      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 14px;">
-        What we don't do yet: dry cleaning, pressing and alterations. Wash, dry
-        and fold is the whole service today.
-      </p>
-      <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0;">
-        There is no limit on how much you can send in one pickup.
-      </p>
-    </div>
-
-  </div>
-</section>
-
-<!-- ===================================================================== -->
-<!-- What a bag costs                                                       -->
-<!-- ===================================================================== -->
-<section class="container grid-2 grid-2-narrow" style="padding-top:80px;padding-bottom:88px;gap:48px;align-items:start;">
-
-  <div data-reveal>
-    <h2 class="display-4" style="margin-bottom:14px;">What a bag costs</h2>
-    <p style="font-size:15px;line-height:1.55;color:var(--ink-700);max-width:34ch;margin:0;">
-      Card on file, charged after we weigh it at your door. No fee for having an account, on
-      either rate: a subscription is charged per pickup like everything else.
-      You can stop the texts any time by replying <strong>STOP</strong>.
-    </p>
-  </div>
-
-  <div class="card card-xl" style="padding:10px 30px;" data-reveal>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">One full washing machine, about {{BAG_WEIGHT}}</span>
-      <span class="amount">{{ESTIMATE_RANGE}}</span>
-    </div>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Pickup from your door</span>
-      <span class="amount">Included</span>
-    </div>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Delivery back to your door</span>
-      <span class="amount">Included</span>
-    </div>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Cancel before pickup</span>
-      <span class="amount">Free</span>
-    </div>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Minimum per pickup</span>
-      <span class="amount">{{MINIMUM}}</span>
-    </div>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Membership</span>
-      <span class="amount">None</span>
-    </div>
-    <div class="price-row">
-      <span style="font-size:16px;color:var(--ink-800);">Most we take in one pickup</span>
-      <span class="amount">No limit</span>
-    </div>
-  </div>
-
-</section>
-
-<!-- ===================================================================== -->
-<!-- Questions about the price                                              -->
-<!-- ===================================================================== -->
 <section style="background:var(--ink-900);padding:88px 0 96px;">
   <div class="container grid-2 grid-2-narrow" style="gap:56px;align-items:start;">
 

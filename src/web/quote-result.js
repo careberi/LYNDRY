@@ -29,7 +29,7 @@ function escapeHtml(value) {
 
 function shell(inner, tone = 'card') {
   return `<section class="container" style="padding-bottom:48px;">
-  <div class="${tone} card-xl" style="padding:26px 28px;max-width:52ch;">${inner}</div>
+  <div class="${tone} card-xl" style="padding:26px 28px;max-width:52ch;margin-inline:auto;">${inner}<p style="margin:18px 0 0;"><a href="/pricing">Change address or try again</a></p></div>
 </section>`;
 }
 
@@ -118,50 +118,22 @@ function priced(quote, address) {
       <span class="amount">${value}</span>
     </div>`;
 
-  return `<section class="container" style="padding-bottom:56px;">
-  <div style="max-width:52ch;" data-reveal>
-    <p class="eyebrow" style="margin:0 0 10px;">Your price</p>
-    <h2 class="display-3" style="margin:0 0 6px;">${perLb(one.perLbCents)} a pound.</h2>
-    <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 20px;">
-      At ${escapeHtml(address)}, with a ${money(quote.minimumCents)} smallest order.
-      <strong>No delivery fee</strong> &mdash; the round trip is in the price.
-    </p>
-
-    <div class="card card-xl" style="padding:10px 26px;margin-bottom:18px;">
-      ${row('One-time pickup', `${perLb(one.perLbCents)}/lb`, 'Book whenever you need us')}
-      ${row('On a subscription', `${perLb(sub.perLbCents)}/lb`, 'Weekly, fortnightly or monthly')}
-      ${/*
-        THE COURIER LINE IS GONE, AND NOTHING REPLACES IT. It read "Pickup and
-        delivery - both journeys, charged once" with a figure beside it. Neil's
-        decision of 25 September was to raise the minimum and keep "no delivery fee"
-        true, rather than charge the courier as its own line - so a row naming one
-        would be advertising a charge that is not made. The round trip is paid for
-        by the smallest order below.
-      */ ''}
-      ${row('Pickup and delivery', 'Included', 'No delivery fee, ever')}
-      ${row('Smallest order', money(quote.minimumCents), 'However little you send')}
+  return `<section class="container" style="padding-bottom:72px;">
+  <div class="quote-column quote-pricing">
+    <p class="eyebrow" style="margin:0 0 10px;">Wash, dry &amp; fold</p>
+    <h2 class="display-3" style="margin:0 0 12px;">${perLb(one.perLbCents)} per pound</h2>
+    <p class="quote-address">${escapeHtml(address)}</p>
+    <div class="card card-xl" style="padding:10px 26px;margin:24px 0;">
+      ${row('One-time pickup', `${perLb(one.perLbCents)}/lb`, 'Book when you need us')}
+      ${row('Subscription pickup', `${perLb(sub.perLbCents)}/lb`, 'Regular pickups')}
+      ${row('Pickup and delivery', money(quote.deliveryFeeCents), quote.quoted ? 'Round trip' : 'Estimated round trip')}
     </div>
-
-    <div class="card card-xl" style="padding:18px 26px;margin-bottom:18px;background:var(--sunbeam-500);">
-      <p style="font:700 12px/1 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;margin:0 0 8px;">
-        A full machine, about 20 lb</p>
-      <p style="font-size:15px;line-height:1.6;margin:0;">
-        <strong style="font-family:var(--font-display);font-size:24px;">${money(one.typical20lbCents)}</strong>
-        one-time, or <strong>${money(sub.typical20lbCents)}</strong> on a subscription. Everything in,
-        nothing added afterwards.
-      </p>
-    </div>
-
-    <p style="font-size:14px;line-height:1.6;color:var(--ink-500);margin:0 0 22px;">
-      Your laundry is weighed after we collect it and that is when you are charged, so the exact total
-      follows the actual weight. Nothing is taken when you book.
-    </p>
-
-    <a href="/account/login" class="btn btn-brand" style="width:100%;">
-      Place an order online
-    </a>
+    <p class="quote-address">These are laundry rates. Pickup and delivery are charged separately.</p>
+    <a href="/account/login" class="btn btn-primary btn-lg btn-full quote-order-button">Place an order online</a>
+    <a href="/pricing" class="quote-change-address">Change address</a>
   </div>
 </section>`;
+
 }
 
 // ONE DOOR, so a caller cannot render a price for a refusal or the other way
@@ -189,7 +161,45 @@ function render({ quote, address, error }) {
     return unavailable();
   }
 
-  return priced(quote, address);
+  return quote.dynamic ? dynamicPriced(quote,address) : priced(quote, address);
 }
 
-module.exports = { render, escapeHtml };
+module.exports = { render, escapeHtml, scheduleForm };
+
+// Public previews never create an order or authorize payment.
+function scheduleForm({address,pickupDate='',pickupTime='',error=''}) {
+  return `<section class="container quote-schedule"><div class="quote-column">
+    <div class="card card-xl"><h2>Refine your estimate</h2>
+    <p>${escapeHtml(address)}</p>
+    <p>Available laundromats and pricing depend on your pickup date and time.</p>
+    ${error ? `<p role="alert">${escapeHtml(error)}</p>` : ''}
+    <form method="get" action="/quote">
+      <input type="hidden" name="address" value="${escapeHtml(address)}">
+      <label>Pickup date<input type="date" name="pickup_date" value="${escapeHtml(pickupDate)}" required></label>
+      <label>Pickup time (Eastern)<input type="time" name="pickup_time" value="${escapeHtml(pickupTime)}" required></label>
+      <button class="btn btn-primary" type="submit">Calculate my price</button>
+    </form></div>
+  </div></section>`;
+}
+
+function dynamicPriced(quote,address) {
+  const one=quote.categories.ONE_TIME;
+  const plan=(name,p)=>`<div class="card card-xl quote-plan"><h3>${name}</h3><dl>
+    <div><dt>Wash, dry &amp; fold</dt><dd>${money(p.rateCentsPerLb)}/lb</dd></div>
+    <div><dt>Operational fee · once per order</dt><dd>${money(p.operationalFeeCents)}</dd></div>
+    <div><dt>Minimum total · includes fee</dt><dd>${money(p.minimumTotalCents)}</dd></div>
+    <div><dt>Estimated total · 30–40 lb</dt><dd>${money(p.estimated30LbCents)}–${money(p.estimated40LbCents)}</dd></div>
+    </dl></div>`;
+  return `<section class="container" style="padding-bottom:72px;"><div class="quote-column quote-pricing">
+    <p class="eyebrow quote-eyebrow">One-time wash, dry &amp; fold</p>
+    <h2 class="display-3 quote-rate-heading">${money(one.rateCentsPerLb)} per pound</h2>
+    <p class="quote-address">${escapeHtml(address)}</p>
+    ${quote.indicative ? '<p class="quote-address">Preliminary estimate for your address. Pickup date and time may change availability and pricing.</p>' : ''}
+    ${plan('One-time pickup',one)}${plan('Subscription pickup',quote.categories.SUBSCRIPTION)}
+    <p class="quote-address">No separate pickup or delivery charge. The operational fee is included in the minimum and estimated totals.</p>
+    <p class="quote-address">Final weight determines your bill. Review and confirm your price when booking. Each subscription pickup receives its own quote.</p>
+    <p class="quote-address">Development estimate: courier costs are simulated. No payment is collected here.</p>
+    <a href="/account/login" class="btn btn-primary btn-lg btn-full quote-order-button">Place an order online</a>
+    <a href="/pricing" class="quote-change-address">Change address</a>
+  </div></section>`;
+}

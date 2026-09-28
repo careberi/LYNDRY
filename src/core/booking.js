@@ -907,6 +907,16 @@ function describeWindow(startValue, endValue) {
 }
 
 // The window an order was promised. Reads what is stored, never recomputes.
+// The requested clock time and a legacy promised window are different facts.
+// Never invent an exact time from the beginning of an old route window.
+function requestedPickupLabel(order) {
+  if (!order) return null;
+  const requested = readableTime(order.pickup_time);
+  if (requested) return requested + ' ET';
+  const legacy = arrivalWindow(order);
+  return legacy ? legacy + ' (legacy window)' : null;
+}
+
 function arrivalWindow(order) {
   if (!order) return null;
   return describeWindow(order.pickup_window_start, order.pickup_window_end);
@@ -1189,7 +1199,7 @@ const PICKUP_METHODS = ['LEAVE_OUTSIDE'];
 // booking.js already follow for their two front doors.
 //
 // It writes nothing and is safe to call as often as the conversation needs.
-async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekdaySaid } = {}) {
+async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekdaySaid, exactTime = false } = {}) {
   // NOT TAKING ORDERS. Checked first, before anything else, because when the
   // service is shut every other reason a booking might fail is beside the
   // point - and because this is the guard that has to hold when the AI is
@@ -1324,7 +1334,7 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
   // The window is decided here and stored by the caller, never recomputed. If
   // today is done it rolls to tomorrow rather than asking the customer to
   // choose again.
-  const window = windowFor(pickupDate, pickupTime);
+  const window = exactTime ? {date:pickupDate,start:null,end:null,substituted:false} : windowFor(pickupDate, pickupTime);
 
   // NOBODY IS BOOKED INTO A TIME THEY DID NOT AGREE TO. Same rule as moving an
   // existing pickup, and for the same reason: a window we chose because theirs
@@ -1344,6 +1354,7 @@ async function checkSlot(customer, { pickupDate, pickupTime, fromSchedule, weekd
 async function bookPickup(
   customer,
   {
+    devQuoteId = null,
     pickupDate,
     pickupTime,
     pickupMethod,
@@ -1401,14 +1412,21 @@ async function bookPickup(
 ) {
   // Every rule lives in checkSlot, so the thing the AI is told and the thing
   // that writes the order can never disagree about what is possible.
-  const checked = await checkSlot(customer, { pickupDate, pickupTime, fromSchedule });
+  const checked = await checkSlot(customer, { pickupDate, pickupTime, fromSchedule, exactTime: Boolean(devQuoteId) });
   if (!checked.ok) return checked;
 
   const { window, waived } = checked;
+  if (devQuoteId) await require('./dev-checkout').validateQuote(devQuoteId,customer,window.date,normaliseTime(pickupTime));
 
+  if (!devQuoteId && subscriptionId && require('./dev-checkout').enabled) {
+    const {data,error}=await db.from('orders').select('id').eq('subscription_id',subscriptionId).not('dev_quote_id','is',null).limit(1);
+    if(error)throw error;
+    if(data.length)return {ok:false,reason:'quote_required',detail:'This recurring pickup needs a new price quote and customer approval.'};
+  }
   const prefs = customer.preferences || {};
 
   const order = await orders.create({
+    devQuoteId,
     customerId: customer.id,
     // What they are set up with RIGHT NOW, frozen onto this order. Changing
     // their account later moves the default for next time and leaves this
@@ -1477,7 +1495,7 @@ async function bookPickup(
   // require() here rather than at the top: dispatch requires this file, so a
   // module-level import would be a cycle. Node caches it, so the cost is one
   // lookup.
-  require('./dispatch')
+  if (!order.dev_quote_id) require('./dispatch')
     .savePlannedPartner(order, customer)
     .catch((err) => console.error(`Could not plan a laundromat: ${err.message}`));
 
@@ -1684,7 +1702,7 @@ function holdRefusedMessage(customer, order, { setupUrl = null, heldCents = null
 // asked for.
 function whenLine(order) {
   const day = readableDate(order.pickup_date);
-  const window = arrivalWindow(order);
+  const window = order.pricing_snapshot ? 'at '+normaliseTime(order.pickup_time)+' Eastern' : arrivalWindow(order);
   return window ? `${day} ${window}` : day;
 }
 
@@ -1828,7 +1846,9 @@ function confirmationMessage(
   // and this message sits at 454 against the 459 that three segments hold.
   const perPound = subscription.perPound(order.price_per_lb_cents || config.pricing.perPoundCents);
 
-  const money = freeOrder
+  const money = order.pricing_snapshot
+    ? ` Quoted price: ${perPound} plus ${billing.money(order.pricing_snapshot.operationalFeeCents)} operational fee; ${billing.money(order.pricing_snapshot.minimumTotalCents)} inclusive minimum. Final weight determines the total.`
+    : freeOrder
     ? freeUpToLb
       ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${perPound}, and we'll text you the total after we weigh it.`
       : ` This one is on us - you got one of the free ones, so there is nothing to pay.`
@@ -1931,6 +1951,7 @@ module.exports = {
   readableDate,
   readableTime,
   arrivalWindow,
+  requestedPickupLabel,
   normaliseTime,
   today,
   serviceDateOf,

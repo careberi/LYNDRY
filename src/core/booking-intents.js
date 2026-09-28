@@ -54,7 +54,7 @@ const recurring = require('./recurring');
 const UNFINISHED_AFTER_MINUTES = 20;
 
 const FIELDS =
-  'id, customer_id, pickup_date, pickup_time, notes, cadence, weekdays, ' +
+  'dev_quote_id, id, customer_id, pickup_date, pickup_time, notes, cadence, weekdays, ' +
   'order_id, completed_at, claimed_at, blocked_reason, card_link_sent_at, ' +
   'created_at, updated_at';
 
@@ -104,7 +104,7 @@ function firstDateFor(intent) {
   // recurring owns this, because recurring owns schedules. A copy here would be
   // a second answer to "which day would this land on", and the two would
   // disagree the first time either moved.
-  return recurring.firstRepeatDate({ cadence: intent.cadence, weekdays: weekdaysOf(intent) }) || '';
+  return recurring.firstRepeatDate({ cadence: intent.cadence, weekdays: weekdaysOf(intent), pickupTime: intent.pickup_time }) || '';
 }
 
 // The one still being worked on, if there is one.
@@ -131,10 +131,11 @@ async function openFor(customerId) {
 //
 // blocked_reason is cleared on every save: they are answering the very
 // question it was asking.
-async function save(customer, { pickupDate, pickupTime, notes, cadence, weekdays } = {}) {
+async function save(customer, { pickupDate, pickupTime, notes, cadence, weekdays, devQuoteId = null } = {}) {
   if (!customer || !customer.id) return null;
 
   const row = {
+    dev_quote_id: devQuoteId,
     customer_id: customer.id,
     pickup_date: pickupDate || null,
     pickup_time: pickupTime || null,
@@ -298,6 +299,7 @@ async function convert(customer, intent) {
   // order, and every version of that undo was wrong in a different way. Nothing
   // is created before the booking now, so there is nothing to undo after it.
   const result = await recurring.bookAndSchedule(customer, {
+    devQuoteId: mine.dev_quote_id,
     pickupDate: mine.pickup_date || '',
     pickupTime: mine.pickup_time || '',
     notes: mine.notes || null,

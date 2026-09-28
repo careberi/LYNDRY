@@ -41,7 +41,7 @@ const digitsOf = (phone) => String(phone || '').replace(/\D/g, '');
 
 function card({ kind, tone, who, phone, goes, detail, extra, action }) {
   return `
-  <div class="card" style="padding:18px 22px;margin-bottom:12px;">
+  <div class="card" style="padding:16px;margin-bottom:12px;">
     <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;">
       <div style="min-width:0;flex:1 1 300px;">
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px;">
@@ -56,7 +56,7 @@ function card({ kind, tone, who, phone, goes, detail, extra, action }) {
 
       <div style="text-align:right;flex:none;">
         <div class="eyebrow" style="margin:0 0 4px;">Goes</div>
-        <div style="font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;">
+        <div style="font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;">
           ${escapeHtml(goes)}
         </div>
       </div>
@@ -69,7 +69,7 @@ function scheduledBody({ followUps, reminders, followUpsOn, canManage, notice, p
   const strip = (text, background) =>
     text
       ? `<p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                   background:${background};font-size:16px;font-weight:600;white-space:pre-wrap;">${escapeHtml(
+                   background:${background};font-size:13px;font-weight:600;white-space:pre-wrap;">${escapeHtml(
           text
         )}</p>`
       : '';
@@ -96,16 +96,16 @@ function scheduledBody({ followUps, reminders, followUpsOn, canManage, notice, p
         ? `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
              <a class="btn btn-outline btn-sm" href="/ops/messages/${escapeHtml(
                digitsOf(f.phone)
-             )}">Read the conversation</a>
+             )}">View messages</a>
              ${
                f.paused
-                 ? '<span style="font-size:14px;color:var(--ink-500);align-self:center;">The AI is switched off on this chat, so nothing is sent either way.</span>'
+                 ? '<span style="font-size:14px;color:var(--ink-500);align-self:center;">Automated replies are paused for this conversation.</span>'
                  : `<form method="post" action="/ops/scheduled/follow-ups/${escapeHtml(
                      digitsOf(f.phone)
                    )}" style="margin:0;">
                       <input type="hidden" name="state" value="${f.off ? 'on' : 'off'}">
                       <button class="btn btn-sm ${f.off ? 'btn-ink' : 'btn-outline'}" type="submit">
-                        ${f.off ? 'Chase them after all' : 'Do not chase this one'}
+                        ${f.off ? 'Enable follow-up' : 'Disable follow-up'}
                       </button>
                     </form>`
              }
@@ -129,11 +129,7 @@ function scheduledBody({ followUps, reminders, followUpsOn, canManage, notice, p
   return `
 <p class="eyebrow" style="margin:0 0 8px;">Admin</p>
 <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Customer follow-up</h1>
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
-  Every text queued to send without anybody pressing a button. Nothing here goes
-  outside 8am to 9pm, and nothing on this page sends anything - it is a reading
-  of what is already scheduled.
-</p>
+
 
 ${strip(notice, 'var(--suds-300)')}
 ${strip(problem, 'var(--stain-100)')}
@@ -153,24 +149,19 @@ ${
 <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:0 0 4px;">
   Follow-ups
 </h2>
-<p style="font-size:15px;color:var(--ink-700);margin:0 0 16px;max-width:64ch;">
-  The AI asked something and nobody answered. It nudges once a couple of hours
-  in when somebody is part-way through setting up, chases once more a day after
-  it asked, and then never again unless they reply. If somebody has said they will come back
-  to you, switch theirs off.
-</p>
+
 
 ${
   live.length
     ? live.map(followUpCard).join('')
-    : `<div class="card" style="padding:18px 22px;margin-bottom:12px;">
-         <p style="margin:0;font-size:16px;">Nobody is waiting on a chase.</p>
+    : `<div class="card" style="padding:16px;margin-bottom:12px;">
+         <p style="margin:0;font-size:13px;">No follow-ups scheduled.</p>
        </div>`
 }
 
 ${
   held.length
-    ? `<p class="eyebrow" style="margin:24px 0 12px;">Switched off</p>
+    ? `<p class="eyebrow" style="margin:24px 0 12px;">Disabled</p>
        ${held.map(followUpCard).join('')}`
     : ''
 }
@@ -178,17 +169,13 @@ ${
 <h2 style="font-family:var(--font-display);font-weight:800;font-size:24px;margin:34px 0 4px;">
   Pickup reminders
 </h2>
-<p style="font-size:15px;color:var(--ink-700);margin:0 0 16px;max-width:64ch;">
-  Sent the evening before every pickup so the bag is actually out when the van
-  arrives. There is no switch: the way to stop one is to move or cancel the
-  pickup, which is a decision about the order rather than about a text.
-</p>
+
 
 ${
   reminders.length
     ? reminders.map(reminderCard).join('')
-    : `<div class="card" style="padding:18px 22px;">
-         <p style="margin:0;font-size:16px;">No pickups are booked, so nothing to remind anybody about.</p>
+    : `<div class="card" style="padding:16px;">
+         <p style="margin:0;font-size:13px;">No pickup reminders scheduled.</p>
        </div>`
 }`;
 }

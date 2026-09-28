@@ -84,7 +84,7 @@ test('A REAL LEG PRICE IGNORES THE TABLE ENTIRELY', () => {
   // object carries our COST instead and there is no customer-facing fee on it at
   // all. Two legs of what Uber quoted, ungrossed.
   assert.equal(priced.courierCostCents, 1099 * 2);
-  assert.equal(priced.deliveryFeeCents, undefined, 'a customer-facing fee is back on the quote');
+  assert.equal(priced.deliveryFeeCents, priced.courierCostCents);
   assert.equal(priced.quoted, true);
 });
 

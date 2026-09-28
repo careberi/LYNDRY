@@ -293,6 +293,9 @@ function quoteFor({ miles, partnerCentsPerLb, partnerName = null, legCents = nul
     // It survives because the margin maths needs it - `netCents()` subtracts what
     // we pay the courier - and because the routing board reads it.
     courierCostCents: legCents != null ? Number(legCents) * 2 : courierCostCents(miles),
+    // Neil confirmed the customer quote shows both trips, without a processing markup.
+    // Use the selected partner's courier quote; the distance band is the fallback estimate.
+    deliveryFeeCents: legCents != null ? Number(legCents) * 2 : courierCostCents(miles),
     minimumCents: config.pricing.minimumCents,
     categories,
 

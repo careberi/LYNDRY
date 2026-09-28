@@ -625,13 +625,16 @@ function toolbarHtml(order, actions, can) {
   const n = order.order_number;
   const parts = [];
   for (const a of actions.primary) {
-    if (a.key === 'task') parts.push(taskForm(order, a.task, can));
+    if (a.key === 'task') {
+      if (!/^(tag_|weigh_|clip_|load_|scan$)/.test(a.task.key)) parts.push(taskForm(order, a.task, can));
+    }
     else if (a.key === 'settle') parts.push(`<a class="cbtn primary" href="#settle">Settle weight</a>`);
     else if (a.key === 'charge') parts.push(`<form method="post" action="/ops/orders/${n}/charge"><button type="submit" class="cbtn primary">Try the card again</button></form>`);
     else if (a.key === 'release-return') parts.push(`<a class="cbtn primary" href="#release">Release the return</a>`);
     else if (a.key === 'regular') parts.push(`<a class="cbtn primary" href="#send">Text: make it regular</a>`);
   }
   for (const a of actions.also) {
+    if (['tags', 'correct'].includes(a.key)) continue;
     if (a.href) parts.push(`<a class="cbtn" href="${escapeHtml(a.href)}"${a.key === 'photo' ? ' target="_blank" rel="noopener"' : ''}>${escapeHtml(a.label)}</a>`);
     else if (a.key === 'card-link') parts.push(`<form method="post" action="/ops/orders/${n}/card-link"><button type="submit" class="cbtn">${escapeHtml(a.label)}</button></form>`);
     else if (a.key === 'cancel') parts.push(`<a class="cbtn danger" href="#cancel">${escapeHtml(a.label)}</a>`);
@@ -808,7 +811,7 @@ function logTable(order, log, view) {
     <tbody>${log.rows
       .map((e) => `<tr><td class="mono">${stamp(e.created_at)}</td><td>${escapeHtml(e.summary || '')}${e.reason ? ` <span class="muted">· ${escapeHtml(e.reason)}</span>` : ''}</td><td class="who">${escapeHtml(e.actor || '')}</td></tr>`)
       .join('') || '<tr><td colspan="3" class="muted">Nothing yet.</td></tr>'}</tbody></table></div>
-  ${view === 'human' ? '<p class="hint">Van clips, tag off, in-house receipt off stay on the bag record. Not in Human.</p>' : ''}`;
+  `;
 }
 
 function kv(pairs) {
@@ -832,11 +835,12 @@ function threadHtml(order, thread, can) {
 // fetched here.
 function orderConsoleBody({
   order, customer, events, labels, messages, tasks, team, laundromats, limits,
-  can, view, banner, money, shortDate, labelState, sideExtras = '',
+  can, view, banner, money, shortDate, labelState, sideExtras = '', intakeHtml = '',
   // The rows from the payments ledger. Absent on an order taken before that
   // table existed, which is why paidTable() draws nothing without them rather
   // than inventing Card $0.
   paymentRows = [],
+  overviewHtml = '', dispatchHtml = '',
 }) {
   const n = order.order_number;
   const c = customer || {};
@@ -844,7 +848,7 @@ function orderConsoleBody({
   const log = humanEvents(events, view);
   const charge = can.money ? chargeRows(events, order, { money }) : [];
   const split = payments.splitFor(order, paymentRows);
-  const bags = bagRows(labels, order, { labelState });
+
   const thread = can.messages ? messagesForOrder(messages, order) : { rows: [], later: 0 };
   const actions = actionsFor(order, { tasks, can, exception, labels });
 
@@ -855,14 +859,15 @@ function orderConsoleBody({
   const prefs = c.preferences || {};
   const spot = prefs.dropoff_spot || prefs.special_instructions || '';
 
-  const meta = [
-    can.customers && address ? `<span>${escapeHtml(address)}</span>` : '',
-    `<span>Pickup <b>${escapeHtml(shortDate(order.pickup_date))}${window ? ' ' + escapeHtml(window) : ''}</b></span>`,
-    asked ? `<span>Asked <b>${escapeHtml(asked)}</b></span>` : '',
-    spot ? `<span>${escapeHtml(spot)}</span>` : '',
-    order.driverName ? `<span>Driver <b>${escapeHtml(order.driverName)}</b></span>` : '',
-    order.partnerName ? `<span>Partner <b>${escapeHtml(order.partnerName)}</b></span>` : '',
-  ].filter(Boolean).join('');
+  const meta = kv([
+    can.customers && address ? ['Address', escapeHtml(address)] : null,
+    ['Pickup date', escapeHtml(shortDate(order.pickup_date))],
+    window ? ['Legacy pickup window', escapeHtml(window)] : null,
+    asked ? ['Requested pickup time', escapeHtml(booking.requestedPickupLabel(order))] : null,
+    spot ? ['Pickup location', escapeHtml(spot)] : null,
+    order.driverName ? ['Driver', escapeHtml(order.driverName)] : null,
+    order.partnerName ? ['Laundromat', escapeHtml(order.partnerName)] : null,
+  ]);
 
   const washBits = [prefs.water_temp, prefs.detergent, prefs.fabric_softener && prefs.fabric_softener !== 'NONE' ? 'softener' : null]
     .filter(Boolean).map((s) => String(s).toLowerCase());
@@ -891,26 +896,35 @@ function orderConsoleBody({
   return `<div class="console">
   <div class="crumb"><a href="/ops">Orders</a> / ${n}</div>
   <div class="title-row"><h1>${escapeHtml(title)}</h1><span class="id">#${n}</span> ${chips(order, exception)}</div>
-  <div class="meta">${meta}</div>
+
   ${banner || ''}
-  ${toolbarHtml(order, actions, { ...can, laundromats })}
+  ${overviewHtml || ('<div class="order-summary">'+meta+'</div>')}
+  ${dispatchHtml}
+  <details class="order-controls order-management">
+    <summary>Manage pickup and assignments</summary>
+    <div class="order-management-body">
+      ${toolbarHtml(order, actions, { ...can, laundromats })}
+      ${sideExtras}
+      ${can.money ? cashForm(order, split, { money, can }) : ''}
+    </div>
+  </details>
+  ${overviewHtml ? "" : `<div class="order-intake">${intakeHtml}</div>`}
   ${stripHtml(exception)}
   ${stageRail(order, events)}
-  <div class="layout">
+  <div class="layout order-detail-layout">
     <div>
-      ${bagsTable(bags, order)}
+      ${overviewHtml ? '' : '<h2>Bags</h2>'}
+      ${overviewHtml ? '' : kv([
+        ['Pickup bags', order.bag_count == null ? 'Not recorded' : escapeHtml(order.bag_count)],
+        ['Return bags', order.return_bag_count == null ? 'Not recorded' : escapeHtml(order.return_bag_count)],
+      ])}
       ${can.money ? chargeTable(charge, { money }) : ''}
       ${can.money ? holdLine(order, { money }) : ''}
       ${can.money ? paidTable(split, { money }) : ''}
-      ${can.money ? cashForm(order, split, { money, can }) : ''}
+
       ${can.audit ? logTable(order, log, view) : ''}
     </div>
-    <div class="side">
-      <h2>Order</h2>${orderKv}
-      ${can.customers ? `<h2>Customer</h2>${customerKv}` : ''}
-      ${sideExtras}
-      ${threadHtml(order, thread, can)}
-    </div>
+
   </div>
 </div>`;
 }

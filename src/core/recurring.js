@@ -482,7 +482,13 @@ async function pauseUntil(customer, date, scheduleId = null) {
 // addSchedule(), which reuses that row and keeps its original started_on. The
 // booked pickup is whatever this returns; the arrangement then continues from
 // its own anchor. Worth knowing, not worth a second copy of the anchoring rule.
-function firstRepeatDate({ cadence, weekdays = [], from = booking.today() }) {
+function firstRepeatDate({ cadence, weekdays = [], from = booking.today(), pickupTime = '' }) {
+  // A new subscription starts at the next occurrence still in the future.
+  // Do not reinterpret an explicit one-time date or move an approved quote.
+  const time = booking.normaliseTime(pickupTime);
+  if (time && from === booking.today() && time <= booking.serviceClockOf(new Date()).time) {
+    from = addDays(from, 1);
+  }
   const days = (weekdays || [])
     .map((n) => Number(n))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
@@ -519,15 +525,21 @@ function firstRepeatDate({ cadence, weekdays = [], from = booking.today() }) {
 // The pickup is real and the customer has been told about it; throwing it away
 // because the repeat did not save would be the worse of the two failures. It
 // says so in the result and shouts in the log.
-async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadence, weekdays }) {
+async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadence, weekdays, devQuoteId = null }) {
   const days = (weekdays || [])
     .map((n) => Number(n))
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
 
   const repeat = Boolean(CADENCES[cadence] && days.length);
-  const firstDate = repeat ? firstRepeatDate({ cadence, weekdays: days }) : pickupDate;
+  const firstDate = repeat ? firstRepeatDate({ cadence, weekdays: days, pickupTime: devQuoteId ? pickupTime : '' }) : pickupDate;
+  if(devQuoteId){
+    const quote=await require('./dev-checkout').read(devQuoteId,customer.id);
+    const category=customer.pricing_category==='WHOLESALE'?'WHOLESALE':repeat?'SUBSCRIPTION':'ONE_TIME';
+    if(quote.snapshot.category!==category)throw Error('Your plan changed. Request a new quote.');
+  }
 
   const result = await booking.bookPickup(customer, {
+    devQuoteId,
     pickupDate: firstDate || '',
     pickupTime: pickupTime || '',
     // The date came from the arrangement rather than from a day they picked,
@@ -588,7 +600,7 @@ async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadenc
   const plan = schedules[0];
 
   if (plan && plan.id) {
-    const rate = subscription.subscriptionCents();
+    const rate = result.order.pricing_snapshot ? result.order.price_per_lb_cents : subscription.subscriptionCents();
 
     const { error } = await db
       .from('orders')

@@ -29,8 +29,7 @@ const { site } = require('./site');
 // ---------------------------------------------------------------------------
 
 const CARD =
-  'border:2px solid var(--ink-900);border-radius:16px;background:var(--paper-050);' +
-  'box-shadow:var(--shadow-pop-sm);padding:26px;';
+  'border:1px solid var(--c-line);border-radius:4px;background:var(--c-row);padding:16px;';
 
 // WHAT THIS STOP IS, AND IT IS THE HEADING NOW.
 //
@@ -1062,7 +1061,7 @@ function partnerCard(run) {
                ${hidden}
                <button type="submit" class="btn btn-primary btn-lg btn-full"
                        ${uncollected ? 'disabled style="opacity:0.35;"' : ''}>
-                 All bags are collected
+                 Confirm all bags collected
                </button>
              </form>`;
               }
@@ -1090,7 +1089,7 @@ function partnerCard(run) {
                       step="0.01" min="0.01" max="400" inputmode="decimal" required autofocus
                       placeholder="${wentIn ? wentIn.toFixed(1) : '25'}"
                       style="width:100%;margin-bottom:16px;">
-               <button type="submit" class="btn btn-primary btn-lg btn-full">That is the weight</button>
+               <button type="submit" class="btn btn-primary btn-lg btn-full">Save weight</button>
              </form>`;
               }
 
@@ -1131,7 +1130,7 @@ function partnerCard(run) {
                ${hidden}
                <button type="submit" class="btn btn-primary btn-lg btn-full"
                        ${allAboard ? '' : 'disabled style="opacity:0.35;"'}>
-                 All the bags are on the van
+                 Confirm all bags loaded
                </button>
              </form>`;
           })()
@@ -1150,12 +1149,12 @@ function runBody({ run, notice = null, problem = null, user = null }) {
     </p>`;
 
   const head = `
-  <div style="max-width:560px;margin:0 auto;">
+  <div class="ops-workspace">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
       <h1 style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;margin:0;">
-        Your route
+        Driver route
       </h1>
-      <a href="/ops" style="font-size:15px;font-weight:600;">All orders</a>
+      <a href="/ops" class="ops-text-link">Dispatch dashboard</a>
     </div>
 
     ${roundCards(run)}
@@ -1175,14 +1174,14 @@ function runBody({ run, notice = null, problem = null, user = null }) {
       <h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.15;margin:0 0 10px;">
         ${
           (run.routes || []).some((r) => r.count)
-            ? 'Nothing in this route'
-            : 'Nothing on today'
+            ? 'No stops in this route'
+            : 'No stops scheduled today'
         }
       </h2>
       <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0;">
         ${
           (run.routes || []).some((r) => r.count)
-            ? `The rest of the day is up there - tap a route with pickups in it.`
+            ? `Select another route window to view its stops.`
             : `No pickups booked to you and nothing in the van. If that looks wrong,
                check the <a href="/ops">orders board</a> - an order with no driver on it
                will not appear here.`
@@ -1291,7 +1290,7 @@ function roundCards(run) {
     const style = late
       ? 'background:var(--stain-500);color:var(--paper-050);border-color:var(--ink-900);box-shadow:var(--shadow-pop-xs);'
       : r.state === 'now'
-        ? 'background:var(--suds-500);border-color:var(--ink-900);box-shadow:var(--shadow-pop-xs);'
+        ? 'background:#e1f2ec;color:#174c3f;border-color:#267b72;'
         : worked
           ? 'background:var(--paper-200);border-color:var(--ink-300);color:var(--ink-500);'
           : 'background:var(--paper-050);border-color:var(--ink-300);color:var(--ink-500);';
@@ -1315,13 +1314,13 @@ function roundCards(run) {
     const started = r.state === 'now' && done > 0;
 
     const note = late
-      ? `${r.count} waiting`
+      ? `${r.count} overdue`
       : r.count === 0
-        ? 'nothing'
+        ? 'No stops'
         : worked
-          ? `${r.count} done`
+          ? `${r.count} completed`
           : started
-            ? `${r.count} left`
+            ? `${r.count} remaining`
             : `${r.count} ${r.count === 1 ? 'stop' : 'stops'}`;
 
     const inner =
@@ -1331,8 +1330,8 @@ function roundCards(run) {
     // AN EMPTY ROUTE IS NOT A LINK. There is nothing behind it, and a card that
     // opens onto "nothing here" teaches you to stop tapping the cards.
     return r.count === 0
-      ? `<div class="run-route" style="${style}">${inner}</div>`
-      : `<a class="run-route" href="/ops/run?route=${encodeURIComponent(r.start)}" style="${style}">${inner}</a>`;
+      ? `<div class="run-route ops-window" style="${style}">${inner}</div>`
+      : `<a class="run-route ops-window" href="/ops/run?route=${encodeURIComponent(r.start)}" style="${style}">${inner}</a>`;
   };
 
   const now = routes.find((r) => r.state === 'now');
@@ -1340,7 +1339,7 @@ function roundCards(run) {
   return `
     <div style="margin:0 0 22px;">
       <div class="eyebrow" style="margin:0 0 9px;">
-        ${now ? `On the ${escapeHtml(now.label)} route` : "Today's routes"}
+        ${now ? `Route window: ${escapeHtml(now.label)}` : "Today's routes"}
       </div>
       <div class="run-routes">${routes.map(card).join('')}</div>
     </div>`;

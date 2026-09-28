@@ -1984,3 +1984,78 @@ body.ly-pop-locked { overflow: hidden; }
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* Address-based pricing form, matching the booking address fields. */
+.pricing-address-form { margin-inline: auto; max-width: 634px; padding: clamp(24px, 4vw, 42px); display: flex; flex-direction: column; gap: 24px; }
+.pricing-address-form .field { gap: 10px; min-width: 0; }
+.pricing-address-form .input { min-height: 66px; border: 2px solid var(--ink-900); border-radius: 17px; }
+.pricing-address-hint { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink-700); }
+.pricing-address-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+@media (max-width: 420px) { .pricing-address-row { grid-template-columns: 1fr; } }
+
+.quote-column { max-width: 640px; margin-inline: auto; }
+.quote-intro, .quote-pricing { text-align: center; }
+.quote-column > p, .quote-column > h1, .quote-column > h2 { margin-inline: auto; }
+.quote-intro .quote-heading { margin: 8px auto 16px; }
+.quote-column .quote-rate-heading { margin: 8px auto 12px; }
+.quote-column .quote-eyebrow { margin: 0 auto 10px; }
+.quote-schedule { margin-bottom: 32px; }
+.quote-schedule form { display: grid; gap: 18px; text-align: left; }
+.quote-schedule input { width: 100%; min-width: 0; }
+.quote-plan { margin-top: 24px; text-align: left; }
+.quote-plan h3 { font-size: 22px; margin: 0 0 12px; }
+.quote-plan dl { margin: 0; }
+.quote-plan dl > div { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid var(--ink-100); }
+.quote-plan dd { margin: 0; text-align: right; font-weight: 700; }
+.quote-plan p { margin: 18px 0 0; }
+.quote-pricing .price-row { text-align: left; gap: 20px; }
+.quote-address { font-size: 17px; line-height: 1.6; color: var(--ink-700); margin: 0; overflow-wrap: anywhere; }
+.quote-order-button { min-height: 64px; font-size: 21px; margin-top: 28px; }
+.quote-change-address { display: inline-block; margin-top: 22px; }
+
+/* Booking estimates and price approval share the customer site's typography. */
+.booking-plan-estimate { margin: 0 0 12px 34px; padding: 14px; border-radius: 12px; background: var(--paper-100, #f3efe5); font-size: 14px; }
+.booking-plan-estimate > div, .booking-price-lines > div { display: flex; justify-content: space-between; gap: 20px; }
+.booking-plan-estimate > div + div { margin-top: 8px; }
+.booking-plan-estimate dd, .booking-price-lines dd { margin: 0; text-align: right; font-weight: 700; }
+.booking-review { padding-top: 56px; padding-bottom: 64px; }
+.booking-review-heading { text-align: center; margin-bottom: 36px; }
+.booking-review-heading > * { margin-left: auto; margin-right: auto; }
+.booking-review-heading h1 { font-size: clamp(32px, 4vw, 52px); line-height: 1.08; margin-top: 12px; margin-bottom: 18px; }
+.booking-review-layout { display: grid; grid-template-columns: 1fr; max-width: 700px; margin-inline: auto; gap: 28px; align-items: start; }
+.booking-review-layout .card { min-width: 0; padding: 30px; }
+.booking-price-summary h2 { font-size: clamp(30px, 3vw, 42px); margin: 10px 0; }
+.booking-price-lines { margin: 26px 0 20px; }
+.booking-price-lines > div { padding: 16px 0; border-top: 1px solid var(--ink-100); }
+.booking-price-lines dt span { display: block; font-size: 13px; color: var(--ink-500); margin-top: 3px; }
+.booking-price-lines dd { white-space: nowrap; }
+.booking-price-lines dd span { font-weight: 400; font-size: 14px; }
+.booking-maximum dd { font-size: 23px; }
+.booking-approval h2 { font-size: 25px; margin: 12px 0; }
+.booking-approval form { margin-top: 24px; }
+.booking-approval input[type=number] { display: block; width: 100%; min-height: 52px; padding: 12px 14px; font: inherit; font-size: 20px; border: 1px solid var(--ink-300, #8c9890); border-radius: 10px; background: white; color: var(--ink-900); }
+.booking-consent { display: flex; align-items: flex-start; gap: 12px; margin: 24px 0; font-size: 15px; }
+.booking-consent input { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--suds-500); }
+.booking-approval .btn + .btn { margin-top: 12px; }
+.booking-development-note { margin: 30px auto 0; text-align: center; font-size: 13px; color: var(--ink-500); }
+@media (max-width: 740px) {
+  .booking-review { padding-top: 32px; }
+  .booking-review-layout { grid-template-columns: 1fr; gap: 22px; }
+  .booking-review-layout .card { padding: 22px; }
+  .booking-plan-estimate { margin-left: 0; }
+}
+
+.booking-order-totals form { margin-top: 24px; }
+.booking-order-totals form .btn + .btn { margin-top: 12px; }
+
+.order-confirmation .confirmation-detail { border-top: 1px solid var(--ink-100); padding-top: 16px; margin-top: 16px; }
+.order-confirmation .confirmation-detail .eyebrow { margin: 0 0 6px; }
+.order-confirmation .confirmation-value { font-size: 16px; line-height: 1.5; color: var(--ink-800); margin: 0; font-weight: 400; }
+.order-confirmation .confirmation-detail:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+
+/* Keep each contact action on the same baseline as its neighboring cards. */
+.contact-methods > .card { display: flex; flex-direction: column; }
+.contact-methods > .card > .btn { margin-top: auto; align-self: flex-start; }
+.account-charge summary { cursor: pointer; color: var(--ink-700); font-size: 14px; white-space: nowrap; }
+.account-charge summary:focus-visible { outline: 2px solid var(--ink-900); outline-offset: 4px; }
+.account-charge > span { display: block; margin-top: 8px; font-size: 14px; font-weight: 400; white-space: nowrap; }

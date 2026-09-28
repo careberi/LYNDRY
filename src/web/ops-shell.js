@@ -1,6 +1,7 @@
 'use strict';
 
 const { escapeHtml, CSS_BASE, logo, ICON_LINKS } = require('./layout');
+const { posChrome } = require('./pos-layout');
 const { site } = require('./site');
 const { config } = require('../config');
 
@@ -29,7 +30,7 @@ const { config } = require('../config');
 //
 // WHAT STAYED IN admin.js: `OPS_MENUS` and `opsNav()`, because they know about
 // roles and about /ops paths, and `adminPage()` as a thin wrapper so all of its
-// call sites are untouched and produce byte-identical HTML.
+// call sites share a layout; operations opt into the POS workspace.
 // ---------------------------------------------------------------------------
 
 // The red strip that says which database you are looking at.
@@ -131,6 +132,7 @@ function opsShell({
   // processing link and the number to ring.
   footer = '',
 
+  pos = false,
   bare = false,
   terminal = false,
   touch = false,
@@ -179,7 +181,7 @@ function opsShell({
   <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 ${head}
 </head>
-<body${terminal ? ` class="ops-terminal${touch ? ' ops-touch' : ''}"` : ''}>
+<body${pos || terminal ? ` class="${pos ? 'pos-app ' : ''}ops-terminal${touch ? ' ops-touch' : ''}${bare ? ' pos-focused' : ''}"` : ''}>
   ${devBand()}
   ${
     // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
@@ -188,7 +190,9 @@ ${head}
     // The reason is what that screen is for. It shows ONE stop and ONE thing to
     // do, and a nav offering nine other places to be is an invitation to read
     // ahead - which is the thing that screen was built not to allow.
-    bare
+    pos && !bare
+      ? posChrome({ title, mark, nav, aside, signOut })
+      : bare
       ? `<div class="container" style="padding-top:22px;text-align:center;">
            ${logo('compact', { href: mark.href, label: mark.label })}
          </div>`
@@ -219,11 +223,18 @@ ${head}
 
   <!-- Less air above the content on a bare page: the logo is already sitting
        in its own padding. -->
-  <main class="container" style="padding-top:${bare ? '18px' : '36px'};padding-bottom:96px;">
+  <main id="pos-main" class="container" style="padding-top:${bare ? '18px' : '36px'};padding-bottom:96px;">
 ${notes.filter(Boolean).join('\n')}
 ${body}
   </main>${footer ? `\n  ${footer}` : ''}
   <script>
+  // Compact navigation starts closed on a phone; desktop remains visible.
+  var posNavigation = document.querySelector('.pos-navigation');
+  if (posNavigation) {
+    var compactNavigation = window.matchMedia('(max-width:760px)');
+    posNavigation.open = !compactNavigation.matches;
+    compactNavigation.addEventListener('change', function (event) { posNavigation.open = !event.matches; });
+  }
   // One menu open at a time.
   //
   // <details> has no idea its siblings exist, so opening a second panel leaves

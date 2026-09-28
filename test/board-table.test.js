@@ -86,13 +86,13 @@ test('and a driver gets no customer link at all', () => {
 test('PICKUP IS TWO COLUMNS', () => {
   const headings = boardHeadings();
   assert.match(headings, /'Pickup date'/);
-  assert.match(headings, /'Pickup time'/);
+  assert.match(headings, /'Requested pickup time'/);
   assert.ok(!/'Pickup'/.test(headings), 'the combined Pickup column came back');
 });
 
 test('and a pickup with no time says so rather than leaving a blank', () => {
   const row = boardRow();
-  assert.match(row, /pickup_window_start \? escapeHtml\(booking\.arrivalWindow\(o\)\) : '—'/);
+  assert.match(row, /booking\.requestedPickupLabel\(o\) \|\| 'Time not selected'/);
 });
 
 test('THE ADDRESS IS OUT OF THE CUSTOMER COLUMN', () => {
@@ -179,7 +179,7 @@ test('THE CUSTOMER PAGE LISTS ORDERS THE SAME WAY', () => {
   const at = SRC.indexOf("router.get('/ops/customers/:id'");
   const route = SRC.slice(at, SRC.indexOf('\nrouter.', at + 10));
 
-  const headings = route.indexOf("['Order', 'Pickup date', 'Pickup time', 'Status', 'Weight'");
+  const headings = route.indexOf("['Order', 'Pickup date', 'Requested pickup time', 'Status', 'Weight'");
   assert.notEqual(headings, -1, 'the order history table does not match the board');
 
   const block = route.slice(headings, headings + 900);

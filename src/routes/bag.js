@@ -41,6 +41,12 @@ const { escapeHtml, CSS_BASE, logo } = require('../web/layout');
 
 const router = express.Router();
 
+// Development intake requires the signed-in laundromat portal, including old tag links.
+router.use('/o', (req, res, next) => {
+  if (require('../core/dev-checkout').enabled) return res.redirect(303, '/shop');
+  return next();
+});
+
 // ---------------------------------------------------------------------------
 // /o/<code> - the page behind the QR on a bag.
 //

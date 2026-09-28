@@ -92,103 +92,46 @@ function adminDashboardBody({
     </div>`;
 
   const card = (c) => `
-  <a href="${c.href}" style="display:block;text-decoration:none;color:inherit;">
-    <div class="card" style="padding:22px;height:100%;">
+  <a href="${c.href}" class="ops-navigation-card">
+    <div class="card" style="padding:16px;height:100%;">
       <p class="eyebrow" style="margin:0 0 6px;">${escapeHtml(c.eyebrow)}</p>
-      <div style="font-family:var(--font-display);font-weight:900;font-size:21px;margin-bottom:8px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:0;">
         ${escapeHtml(c.title)}
       </div>
-      <p style="font-size:14px;line-height:1.5;color:var(--ink-700);margin:0;">${escapeHtml(c.line)}</p>
+
     </div>
   </a>`;
 
   return `
-<p class="eyebrow" style="margin:0 0 8px;">The business</p>
+<p class="eyebrow" style="margin:0 0 8px;">Administration</p>
 <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Admin dashboard</h1>
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
-  Everything you decide, in one place. The day itself - orders, the route,
-  routing - is under Dashboard.
-</p>
+
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
 
-<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:34px;">
-  ${stat('Taking orders', open ? 'Yes' : 'No', open ? 'var(--suds-300)' : 'var(--stain-100)')}
+<div class="ops-summary-grid">
+  ${stat('Order intake', open ? 'Open' : 'Paused', open ? 'var(--suds-300)' : 'var(--stain-100)')}
   ${stat('Open issues', openIssues, openIssues ? 'var(--stain-100)' : undefined)}
   ${stat('Promotions', running.length)}
-  ${stat('With us now', orderCounts.withUs || 0)}
-  ${stat('To collect', orderCounts.toCollect || 0)}
+  ${stat('Orders in progress', orderCounts.withUs || 0)}
+  ${stat('Awaiting pickup', orderCounts.toCollect || 0)}
 </div>
 
-<div class="card card-xl" style="padding:0;overflow:hidden;margin-bottom:24px;">
-  <div style="padding:24px;background:${open ? 'var(--suds-300)' : 'var(--stain-100)'};
-              border-bottom:2px solid var(--ink-900);">
-    <p class="eyebrow" style="margin:0 0 6px;">Right now</p>
-    <div style="font-family:var(--font-display);font-weight:900;font-size:26px;line-height:1.1;">
-      ${open ? 'Open. Taking orders.' : 'Closed. Not taking orders.'}
-    </div>
-    ${
-      !open && settings.paused_reason
-        ? `<p style="font-size:15px;line-height:1.6;margin:10px 0 0;">
-             <strong>Customers are told:</strong> ${escapeHtml(settings.paused_reason)}
-           </p>`
-        : ''
-    }
-    ${
-      !open
-        ? config.alwaysBookNumbers.length
-          ? `<p style="font-size:14px;line-height:1.6;margin:10px 0 0;">
-               Exempt and can still book: ending
-               ${config.alwaysBookNumbers.map((n) => escapeHtml(n.slice(-4))).join(', ')}.
-             </p>`
-          : `<p style="font-size:14px;line-height:1.6;margin:10px 0 0;font-weight:700;color:var(--stain-500);">
-               Nobody is exempt - your own number cannot book either.
-             </p>`
-        : ''
-    }
-  </div>
-
-  <div style="padding:24px;">
-    ${
-      open
-        ? `<form method="post" action="/ops/settings/close">
-             <label class="field-label" for="reason">Why are we closed?</label>
-             <input class="field" id="reason" name="reason" type="text" maxlength="300"
-                    placeholder="we are still lining up our first laundromat"
-                    style="width:100%;margin-bottom:12px;">
-             <button class="btn btn-lg" type="submit">Stop taking orders</button>
-           </form>`
-        : `<form method="post" action="/ops/settings/open">
-             <button class="btn btn-primary btn-lg" type="submit">Start taking orders</button>
-           </form>`
-    }
-  </div>
-</div>
-
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
-            grid-auto-rows:1fr;gap:18px;">
+<div class="ops-navigation-grid">
   ${[
+    { href: '/ops/settings', eyebrow: 'Operations', title: 'Service status' },
     {
       href: '/ops/promotions',
-      eyebrow: 'Giving money away',
+      eyebrow: 'Offers',
       title: 'Promotions',
       line: running.length ? running.map((p) => p.name).join(', ') : 'Nothing running',
     },
-    {
-      // SECOND, BESIDE PROMOTIONS, at Neil's request. It belongs with the rest
-      // of what an owner works rather than under Tools: everything here is a
-      // decision about who hears from us, and since 10 September the adverts
-      // say nothing on their own - somebody has to ring these people.
-      href: '/ops/leads',
-      eyebrow: 'Off the Facebook adverts',
-      title: 'Leads',
-      line: leadsLine(leads),
-    },
+
     {
       href: '/ops/broadcast',
-      eyebrow: 'Everybody at once',
-      title: 'Text blast',
+      eyebrow: 'Messaging',
+      title: 'Customer broadcast',
       line: 'One message to every customer who has not opted out',
     },
     {
@@ -196,13 +139,13 @@ ${banner(problem, 'bad')}
       // It belongs beside Promotions and the text blast for the same reason
       // they are here: all three are an owner deciding what customers hear.
       href: '/ops/scheduled',
-      eyebrow: 'Texts nobody has to send',
+      eyebrow: 'Automation',
       title: 'Customer follow-up',
       line: scheduledLine(scheduled),
     },
     {
       href: '/ops/issues',
-      eyebrow: 'Waiting on a person',
+      eyebrow: 'Support',
       title: 'Issues',
       line: openIssues ? `${openIssues} open` : 'Nothing open',
     },
@@ -216,7 +159,7 @@ ${banner(problem, 'bad')}
       // so without this card they would be invisible - and somebody who got as
       // far as an address and a day is the warmest lead in the business.
       href: '/ops/checkouts',
-      eyebrow: 'Got as far as the card',
+      eyebrow: 'Online bookings',
       title: 'Unfinished checkouts',
       line: checkouts
         ? `${checkouts} ${checkouts === 1 ? 'person' : 'people'} to ring`
@@ -224,17 +167,17 @@ ${banner(problem, 'bad')}
     },
     {
       href: '/ops',
-      eyebrow: 'Where everything is',
+      eyebrow: 'Operations',
       title: 'Orders',
       line: `${orderCounts.toCollect || 0} to collect, ${orderCounts.withUs || 0} with us`,
     },
     {
-      // Three weights side by side and the money beside them. It reads real
+      // Reports side by side and the money beside them. It reads real
       // orders, so it belongs with the rest of what an owner checks rather
       // than with the two what-if calculators under Tools.
       href: '/ops/reports',
-      eyebrow: 'Three weights',
-      title: 'Weight and money report',
+      eyebrow: 'Reports',
+      title: 'Weight and payment report',
       line: 'Every order that went to a laundromat, ours against theirs',
     },
     {
@@ -370,7 +313,7 @@ function settingsBody({ settings, notice, problem }) {
 
   return `
 <p class="eyebrow" style="margin:0 0 8px;">The service</p>
-<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Are we taking orders?</h1>
+<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Service status</h1>
 <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
   This changes what the AI says to customers and whether a booking can be made
   at all. Turning it off shuts the text thread, the website form and the
@@ -452,7 +395,7 @@ ${
               border-bottom:2px solid var(--ink-900);">
     <p class="eyebrow" style="margin:0 0 6px;">Right now</p>
     <div style="font-family:var(--font-display);font-weight:900;font-size:30px;line-height:1.1;">
-      ${open ? 'Open. Taking orders.' : 'Closed. Not taking orders.'}
+      ${open ? 'Accepting orders' : 'Orders paused'}
     </div>
     ${
       !open && settings.paused_reason
@@ -839,7 +782,7 @@ function standDownCard({ promo, isAutomatic }) {
 
   return `
   <div class="card card-xl" style="padding:24px;margin-bottom:24px;">
-    <p class="eyebrow" style="margin:0 0 12px;">Who gets it</p>
+    <p class="eyebrow" style="margin:0 0 12px;">Audience</p>
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:60ch;">
       Every number that texts in for the first time is given this, before they
       have booked anything, and it is what the website popup advertises.
@@ -915,7 +858,7 @@ function promotionDetailBody({ promo, holders, notice, problem, popupOn = false,
       <div class="eyebrow" style="margin:5px 0 0;">${escapeHtml(label)}</div>
     </div>`;
 
-  const heads = ['Who', 'Where it got to', 'Given', 'Used', 'Runs out', 'Order']
+  const heads = ['Who', 'Where it got to', 'Given', 'Used', 'Expiration', 'Order']
     .map(
       (h) =>
         `<th class="eyebrow" style="text-align:left;padding:14px 10px;border-bottom:2px solid var(--ink-900);">${h}</th>`
@@ -1008,16 +951,8 @@ function promotionsBody({ list, counts, notice, problem, popupOn = false }) {
   return `
 <p class="eyebrow" style="margin:0 0 8px;">The business</p>
 <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Promotions</h1>
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
-  An offer belongs to a person, not to a code. Give one out and it sits on their
-  account until they spend it or it runs out - there is nothing for anybody to
-  type at booking, because the AI already knows who is texting.
-</p>
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:64ch;margin:0 0 26px;">
-  The one exception is a door hanger or a flyer, where we have never met them and
-  a code in their first text is the only way to know which card they picked up.
-  That code claims the offer once and is never needed again.
-</p>
+
+
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
@@ -1026,7 +961,7 @@ ${
   live.length
     ? live.map((p) => promotionCard(p, counts, popupOn)).join('')
     : `<div class="card" style="padding:20px 24px;margin-bottom:16px;">
-         <p style="margin:0;font-size:16px;">Nothing running. The form below starts one.</p>
+         <p style="margin:0;font-size:16px;">No active promotions.</p>
        </div>`
 }
 
@@ -1047,7 +982,7 @@ ${
       <div>
         <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">1 &middot; What are you offering</p>
 
-        <label class="field-label" for="p_name">Name it</label>
+        <label class="field-label" for="p_name">Promotion name</label>
         <p class="field-hint" style="margin:0 0 8px;">
           For you and for the order history. A customer never sees this on its own.
         </p>
@@ -1056,14 +991,14 @@ ${
 
         <div class="grid-2" style="margin-top:16px;">
           <div>
-            <label class="field-label" for="p_kind">What it takes off</label>
+            <label class="field-label" for="p_kind">Discount type</label>
             <select class="field" id="p_kind" name="kind">
               <option value="PERCENT_OFF">A percentage</option>
               <option value="AMOUNT_OFF">A fixed amount</option>
             </select>
           </div>
           <div>
-            <label class="field-label" for="p_value">How much</label>
+            <label class="field-label" for="p_value">Discount amount</label>
             <p class="field-hint" style="margin:0 0 8px;">Percent as a whole number, or dollars.</p>
             <input class="field" id="p_value" name="value" type="number" min="1" step="0.01" required
                    placeholder="30">
@@ -1072,7 +1007,7 @@ ${
       </div>
 
       <div style="padding-top:22px;border-top:2px solid var(--ink-100);">
-        <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">2 &middot; Who gets it</p>
+        <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">2 &middot; Audience</p>
 
         <select class="field" id="p_audience" name="audience">${audienceOptions}</select>
         ${audienceNotes}
@@ -1129,7 +1064,7 @@ ${
 
         <div class="grid-2" style="margin-top:16px;">
           <div>
-            <label class="field-label" for="p_expires">Runs out after</label>
+            <label class="field-label" for="p_expires">Expiration after</label>
             <p class="field-hint" style="margin:0 0 8px;">Days from when they get it. Blank never expires.</p>
             <input class="field" id="p_expires" name="expires_days" type="number" min="1" step="1"
                    placeholder="7">
@@ -1175,7 +1110,7 @@ ${
 
   <div class="card card-xl" id="promo-preview"
        style="padding:26px;background:var(--paper-050);position:sticky;top:20px;">
-    <p class="eyebrow" style="margin:0 0 14px;">What you are making</p>
+    <p class="eyebrow" style="margin:0 0 14px;">Promotion preview</p>
 
     <p id="pv_offer" style="font-family:var(--font-display);font-weight:900;font-size:28px;
               line-height:1.1;margin:0 0 16px;">30% off</p>
@@ -1185,7 +1120,7 @@ ${
         <div id="pv_who" style="font-size:16px;margin-top:3px;">Only people you pick</div></div>
       <div><span class="eyebrow" style="margin:0;">Which order</span>
         <div id="pv_order" style="font-size:16px;margin-top:3px;">Their first order only</div></div>
-      <div><span class="eyebrow" style="margin:0;">Runs out</span>
+      <div><span class="eyebrow" style="margin:0;">Expiration</span>
         <div id="pv_expiry" style="font-size:16px;margin-top:3px;">Never</div></div>
       <div><span class="eyebrow" style="margin:0;">Limits</span>
         <div id="pv_limits" style="font-size:16px;margin-top:3px;">None</div></div>
@@ -1303,34 +1238,20 @@ function broadcastBody({ counts, recent, notice, problem, draft = '' }) {
     .join('');
 
   return `
-<p class="eyebrow" style="margin:0 0 8px;">One message, everybody</p>
-<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Send a text blast</h1>
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
-  Goes to every number in the group you pick, from our own number, and is
-  logged in each person's thread like any other message.
-</p>
+<p class="eyebrow" style="margin:0 0 8px;">Messaging</p>
+<h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">Customer broadcast</h1>
+
 
 ${banner(notice, 'good')}
 ${banner(problem, 'bad')}
 
-<div class="ops-note ops-note--bad">
-  <span class="ops-note__label">Before you send</span>
-  <ul style="margin:0;padding-left:20px;font-size:16px;line-height:1.7;">
-    <li><strong>Anyone who replied STOP is never included</strong>, whatever
-        group you pick. That is not a setting and cannot be turned off.</li>
-    <li>Everyone here gave us their number themselves, by texting us or by
-        ticking the box. Keep it about laundry: a blast that reads as marketing
-        to somebody who signed up for a pickup is how a number gets reported
-        and blocked.</li>
-    <li>There is no undo. A text is gone the moment it sends.</li>
-  </ul>
-</div>
+
 
 <div class="card card-xl" style="padding:28px;margin-bottom:34px;">
   <form method="post" action="/ops/broadcast" style="display:flex;flex-direction:column;gap:18px;">
 
     <div>
-      <label class="field-label" for="b_audience">Who gets it</label>
+      <label class="field-label" for="b_audience">Audience</label>
       <select class="field" id="b_audience" name="audience">
         ${AUDIENCES.map(
           (a) => `<option value="${a.key}">${escapeHtml(a.label)} (${counts[a.key] || 0})</option>`
@@ -1339,10 +1260,9 @@ ${banner(problem, 'bad')}
     </div>
 
     <div>
-      <label class="field-label" for="b_body">The message</label>
+      <label class="field-label" for="b_body">Message</label>
       <p class="field-hint" style="margin:0 0 8px;">
-        Plain words. 160 characters is one segment and carriers bill per segment,
-        so a long message costs double to everybody at once.
+        SMS charges depend on message length and recipient count.
       </p>
       <textarea class="field" id="b_body" name="body" rows="4" required maxlength="480"
                 placeholder="It's LYNDRY. We open next week and you are first in line.">${escapeHtml(draft)}</textarea>
@@ -1350,18 +1270,18 @@ ${banner(problem, 'bad')}
 
     <label style="display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.5;">
       <input type="checkbox" name="confirm" value="yes" required style="margin-top:4px;width:22px;height:22px;">
-      <span>I have read it back and I want it sent.</span>
+      <span>I confirm this message is ready to send.</span>
     </label>
 
-    <div><button class="btn btn-ink btn-lg" type="submit">Send it ${icon('arrow-right', '22')}</button></div>
+    <div><button class="btn btn-ink btn-lg" type="submit">Send broadcast ${icon('arrow-right', '22')}</button></div>
   </form>
 </div>
 
 ${
   recent.length
-    ? `<h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;margin:0 0 14px;">Already sent</h2>
-       <div style="overflow-x:auto;">
-         <table style="width:100%;border-collapse:collapse;font-size:15px;min-width:520px;">
+    ? `<h2 style="font-family:var(--font-display);font-weight:900;font-size:26px;margin:0 0 14px;">Sent broadcasts</h2>
+       <div class="ops-table-wrap">
+         <table class="ops-table" style="min-width:520px;">
            <thead><tr>
              <th style="text-align:left;padding:0 12px 10px 0;border-bottom:2px solid var(--ink-900);
                         font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;">When</th>

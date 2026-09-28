@@ -6,6 +6,8 @@ const db = require('../db');
 const orders = require('../core/orders');
 const auth = require('../core/admin-auth');
 const { config } = require('../config');
+const retiredPos = require('../web/retired-pos-pages');
+const shipdayWorkspace = config.env === 'development' && !config.supabase.isProduction;
 const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE, ICON_LINKS } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');
@@ -531,6 +533,7 @@ const OPS_MENUS = Object.freeze([
       // Behind money.view - Admin only - because every row carries what a leg cost
       // and the two controls spend and unspend money at a vendor.
       { href: '/ops/couriers', label: 'Couriers', permission: 'money.view' },
+      { href: '/ops/shipday', label: 'Shipday', permission: 'service.manage' },
       // "Route planner" says which of the two it is. This one is a day you
       // invent; Routing under Dashboard is the day that exists.
       { href: '/ops/planner', label: 'Route planner', permission: 'money.view', vanOnly: true },
@@ -564,54 +567,18 @@ const OPS_MENUS = Object.freeze([
 ]);
 
 function opsNav(user, active) {
-  return OPS_MENUS.map((menu) => {
-    // A group can be gated as a whole, on top of each item's own permission.
-    // Used by Admin, which must not appear at all for somebody who is not one.
+  if (!user) return '';
+  const { posIcon } = require('../web/pos-layout');
+  const adminPages = ['/ops/promotions', '/ops/broadcast', '/ops/scheduled', '/ops/settings', '/ops/checkouts', '/ops/reports', '/ops/issues'];
+  const navActive = adminPages.some(path => active === path || active.startsWith(path + '/')) ? '/ops/admin' : active;
+  const icons = { '/ops': 'orders', '/ops/run': 'delivery', '/ops/routing': 'delivery', '/ops/couriers': 'delivery', '/ops/customers': 'people', '/ops/messages': 'messages', '/ops/admin': 'home', '/ops/team': 'people', '/ops/partners': 'people', '/ops/process': 'book', '/ops/journey': 'book' };
+  return OPS_MENUS.map(menu => {
     if (menu.permission && !roles.can(user, menu.permission)) return '';
-
-    // AND `vanOnly` DROPS THE SCREENS THE COURIER MODEL TAKES THE SUBJECT AWAY
-    // FROM - routing, the planner, unit economics and bag tags. See `vanOnly`
-    // above for why they are gated rather than deleted. The routes refuse too;
-    // this is only the menu, and a menu is never a guard.
-
-    const courier = config.courier.model === 'DYNAMIC';
-
-    const items = menu.items.filter(
-      (i) => (!i.permission || roles.can(user, i.permission)) && !(i.vanOnly && courier)
-    );
+    const items = menu.items.filter(i => !(shipdayWorkspace && retiredPos.destination(i.href)) && (!i.permission || roles.can(user, i.permission)) && !(i.vanOnly && config.courier.model === 'DYNAMIC'));
     if (!items.length) return '';
-
-    // Which group holds the page you are on, so "where am I" survives being
-    // folded into a menu. Deliberately NOT opened on load - a panel covering
-    // the page you just asked for is worse than a highlighted word.
-    const here = items.some((i) => i.href === active);
-
-    // A MENU WITH ONE THING IN IT IS NOT A MENU. Once Business held only
-    // Admin, opening a panel to reveal a single link was a tap that bought
-    // nothing - so a group of one renders as the link itself, wearing the
-    // item's name rather than the group's. Same rule that already drops a
-    // group nobody has permission for: the nav shows what you can do, not the
-    // shape of a table in the source.
-    if (items.length === 1) {
-      const only = items[0];
-      return `
-        <a class="ops-menu-solo" href="${only.href}"${
-          only.href === active ? ' aria-current="page"' : ''
-        }>${escapeHtml(only.label)}</a>`;
-    }
-
-    const links = items
-      .map(
-        (i) =>
-          `<a href="${i.href}"${i.href === active ? ' aria-current="page"' : ''}>${escapeHtml(i.label)}</a>`
-      )
-      .join('');
-
-    return `
-        <details class="ops-menu"${here ? " data-here=\"1\"" : ''}>
-          <summary>${escapeHtml(menu.label)}</summary>
-          <div class="ops-menu-panel">${links}</div>
-        </details>`;
+    return '<div class="pos-nav-group"><p class="pos-nav-label">'+escapeHtml(menu.label)+'</p>'+items.map(i =>
+      '<a class="pos-nav-link" href="'+i.href+'"'+(i.href === navActive ? ' aria-current="page"' : '')+'>'+posIcon(icons[i.href])+'<span>'+escapeHtml(i.label)+'</span></a>'
+    ).join('')+'</div>';
   }).join('');
 }
 
@@ -669,6 +636,7 @@ function adminPage({
   // Every argument below reproduces what this function emitted before the
   // extraction, byte for byte.
   return opsShell({
+    pos: true,
     title,
     titleSuffix: `${site.name} ops`,
     body,
@@ -676,7 +644,7 @@ function adminPage({
     mark: { text: 'LYNDRY OPS', href: '/ops', label: 'LYNDRY ops' },
     nav: opsNav(user, active),
     aside: user
-      ? `<span class="eyebrow" style="margin:0;color:var(--paper-300);">${escapeHtml(
+      ? `<span class="pos-user">${escapeHtml(
           user.name
         )} &middot; ${escapeHtml(roles.labelFor(roles.roleOf(user)))}</span>`
       : '',
@@ -703,9 +671,9 @@ function adminPage({
       openIssues
         ? opsNote({
             tone: 'bad',
-            label: 'Needs a person',
+            label: 'Needs attention',
             title: `${openIssues} unresolved ${openIssues === 1 ? 'issue' : 'issues'}`,
-            go: 'Open them',
+            go: 'View issues',
             href: '/ops/issues',
             role: 'alert',
           })
@@ -1380,12 +1348,12 @@ function loginShell({ heading, intro, error = '', form }) {
        exactly two places and never in the public layout. -->
   <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 </head>
-<body>
+<body class="pos-app pos-login ops-terminal">
   ${opsDevBand()}
   <main class="hero" style="min-height:100vh;display:flex;align-items:center;">
     <div class="container" style="max-width:460px;padding-top:48px;padding-bottom:48px;">
 
-      <div style="margin-bottom:32px;">${logo('offset', { href: null })}</div>
+      <div class="pos-brand">LYNDRY<span>POS</span></div>
 
       <p class="eyebrow eyebrow-brand">Operations</p>
       <h1 class="display-4" style="margin-bottom:10px;">${escapeHtml(heading)}</h1>
@@ -1678,6 +1646,13 @@ const guard = [
   auth.requireAdminPage,
 ];
 
+// Retired screens stay behind the same login guard. Delivery operations live in Shipday.
+router.use((req, res, next) => {
+  const destination = shipdayWorkspace && retiredPos.destination(req.path);
+  if (!destination || !['GET', 'HEAD'].includes(req.method)) return next();
+  return guard[0](req, res, () => guard[1](req, res, () => res.redirect(303, destination)));
+});
+
 // Counts what is unresolved, for the banner in the shell. Runs on every ops
 // page so a new page cannot accidentally hide the flag; a failure here returns
 // zero rather than taking the dashboard down.
@@ -1720,6 +1695,19 @@ function refuse(req, res) {
 // `guard` proves who you are; `may(...)` proves you're allowed. Every page
 // below takes both.
 const may = (permission) => roles.requirePermission(permission, refuse);
+require('./spending-routes').registerAdmin(router, { guard, may, adminPage });
+require('./shipday-routes').registerAdmin(router, { guard, may, adminPage });
+require('./shipday-assignments').registerAdmin(router, { guard, may, adminPage });
+router.post('/ops/orders/:id/sync-shipday',guard,may('orders.override'),require('./spending-routes').sameOrigin,async(req,res,next)=>{
+  try {
+    if(!shipdayWorkspace)return res.sendStatus(404);
+    const {data:order,error}=await db.from('orders').select('id,order_number').eq('order_number',req.params.id).single();
+    if(error)throw error;
+    await require('../core/shipday-order-sync-runtime').syncOrder(order.id,{retry:true});
+    res.redirect(303,'/ops/orders/'+order.order_number);
+  }catch(e){next(e);}
+});
+require('./dev-journey-routes').registerAdmin(router, { guard, may, adminPage });
 
 // ---------------------------------------------------------------------------
 // SCREENS THAT ONLY MEAN ANYTHING WHEN WE DO THE DRIVING.
@@ -1982,13 +1970,13 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       // anybody saved the person, a record since removed - and a link to
       // /ops/customers/undefined is a 404 somebody reports as a bug.
       const customerCell = c.id
-        ? `<a href="/ops/customers/${escapeHtml(c.id)}" style="font-weight:600;">${escapeHtml(
+        ? `<a href="/ops/customers/${escapeHtml(c.id)}">${escapeHtml(
             c.name || 'Unnamed'
           )}</a>`
         : `<span style="color:var(--ink-500);">${escapeHtml(c.name || 'Unknown')}</span>`;
 
       return [
-        `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
+        `<a href="/ops/orders/${o.order_number}">#${o.order_number}</a>`,
 
         // A DRIVER GETS WHERE, NOT WHO, AND THAT IS WHY THE ADDRESS SURVIVES
         // HERE AND NOWHERE ELSE. Without customers.view there is no Customer
@@ -1998,7 +1986,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         // column is not the same as taking it off a driver's board.
         showNames
           ? customerCell
-          : `<a href="/ops/orders/${o.order_number}" style="font-weight:600;">${
+          : `<a href="/ops/orders/${o.order_number}">${
               escapeHtml(addressOf(c)) || 'No address'
             }</a>`,
 
@@ -2007,7 +1995,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         // The window, on its own. A date with no time is a real state - plenty
         // of customers never name one - so it says so rather than leaving a
         // cell that reads as a rendering fault.
-        o.pickup_window_start ? escapeHtml(booking.arrivalWindow(o)) : '—',
+        escapeHtml(booking.requestedPickupLabel(o) || 'Time not selected'),
 
         statusBadge(o.status, o),
         clock(o),
@@ -2024,7 +2012,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       'Order',
       showNames ? 'Customer' : 'Where',
       'Pickup date',
-      'Pickup time',
+      'Requested pickup time',
       'Status',
       'Clock',
       'Weight',
@@ -2049,56 +2037,38 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     // own stops on this board and does not need a picture of everybody else's
     // day. Drawn from the timestamps already on the orders rather than a
     // progress column, so it cannot drift from what actually happened.
-    const crew = roles.can(req.opsUser, 'customers.view') ? await drivers.board(booking.today()) : null;
+    const crew = !shipdayWorkspace && roles.can(req.opsUser, 'customers.view') ? await drivers.board(booking.today()) : null;
 
     const driverCard = (r) => {
       const p = r.progress;
       const pct = p.fraction == null ? 0 : Math.round(p.fraction * 100);
 
       const where = p.idle
-        ? '<span style="color:var(--ink-500);">nothing on today</span>'
+        ? '<span style="color:var(--ink-500);">No assigned stops</span>'
         : p.nextStop
-          ? `on the route &middot; next is stop ${p.nextStop.stop_number}, #${p.nextStop.order_number}`
+          ? `Next stop ${p.nextStop.stop_number}, #${p.nextStop.order_number}`
           : p.toCollect
-            ? `${p.toCollect} still to collect`
+            ? `${p.toCollect} awaiting pickup`
             : p.carrying
-              ? `carrying ${p.carrying}, nothing loaded yet`
-              : 'everything done';
+              ? `carrying ${p.carrying}, awaiting loading`
+              : 'Route complete';
 
-      return `
-      <a href="/ops/routing?driver=${escapeHtml(r.driver.id)}"
-         style="display:block;text-decoration:none;color:inherit;flex:1 1 260px;min-width:0;
-                padding:18px 20px;border:2px solid var(--ink-900);border-radius:14px;
-                background:var(--paper-050);box-shadow:var(--shadow-pop-xs);">
-        <div style="display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;">
-          <span style="font-weight:700;font-size:17px;">${escapeHtml(r.driver.name)}</span>
-          <span class="eyebrow" style="margin:0;">${
-            r.base.own ? escapeHtml(r.driver.base_city || 'own base') : 'service base'
-          }</span>
-        </div>
-
-        <div style="height:12px;border:2px solid var(--ink-900);border-radius:999px;overflow:hidden;
-                    background:var(--paper-000);margin:12px 0 8px;">
-          <div style="height:100%;width:${pct}%;background:var(--suds-500);"></div>
-        </div>
-
-        <div style="font-size:14px;line-height:1.5;">
-          ${p.done} of ${p.total} delivered &middot; ${where}
-        </div>
-        <div style="font-size:13px;color:var(--ink-500);margin-top:4px;">
-          ${p.toCollect} to collect &middot; ${p.carrying} in hand
-        </div>
-      </a>`;
+      return [
+        `<a href="/ops/routing?driver=${escapeHtml(r.driver.id)}">${escapeHtml(r.driver.name)}</a>`,
+        escapeHtml(r.base.own ? r.driver.base_city || 'Driver base' : 'Service base'),
+        `${p.done} / ${p.total} <progress value="${pct}" max="100" aria-label="Delivery completion">${pct}%</progress>`,
+        String(p.toCollect), String(p.carrying), where,
+      ];
     };
 
     const driverStrip = crew
       ? `
       <section style="margin-bottom:44px;">
-        ${sectionHeading('Where everybody is', 'The route', crew.rows.length)}
+        ${sectionHeading('Routes', 'Driver progress', crew.rows.length)}
         <div style="display:flex;flex-wrap:wrap;gap:16px;">
           ${
             crew.rows.length
-              ? crew.rows.map(driverCard).join('')
+              ? table(['Driver', 'Base', 'Delivered', 'Awaiting pickup', 'On board', 'Route status'], crew.rows.map(driverCard))
               : `<p style="margin:0;font-size:15px;color:var(--ink-500);line-height:1.6;">
                    Nobody on the team can drive yet. Add somebody at
                    <a href="/ops/team">Team</a>.
@@ -2163,11 +2133,11 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         <a class="btn btn-sm btn-outline" href="/ops?date=${shift(viewDate, -1)}"
            aria-label="The day before">&larr;</a>
         <div>
-          <label class="field-label" for="date" style="margin-bottom:4px;">Which day</label>
+          <label class="field-label" for="date" style="margin-bottom:4px;">Date</label>
           <input class="field" id="date" name="date" type="date" value="${escapeHtml(viewDate)}"
                  max="${escapeHtml(now)}" style="min-width:170px;">
         </div>
-        <button class="btn btn-sm" type="submit">Show it</button>
+        <button class="btn btn-sm" type="submit">View date</button>
         ${
           // Only forward as far as today. There is nothing to look at in the
           // future that Upcoming does not already show.
@@ -2216,15 +2186,16 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
              </p>`
       }`;
 
-    const body = isToday ? `
+    const body = isToday ? `<div class="logistics-board">
+      <header class="logistics-header"><div><p class="eyebrow">Operations</p><h1>Dispatch dashboard</h1></div></header>
       ${dayStrip}
-      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:40px;">
-        ${statCard('To collect', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
+      <div class="logistics-stats">
+        ${statCard('Awaiting pickup', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
         ${
           // Bags in his hands at a door: collected, not yet loaded. Same leg of
           // the day as "to collect", so the same tint.
           statCard(
-            'Being collected',
+            'Pickup in progress',
             g.doorstep.length,
             g.doorstep.length ? 'var(--suds-300)' : undefined
           )
@@ -2245,37 +2216,36 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
           // The scale has not happened yet, so there is no number - saying so
           // is better than a zero that reads as "nothing in hand".
           statCard(
-            'Pounds with us',
+            'Laundry in progress',
             poundsWithUs ? weight.show(poundsWithUs, { unit: true }) : withUs.length ? 'not weighed' : '0'
           )
         }
-        ${late.length ? statCard('Late', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
-        ${showMoney && owed.length ? statCard('Owed', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)') : ''}
+        ${late.length ? statCard('Overdue', late.length, 'var(--stain-500)', 'var(--paper-050)') : ''}
+        ${showMoney && owed.length ? statCard('Outstanding balance', money(owedTotal), 'var(--stain-500)', 'var(--paper-050)') : ''}
       </div>
 
       ${driverStrip}
 
       ${board('Not in a group', 'Unclassified', g.stray, 'These match no stage. That is a bug worth reporting.')}
-      ${board('Ready', 'Ready to collect from the partner', g.ready, 'Washed and folded. Collect these and get them out.')}
-      ${board('Today', 'To collect from customers', g.collect)}
+      ${board('Ready', 'Ready for pickup at laundromat', g.ready)}
+      ${board('Customer pickups', 'Awaiting pickup', g.collect)}
       ${board(
         'At the door',
-        'Collected, not yet in the van',
-        g.doorstep,
-        'The driver has these in his hands. They are on the van once every bag is loaded.'
+        'Pickup in progress',
+        g.doorstep
       )}
-      ${board('On the van', 'Collected, not yet dropped', g.van)}
-      ${board('At the partner', 'Being washed', g.partner)}
+      ${board('Transport', 'Awaiting laundromat drop-off', g.van)}
+      ${board('Processing', 'At laundromat', g.partner)}
       ${board('On the way back', 'Out for delivery', g.out)}
       ${board('Booked', 'Upcoming', g.upcoming)}
-      ${board('Finished', 'Past', g.past)}
+      ${board('History', 'Completed and canceled', g.past)}
 
       ${
         all.length
           ? ''
           : '<p style="font-size:17px;color:var(--ink-500);">No orders yet. The first one will appear here the moment somebody books.</p>'
       }
-    ` : historyBody;
+    </div>` : historyBody;
 
     res.type('html').send(
       adminPage({
@@ -2509,55 +2479,18 @@ function bagRow(order, l, total, canAct, done, parents = []) {
 // the people who may stop one. A driver has neither.
 function optOutControl(person, mayDo) {
   if (!mayDo) return '';
-
-  if (person.status === 'UNSUBSCRIBED') {
-    return `
-    <div class="ops-note ops-note--bad">
-      <span class="ops-note__label">Texting</span>
-      <h2 class="ops-note__title">
-        This number is opted out
-      </h2>
-      <p style="margin:0;font-size:15px;line-height:1.6;color:var(--ink-800);max-width:62ch;">
-        Nothing will text them - not a reminder, not an offer, not a status
-        update, not the AI. Every send is refused before it reaches the carrier.
-        Only they can undo it, by texting START from their own phone.
-        ${
-          person.unsubscribed_note
-            ? `<br><br><strong>What was recorded:</strong> ${escapeHtml(person.unsubscribed_note)}`
-            : ''
-        }
-      </p>
-    </div>`;
-  }
-
-  // A CARD, NOT A COLLAPSED TOGGLE. It was a <details> at the foot of the
-  // details card and Neil looked for it, could not find it, and reasonably
-  // concluded it had not been built. A control nobody can find is a control
-  // that does not exist - and this one gets reached for at an awkward moment,
-  // with somebody on the phone asking to be left alone.
-  return `
-  <div class="card card-xl" style="padding:26px;margin-bottom:24px;">
-    <p class="eyebrow" style="margin:0 0 8px;">Texting</p>
-    <h2 style="font-family:var(--font-display);font-weight:800;font-size:22px;margin:0 0 12px;">
-      They asked not to be texted
-    </h2>
-    <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);max-width:62ch;">
-      For somebody who told you another way - on the phone, at their door, by
-      email. It stops everything: reminders, offers, status texts, the AI, the
-      lot. <strong>You cannot undo this from here.</strong> Only they can, by
-      texting START from their own phone.
-    </p>
+  const off = person.status === 'UNSUBSCRIBED';
+  return `<div class="card card-xl customer-texting">
     <form method="post" action="/ops/customers/${escapeHtml(person.id)}/opt-out"
-          style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
-      <div style="flex:1 1 320px;min-width:260px;">
-        <label class="field-label" for="optout_note">How they told you</label>
-        <input class="input input-lg" type="text" id="optout_note" name="note" maxlength="200" required
-               style="width:100%;" placeholder="Called and asked to be taken off the list">
-      </div>
-      <div>
-        <button class="btn btn-ink btn-lg" type="submit">Mark them opted out</button>
-      </div>
+      onsubmit="var note = window.prompt('Why did the customer ask to stop texts?'); if (!note || !note.trim()) return false; this.elements.note.value = note.trim().slice(0,200);">
+      <span id="texting-label" class="field-label">Text messages</span>
+      <input type="hidden" name="note" value="">
+      <button type="submit" class="texting-switch" role="switch" aria-labelledby="texting-label" aria-checked="${!off}" ${off ? 'disabled' : ''}>
+        <span class="texting-switch-track" aria-hidden="true"><span></span></span>
+        <span>${off ? 'Off' : 'On'}</span>
+      </button>
     </form>
+    ${off ? '<p class="field-hint">The customer must text START to enable messages again.</p>' : ''}
   </div>`;
 }
 
@@ -2719,7 +2652,7 @@ function carrierCard(order) {
       </div>`;
   };
 
-  return `<h2>Who drives it</h2>
+  return `<h2>Transport assignment</h2>
     <div id="carrier">
       ${leg(carriers.PICKUP, 'Pickup')}
       ${leg(carriers.RETURN, 'Delivery')}
@@ -2793,7 +2726,7 @@ function laundromatCard(order, mayPin, shops) {
           <option value="">Cheapest all in (automatic)</option>
           ${options}
         </select>
-        <button class="cbtn" type="submit">Send it there</button>
+        <button class="cbtn" type="submit">Update destination and pricing</button>
       </form>
 
       <p class="hint">Pinning books nothing and moves nothing. It decides where the
@@ -3066,7 +2999,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // preferences, not on the order, and asking for them makes the whole
       // query fail rather than just returning null.
       .select(
-        `${ORDER_FIELDS}, price_per_lb_cents, payment_failure_reason, paid_at, ` +
+        `${ORDER_FIELDS}, price_per_lb_cents, minimum_cents, surcharge_cents, dev_quote_id, pricing_snapshot, pending_pricing_snapshot, preferences, payment_failure_reason, paid_at, ` +
           // THE OTHER TWO HALVES OF WHY A CARD SAID NO. Both were missing, and
           // both failed silently in the worst way: an unselected column reads
           // as undefined, so the decline code line was omitted altogether and
@@ -3283,7 +3216,6 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // settles a wash and returns early without a price, which a pickup that
       // has never been weighed does not have. Its own section carries id="hold".
       showMoney ? refusedHoldCard(order, can.override) : '',
-      stillRunning ? `<div id="correct">${correctionsCard(order, labels, can.override) + extraBagCard(order, can.override)}</div>` : '',
       orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
       // WHO DOES EACH LEG. Neil, 25 September: "There also needs for me to
       // override a pickup/delivery manually so i can assign a in house driver
@@ -3301,7 +3233,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // kind of decision - who does the work and where it is done - and both are
       // Admin only for the same reason: they are about the customer's order rather
       // than about a step in the round.
-      can.override && stillRunning ? laundromatCard(order, true, laundromats) : '',
+      !shipdayWorkspace && can.override && stillRunning ? laundromatCard(order, true, laundromats) : '',
       can.customers && stillRunning
         ? `<h2>Driver</h2><div id="driver"><form method="post" action="/ops/orders/${order.order_number}/driver" style="margin:0;display:flex;gap:8px;flex-wrap:wrap;">
              <select name="driver_id" style="font:inherit;padding:4px 6px;border:1px solid #9ca3af;border-radius:3px;min-height:30px;">
@@ -3311,10 +3243,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
              <button class="cbtn" type="submit">Move</button>
            </form></div>`
         : '',
-      // Only while the order is live. Every row is a fact about the PERSON -
-      // "nothing booked" is true of everybody whose last pickup ran - and on a
-      // finished order the only sentence worth sending is "make it regular".
-      can.customers && stillRunning && orderFields.length
+    ].join('');
+
+    const intakeHtml = can.customers && stillRunning && orderFields.length
         ? intakeTable({
             fields: orderFields,
             action: `/ops/customers/${c.id}/ask?order=${order.order_number}`,
@@ -3322,10 +3253,33 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
             ago: timeAgo,
             optedOut: c.status === 'UNSUBSCRIBED',
           })
-        : '',
-    ].join('');
+        : '';
 
+    let overviewHtml = '';
+    const deliverySync = shipdayWorkspace ? await require('../core/shipday-order-sync-runtime').rows(order.id) : [];
+    if (shipdayWorkspace) {
+      const destinationId = order.partner_id || order.intended_partner_id;
+      const destination = destinationId ? await partners.find(destinationId) : null;
+      let revised = null, priceProblem = '';
+      if (showMoney && order.pricing_snapshot && !order.partner_id && stillRunning) {
+        try { revised = await require('../core/order-partner-price').preview({...order,customers:c},destinationId); }
+        catch (err) { priceProblem = 'Cannot refresh this destination estimate: '+err.message; }
+      }
+      overviewHtml = require('../web/order-overview').orderOverview({order,customer:c,shop:destination,quote:revised,problem:priceProblem,deliverySync,
+        canMoney:showMoney,canCustomer:can.customers,selector:can.override && stillRunning ? laundromatCard(order,true,laundromats) : ''});
+    }
+    let dispatchHtml = '';
+    if (shipdayWorkspace && can.override && order.status === 'READY') {
+      const dispatchRuntime = require('../core/shipday-dispatch-runtime');
+      const [returnPlan, dispatchDrivers] = await Promise.all([
+        dispatchRuntime.result(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg','TO_CUSTOMER').maybeSingle()).catch(()=>null),
+        dispatchRuntime.provider.drivers().catch(()=>[]),
+      ]);
+      dispatchHtml = require('./shipday-assignments').returnDispatchCard({order,plan:returnPlan,drivers:dispatchDrivers,simulation:dispatchRuntime.simulation});
+    }
     const body = orderConsoleBody({
+      overviewHtml,
+      dispatchHtml,
       order: consoleOrder,
       customer: c,
       events: history,
@@ -3342,6 +3296,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       shortDate,
       labelState,
       sideExtras,
+      intakeHtml,
       // HOW IT WAS ACTUALLY PAID. Caught rather than awaited into a failure:
       // an order page that will not load because the ledger is unreachable is
       // worse than one without the split on it.
@@ -3766,7 +3721,7 @@ router.get('/ops/customers', guard, withIssues, may('customers.view'), async (re
 
     const body = `
       <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;justify-content:space-between;">
-        <div>${sectionHeading('Everyone', 'Customers', (people || []).length)}</div>
+        <div>${sectionHeading('Customer directory', 'Customers', (people || []).length).replace('<h2', '<h1').replace('</h2>', '</h1>')}</div>
         <!-- The way in for a phone call. It sits here rather than on the Admin
              dashboard because this is the screen you are already on when
              somebody rings and you go looking for them. -->
@@ -3856,22 +3811,18 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
   };
 
   return `
-    <p class="eyebrow" style="margin:0 0 8px;">On the phone</p>
+    <p class="eyebrow" style="margin:0 0 8px;">Customers</p>
     <h1 style="margin:0 0 10px;font-size:40px;line-height:1.05;">New customer</h1>
-    <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:62ch;margin:0 0 26px;">
-      Everything the customer would fill in themselves, typed while you talk.
-      Saving this texts them a link to add their card, which is the one thing
-      you cannot enter for them.
-    </p>
+
 
     ${problem ? phoneBanner(problem) : ''}
 
-    <form method="post" action="/ops/customers/new" class="card card-xl" style="padding:26px;max-width:640px;">
-      <label class="field-label" for="phone">Their cell number</label>
+    <form method="post" action="/ops/customers/new" class="card card-xl" style="padding:16px;max-width:640px;">
+      <label class="field-label" for="phone">Mobile number</label>
       <input class="field" id="phone" name="phone" type="tel" required maxlength="20"
              value="${v('phone')}" placeholder="201-555-0123" style="width:100%;margin-bottom:6px;">
       <p style="font-size:13px;color:var(--ink-500);margin:0 0 18px;">
-        This is their account and where every text goes. Read it back to them before you save.
+        Confirm the mobile number before saving. Customer messages are sent to this number.
       </p>
 
       <label class="field-label" for="name">Name</label>
@@ -3882,7 +3833,7 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
       <input class="field" id="address_line1" name="address_line1" type="text" required maxlength="120"
              value="${v('address_line1')}" style="width:100%;margin-bottom:10px;">
 
-      <label class="field-label" for="address_line2">Apartment or unit, if any</label>
+      <label class="field-label" for="address_line2">Apartment or unit (optional)</label>
       <input class="field" id="address_line2" name="address_line2" type="text" maxlength="80"
              value="${v('address_line2')}" style="width:100%;margin-bottom:10px;">
 
@@ -3899,12 +3850,12 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
         </div>
       </div>
 
-      <label class="field-label" for="spot">Where does the bag go?</label>
+      <label class="field-label" for="spot">Pickup and delivery location</label>
       <input class="field" id="spot" name="spot" type="text" required maxlength="200"
              value="${v('spot')}" placeholder="front porch, in the driveway, with the doorman"
              style="width:100%;margin-bottom:6px;">
       <p style="font-size:13px;color:var(--ink-500);margin:0 0 22px;">
-        One spot for both legs: where the driver finds it, and where the clean laundry goes back.
+        Use the same location for pickup and delivery.
       </p>
 
       ${washField('water_temp')}
@@ -4422,15 +4373,11 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       .filter((o) => o.payment_status !== 'WAIVED')
       .reduce((sum, o) => sum + (o.price_cents || 0), 0);
 
-    const detail = (label, value) => `
-      <div style="display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
-        <span class="eyebrow" style="margin:0;">${escapeHtml(label)}</span>
-        <span style="font-size:16px;text-align:right;">${value}</span>
-      </div>`;
+    const detail = (label, value) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${value}</td></tr>`;
 
     const card = person.card_last4
       ? `${escapeHtml(person.card_brand || 'card')} ending ${escapeHtml(person.card_last4)}`
-      : 'none on file';
+      : 'Not on file';
 
     const body = `
       <a href="/ops/customers" style="font-size:15px;font-weight:600;">&larr; All customers</a>
@@ -4444,7 +4391,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           roles.can(req.opsUser, 'messages.view')
             ? `<a href="/ops/messages/${encodeURIComponent(
                 String(person.phone || '').replace(/\D/g, '')
-              )}" class="btn btn-outline btn-sm">Read the thread</a>`
+              )}" class="btn btn-outline btn-sm">View messages</a>`
             : ''
         }
         <!-- FOR SOMEBODY WHO RANG UP. Every rule about whether the pickup can
@@ -4511,7 +4458,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                             <span style="font-size:14px;font-family:var(--font-mono);">
                               ${
                                 h.expiresAt
-                                  ? `runs out ${escapeHtml(dateTime(h.expiresAt))}`
+                                  ? `Expires ${escapeHtml(dateTime(h.expiresAt))}`
                                   : 'no expiry'
                               }
                             </span>
@@ -4522,7 +4469,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                    : `<p style="margin:0 0 ${
                        mayPromote ? '18px' : '0'
                      };font-size:16px;color:var(--ink-700);">
-                        They are not holding an offer.
+                        No active offers.
                       </p>`
                }
 
@@ -4534,7 +4481,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                                      padding-top:${holding.length ? '18px' : '0'};
                                      ${holding.length ? 'border-top:2px solid var(--ink-100);' : ''}">
                           <div style="flex:1 1 280px;min-width:0;">
-                            <label class="field-label" for="give_promo">Give them one</label>
+                            <label class="field-label" for="give_promo">Promotion</label>
                             <select class="field" id="give_promo" name="promotion_id">
                               ${offerable
                                 .map(
@@ -4546,15 +4493,14 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                                 .join('')}
                             </select>
                           </div>
-                          <button class="btn btn-ink" type="submit">Give it</button>
+                          <button class="btn btn-ink" type="submit">Apply promotion</button>
                         </form>
                         <p style="margin:12px 0 0;font-size:14px;line-height:1.55;color:var(--ink-500);">
-                          It goes on their account and comes off the price by itself.
-                          Nothing is texted - say so yourself on their thread if you want them to know now.
+                          The promotion applies automatically. No notification is sent.
                         </p>`
                      : `<p style="margin:0;font-size:15px;color:var(--ink-500);">
-                          No promotions are running.
-                          <a href="/ops/promotions">Make one</a> and it can be given from here.
+                          No active promotions.
+                          <a href="/ops/promotions">Create a promotion</a>.
                         </p>`
                    : ''
                }
@@ -4565,12 +4511,12 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       <div class="grid-2" style="align-items:start;margin-bottom:44px;">
 
         <div class="card card-xl" style="padding:28px;">
-          ${sectionHeading('Contact', 'Details')}
+          ${sectionHeading('Contact', 'Details')}<table class="customer-details-table"><tbody>
           ${detail('Phone', `<a href="tel:${escapeHtml(person.phone)}">${escapeHtml(format.displayPhone(person.phone))}</a>`)}
           ${detail('Email', `<a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email || '—')}</a>`)}
           ${detail('Address', escapeHtml(addressOf(person)) || '—')}
           ${detail('Signed up', dateTime(person.created_at))}
-          ${detail('How they found us', signedUpVia(person))}
+          ${detail('Signup source', signedUpVia(person))}
           ${detail('Texting consent', person.sms_consent_at ? dateTime(person.sms_consent_at) : 'not recorded')}
           ${
             person.status === 'UNSUBSCRIBED'
@@ -4588,12 +4534,12 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                 )
               : ''
           }
-          ${showMoney ? detail('Card', card) + detail('Lifetime billed', `<strong>${money(billed)}</strong>`) : ''}
+          ${showMoney ? detail('Card', card) + detail('Lifetime billed', money(billed)) : ''}</tbody></table>
         </div>
 
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading(
-            'Standing orders',
+            'Recurring pickups',
             schedules.filter((sc) => sc.status === 'ACTIVE').length
               ? `${schedules.filter((sc) => sc.status === 'ACTIVE').length} running`
               : 'None'
@@ -4623,19 +4569,17 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
                     }
                 </div>
                 <div style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);margin-top:4px;">
-                  ${next ? `next ${escapeHtml(shortDate(next))}` : 'nothing due'}
+                  ${next ? `next ${escapeHtml(shortDate(next))}` : 'No pickup scheduled'}
                 </div>
               </div>
             </div>`;
                   })
                   .join('') +
                 `<p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:16px 0 0;">
-                   Booked the evening before by the nightly run, with a text they can
-                   reply SKIP to. Changed by texting us, not from here.
+                   Pickups are booked the evening before. Customers can reply SKIP to the reminder.
                  </p>`
               : `<p style="margin:6px 0 0;font-size:15px;color:var(--ink-500);line-height:1.6;">
-                   No repeating pickup. They are offered one after a clean delivery,
-                   once, and can set one up any time by texting.
+                   No recurring pickups scheduled.
                  </p>`
           }
         </div>
@@ -4645,7 +4589,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         })}
 
         <div class="card card-xl" style="padding:28px;">
-          ${sectionHeading('Wash', 'Preferences')}
+          ${sectionHeading('Wash', 'Preferences')}<table class="customer-details-table"><tbody>
           ${detail('Temperature', escapeHtml(prefs.water_temp || 'COLD'))}
           ${detail('Detergent', escapeHtml((prefs.detergent || 'STANDARD').replace(/_/g, ' ')))}
           ${detail('Fabric softener', prefs.fabric_softener ? 'yes' : 'no')}
@@ -4655,7 +4599,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
               ? detail('Instructions', escapeHtml(prefs.special_instructions))
               : ''
           }
-        </div>
+        </tbody></table></div>
 
       </div>
 
@@ -4666,7 +4610,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           ? intakeTable({
               fields: intakeFields,
               action: `/ops/customers/${person.id}/ask`,
-              canSend: false,
+              canSend: canAsk,
               ago: timeAgo,
               optedOut: person.status === 'UNSUBSCRIBED',
             })
@@ -4705,12 +4649,12 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
            and what they read out, and the UUID is for the database. -->
       ${table(
         showMoney
-          ? ['Order', 'Pickup date', 'Pickup time', 'Status', 'Weight', 'Price', 'Payment']
-          : ['Order', 'Pickup date', 'Pickup time', 'Status', 'Weight'],
+          ? ['Order', 'Pickup date', 'Requested pickup time', 'Status', 'Weight', 'Price', 'Payment']
+          : ['Order', 'Pickup date', 'Requested pickup time', 'Status', 'Weight'],
         (history || []).map((o) => [
           `<a href="/ops/orders/${o.order_number}" style="font-weight:700;font-variant-numeric:tabular-nums;">#${o.order_number}</a>`,
           shortDate(o.pickup_date),
-          o.pickup_window_start ? escapeHtml(booking.arrivalWindow(o)) : '—',
+          escapeHtml(booking.requestedPickupLabel(o) || 'Time not selected'),
           statusBadge(o.status, o),
           o.weight_lb ? `${o.weight_lb} lb` : '—',
           ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
@@ -4981,7 +4925,7 @@ const CONSENT_SOURCES = {
   WEB_ORDER: 'Placed an order online',
   WEB_BERGEN: 'The Facebook advert landing page',
   FACEBOOK_FORM: 'A Facebook advert form',
-  INBOUND_TEXT: 'They texted us first',
+  INBOUND_TEXT: 'Inbound text message',
   DOOR_HANGER: 'Scanned a door hanger',
 
   // The form at /signup, which no longer exists. Anything recorded this way is
@@ -5887,6 +5831,16 @@ router.post('/ops/orders/:id/laundromat', guard, may('orders.override'), async (
         303,
         `${back}?problem=${encodeURIComponent('That laundromat is not on the active list.')}`
       );
+    }
+
+    if (shipdayWorkspace && order.dev_quote_id) {
+      try {
+        await require('../core/order-partner-price').change(order,wanted,req.opsUser);
+        await require('../core/shipday-order-sync-runtime').syncOrder(order.id);
+        return res.redirect(303,back+'?done='+encodeURIComponent('Destination and pricing updated. Check the Shipday sync status below.'));
+      } catch (error) {
+        return res.redirect(303,back+'?problem='+encodeURIComponent(error.message));
+      }
     }
 
     const was = order.intended_partner_id
@@ -7139,7 +7093,7 @@ router.get('/ops/reports', guard, withIssues, may('money.view'), async (req, res
       adminPage({
         // Slice five, exceptions and money. The terminal skin. See adminPage().
         terminal: true,
-        title: 'Weight and money report',
+        title: 'Weight and payment report',
         active: '/ops/reports',
         body: reportsBody({ report, partners: partnerRows || [], form }),
         user: req.opsUser,
@@ -8768,19 +8722,18 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     const dayStrip = `
       <form method="get" action="/ops/issues"
             style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:26px;">
-        <a class="btn btn-sm btn-outline" href="/ops/issues?date=${shift(viewDate || now, -1)}"
-           aria-label="The day before">&larr;</a>
+
         <div>
-          <label class="field-label" for="date" style="margin-bottom:4px;">A day to look at</label>
+          <label class="field-label" for="date" style="margin-bottom:4px;">Date</label>
           <input class="field" id="date" name="date" type="date" value="${escapeHtml(viewDate || '')}"
                  max="${escapeHtml(now)}" style="min-width:170px;">
         </div>
-        <button class="btn btn-sm" type="submit">Show it</button>
+        <button class="btn btn-sm" type="submit">Apply filters</button>
         ${
           viewDate
             ? `<a class="btn btn-sm btn-outline" href="/ops/issues?date=${shift(viewDate, 1)}"
                   aria-label="The day after">&rarr;</a>
-               <a class="btn btn-sm" href="/ops/issues">Back to the queue</a>`
+               <a class="btn btn-sm" href="/ops/issues">All open issues</a>`
             : ''
         }
       </form>`;
@@ -8790,7 +8743,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
       const o = i.orders || null;
 
       return `
-      <div class="card card-xl" style="padding:26px;margin-bottom:20px;${
+      <div class="card card-xl" style="padding:16px;margin-bottom:20px;${
         i.status === 'OPEN' ? 'box-shadow:6px 6px 0 var(--stain-500);' : ''
       }">
         <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin-bottom:14px;">
@@ -8799,26 +8752,26 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
           };">${escapeHtml(i.status)}</span>
           ${
             o
-              ? `<a href="/ops/orders/${o.order_number}" style="font-weight:700;">Order #${o.order_number}</a>`
-              : '<span style="font-size:14px;color:var(--ink-500);">No order attached</span>'
+              ? `<a href="/ops/orders/${o.order_number}" class="ops-text-link">Order #${o.order_number}</a>`
+              : '<span style="font-size:13px;color:var(--ink-500);">No linked order</span>'
           }
-          <span style="font-size:14px;color:var(--ink-500);">${escapeHtml(dateTime(i.created_at))}</span>
+          <span style="font-size:13px;color:var(--ink-500);">${escapeHtml(dateTime(i.created_at))}</span>
           ${
             // WAS ANYBODY TOLD. An open issue nobody was paged about is the
             // worst state this screen can show - a customer promised a person
             // and no person knows - so it is red, not a footnote. See
             // migration 0077 for the customer it happened to.
             i.status === 'OPEN' && !i.paged_at
-              ? '<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">Nobody was paged</span>'
+              ? '<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">Notification not sent</span>'
               : i.paged_at
-              ? `<span style="font-size:14px;color:var(--ink-500);">Paged ${escapeHtml(dateTime(i.paged_at))}${
-                  i.repaged_at ? `, again ${escapeHtml(dateTime(i.repaged_at))}` : ''
+              ? `<span style="font-size:13px;color:var(--ink-500);">Notified ${escapeHtml(dateTime(i.paged_at))}${
+                  i.repaged_at ? `, reminded ${escapeHtml(dateTime(i.repaged_at))}` : ''
                 }</span>`
               : ''
           }
         </div>
 
-        <p style="font-size:19px;line-height:1.45;margin:0 0 12px;font-weight:600;">
+        <p style="font-size:13px;line-height:1.5;margin:0 0 12px;font-weight:400;">
           ${escapeHtml(i.reason)}
         </p>
 
@@ -8830,12 +8783,12 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
             : ''
         }
 
-        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:15px;margin-bottom:${
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:13px;margin-bottom:${
           i.status === 'OPEN' ? '20px' : '0'
         };">
-          <a href="/ops/customers/${c.id}" style="font-weight:600;">${escapeHtml(c.name || 'Unknown')}</a>
+          <a href="/ops/customers/${c.id}" class="ops-text-link">${escapeHtml(c.name || 'Unknown')}</a>
           <a href="tel:${escapeHtml(c.phone || '')}">${escapeHtml(formatPhone(c.phone || ''))}</a>
-          <a href="/ops/messages/${encodeURIComponent(String(c.phone || '').replace(/\\D/g, ''))}">Read the thread</a>
+          <a href="/ops/messages/${encodeURIComponent(String(c.phone || '').replace(/\\D/g, ''))}">View messages</a>
         </div>
 
         ${
@@ -8843,10 +8796,10 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
             ? `<form method="post" action="/ops/issues/${i.id}/resolve"
                      style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;border-top:2px solid var(--ink-900);padding-top:18px;margin:0;">
                  <input class="input" type="text" name="resolution" maxlength="200"
-                        placeholder="What did you do about it?" style="flex:1;min-width:240px;">
+                        placeholder="Resolution notes" style="flex:1;min-width:240px;">
                  <button type="submit" class="btn btn-primary">Mark resolved</button>
                </form>`
-            : `<p style="font-size:14px;color:var(--ink-500);margin:14px 0 0;">
+            : `<p style="font-size:13px;color:var(--ink-500);margin:14px 0 0;">
                  Resolved ${escapeHtml(dateTime(i.resolved_at))}${
                    i.ops_users ? ` by ${escapeHtml(i.ops_users.name)}` : ''
                  }${i.resolution ? `: ${escapeHtml(i.resolution)}` : ''}
@@ -8856,15 +8809,16 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
     };
 
     const body = `
+      <h1>Issues</h1>
       ${dayStrip}
 
       ${
         viewDate
-          ? `<p class="eyebrow" style="margin:0 0 6px;">Looking back</p>
+          ? `<p class="eyebrow" style="margin:0 0 6px;">Issue history</p>
              <h1 style="font-family:var(--font-display);font-weight:900;font-size:34px;letter-spacing:-0.03em;margin:0 0 8px;">
                ${escapeHtml(longDate(viewDate))}
              </h1>
-             <p style="font-size:15px;color:var(--ink-500);line-height:1.6;max-width:64ch;margin:0 0 30px;">
+             <p style="font-size:13px;color:var(--ink-500);line-height:1.6;max-width:64ch;margin:0 0 30px;">
                Everything raised that day, whether it was dealt with or not. An
                issue resolved a week later still belongs to the day it happened.
              </p>`
@@ -8877,8 +8831,8 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
           ? open.map(card).join('')
           : `<p style="font-size:17px;color:var(--ink-500);margin-bottom:56px;">${
               viewDate
-                ? 'Nothing raised that day is still open.'
-                : 'Nothing open. Everything a customer raised has been dealt with.'
+                ? 'No open issues for this date.'
+                : 'No open issues.'
             }</p>`
       }
 
@@ -9078,14 +9032,10 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
       const preview = String(t.last.body || '').replace(/\s+/g, ' ').slice(0, 90);
 
       return [
-        `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">
-           ${who}${stopped}${muted}
-           <div style="font-size:13px;color:var(--ink-500);font-variant-numeric:tabular-nums;">${escapeHtml(
-             formatPhone(t.phone)
-           )}</div>
-         </a>`,
+        `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">${escapeHtml(formatPhone(t.phone))}</a>`,
+        `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">${who}</a>${stopped}${muted}`,
         `<div style="font-size:14px;color:var(--ink-700);max-width:46ch;">
-           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Them' : 'Us'}</span>
+           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Received' : 'Sent'}</span>
            ${escapeHtml(preview)}${t.last.body && t.last.body.length > 90 ? '&hellip;' : ''}
          </div>`,
         `<span style="white-space:nowrap;">${escapeHtml(timeAgo(t.last.created_at))}</span>`,
@@ -9094,64 +9044,17 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     };
 
     const body = `
-      ${sectionHeading('Everything anyone has texted us', 'Conversations', threads.length)}
-
-      ${
-        // START A CONVERSATION WITH A NUMBER THAT HAS NEVER TEXTED US.
-        //
-        // Neil's ask. Every other way of sending a message needs a thread to
-        // send it into, so somebody he met at a laundromat or a building could
-        // not be texted at all without waiting for them to text first.
-        //
-        // Behind messages.send like the box on a thread, because it is the same
-        // act: words on a real phone. It lands you in the conversation
-        // afterwards rather than back here, since the next thing you want is to
-        // see what you sent and wait for the reply.
-        roles.can(req.opsUser, 'messages.send')
-          ? `<details class="card card-xl" style="padding:0;margin-bottom:28px;">
-               <summary style="padding:20px 24px;cursor:pointer;list-style:none;font-weight:700;font-size:17px;">
-                 ${icon('message-circle', '20')} Text somebody new
-               </summary>
-               <div style="padding:0 24px 24px;">
-                 <p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;max-width:64ch;">
-                   For a number that has never texted us - somebody you met, or a
-                   building manager. It starts a thread like any other, and the AI
-                   picks it up when they reply.
-                 </p>
-                 <form method="post" action="/ops/messages/new"
-                       style="display:flex;flex-direction:column;gap:16px;max-width:620px;">
-                   <div>
-                     <label class="field-label" for="new_phone">Their mobile number</label>
-                     <input class="field" id="new_phone" name="phone" type="tel" required
-                            inputmode="tel" autocomplete="off" placeholder="201-555-0142">
-                   </div>
-                   <div>
-                     <label class="field-label" for="new_body">What to say</label>
-                     <p class="field-hint" style="margin:0 0 8px;">
-                       Plain text - no dashes or curly quotes, they cost an extra segment.
-                       They have not asked to hear from us, so say who you are.
-                     </p>
-                     <textarea class="field" id="new_body" name="body" rows="3" required
-                               style="width:100%;resize:vertical;"
-                               placeholder="Hi, it's Neil from LYNDRY - we spoke at the laundromat..."></textarea>
-                   </div>
-                   <div><button class="btn btn-ink btn-lg" type="submit">Send it</button></div>
-                 </form>
-               </div>
-             </details>`
-          : ''
-      }
+      ${sectionHeading('Messages', 'Conversations', threads.length).replace('<h2', '<h1').replace('</h2>', '</h1>')}
 
       ${
         leads.length
           ? `<div class="ops-note ops-note--warn">
                <p style="margin:0 0 4px;font-size:16px;">
                  <strong>${leads.length} ${leads.length === 1 ? 'number has' : 'numbers have'} texted without signing up.</strong>
-                 The AI answered them in the thread. Nothing else chases them.
+                 Review these conversations and reply if needed.
                </p>
                <p style="margin:10px 0 0;font-size:15px;line-height:1.55;">
-                 Open a thread to reply, or mark it dealt with to clear it from
-                 here. If they text again, they come back.
+                 Mark a conversation resolved to remove it from this list. A new message will reopen it.
                </p>
                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
                  ${leads
@@ -9185,10 +9088,10 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                  <strong>The AI is switched off on ${pausedThreads.length} ${
                    pausedThreads.length === 1 ? 'conversation' : 'conversations'
                  }.</strong>
-                 Nothing answers ${pausedThreads.length === 1 ? 'that number' : 'those numbers'} but a person.
+                 Manual replies are required.
                </p>
                <p style="margin:10px 0 0;font-size:15px;line-height:1.55;">
-                 Open the thread to reply, or switch the AI back on when you are done with them.
+                 Open a conversation to reply or resume automated replies.
                  ${
                    roles.can(req.opsUser, 'messages.send')
                      ? 'Clearing this keeps the AI off and hides the warning until they text again.'
@@ -9220,7 +9123,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
                         ${pausedThreads
                           .map((t) => `<input type="hidden" name="phone" value="${escapeHtml(t.phone)}">`)
                           .join('')}
-                        <button class="btn btn-sm btn-ink" type="submit">Clear this</button>
+                        <button class="btn btn-sm btn-ink" type="submit">Dismiss warning</button>
                       </form>`
                    : ''
                }
@@ -9228,7 +9131,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
           : ''
       }
 
-      ${table(['Who', 'Latest message', 'When', 'Total'], threads.map(row))}
+      ${table(['Number', 'Name', 'Message', 'When', 'Total'], threads.map(row))}
 
       ${
         scanned >= THREAD_SCAN_LIMIT
@@ -9453,7 +9356,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           // Outside the form it submits, so the AI control can sit beside it on
           // the same row - two forms cannot be nested. Plain HTML, no script.
           canWrite
-            ? `<button class="btn btn-ink btn-lg" type="submit" form="send-message">Send it</button>`
+            ? `<button class="btn btn-ink btn-lg" type="submit" form="send-message">Send message</button>`
             : ''
         }
         ${
@@ -9474,14 +9377,14 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         }
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-left:auto;">
           <span class="badge" style="background:var(--${pauseState.paused ? 'sunbeam' : 'suds'}-500);">
-            AI is ${pauseState.paused ? 'off' : 'on'} for this chat
+            Automated replies: ${pauseState.paused ? 'paused' : 'on'}
           </span>
           ${
             canSend
               ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/ai" style="margin:0;">
                    <input type="hidden" name="state" value="${pauseState.paused ? 'on' : 'off'}">
                    <button class="btn btn-outline" type="submit">
-                     ${pauseState.paused ? 'Switch the AI on' : 'Switch the AI off'}
+                     ${pauseState.paused ? 'Resume automated replies' : 'Pause automated replies'}
                    </button>
                  </form>`
               : ''
@@ -9503,7 +9406,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
 
     const who = customer
       ? `<a href="/ops/customers/${customer.id}" class="btn btn-outline btn-sm">Open profile</a>`
-      : `<span class="badge" style="background:var(--sunbeam-500);">Never signed up</span>`;
+      : `<span class="badge" style="background:var(--sunbeam-500);">No customer account</span>`;
 
     // ?note= and ?problem= on the redirect, so refreshing after a send repeats
     // the message and never the action - the same pattern as the order page.
@@ -9512,7 +9415,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
 
     const strip = (text, background) => `
       <p style="margin:0 0 18px;padding:13px 16px;border:2px solid var(--ink-900);border-radius:12px;
-                background:${background};font-size:16px;font-weight:600;">${escapeHtml(text)}</p>`;
+                background:${background};font-size:13px;font-weight:600;">${escapeHtml(text)}</p>`;
 
     // IS THIS A CONVERSATION, OR US TALKING TO OURSELVES?
     //
@@ -9596,23 +9499,18 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         !customer
           ? leadOpen
             ? `<div class="ops-note ops-note--warn">
-                 <span class="ops-note__label">Never signed up</span>
-                 <p style="font-size:16px;line-height:1.6;margin:0 0 14px;">
-                   They texted and never became a customer. Reply below, or mark
-                   it dealt with to clear it from the conversations screen.
-                   <strong>If they text again they come back</strong>, so
-                   nothing is lost.
-                 </p>
+                 <span class="ops-note__label">No customer account</span>
+
                  ${
                    canSend
                      ? `<form method="post" action="/ops/messages/${encodeURIComponent(digits)}/dismiss"
                               style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
                           <div style="flex:1 1 240px;min-width:0;">
-                            <label class="field-label" for="why">What happened? (optional)</label>
+                            <label class="field-label" for="why">Resolution notes (optional)</label>
                             <input class="field" id="why" name="note" type="text" maxlength="200"
                                    placeholder="called them, not interested">
                           </div>
-                          <button class="btn btn-ink" type="submit">Dealt with</button>
+                          <button class="btn btn-ink" type="submit">Mark resolved</button>
                         </form>`
                      : ''
                  }
@@ -9637,7 +9535,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         hold
           ? `<div class="ops-note ops-note--bad" role="alert">
                <span class="ops-note__label">The AI has stopped replying</span>
-               <p style="font-size:16px;line-height:1.6;margin:0;">
+               <p style="font-size:13px;line-height:1.6;margin:0;">
                  ${escapeHtml(hold.reason)}
                </p>
                <p style="font-size:15px;line-height:1.6;margin:12px 0 0;color:var(--ink-700);">
@@ -9677,7 +9575,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         ${
           thread.length
             ? `<div style="display:flex;flex-direction:column;gap:20px;">${thread.map(bubble).join('')}</div>`
-            : `<p style="font-size:16px;color:var(--ink-500);margin:0;">Nothing has been sent to or from this number.</p>`
+            : `<p style="font-size:13px;color:var(--ink-500);margin:0;">No messages to display.</p>`
         }
 
         ${
@@ -9766,18 +9664,9 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
           // into it and then refuses is worse than no box.
           canWrite
             ? `<div style="margin:26px 0 0;padding-top:24px;border-top:2px solid var(--ink-100);">
-                 <label class="field-label" for="msg">Send them a message</label>
-                 <p class="field-hint" style="margin:0 0 10px;">
-                   Goes straight to their phone from the LYNDRY number, and is
-                   logged in this thread like any other. Plain text - no dashes
-                   or curly quotes, they cost an extra segment.
-                 </p>
-                 <p class="field-hint" style="margin:0 0 10px;">
-                   Write as much as you need. Every 153 characters is another
-                   segment and every segment is billed, so long is fine when it
-                   is worth it - past ${SMS_MAX_CHARS} the carrier will not take
-                   it at all, and we will say so rather than send half of it.
-                 </p>
+                 <label class="field-label" for="msg">Message</label>
+
+
                  <form method="post" id="send-message"
                        action="/ops/messages/${encodeURIComponent(digits)}/send" style="margin:0;">
                    <textarea class="field" id="msg" name="body" rows="3" required
@@ -11698,6 +11587,11 @@ router.post('/ops/partners/:id', guard, may('partners.manage'), async (req, res,
   }
 });
 
+if (require('../core/dev-checkout').enabled) {
+  router.use('/ops/partners/:partnerId/portal', guard, may('partners.portal'),
+    require('./shop-admin-portal').createRouter({ service: require('../core/partner-intake-runtime'), loadPartner: partners.find }));
+}
+
 router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (req, res, next) => {
   try {
     // ":id" also matches a literal like /ops/partners/enquiries, and Express
@@ -11750,6 +11644,7 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
           staff,
           weighed,
           courierModel,
+          canOpenPortal: require('../core/dev-checkout').enabled && roles.can(req.opsUser, 'partners.portal'),
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
         }),
         user: req.opsUser,
@@ -12298,7 +12193,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
     });
 
     const body = `
-      ${sectionHeading('Who can sign in', 'Team', (people || []).length)}
+      ${sectionHeading('Staff access', 'Team', (people || []).length).replace('<h2', '<h1').replace('</h2>', '</h1>')}
 
       ${
         req.query.note

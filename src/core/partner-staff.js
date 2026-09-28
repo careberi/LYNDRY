@@ -34,7 +34,7 @@ const ROLES = Object.freeze({ OWNER: 'OWNER', ATTENDANT: 'ATTENDANT' });
 // What the ops screen and the portal both select. One list, so a column added for
 // one of them cannot arrive `undefined` at the other - the trap CLAUDE.md counts
 // against CARD_FIELDS, BOARD_FIELDS, RUN_FIELDS and four more.
-const FIELDS = 'id, partner_id, name, phone, role, status, last_seen_at, created_at';
+const FIELDS = 'id, partner_id, name, phone, role, status, last_login_at, created_at';
 
 async function list(partnerId) {
   if (!partnerId) return [];

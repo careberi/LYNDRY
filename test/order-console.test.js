@@ -328,7 +328,8 @@ test('A DRIVER IS SHOWN THE STOP, NOT THE CUSTOMER - on the rendered page, not o
   assert.ok(!/id="log"/.test(html), 'change log leaked');
   assert.ok(!/Texts for #/.test(html), 'thread leaked');
   assert.ok(/1650 Chandler Dr/.test(html), 'the address is the one detail a stop needs');
-  assert.ok(/<table class="data">/.test(html), 'the bags table is still theirs');
+  assert.ok(/Pickup bags/.test(html), 'bag count is visible');
+  assert.ok(!/Taken at door|Lineage|Code off the tag/.test(html), 'tag workflow is absent');
 });
 
 test('a driver gets the step and nothing that is not theirs to press', () => {

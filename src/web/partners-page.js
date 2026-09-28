@@ -3,7 +3,6 @@
 const { escapeHtml } = require('./layout');
 const partners = require('../core/partners');
 const format = require('../core/format');
-const pitchLink = require('../core/pitch-link');
 
 // ---------------------------------------------------------------------------
 // The partner directory: /ops/partners
@@ -47,7 +46,7 @@ function partnerRow(p) {
   const margin =
     laundromat && p.wholesale_per_lb_cents != null
       ? `<span class="num">${escapeHtml(money(p.wholesale_per_lb_cents))}/lb</span> wholesale`
-      : '<span style="color:var(--ink-500);">no rate agreed</span>';
+      : '<span style="color:var(--ink-500);">Rate not set</span>';
 
   return `
   <a href="/ops/partners/${p.id}" class="card card-xl"
@@ -59,16 +58,16 @@ function partnerRow(p) {
       ${typeBadge(p.type)}
       ${statusBadge(p.status)}
     </div>
-    <div style="font-size:15px;color:var(--ink-700);">${escapeHtml(addressOf(p) || 'No address')}</div>
+    <div style="font-size:15px;color:var(--ink-700);">${escapeHtml(addressOf(p) || 'Address not provided')}</div>
     <div style="font-family:var(--font-mono);font-size:13px;color:var(--ink-500);margin-top:8px;">
       ${margin}${
-        laundromat && p.daily_capacity_lb ? ` &middot; ${p.daily_capacity_lb} lb a day` : ''
+        laundromat && p.daily_capacity_lb ? ` &middot; ${p.daily_capacity_lb} lb daily capacity` : ''
       }${p.hours ? ` &middot; ${escapeHtml(p.hours)}` : ''}
     </div>
   </a>`;
 }
 
-function partnerListBody({ list, notice, problem = null, baseUrl = '' }) {
+function partnerListBody({ list, notice, problem = null }) {
   const laundromats = list.filter((p) => p.type === 'LAUNDROMAT');
   const managers = list.filter((p) => p.type === 'PROPERTY_MANAGER');
 
@@ -82,12 +81,12 @@ function partnerListBody({ list, notice, problem = null, baseUrl = '' }) {
   return `
 <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;justify-content:space-between;margin-bottom:8px;">
   <div>
-    <p class="eyebrow" style="margin:0 0 8px;">Who we work with</p>
+    <p class="eyebrow" style="margin:0 0 8px;">Partner directory</p>
     <h1 style="margin:0;font-size:40px;line-height:1.05;">Partners</h1>
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
-    <a class="btn btn-outline" href="/ops/partners/enquiries">Enquiries</a>
-    <a class="btn" href="/ops/partners/new">Add a partner</a>
+    <a class="btn btn-outline" href="/ops/partners/enquiries">Partner inquiries</a>
+    <a class="btn" href="/ops/partners/new">Add partner</a>
   </div>
 </div>
 
@@ -102,55 +101,12 @@ ${
     : ''
 }
 
-<!-- Sending somebody the overview.
-     A text rather than an email because that is what actually gets read by
-     somebody standing behind a counter, and because we already have a number
-     for most of them written on a scrap of paper. The link is on our own
-     domain - never a shortener - for the same reason every other link we send
-     is: carriers score a texted link partly by its domain. -->
-<div class="card card-xl" style="padding:26px;margin-top:26px;">
-  <p class="eyebrow" style="margin:0 0 10px;">Send the overview</p>
-  <p style="font-size:16px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;max-width:64ch;">
-    Texts a laundromat a link to the page explaining how working with us
-    works - what their part is, what we handle, and the questions they
-    always ask. No prices on it, because none are agreed.
-  </p>
-  <form method="post" action="/ops/partners/send-overview"
-        style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
-    <div style="flex:1 1 240px;min-width:0;">
-      <label class="field-label" for="ov_phone">Their mobile number</label>
-      <input class="field" id="ov_phone" name="phone" type="tel" inputmode="tel"
-             autocomplete="off" placeholder="201-555-0134" required>
-    </div>
-    <div style="flex:1 1 200px;min-width:0;">
-      <label class="field-label" for="ov_name">Who they are <span style="font-weight:400;color:var(--ink-500);">(optional)</span></label>
-      <input class="field" id="ov_name" name="name" type="text" autocomplete="off"
-             maxlength="60" placeholder="Cedar Lane Launderette">
-    </div>
-    <button class="btn btn-ink btn-lg" type="submit">Send it</button>
-  </form>
-  <p class="field-hint" style="margin-top:12px;">
-    Goes out from our own number and is logged in the conversation like any
-    other message. <strong>The link is good for ${pitchLink.lifetimeMs() / 60000} minutes</strong>
-    and is made fresh each time you press this - so send it to somebody who is
-    going to look now, and send another if they did not. There is no address to
-    copy: the page does not open without a link we sent - so to read it
-    yourself, send it to your own number.
-  </p>
-</div>
-
-<p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:60ch;margin:14px 0 0;">
-  Added by hand. This is the short list of places we have a relationship with,
-  not the pile of people who filled in the website form - those are under
-  Enquiries.
-</p>
-
 ${
   list.length
     ? group('Laundromats', laundromats) + group('Management companies', managers)
     : `<div class="card card-xl" style="padding:28px;margin-top:28px;">
          <p style="margin:0;font-size:16px;color:var(--ink-500);line-height:1.6;">
-           Nobody yet. Add the first one above.
+           No partners added. Select Add partner to create a record.
          </p>
        </div>`
 }`;
@@ -476,17 +432,13 @@ function loadLine(load) {
 // so the screen listing laundromats could not say where a shop's portal was or who
 // could open it.
 //
-// "THE ABILITY TO SIGN INTO IT AS WELL" NEEDS NO NEW MECHANISM, and saying so on
-// the page is better than building one. Neil adds HIMSELF as an owner with his own
-// number and signs in at the shop's URL like anybody else - as himself, with
-// everything he does attributed to him. An impersonation feature would put his
-// actions in an attendant's name, which is the one thing a staff list prevents.
+// LYNDRY administrators enter with their own POS identity, never as shop staff.
 //
 // ONLY OPS MAY NAME AN OWNER. The portal's own Staff page cannot pass a role at
 // all - `partnerStaff.addAttendant()` has no argument for one - because an owner
 // minting another owner is what the two ladders exist to prevent. This is the rung
 // between them and it belongs here.
-function staffCard(p, staff) {
+function staffCard(p, staff, canOpenPortal = false) {
   if (p.type !== 'LAUNDROMAT') return '';
 
   const url = p.slug ? `/shop/${escapeHtml(p.slug)}` : null;
@@ -518,7 +470,8 @@ function staffCard(p, staff) {
 
   return `
 <div class="card card-xl" style="padding:26px;margin-bottom:24px;">
-  <p class="eyebrow" style="margin:0 0 6px;">Their portal</p>
+  <p class="eyebrow" id="portal-access" style="margin:0 0 6px;">Their portal</p>
+  ${canOpenPortal ? `<div class="ops-note" style="margin-bottom:20px;"><strong>LYNDRY administrator access</strong><p>Open this laundromat using your POS account. Actions are recorded under your own admin identity.</p><a class="btn btn-primary" href="/ops/partners/${escapeHtml(p.id)}/portal">Open portal as admin</a></div>` : ""}
   <h2 style="font-family:var(--font-display);font-weight:900;font-size:24px;margin:0 0 10px;">
     Who can sign in
   </h2>
@@ -543,7 +496,7 @@ function staffCard(p, staff) {
            <tbody>${rows}</tbody>
          </table></div>`
       : `<p style="font-size:15px;line-height:1.6;color:var(--ink-500);margin:0 0 18px;">
-           Nobody can sign in to this shop yet.
+           No owners or attendants have been added to this shop yet.
          </p>`
   }
 
@@ -570,9 +523,7 @@ function staffCard(p, staff) {
 
   <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:16px 0 0;">
     An owner can add and remove their own attendants. Nobody is texted when they are added &mdash;
-    they sign in when they choose to. <strong>To see the portal yourself, add your own number as an
-    owner</strong> and sign in at their address: everything you do is then recorded as you rather
-    than as one of their staff.
+    they sign in when they choose to. ${canOpenPortal ? "Your POS admin account can access every laundromat without being added as an owner." : "Laundromat owners and attendants use their own registered phone numbers."}
   </p>
 </div>`;
 }
@@ -647,6 +598,7 @@ function partnerDetailBody({
   staff = [],
   weighed = null,
   courierModel = false,
+  canOpenPortal = false,
 } = {}) {
   const p = partner;
   const laundromat = p.type === 'LAUNDROMAT';
@@ -780,7 +732,7 @@ ${
     ${p.notes ? `<p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:var(--ink-700);white-space:pre-wrap;">${escapeHtml(p.notes)}</p>` : ''}
   </div>
 
-  ${staffCard(p, staff)}
+  ${staffCard(p, staff, canOpenPortal)}
 
   ${
     // THEIR SCALE AGAINST OURS IS A VAN QUESTION AND CANNOT BE ASKED UNDER A

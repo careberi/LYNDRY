@@ -87,7 +87,7 @@ const ORDER_FIELDS =
   // price" - both false, about an order that was settled days earlier.
   //
   // The bag tag page never had this because `tags.findByTag()` selects `*`.
-  'weight_settled_at, price_cents, payment_status, ' +
+  'weight_settled_at, price_cents, payment_status, dev_quote_id, pricing_snapshot, pending_pricing_snapshot, ' +
   // AND EVERY COLUMN THE PRICING BRANCH READS, because the weigh-in is what
   // prices the order and all four arrive undefined without this.
   //
@@ -324,6 +324,12 @@ router.get('/shop/:slug', async (req, res, next) => {
 // --- everything below needs a signed-in attendant ---------------------------
 
 router.use('/shop', auth.requirePartner);
+
+// Development intake replaces the legacy bag/PIN workflow. The shared login
+// and staff management remain, while production keeps its existing portal.
+if (require('../core/dev-checkout').enabled) {
+  router.use(require('./shop-intake-routes').createRouter(require('../core/partner-intake-runtime')));
+}
 
 router.get('/shop', async (req, res, next) => {
   const lang = langOf(req);
