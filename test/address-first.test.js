@@ -32,6 +32,9 @@ test('booking starts with saved-address confirmation and removes premature plan 
   assert.match(html,/One-Time or Subscription\?/);assert.match(html,/name="address_confirmed" value="yes"/);assert.doesNotMatch(html,/\$2\.00|\$1\.80|Save 10%/);assert.equal(writes,1);
   html=await(await post({step:'repeat',address_confirmed:'yes',plan:'ONE_TIME'})).text();
   assert.match(html,/Schedule your pickup/);
+  assert.match(html,/Pickup times depend on the laundromats/);
+  assert.doesNotMatch(html,/<input[^>]*name="pickup_time"[^>]*\b(?:min|max)=/);
+
   html=await(await post({step:'repeat',back:'address',address_confirmed:'yes',plan:'ONE_TIME'})).text();assert.match(html,/Where should we pick up\?/);assert.equal(writes,1);
   // Old forms cannot skip the newly required first screen.
   html=await(await post({step:'repeat',plan:'ONE_TIME'})).text();assert.match(html,/Where should we pick up\?/);

@@ -16,6 +16,17 @@ async function policy() {
   if (!rows.length) throw Error('Configure contribution targets before quoting.');
   return { ...rows[0].policy, version: rows[0].id };
 }
+// Both handovers must fit this shop's hours on consecutive local calendar days.
+function scheduleFits(shop, rows, date, time) {
+  const partners = require('./partners');
+  const weekday = new Date(date+'T12:00:00Z').getUTCDay();
+  if (!partners.isOpenAt(rows, weekday, time)) return false;
+  if (shop.dropoff_cutoff && time >= String(shop.dropoff_cutoff).slice(0,5)) return false;
+  const minutes = Number(time.slice(0,2))*60+Number(time.slice(3));
+  const turnaround = Number(shop.turnaround_minutes) || 1440;
+  return partners.canCollectOn(rows, (weekday+1)%7, Math.max(0,minutes+turnaround-1440));
+}
+
 async function previewQuote(customer, form, { publicPreview = false, addressEstimate = false, partnerId = null, policyOverride = null } = {}) {
   guard();
   const booking = require('./booking'), partners = require('./partners'), geo = require('./geocode');
@@ -37,26 +48,16 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
   const category = customer.pricing_category === 'WHOLESALE' ? 'WHOLESALE' : form.plan === 'SUBSCRIPTION' ? 'SUBSCRIPTION' : 'ONE_TIME';
   const [home, shops, hours, loads, planned] = await Promise.all([publicPreview ? geo.locate(customer) : geo.lookupOnce(geo.addressLine(customer)),partners.list({type:'LAUNDROMAT'}).then(rows=>rows.filter(p=>p.status==='ACTIVE')),partners.hoursForAll(),partners.loadByPartner(),partners.plannedByPartner(addressEstimate ? [] : [date])]);
   if (!home) throw Error('The pickup address could not be located. Check the street and ZIP.');
-  const weekday = new Date(date+'T12:00:00Z').getUTCDay();
   const candidates = [];
   for (const shop of shops) {
     if (partnerId && shop.id !== partnerId) continue;
     // Contact details do not determine price eligibility.
     if (!shop.address_line1) continue;
-    if (shop.lat == null || shop.lng == null || (!addressEstimate && !partners.isOpenAt(hours.get(shop.id)||[],weekday,time))) continue;
+    if (shop.lat == null || shop.lng == null || (!addressEstimate && !scheduleFits(shop,hours.get(shop.id)||[],date,time))) continue;
     const onFloor=loads.get(shop.id)||{}, reserved=planned.get(shop.id)||{};
     const used=(onFloor.pounds||0)+(reserved.pounds||0)+((onFloor.unweighed||0)+(reserved.unweighed||0))*current.referenceWeightLb;
     const cap = partners.capacityOf(shop,{pounds:used});
     if (cap.remaining != null && cap.remaining < current.referenceWeightLb) continue;
-    if (!addressEstimate) {
-    if (shop.dropoff_cutoff && time >= String(shop.dropoff_cutoff).slice(0,5)) continue;
-    const minutes = Number(time.slice(0,2))*60+Number(time.slice(3));
-    const ready = minutes+(Number(shop.turnaround_minutes)||1440);
-    // Standard service returns the laundry the next day. Finishing after
-    // closing today must not exclude a shop that can release it tomorrow.
-    // Work not ready during tomorrow's opening hours remains ineligible.
-    if (!partners.canCollectOn(hours.get(shop.id)||[],(weekday+1)%7,Math.max(0,ready-1440))) continue;
-    }
     const miles = geo.milesBetween(home,{lat:Number(shop.lat),lng:Number(shop.lng)});
     if (!Number.isFinite(miles) || miles > 15) continue;
     const verified = await courierAvailability.verifyRoundTrip(shipday, {
@@ -101,6 +102,14 @@ async function approve(id,customer) {
 async function validateQuote(id,customer,date,time) {
   const quote = await read(id,customer.id);
   if (!quote.approved_at || Date.parse(quote.expires_at)<=Date.now() || quote.pickup_date!==date || String(quote.pickup_time).slice(0,5)!==String(time).slice(0,5)) throw Error('Refresh and approve the quote before booking.');
+  const partners = require('./partners');
+  const [shop, hours] = await Promise.all([
+    partners.find(quote.snapshot.partnerId), partners.hoursForAll(),
+  ]);
+  if (!shop || shop.status !== 'ACTIVE' || shop.type !== 'LAUNDROMAT' ||
+      !scheduleFits(shop,hours.get(shop.id)||[],date,String(time).slice(0,5))) {
+    throw Error('The laundromat is no longer available for this pickup and next-day return. Please choose another time and get a new quote.');
+  }
   return quote;
 }
 async function evaluateWeight(order,weightLb) {

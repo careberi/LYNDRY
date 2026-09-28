@@ -128,3 +128,41 @@ test('next-day return rejects laundry that is not ready before tomorrow closes',
  f.modules['./partners'].canCollectOn=(_rows,_day,ready)=>ready<21*60;
  await assert.rejects(f.service.previewQuote({lat:0,lng:0},{pickup_date:'2030-01-01',pickup_time:'08:00'},{publicPreview:true}),/No eligible laundromat/);
 });
+
+
+test('scheduled quotes use actual partner hours, including breaks, closing and next-day closure',async()=>{
+ const f=fixture(), real=require('../src/core/partners');
+ f.modules['./partners'].isOpenAt=real.isOpenAt;
+ f.modules['./partners'].canCollectOn=real.canCollectOn;
+ const row=(weekday,opens_at,closes_at)=>({weekday,opens_at,closes_at});
+ let hours=[row(2,'09:00','12:00'),row(2,'13:00','19:00'),row(3,'09:00','19:00')];
+ f.modules['./partners'].hoursForAll=async()=>new Map([['partner',hours]]);
+ const preview=time=>f.service.previewQuote({lat:0,lng:0},{pickup_date:'2030-01-01',pickup_time:time},{publicPreview:true});
+ assert.equal((await preview('18:00')).snapshot.partnerId,'partner');
+ for(const time of ['08:59','12:00','12:30','19:00','19:01']) await assert.rejects(preview(time),/No eligible laundromat/);
+ hours=[row(2,'09:00','18:00'),row(3,'09:00','19:00')];
+ await assert.rejects(preview('19:00'),/No eligible laundromat/);
+ hours=[row(2,'09:00','19:00')];
+ await assert.rejects(preview('18:00'),/No eligible laundromat/);
+ hours=[row(2,'09:00','19:00'),row(3,null,'19:00')];
+ await assert.rejects(preview('18:00'),/No eligible laundromat/);
+});
+
+test('final booking rechecks the quoted shop after its hours change',async()=>{
+ const f=fixture(),real=require('../src/core/partners');
+ f.modules['./partners'].isOpenAt=real.isOpenAt;
+ f.modules['./partners'].canCollectOn=real.canCollectOn;
+ const shop={id:'partner',status:'ACTIVE',type:'LAUNDROMAT',turnaround_minutes:60};
+ f.modules['./partners'].find=async()=>shop;
+ let rows=[{weekday:2,opens_at:'09:00',closes_at:'19:00'},{weekday:3,opens_at:'09:00',closes_at:'19:00'}];
+ f.modules['./partners'].hoursForAll=async()=>new Map([['partner',rows]]);
+ const quote={approved_at:'2029-12-31',expires_at:'2030-01-01T00:05:00Z',pickup_date:'2030-01-01',pickup_time:'18:00',snapshot:{partnerId:'partner'}};
+ f.modules['../db'].from=()=>{const q={select(){return q;},eq(){return q;},single:async()=>({data:quote})};return q;};
+ const validate=()=>f.service.validateQuote('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',{id:'customer'},'2030-01-01','18:00');
+ assert.equal(await validate(),quote);
+ rows=rows.filter(r=>r.weekday===2);
+ await assert.rejects(validate(),/no longer available/);
+ rows=[{weekday:2,opens_at:'09:00',closes_at:'18:00'},{weekday:3,opens_at:'09:00',closes_at:'19:00'}];
+ await assert.rejects(validate(),/no longer available/);
+ assert.equal(f.writes(),0);
+});

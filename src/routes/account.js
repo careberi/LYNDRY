@@ -619,7 +619,7 @@ function money(cents) {
 // ---------------------------------------------------------------------------
 function dateBounds(opensOn = null) {
   const today = booking.today();
-  const from = booking.windowsToday().dayIsDone ? booking.addDays(today, 1) : today;
+  const from = !require('../core/dev-checkout').enabled && booking.windowsToday().dayIsDone ? booking.addDays(today, 1) : today;
   const to = booking.addDays(today, 60);
 
   return { min: opensOn && opensOn > from ? opensOn : from, max: to };
@@ -2335,6 +2335,7 @@ function repeatForm(given, estimate) {
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function whenForm(customer, given, opensOn) {
+  const partnerHours = require('../core/dev-checkout').enabled;
   const regular = subscribing(given);
   const { min, max } = dateBounds(opensOn);
 
@@ -2400,22 +2401,15 @@ function whenForm(customer, given, opensOn) {
       <div class="stack">
         ${regular ? days : oneDay}
 
-        <!-- BOUNDED BY THE HOURS THE VAN ACTUALLY RUNS, and taken from
-             PICKUP_WINDOWS rather than typed here - so changing the windows moves
-             this with them, the same way it already moves the turnaround promise.
-
-             min/max on a time input is a courtesy and not a guard: some browsers
-             only mark an out-of-range value invalid rather than refusing it, and
-             none of them stop a form being posted by hand. checkSlot() is what
-             actually decides, and it already answers "that time has gone, the
-             next slot is..." in a sentence. -->
+        <!-- Development checks the requested time against eligible partners.
+             Legacy van bookings retain their fixed window bounds. -->
         <div class="field">
           <label class="field-label" for="pickup_time">What time?</label>
           <input class="input input-lg" type="time" id="pickup_time" name="pickup_time" required
-                 min="${opensAt}" max="${closesAt}"
-                 value="${escapeHtml(given.pickup_time || startsAt)}">
+                 ${partnerHours ? '' : `min="${opensAt}" max="${closesAt}"`}
+                 value="${escapeHtml(given.pickup_time || (partnerHours ? '' : startsAt))}">
           <span class="field-hint">
-            We pick up between ${booking.readableTime(opensAt)} and ${booking.readableTime(closesAt)}.
+            ${partnerHours ? 'Pickup times depend on the laundromats serving your address. We check that a laundromat can receive your laundry and is open for collection the next day before confirming.' : `We pick up between ${booking.readableTime(opensAt)} and ${booking.readableTime(closesAt)}.`}
           </span>
         </div>
 

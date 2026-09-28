@@ -549,10 +549,11 @@ function canCollectOn(rows, weekday, readyAtMinutes) {
   return (rows || [])
     .filter((r) => Number(r.weekday) === Number(weekday))
     .some((r) => {
+      const from = minutesOfDay(r.opens_at);
       const to = minutesOfDay(r.closes_at);
       // End-exclusive, like isOpenAt: work that is ready at the closing minute
       // is ready too late to be collected that day.
-      return to != null && to > ready;
+      return from != null && to != null && from < to && to > Math.max(from, ready);
     });
 }
 
