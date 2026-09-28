@@ -9,7 +9,7 @@ Neil requested a modern wash-and-fold POS design on 27 September 2026, using the
 - Existing forms, validation, payment, SMS, reminder, routing and cancellation behavior remain unchanged.
 - pos.lyndry.com serves the existing guarded /ops routes at root paths. For example /ops/customers becomes /customers; /ops/orders/9006 becomes /orders/9006; the dispatch dashboard is /.
 - HTML navigation and form targets, redirects, login cookies and app manifest are adapted on the POS host. Internal API aliases continue to work; POST requests are never redirected or replayed. Customer photo/payment/portal links stay on APP_BASE_URL.
-- Local preview: localhost:3000/ops uses the current dev session. pos.localhost:3000 uses the new address layout and requires its own normal sign-in.
+- Local preview: pos.localhost:3000 is the staff entry point and requires normal sign-in. localhost:3000/ops and all its child URLs return HTTP 410 for every method; internal /ops handlers and aliases on the POS host remain available.
 
 ## Production activation remains pending
 

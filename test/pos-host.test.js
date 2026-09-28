@@ -27,7 +27,7 @@ async function fixture(t, options = {}) {
   await new Promise(resolve=>server.once('listening',resolve));
   t.after(()=>new Promise(resolve=>server.close(resolve)));
   return (path, {host='pos.lyndry.com',method='GET',body=''}={})=>new Promise((resolve,reject)=>{
-    const request=http.request({hostname:'127.0.0.1',port:server.address().port,path,method,headers:{host,'content-type':'application/x-www-form-urlencoded'}},response=>{
+    const request=http.request({hostname:'127.0.0.1',port:server.address().port,path,method,agent:false,headers:{host,'content-type':'application/x-www-form-urlencoded','content-length':Buffer.byteLength(body)}},response=>{
       let text='';response.setEncoding('utf8');response.on('data',chunk=>text+=chunk);response.on('end',()=>resolve({status:response.statusCode,headers:response.headers,text}));
     });request.on('error',reject);request.end(body);
   });
@@ -90,7 +90,27 @@ test('legacy domain migration is opt-in and restricted to browser HTML',async t=
   const off=await fixture(t);assert.equal((await off('/ops',{host:'lyndry.com'})).status,200);
   const on=await fixture(t,{redirectLegacy:true});
   assert.equal((await on('/ops?date=2026-09-27',{host:'lyndry.com'})).headers.location,'https://pos.lyndry.com/?date=2026-09-27');
-  assert.equal((await on('/ops',{host:'localhost:3000'})).status,200);
+  assert.equal((await on('/ops',{host:'localhost:3000'})).status,410);
+});
+
+test('local website retires every old ops entry point before login, reads or mutations',async t=>{
+  const request=await fixture(t);
+  for(const path of ['/ops','/ops/','/ops?date=2026-09-28','/ops/login','/ops/customers','/ops/orders/9016','/ops/today','/ops/action','/OPS/customers']) {
+    for(const method of ['GET','HEAD','POST','PUT','PATCH','DELETE']) {
+      const result=await request(path,{host:'localhost:3000',method,body:method==='GET'||method==='HEAD'?'':'value=unchanged'});
+      assert.equal(result.status,410,method+' '+path);
+      assert.equal(result.headers.location,undefined);
+      assert.equal(result.headers['set-cookie'],undefined);
+    }
+  }
+  assert.equal((await request('/customers',{host:'localhost:3000'})).text,'PUBLIC SITE');
+  assert.equal((await request('/health',{host:'localhost:3000'})).text,'asset');
+  assert.equal((await request('/ops/customers',{host:'lyndry-production-de2c.up.railway.app'})).status,200);
+  assert.equal((await request('/customers',{host:'pos.localhost:3000'})).status,200);
+  const action=await request('/action',{host:'pos.localhost:3000',method:'POST',body:'value=unchanged'});
+  assert.equal(action.status,200);
+  assert.deepEqual(JSON.parse(action.text),{value:'unchanged',path:'/ops/action'});
+  assert.equal((await request('/ops/today',{host:'pos.localhost:3000'})).status,401);
 });
 test('manifest uses the new scope and assets remain reachable',async t=>{
   const request=await fixture(t);const manifest=await request('/app.webmanifest');

@@ -25,6 +25,11 @@ function posHost({ host = 'pos.lyndry.com', publicHost = 'lyndry.com', publicOri
     const incomingHost = String(req.headers.host || '').split(':')[0].toLowerCase();
     const onPos = incomingHost === host || incomingHost === 'pos.localhost';
     if (!onPos) {
+      // Retire the local website's old staff entry point before any handler can
+      // read a session or perform an action. POS still uses these paths internally.
+      if (incomingHost === 'localhost' && /^\/ops(?:[/?]|$)/i.test(req.url)) {
+        return res.status(410).type('text/plain').send('This address has been retired. Open the POS at pos.localhost instead.');
+      }
       if (redirectLegacy && incomingHost === publicHost && /^(GET|HEAD)$/.test(req.method) && /^\/ops(?:[/?]|$)/.test(req.url)) {
         const send = res.send;
         let redirected = false;
