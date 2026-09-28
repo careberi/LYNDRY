@@ -1815,6 +1815,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     if (error) throw error;
 
     const all = data || [];
+    const pickupPlans = new Map(shipdayWorkspace && all.length ? (await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('order_id,state,assigned_name,problem,simulation').eq('leg','TO_PARTNER').in('order_id',all.map(o=>o.id)))).map(p=>[p.order_id,p]) : []);
     const now = today();
 
     // WHICH PROMOTION IS COMING no longer has a column to go in. Neil's
@@ -1998,6 +1999,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         escapeHtml(booking.requestedPickupLabel(o) || 'Time not selected'),
 
         statusBadge(o.status, o),
+        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id))]:[]),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
 
@@ -2014,6 +2016,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       'Pickup date',
       'Requested pickup time',
       'Status',
+      ...(shipdayWorkspace?['Pickup dispatch']:[]),
       'Clock',
       'Weight',
     ];
@@ -3269,6 +3272,10 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         canMoney:showMoney,canCustomer:can.customers,selector:can.override && stillRunning ? laundromatCard(order,true,laundromats) : ''});
     }
     let dispatchHtml = '';
+    if(shipdayWorkspace && order.status==='REQUESTED') {
+      const pickupPlan=await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg','TO_PARTNER').maybeSingle());
+      dispatchHtml=require('../web/pickup-dispatch').card(pickupPlan);
+    }
     if (shipdayWorkspace && can.override && order.status === 'READY') {
       const dispatchRuntime = require('../core/shipday-dispatch-runtime');
       const [returnPlan, dispatchDrivers] = await Promise.all([

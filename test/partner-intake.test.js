@@ -77,7 +77,7 @@ test('order detail only fetches preferences after durable intake and keeps shop 
         else data=[];
         return Promise.resolve({data,error:null}).then(resolve);
       }};return q;}};
-  const service=createService({db});
+  const service=createService({db,deliveryInfo:async()=>({assignmentVerified:true,driver:'Assigned driver'})});
   assert.equal((await service.detail('shop','9015')).stage,'INCOMING');
   assert.ok(!queries.some(q=>q.selected.includes('preferences')));
   assert.ok(queries[0].filters[0].includes('partner_id.eq.shop'));

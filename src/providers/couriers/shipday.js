@@ -60,6 +60,7 @@ function delivery(body, expectedId) {
     id: String(body.orderId), provider: 'shipday',
     status: states[body.status] || body.status || 'unknown',
     providerStatus: body.status || null,
+    service: body.thirdPartyName || null,
     feeCents: cents(body.totalBillableAmount),
     trackingUrl: safeUrl(body.trackingUrl),
     courier: body.driverName ? { name: body.driverName, phone: body.driverPhone || null,
@@ -168,13 +169,23 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
       if (!externalId) throw new Error('An order reference is required.');
       return request('GET', `/orders/${encodeURIComponent(externalId)}`);
     },
-    async assign(orderId, { maxFeeCents, requirePin = false, leaveAtDoor = false } = {}) {
+    async assign(orderId, { maxFeeCents, requirePin = false, leaveAtDoor = false, pickupReadyAt = null, trip = null, acceptEstimate = null, beforeAssign = null } = {}) {
       identifier(orderId);
       if (!Number.isSafeInteger(maxFeeCents) || maxFeeCents < 0) throw new Error('An approved courier budget is required.');
       if (requirePin && leaveAtDoor) throw new Error('PIN delivery cannot be contactless.');
-      const options = estimates(await request('GET', `/on-demand/estimate/${orderId}`));
-      const selected = options.find((row) => !row.requiresFeeReview && row.feeCents <= maxFeeCents);
+      // Order estimates can quote an immediate pickup despite the job's saved
+      // schedule. Availability explicitly accepts the requested UTC pickup time.
+      const options = pickupReadyAt && trip ? estimates(await request('POST','/on-demand/availability',{
+        pickupAddress:address(trip.from),deliveryAddress:address(trip.to),pickUpTime:instant(pickupReadyAt),
+      })) : estimates(await request('GET', `/on-demand/estimate/${orderId}`));
+      const selected = options.find((row) => !row.requiresFeeReview && row.feeCents <= maxFeeCents &&
+        (!pickupReadyAt || (['uber','doordash'].includes(row.service.toLowerCase()) &&
+          Date.parse(row.pickupTime) >= Date.parse(pickupReadyAt) &&
+          Date.parse(row.pickupTime) <= Date.parse(pickupReadyAt) + 30 * 60000 &&
+          Date.parse(row.deliveryTime) > Date.parse(row.pickupTime))) &&
+        (!acceptEstimate || acceptEstimate(row)));
       if (!selected) return { ok: false, quoteChanged: true, reason: 'courier_price_changed' };
+      if (beforeAssign) await beforeAssign(selected);
       const result = await request('POST', '/on-demand/assign', {
         orderId: Number(orderId), name: selected.service, estimateReference: selected.reference,
         contactlessDelivery: leaveAtDoor, podType: requirePin ? 'PIN' : 'PHOTO',

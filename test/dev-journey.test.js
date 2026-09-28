@@ -1,13 +1,13 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm'),path=require('path');
-function fixture(order,{approval=true,payment=true}={}){
+function fixture(order,{approval=true,payment=true,realCourier=false}={}){
  let charged=0;const transitions=[];
  const query={select(){return this;},eq(){return this;},not(){return this;},single(){return order;}};
  const modules={
-  '../db':{from:()=>query},'./dev-checkout':{guard(){},data:async q=>q},
+  '../db':{from:table=>table==='shipday_dispatch_plans'?{...query,single:()=>({state:'ASSIGNED',simulation:!realCourier})}:query},'./dev-checkout':{guard(){},data:async q=>q},
   './orders':{transition:async(o,status)=>{transitions.push(status);o.status=status;}},
   './spending-controls':{check:async()=>({ok:approval,reason:'Approval pending'})},
-  './shipday-dispatch-runtime':{},'../providers/payments':{mode:'test'},
+  './shipday-dispatch-runtime':{enroll:async()=>[]},'../providers/payments':{mode:'test'},
   './billing':{settleTotal:async()=>{charged++;return {ok:payment,reason:'Declined'};}},
   './order-events':{record:async()=>{}}
  };
@@ -28,4 +28,8 @@ test('declined payment cannot advance the order to ready or delivery',async()=>{
  const f=fixture({status:'AT_PARTNER',payment_status:'UNPAID',weight_lb:33,price_cents:6000},{payment:false});
  await assert.rejects(f.action('pay'),/Declined/);await assert.rejects(f.action('ready'),/Settle/);
  await assert.rejects(f.action('deliver'),/paid return trip/);assert.equal(f.transitions.length,0);
+});
+test('simulator cannot collect a real assigned Shipday pickup',async()=>{
+ const f=fixture({status:'REQUESTED',payment_status:'UNPAID'},{realCourier:true});
+ await assert.rejects(f.action('collect'),/Real Shipday deliveries/);assert.equal(f.transitions.length,0);
 });

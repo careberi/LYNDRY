@@ -13,6 +13,7 @@ async function run(row) {
  let problem=null,order;
  try {
   const plan=await data(db.from('shipday_dispatch_plans').select('*').eq('id',row.plan_id).single());
+  if(plan.booking_dispatch)throw Error('This scheduled pickup uses automatic courier dispatch. Review delivery changes in Shipday before changing or replacing its assignment.');
   order=await data(db.from('orders').select('*,customers(*)').eq('id',plan.order_id).single());
   const expected=`LYNDRY-DEV-${order.order_number}-${plan.leg==='TO_PARTNER'?'PICKUP':'RETURN'}`;
   if(plan.external_reference && plan.external_reference!==expected)throw Error('Development sync only updates linked LYNDRY-DEV deliveries.');

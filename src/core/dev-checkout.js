@@ -128,4 +128,4 @@ function report(order) {
   return {revenueCents:order.price_cents,washingCents,courierCents:s.pickupCents+s.returnCents,processingCents,
     ...economics.contribution({revenueCents:order.price_cents,washingCents,courierCents:s.pickupCents+s.returnCents,processingCents})};
 }
-module.exports={enabled,guard,data,address,policy,previewQuote,estimateAddress,createQuote,read,approve,validateQuote,evaluateWeight,report};
+module.exports={enabled,guard,data,address,policy,scheduleFits,previewQuote,estimateAddress,createQuote,read,approve,validateQuote,evaluateWeight,report};

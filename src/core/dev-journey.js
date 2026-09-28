@@ -7,7 +7,7 @@ const inProgress=new Set();
 async function find(id){return checkout.data(db.from('orders').select('*,customers(*)').eq('id',id).not('dev_quote_id','is',null).single());}
 async function event(order,summary,actor){await require('./order-events').record(order.id,{kind:'COURIER',summary:'Development simulation: '+summary,by:{opsUser:actor}});}
 async function plan(order,leg){await runtime.enroll(order,leg);return checkout.data(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg',leg).single());}
-async function requireAssigned(order,leg){const p=await plan(order,leg);if(p.state!=='ASSIGNED')throw Error('Assign the driver before simulating collection.');}
+async function requireAssigned(order,leg){const p=await plan(order,leg);if(p.simulation===false)throw Error('Real Shipday deliveries cannot be advanced by the simulator.');if(p.state!=='ASSIGNED')throw Error('Assign the driver before simulating collection.');}
 async function action(id,command,input,actor){
  checkout.guard();
  if(require('../providers/payments').mode!=='test')throw Error('This flow requires test-mode payments.');

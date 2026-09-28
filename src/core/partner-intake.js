@@ -39,6 +39,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
       const courier = legs.find(p => p.order_id === order.id && p.leg === leg && p.delivery_id &&
         !['canceled','cancelled','failed'].includes(String(p.status).toLowerCase()));
       const assigned = plan?.state === 'ASSIGNED' && Boolean(plan.shipday_order_id);
+      if(stage==='INCOMING' && live?.assignmentVerified!==true)return null;
       return {
         // Only anonymous operational fields leave this service for a template.
         number: order.order_number,
@@ -50,6 +51,8 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         deliveryStatus: live?.provider_status || null,
         deliveryReason: live?.reason || null,
         etaMinutes: live?.etaMinutes ?? null,
+        scheduledArrivalAt:live?.scheduledArrivalAt||null,
+        scheduledPickupAt:live?.scheduledPickupAt||null,
         checkedAt: live?.checked_at || null,
         deliveryPhotoCount: live?.ok ? (live.deliveryPhotos || []).length : 0,
         assigned: live ? Boolean(live.driver) : Boolean(assigned || courier),
@@ -62,7 +65,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         officeReview: intake?.needs_review === true,
       };
     })));
-    return views;
+    return views.filter(Boolean);
   }
   async function history(partner, requestedPage=1) {
     const page=/^[1-9]\d{0,4}$/.test(String(requestedPage)) ? Number(requestedPage) : 1;

@@ -24,7 +24,7 @@ function body({ configured, services = null, checkedAt = null, problem = null, q
     <button class="btn btn-ink" ${configured ? '' : 'disabled'}>Get estimate</button></form>
     ${quote ? quote.ok ? `<div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Service</th><th>Estimated courier fee</th></tr></thead><tbody>${quote.options.map((s) => `<tr><td>${esc(s.service)}</td><td>$${(s.feeCents / 100).toFixed(2)}</td></tr>`).join('')}</tbody></table></div><p class="field-hint">Courier estimates only. Additional Shipday charges are not yet verified. Do not use this as a final customer quote. Prices are checked again before assignment.</p>` : '<p role="status">No confirmed estimate is available for this trip.</p>' : ''}
     </section>
-    <section class="card card-xl ops-form-stack"><h2>Dispatch</h2><p>Development dispatch plans support automatic third-party assignment and in-house overrides. Card and payment checks apply. Live dispatch remains disabled.</p></section>`;
+    <section class="card card-xl ops-form-stack"><h2>Dispatch</h2><p>Eligible scheduled pickups can be sent to Shipday automatically after booking and payment checks. View the assignment page for activation status, confirmed drivers and any problems.</p><a href="/ops/shipday/assignments">View driver assignments</a></section>`;
 }
 
 function registerAdmin(router, { guard, may, adminPage, client = createClient({ apiKey: config.shipday.apiKey, allowWrites: false }), configured = Boolean(config.shipday.apiKey), activeProvider = require('../providers/couriers').name }) {

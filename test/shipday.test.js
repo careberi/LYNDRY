@@ -89,3 +89,17 @@ test('in-house assignment accepts documented empty 204 and refuses offline drive
  assert.equal((await client.assignDriver(123,7)).ok,true);assert.equal(calls[1].method,'PUT');assert.ok(calls[1].url.endsWith('/orders/assign/123/7'));
  assert.equal((await client.assignDriver(123,8)).ok,false);assert.equal(calls.length,3);
 });
+
+test('scheduled assignment excludes early arrivals, unsupported couriers, fees and closed-shop estimates',async()=>{
+ const offer={id:'q',name:'Uber',fee:7.5,error:false,pickupTime:'2026-09-28T20:00:00Z',deliveryTime:'2026-09-28T20:25:00Z'};
+ for(const patch of [{pickupTime:'2026-09-28T19:45:00Z'},{pickupTime:'2026-09-28T21:00:00Z'},{name:'Other'},{fee:8},{regulatoryFee:1},{pickupTime:null},{deliveryTime:null}]){
+  const {client,calls}=fixture([[{...offer,...patch}]],{allowWrites:true});
+  assert.equal((await client.assign(123,{maxFeeCents:750,pickupReadyAt:offer.pickupTime})).ok,false);assert.equal(calls.length,1);
+ }
+ const closed=fixture([[offer]],{allowWrites:true});assert.equal((await closed.client.assign(123,{maxFeeCents:750,pickupReadyAt:offer.pickupTime,acceptEstimate:()=>false})).ok,false);
+ let checked=false;const good=fixture([[offer],{orderId:123,status:'REQUESTED',thirdPartyName:'Uber'}],{allowWrites:true});
+ const result=await good.client.assign(123,{maxFeeCents:750,pickupReadyAt:offer.pickupTime,trip,beforeAssign:async()=>{checked=true;}});
+ assert.equal(checked,true);assert.equal(result.status,'REQUESTED');assert.equal(good.calls[1].parsed.podType,'PHOTO');
+ assert.equal(good.calls[0].url,'https://api.shipday.com/on-demand/availability');assert.equal(good.calls[0].parsed.pickUpTime,'2026-09-28T20:00:00.000Z');assert.equal(good.calls[1].parsed.estimateReference,'q');
+ const changed=fixture([[offer]],{allowWrites:true});await assert.rejects(changed.client.assign(123,{maxFeeCents:750,pickupReadyAt:offer.pickupTime,beforeAssign:async()=>{throw Error('Payment changed');}}),/Payment changed/);assert.equal(changed.calls.length,1);
+});

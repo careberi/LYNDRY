@@ -1599,6 +1599,11 @@ async function bookPickup(
     order.authorized_at = new Date().toISOString();
   }
 
+  // Durable pickup enrollment happens after the existing payment checks. The
+  // worker can recover a failed handoff without replaying the customer booking.
+  if (order.dev_quote_id) await require('./shipday-booking-runtime').booked(order)
+    .catch(err => console.error('Could not queue the booked Shipday pickup:', err.message));
+
   // ---------------------------------------------------------------------
   // TELL THE OFFICE. Neil's ask: an admin should get a text when somebody
   // places an order, rather than finding out by opening the board.

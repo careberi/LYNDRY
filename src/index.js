@@ -412,6 +412,7 @@ const server = app.listen(config.port, () => {
   // disaster.
   scheduler.start();
   require('./core/shipday-dispatch-runtime').start();
+  require('./core/shipday-booking-runtime').start();
   require('./core/shipday-order-sync-runtime').start();
 });
 

@@ -79,6 +79,12 @@ function eta(o,lang) {
 function courier(o,lang) {
   return `<div class="shop-courier"><span class="shop-icon">${posIcon('delivery')}</span><div>${driver(o,lang)}<p>${e(deliveryStatus(o,lang))}</p></div></div><p class="shop-reference">${e(o.reference)}</p>`;
 }
+function scheduledArrival(o,lang) {
+  const value=o.scheduledArrivalAt||o.scheduledPickupAt;
+  if(!value||!Number.isFinite(Date.parse(value)))return e(say(lang,'Schedule unavailable','Horario no disponible'));
+  const label=o.scheduledArrivalAt?say(lang,'Scheduled arrival','Llegada programada'):say(lang,'Pickup scheduled','Recogida programada');
+  return '<small>'+e(label)+'</small><strong>'+e(new Date(value).toLocaleString(lang==='es'?'es-US':'en-US',{timeZone:'America/New_York',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</strong><small>'+e(say(lang,'Eastern time · Live ETA:','Hora del este · ETA en vivo:'))+'</small>';
+}
 const stageIcon={INCOMING:'delivery',WASH:'tools',READY:'delivery'};
 const badge=(lang,stage)=>`<span class="shop-status shop-status--${stage.toLowerCase()}">${e(label(lang,stage))}</span>`;
 function boardUrl(lang,stage='',query='') {
@@ -101,13 +107,13 @@ function board(ctx) {
   const stats=Object.keys(labels).map(s=>`<a class="card shop-stat" href="#section-${s.toLowerCase()}"><span class="shop-stat-icon shop-status--${s.toLowerCase()}">${posIcon(stageIcon[s])}</span><span class="shop-stat-label">${e(label(lang,s))}</span><strong>${counts[s]}</strong><span class="shop-stat-arrow" aria-hidden="true">↓</span></a>`).join('');
   function section(s) {
     const list=matching.filter(o=>o.stage===s);
-    const heading=s==='INCOMING'?[say(lang,'Order','Pedido'),say(lang,'Driver','Conductor'),say(lang,'Status','Estado'),'ETA',say(lang,'Action','Accion')]:s==='WASH'?[say(lang,'Order','Pedido'),say(lang,'Weight','Peso'),say(lang,'Status','Estado'),say(lang,'Action','Accion')]:[say(lang,'Order','Pedido'),say(lang,'Weight','Peso'),say(lang,'Driver','Conductor'),say(lang,'Collection status','Estado de recogida'),say(lang,'Pickup ETA','ETA de recogida'),say(lang,'Action','Accion')];
+    const heading=s==='INCOMING'?[say(lang,'Order','Pedido'),say(lang,'Driver','Conductor'),say(lang,'Status','Estado'),say(lang,'Arrival','Llegada'),say(lang,'Action','Accion')]:s==='WASH'?[say(lang,'Order','Pedido'),say(lang,'Weight','Peso'),say(lang,'Status','Estado'),say(lang,'Action','Accion')]:[say(lang,'Order','Pedido'),say(lang,'Weight','Peso'),say(lang,'Driver','Conductor'),say(lang,'Collection status','Estado de recogida'),say(lang,'Pickup ETA','ETA de recogida'),say(lang,'Action','Accion')];
     const rows=list.map(o=>{
       const href=`/shop/orders/${o.number}?lang=${lang}`;
       const identity=`<th scope="row"><a href="${href}">#${o.number}</a>${o.officeReview?`<small class="shop-review-flag">${e(say(lang,'Contact LYNDRY','Contacte a LYNDRY'))}</small>`:''}</th>`;
       const weight=`<td>${o.weight?e(o.weight)+' lb':'—'}</td>`;
       const link=(text)=>`<a id="order-action-${o.number}" class="btn btn-outline" href="${href}">${e(text)}</a>`;
-      if(s==='INCOMING')return `<tr>${identity}<td>${driver(o,lang)}</td><td><span class="shop-delivery-status">${e(deliveryStatus(o,lang))}</span>${o.deliveryStatus==='ALREADY_DELIVERED'?`<small>${e(say(lang,'Awaiting intake','Pendiente de registro'))}</small>`:''}${o.deliveryPhotoCount?`<a href="${href}#delivery-photo">${e(say(lang,'View delivery photo','Ver foto de entrega'))}</a>`:''}</td><td><strong data-live-eta>${e(eta(o,lang))}</strong>${o.checkedAt?`<small>${e(say(lang,'Checked','Actualizado'))} ${e(new Date(o.checkedAt).toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}))}</small>`:''}</td><td>${o.canAccept?`<a id="order-action-${o.number}" data-intake-link class="btn btn-primary" href="${href}">${e(say(lang,'Intake','Registrar'))}</a>`:`<button class="btn btn-outline" disabled>${e(say(lang,'Intake','Registrar'))}</button><small><a href="${href}">${e(say(lang,'View status','Ver estado'))}</a></small>`}</td></tr>`;
+      if(s==='INCOMING')return `<tr>${identity}<td>${driver(o,lang)}</td><td><span class="shop-delivery-status">${e(deliveryStatus(o,lang))}</span>${o.deliveryStatus==='ALREADY_DELIVERED'?`<small>${e(say(lang,'Awaiting intake','Pendiente de registro'))}</small>`:''}${o.deliveryPhotoCount?`<a href="${href}#delivery-photo">${e(say(lang,'View delivery photo','Ver foto de entrega'))}</a>`:''}</td><td>${scheduledArrival(o,lang)}<strong data-live-eta>${e(eta(o,lang))}</strong>${o.checkedAt?`<small>${e(say(lang,'Checked','Actualizado'))} ${e(new Date(o.checkedAt).toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}))}</small>`:''}</td><td>${o.canAccept?`<a id="order-action-${o.number}" data-intake-link class="btn btn-primary" href="${href}">${e(say(lang,'Intake','Registrar'))}</a>`:`<button class="btn btn-outline" disabled>${e(say(lang,'Intake','Registrar'))}</button><small><a href="${href}">${e(say(lang,'View status','Ver estado'))}</a></small>`}</td></tr>`;
       if(s==='WASH')return `<tr>${identity}${weight}<td>${badge(lang,s)}</td><td>${link(say(lang,'View wash instructions','Ver instrucciones de lavado'))}</td></tr>`;
       return `<tr>${identity}${weight}<td>${driver(o,lang)}</td><td>${e(o.deliveryStatus?deliveryStatus(o,lang):say(lang,'Awaiting return driver','Esperando conductor de vuelta'))}</td><td><strong data-live-eta>${e(eta(o,lang))}</strong></td><td>${link(o.canCollect?say(lang,'Confirm pickup','Confirmar recogida'):say(lang,'View collection','Ver recogida'))}</td></tr>`;
     }).join('');

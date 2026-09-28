@@ -58,6 +58,7 @@ async function enroll(order,leg='TO_PARTNER'){
   if(!at)throw Error('A valid, unambiguous customer-selected pickup time is required.');
   const existing=await result(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg',leg).maybeSingle());
   if(existing){
+    if(existing.booking_dispatch)return [existing];
     if(leg==='TO_PARTNER' && ['PLANNED','BLOCKED'].includes(existing.state) && new Date(existing.dispatch_at).toISOString()!==at){
       await store.save(existing,{dispatch_at:at,state:'PLANNED',problem:null},{actor:'scheduler',event:'PICKUP_RESCHEDULED',at:new Date().toISOString()});
     }
@@ -71,8 +72,8 @@ async function tick(){
   busy=true;
   try{
     const setting=await settings();if(!setting.enabled)return;
-    const orders=await result(db.from('orders').select('id,pickup_date,pickup_time,status').gte('created_at',setting.starts_at).in('status',['REQUESTED','READY']));
-    for(const order of orders){if(order.status==='REQUESTED'&&!dispatchInstant(order.pickup_date,require('./booking').normaliseTime(order.pickup_time)))continue;await enroll(order,order.status==='READY'?'TO_CUSTOMER':'TO_PARTNER');}
+    const orders=await result(db.from('orders').select('id,pickup_date,pickup_time,status,created_at,dev_quote_id').gte('created_at',setting.starts_at).in('status',['REQUESTED','READY']));
+    for(const order of orders){if(order.status==='REQUESTED'&&require('./shipday-booking-runtime').eligible(order,setting))continue;if(order.status==='REQUESTED'&&!dispatchInstant(order.pickup_date,require('./booking').normaliseTime(order.pickup_time)))continue;await enroll(order,order.status==='READY'?'TO_CUSTOMER':'TO_PARTNER');}
     const due=await result(db.from('shipday_dispatch_plans').select('id').eq('simulation',true).in('state',['PLANNED','BLOCKED']).lte('dispatch_at',new Date().toISOString()).order('dispatch_at').limit(50));
     for(const plan of due)await dispatcher.run(plan.id);
   }finally{busy=false;}
@@ -82,6 +83,7 @@ async function list(){return result(db.from('shipday_dispatch_plans').select('*,
 async function runAtSelectedTime(id,actor){
   if(!simulation)throw Error('Only development can simulate a dispatch time.');
   const plan=await store.get(id);if(!plan)throw Error('Assignment not found.');
+  if(plan.simulation===false)throw Error('This is a real Shipday delivery. Use its confirmed driver status, not the simulator.');
   return createDispatcher({store,provider,validate,now:()=>Math.max(Date.now(),Date.parse(plan.dispatch_at))}).run(id,null,'staff:'+actor);
 }
 module.exports={runAtSelectedTime,simulation,store,provider,settings,list,enroll,tick,start,run:dispatcher.run,result};

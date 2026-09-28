@@ -15,14 +15,23 @@ async function verify({provider,order,shop,plan,now=Date.now,telemetry=false}) {
       normalize(remote.customer?.name)!==normalize(shop.name)||normalize(remote.customer?.address)!==normalize(address(shop))) return {ok:false,reason:'delivery_mismatch'};
     const status=remote.orderStatus?.orderState;
     const evidence={shipday_order_id:String(remote.orderId),provider_status:status||'UNKNOWN',checked_at:new Date(now()).toISOString(),
-      driver:remote.assignedCarrier?.name||null,driverPhone:phone(remote.assignedCarrier?.phoneNumber),etaMinutes:null};
+      driver:remote.assignedCarrier?.name||null,driverPhone:phone(remote.assignedCarrier?.phoneNumber),etaMinutes:null,
+      assignmentVerified:Boolean(remote.assignedCarrier?.id && remote.assignedCarrier?.name &&
+        ['NOT_ACCEPTED','NOT_STARTED_YET','STARTED','PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED'].includes(status))};
+    const scheduledDate=remote.activityLog?.expectedDeliveryDate,scheduledTime=remote.activityLog?.expectedDeliveryTime;
+    const scheduled=scheduledDate&&scheduledTime?scheduledDate+'T'+scheduledTime+'Z':null;
+    evidence.scheduledArrivalAt=scheduled&&Number.isFinite(Date.parse(scheduled))?new Date(scheduled).toISOString():null;
+    evidence.scheduledPickupAt=require('./shipday-dispatch').dispatchInstant(order.pickup_date,String(order.pickup_time||'').slice(0,5));
     let thirdPartyCollected=true;
     if(remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState) {
       const live=await provider.status(plan.shipday_order_id);
       thirdPartyCollected=['pickup_complete','delivered'].includes(live.status);
       evidence.driver=live.courier?.name||null;
       evidence.driverPhone=phone(live.courier?.phone);
+      evidence.assignmentVerified=Boolean(live.courier?.name && ['STARTED','ASSIGNED','pickup_complete','delivered'].includes(live.status));
     }
+    if(remote.orderStatus?.incomplete || remote.activityLog?.failedDeliveryTime ||
+      !['NOT_ASSIGNED','NOT_ACCEPTED','NOT_STARTED_YET','STARTED','PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED'].includes(status))evidence.assignmentVerified=false;
     const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now()));
     if(!order.pickup_date || order.pickup_date>today) return {...evidence,ok:false,reason:'delivery_future'};
     if(!COLLECTED.has(status) || remote.orderStatus?.incomplete || remote.activityLog?.failedDeliveryTime || !thirdPartyCollected) return {...evidence,ok:false,reason:'delivery_not_collected'};
