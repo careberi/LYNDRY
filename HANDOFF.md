@@ -1,3 +1,6 @@
+## 2026-09-28: enable Keen Hope POS domain
+Neil configured pos-dev.lyndry.com on Keen Hope and requested implementation, commit and push to dev. Recognize that hostname as the POS automatically for the known development database, regardless of NODE_ENV. Allow an explicit POS_HOST hostname override; retain pos.lyndry.com as the production default and pos.localhost for local work. Keep customer links on APP_BASE_URL, shared staff authorization, host-only cookies and existing child paths. Test host separation, login and actions. Independent review and Neil click-test pending.
+
 ## 2026-09-28: retire localhost ops URLs
 Neil requested removal of localhost:3000/ops and every child URL. Return HTTP 410 for all methods under /ops on the localhost website before staff handlers execute. Keep pos.localhost pages, authentication, actions and internal API aliases working through the shared handlers. This supersedes local legacy URL compatibility only; Railway and live host behavior are outside this change. No database, payment, messaging or dispatch changes. Regression tests required; independent review and Neil click-test pending.
 

@@ -1,5 +1,16 @@
 'use strict';
 
+function configuredPosHost(value, projectRef) {
+  // Railway's development service runs NODE_ENV=production too; its database
+  // identity selects the development hostname without another dashboard change.
+  const host = String(value || '').trim().toLowerCase() ||
+    (projectRef === 'psrphpgbiifvnlrgvbdg' ? 'pos-dev.lyndry.com' : 'pos.lyndry.com');
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(host)) {
+    throw new Error('POS_HOST must be a hostname without a protocol, port or path');
+  }
+  return host;
+}
+
 // Keep a single set of guarded ops routes. Only the public address changes;
 // the original /ops paths remain the internal contract for auth and the API.
 function publicPath(url) {
@@ -87,4 +98,4 @@ function posHost({ host = 'pos.lyndry.com', publicHost = 'lyndry.com', publicOri
     next();
   };
 }
-module.exports = { posHost, publicPath, htmlUrls };
+module.exports = { posHost, publicPath, htmlUrls, configuredPosHost };

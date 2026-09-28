@@ -119,7 +119,7 @@ const config = Object.freeze({
   // Switch legacy browser links only after the POS domain has working HTTPS.
   shipday: Object.freeze({ apiKey: process.env.SHIPDAY_API_KEY || '' }),
 
-  pos: Object.freeze({ host: 'pos.lyndry.com', redirectLegacy: process.env.POS_REDIRECT_LEGACY === 'true' }),
+  pos: Object.freeze({ host: require('./web/pos-host').configuredPosHost(process.env.POS_HOST, supabaseProjectRef), redirectLegacy: process.env.POS_REDIRECT_LEGACY === 'true' }),
 
   // The AI model is resolved a single time, at startup. Never try one model,
   // catch an error, and fall back to another per message.

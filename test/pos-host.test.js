@@ -3,7 +3,30 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
-const { posHost, publicPath, htmlUrls } = require('../src/web/pos-host');
+const { posHost, publicPath, htmlUrls, configuredPosHost } = require('../src/web/pos-host');
+
+test('POS hostname defaults follow database identity and accept an explicit hostname',()=>{
+  assert.equal(configuredPosHost('', 'psrphpgbiifvnlrgvbdg'), 'pos-dev.lyndry.com');
+  assert.equal(configuredPosHost('', 'pauaemlehenfrnjvgzmc'), 'pos.lyndry.com');
+  assert.equal(configuredPosHost(' POS-TEST.LYNDRY.COM ', ''), 'pos-test.lyndry.com');
+  for(const value of ['https://pos-dev.lyndry.com','pos-dev.lyndry.com/path','pos-dev.lyndry.com:3000','bad host']) assert.throws(()=>configuredPosHost(value,''),/POS_HOST/);
+});
+
+test('Railway development POS serves staff pages, login and actions on its own host',async t=>{
+  const host=configuredPosHost('', 'psrphpgbiifvnlrgvbdg');
+  const request=await fixture(t,{host,publicOrigin:'https://lyndry-production-de2c.up.railway.app'});
+  assert.match((await request('/',{host})).text,/href="\/customers"/);
+  assert.equal((await request('/customers',{host})).text,'<!doctype html><h1>Customers</h1>');
+  assert.equal((await request('/customers',{host:'lyndry-production-de2c.up.railway.app'})).text,'PUBLIC SITE');
+  assert.equal((await request('/customers',{host:host+'.attacker.test'})).text,'PUBLIC SITE');
+  assert.equal((await request('/customers',{host:'pos.localhost:3000'})).status,200);
+  const login=await request('/login',{host,method:'POST'});
+  assert.equal(login.headers.location,'/customers?note=saved');
+  assert.match(login.headers['set-cookie'][0],/Path=\/;/);
+  assert.doesNotMatch(login.headers['set-cookie'][0],/Domain=/);
+  const action=await request('/action',{host,method:'POST',body:'value=unchanged'});
+  assert.deepEqual(JSON.parse(action.text),{value:'unchanged',path:'/ops/action'});
+});
 
 async function fixture(t, options = {}) {
   const app = express();
