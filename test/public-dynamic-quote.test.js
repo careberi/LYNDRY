@@ -10,7 +10,7 @@ function fixture(){
  const chain={select(){return this;},lte(){return this;},order(){return this;},limit(){return {data:[{id:'policy',policy}]};}};
  const modules={
   '../db':{from(table){if(table==='dev_pricing_policies')return chain;if(table==='dev_order_quotes')return {insert(q){writes++;return {select(){return {single(){return {data:q};}};}};}};throw Error('Unexpected table '+table);}},
-  '../config':{config:{env:'development',supabase:{isProduction:false},shipday:{apiKey:'test'}}},
+  '../config':{config:{env:'development',supabase:{isProduction:false,isDevelopment:true},shipday:{apiKey:'test'}}},
   '../providers/couriers/shipday':{createClient:()=>shipdayClient},
   './public-courier-availability':require('../src/core/public-courier-availability'),
   './pricing-economics':economics,'./dynamic-order-pricing':dynamic,

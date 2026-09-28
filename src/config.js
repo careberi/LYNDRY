@@ -137,6 +137,9 @@ const config = Object.freeze({
     // catch. This one answers "are these rows real customers".
     projectRef: supabaseProjectRef,
     isProduction: supabaseIsProduction,
+    // Keen Hope runs production-mode Node against this development database.
+    // UI/checkout capabilities follow data identity, not Node's runtime mode.
+    isDevelopment: supabaseProjectRef === 'psrphpgbiifvnlrgvbdg',
   }),
 
   // Telnyx sends and receives the text messages. Nothing outside

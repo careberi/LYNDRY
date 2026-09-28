@@ -7,7 +7,7 @@ const orders = require('../core/orders');
 const auth = require('../core/admin-auth');
 const { config } = require('../config');
 const retiredPos = require('../web/retired-pos-pages');
-const shipdayWorkspace = config.env === 'development' && !config.supabase.isProduction;
+const shipdayWorkspace = config.supabase.isDevelopment;
 const { site } = require('../web/site');
 const { escapeHtml, logo, icon, CSS_BASE, ICON_LINKS } = require('../web/layout');
 const { normalisePhone, formatPhone } = require('../core/phone');

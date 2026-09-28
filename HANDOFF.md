@@ -1,3 +1,6 @@
+## 2026-09-28: hosted development POS parity
+Neil requested that Keen Hope's pos-dev.lyndry.com show the same POS as pos.localhost:3000. Use the exact known development database identity for POS navigation, pickup dispatch display, portal access/layout and development checkout eligibility, independent of NODE_ENV. Preserve production-mode HTTPS cookies and other runtime security behavior. Hosted portal administrator links use the configured POS host rather than localhost. Keep separate real courier mutation/worker gates unchanged so a presentation deployment does not activate another dispatch worker. No database migration or manual courier actions. Test both Node modes, production/unknown database exclusion and portal links; independent review and Neil click-test pending.
+
 ## 2026-09-28: enable Keen Hope POS domain
 Neil configured pos-dev.lyndry.com on Keen Hope and requested implementation, commit and push to dev. Recognize that hostname as the POS automatically for the known development database, regardless of NODE_ENV. Allow an explicit POS_HOST hostname override; retain pos.lyndry.com as the production default and pos.localhost for local work. Keep customer links on APP_BASE_URL, shared staff authorization, host-only cookies and existing child paths. Test host separation, login and actions. Independent review and Neil click-test pending.
 

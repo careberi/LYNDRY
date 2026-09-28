@@ -6,7 +6,7 @@ const dynamic = require('./dynamic-order-pricing');
 const { dispatchInstant } = require('./shipday-dispatch');
 const { createClient: createShipdayClient } = require('../providers/couriers/shipday');
 const courierAvailability = require('./public-courier-availability');
-const enabled = config.env === 'development' && !config.supabase.isProduction;
+const enabled = config.supabase.isDevelopment;
 const shipday = createShipdayClient({ apiKey: config.shipday.apiKey, allowWrites: false });
 function guard() { if (!enabled) throw Error('Development checkout is unavailable.'); }
 async function data(query) { const { data, error } = await query; if (error) throw error; return data; }

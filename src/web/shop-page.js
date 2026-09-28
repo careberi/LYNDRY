@@ -320,7 +320,7 @@ function page({
   notes = [],
   showProcessingGuide = true,
 }) {
-  const usePos = config.env === 'development' && !config.supabase.isProduction;
+  const usePos = config.supabase.isDevelopment;
   return opsShell({
     title,
     titleSuffix: shop ? shop.name : site.name,
@@ -386,7 +386,7 @@ function phoneStep({ lang = 'en', error = '', phone = '', next = '/shop', shop =
           ${s('textMeACode', lang)} ${icon('arrow-right', '22')}
         </button>
       </form>
-      ${config.env === "development" && !config.supabase.isProduction ? `<p style="margin-top:24px;"><a href="http://pos.localhost:${config.port}/${shop ? "partners/" + escapeHtml(shop.id) + "/portal" : "partners"}">Sign in as a LYNDRY administrator</a></p>` : ""}`,
+      ${config.supabase.isDevelopment ? `<p style="margin-top:24px;"><a href="${escapeHtml(new URL(config.baseUrl).hostname === 'localhost' ? 'http://pos.localhost:'+config.port : 'https://'+config.pos.host)}/${shop ? "partners/" + escapeHtml(shop.id) + "/portal" : "partners"}">Sign in as a LYNDRY administrator</a></p>` : ""}`,
   });
 }
 
