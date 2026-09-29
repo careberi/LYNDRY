@@ -227,7 +227,7 @@ const PAGES = [
           ],
           [
             'How do I pay?',
-            `Before your first pickup we text you a secure link to save a card. It is handled by Stripe, our payment processor. The card number never touches this website. Saving it does not charge it: nothing is taken when you book. Your laundry is weighed after we collect it, and that is the moment your card is charged.`,
+            `Before your first pickup we text you a secure link to save a card. It is handled by our payment processor. The card number never touches this website. Saving it does not charge it: nothing is taken when you book. Your laundry is weighed after we collect it, and that is the moment your card is charged.`,
           ],
           [
             'What if I need to cancel?',
@@ -587,7 +587,7 @@ function signupCardBlock() {
         <button type="submit" class="btn btn-ink btn-lg btn-full">Add a card</button>
       </form>
       <p style="font-size:14px;line-height:1.5;color:var(--ink-700);margin:14px 0 0;">
-        Handled by Stripe. The card number never touches this website. You can
+        Handled securely by our payment processor. The card number never touches this website. You can
         also add one later at ${site.domain}/account.
       </p>
     </div>`;

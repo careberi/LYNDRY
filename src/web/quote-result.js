@@ -225,7 +225,7 @@ function dynamicPriced(quote,address) {
     ${plan('Subscription pickup',subscription)}${plan('One-time pickup',one)}
     <p class="quote-address">No separate pickup or delivery charge. The operational fee is included in the minimum and estimated totals.</p>
     <p class="quote-address">Final weight determines your bill. Review and confirm your price when booking. Each subscription pickup receives its own quote.</p>
-    <p class="quote-address">Uber and DoorDash availability was checked through Shipday for both trips. Availability is checked again when you book. No driver is requested and no payment is collected here.</p>
+    <p class="quote-address">Pickup and return availability has been checked. Availability is checked again when you book. No driver is requested and no payment is collected here.</p>
     <a href="/account/login" class="btn btn-primary btn-lg btn-full quote-order-button">Place an order online</a>
     <a href="/pricing" class="quote-change-address">Change address</a>
   </div></section>`;

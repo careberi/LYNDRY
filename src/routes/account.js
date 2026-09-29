@@ -2182,7 +2182,7 @@ function cardStep({ customer, intent }) {
     </form>
 
     <p style="font-size:14px;line-height:1.55;color:var(--ink-500);margin:16px 0 0;">
-      Handled by Stripe, our payment provider. We never see the number.
+      Handled securely by our payment provider. We never see the number.
     </p>
   </div>
 
@@ -2255,7 +2255,7 @@ function repeatForm(given, estimate) {
     ? estimateView.planEstimate(estimate.categories[estimate.snapshot?.category === 'WHOLESALE' ? 'WHOLESALE' : category]) : '';
   const estimateNote = estimate ? '<p class="field-hint">' + (estimate.unavailable
     ? 'An address estimate is unavailable. Choose a pickup date and time to try again.'
-    : 'Preliminary estimates for your address. Shipday confirmed current Uber and DoorDash availability for both trips. We check again after you choose a pickup date and time.') + '</p>' : '';
+    : 'Preliminary estimates for your address. Pickup and return availability has been checked. We check again after you choose a pickup date and time.') + '</p>' : '';
   const chosen = String(given.plan || '');
   // HOW OFTEN, ASKED ON THE SAME SCREEN AS THE PLAN IT BELONGS TO.
   //
@@ -2740,7 +2740,11 @@ router.post('/account/book', async (req, res, next) => {
         if (form.price_consent !== 'yes') throw Error('Confirm the displayed prices to continue.');
         const approved = await checkout.approve(form.dev_quote_id,customer);
         if (approved.order_id) return res.redirect(303,'/account');
-      } catch (error) { return reshow('when',error.message); }
+      } catch (error) {
+        console.error('Could not validate booking quote:', error.message);
+        return reshow('when', require('../web/customer-copy').customerText(error.message,
+          'We could not verify this pickup right now. Please try again or contact LYNDRY.'));
+      }
     }
     // -----------------------------------------------------------------------
     // NO PAYMENT METHOD, NO ORDER. Neil's decision lock, 14 September.

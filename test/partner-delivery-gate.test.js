@@ -36,7 +36,7 @@ test('forged or stale acceptance POST repeats the provider check and cannot reac
 });
 test('locked portal does not render an accept form or spoofed success notice; verified intake is weight-only',()=>{
  const ctx={shop:{name:'Test'},lang:'en',csrf:'test',notice:'accept',order:{number:9015,stage:'INCOMING',canAccept:false,deliveryReason:'delivery_not_collected',reference:'LYNDRY #9015'}};
- const html=page.detail(ctx);assert.doesNotMatch(html,/Delivery accepted\.|action="[^\"]+\/accept"|name="weight_lb"/);assert.match(html,/Waiting for Shipday/);
+ const html=page.detail(ctx);assert.doesNotMatch(html,/Delivery accepted\.|action="[^\"]+\/accept"|name="weight_lb"|Shipday/);assert.match(html,/Waiting for pickup confirmation/);
  const intake=page.detail({...ctx,order:{...ctx.order,stage:'INCOMING',receivedVerified:true,canAccept:true}});
  assert.match(intake,/name="weight_lb"/);assert.doesNotMatch(intake,/tracking_number|internal ticket|Ticket &amp; weight/);
 });

@@ -5,6 +5,7 @@ const { opsNote } = require('./ops-shell');
 const { translator } = require('./laundromat-es');
 const { validIntake } = require('../core/partner-intake');
 const { posIcon } = require('./pos-layout');
+const { customerText } = require('./customer-copy');
 const labels = {
   INCOMING: ['Incoming deliveries', 'Entregas por llegar'],
   WASH: ['Ready to wash', 'Lista para lavar'],
@@ -13,12 +14,12 @@ const labels = {
 const messages = {
   return_requested: ['Return driver requested. Track collection below.', 'Conductor solicitado. Consulte la recogida abajo.'],
   return_pending: ['Laundry is ready, but the driver request needs attention. Refresh or contact LYNDRY.', 'La ropa esta lista, pero la solicitud necesita atencion. Actualice o contacte a LYNDRY.'],
-  return_not_collected: ['Shipday has not confirmed pickup by the assigned return driver yet. Refresh before confirming.', 'Shipday aun no confirma la recogida por el conductor asignado. Actualice antes de confirmar.'],
+  return_not_collected: ['Pickup by the assigned return driver has not been confirmed yet. Refresh before confirming.', 'Aun no se confirma la recogida por el conductor asignado. Actualice antes de confirmar.'],
   collected: ['Pickup confirmed. This order is now out for delivery.', 'Recogida confirmada. El pedido esta en reparto.'],
   delivery_future: ['This pickup is scheduled for a future day. Delivery cannot be accepted yet.', 'La recogida esta programada para otro dia. Aun no puede aceptar la entrega.'],
-  delivery_not_collected: ['Waiting for Shipday to confirm collection. Assignment or a driver heading to pickup is not enough.', 'Esperando que Shipday confirme la recogida. La asignacion del conductor no basta.'],
-  delivery_mismatch: ['The Shipday delivery does not match this order and laundromat. Contact LYNDRY.', 'La entrega de Shipday no coincide con este pedido y lavanderia. Contacte a LYNDRY.'],
-  delivery_unverified: ['Delivery cannot be verified with Shipday right now. Refresh to check again or contact LYNDRY.', 'No se puede verificar la entrega con Shipday. Actualice o contacte a LYNDRY.'],
+  delivery_not_collected: ['Waiting for pickup confirmation. Assignment or a driver heading to pickup is not enough.', 'Esperando confirmacion de la recogida. La asignacion del conductor no basta.'],
+  delivery_mismatch: ['The delivery does not match this order and laundromat. Contact LYNDRY.', 'La entrega no coincide con este pedido y lavanderia. Contacte a LYNDRY.'],
+  delivery_unverified: ['Delivery cannot be verified right now. Refresh to check again or contact LYNDRY.', 'No se puede verificar la entrega ahora. Actualice o contacte a LYNDRY.'],
   intake: ['Intake saved. Your wash instructions are below.', 'Registro guardado. Las instrucciones aparecen abajo.'],
   ready: ['Marked ready. LYNDRY will arrange the return collection.', 'Marcado como listo. LYNDRY organizara la recogida.'],
   office_review: ['Your intake is saved. Contact LYNDRY before releasing this order.', 'Su registro esta guardado. Contacte a LYNDRY antes de entregar este pedido.'],
@@ -62,7 +63,8 @@ function deliveryStatus(o,lang) {
 }
 function driver(o,lang) {
   const contact=phone(o.driverPhone);
-  return `<strong>${e(o.driver||say(lang,'Not assigned','Sin asignar'))}</strong>${contact?`<a class="shop-driver-call" href="tel:${e(contact)}">${e(say(lang,'Call driver','Llamar al conductor'))}</a>`:''}`;
+  const name = customerText(o.driver, o.assigned ? say(lang,'Assigned driver','Conductor asignado') : say(lang,'Not assigned','Sin asignar'));
+  return `<strong>${e(name)}</strong>${contact?`<a class="shop-driver-call" href="tel:${e(contact)}">${e(say(lang,'Call driver','Llamar al conductor'))}</a>`:''}`;
 }
 function eta(o,lang) {
   if(o.stage==='READY') {
@@ -131,7 +133,7 @@ function deliveryProof(o,lang) {
     const alt=say(lang,'Delivery photo','Foto de entrega')+' '+(i+1)+' · LYNDRY #'+o.number;
     return '<figure><a href="'+e(url)+'" target="_blank" rel="noopener" aria-label="'+e(alt)+'"><img src="'+e(url)+'" alt="'+e(alt)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.hidden=true;this.parentElement.nextElementSibling.hidden=false"><span>'+e(say(lang,'View full-size photo','Ver foto completa'))+'</span></a><p hidden>'+e(say(lang,'Photo unavailable. Refresh to try again.','Foto no disponible. Actualice para intentar de nuevo.'))+'</p></figure>';
   }).join('');
-  const empty=o.deliveryPhotoUnavailable?say(lang,'Delivery photo unavailable. Refresh to try again.','Foto de entrega no disponible. Actualice para intentar de nuevo.'):say(lang,'No delivery photo has been received from Shipday yet.','Aun no se ha recibido una foto de entrega de Shipday.');
+  const empty=o.deliveryPhotoUnavailable?say(lang,'Delivery photo unavailable. Refresh to try again.','Foto de entrega no disponible. Actualice para intentar de nuevo.'):say(lang,'No delivery photo has been received yet.','Aun no se ha recibido una foto de entrega.');
   return '<section class="card shop-delivery-proof" id="delivery-photo"><h2>'+e(say(lang,'Delivery photo','Foto de entrega'))+'</h2><p>'+e(say(lang,'Original bags delivered to this laundromat. Match them to this order at intake and collection.','Bolsas originales entregadas a esta lavanderia. Verifique el pedido al recibir y devolver.'))+'</p>'+(photos||'<p class="muted">'+e(empty)+'</p>')+'</section>';
 }
 function detail(ctx) {
@@ -151,7 +153,7 @@ function detail(ctx) {
       content+=`<h2>${e(say(lang,'Return collection','Recogida de vuelta'))}</h2>${o.assigned?courier(o,lang):`<p>${e(say(lang,'No return driver is assigned yet. Keep this order at the laundromat.','Aun no hay conductor asignado. Guarde el pedido en la lavanderia.'))}</p>`}<p>${e(say(lang,'Pickup ETA','ETA de recogida'))}: <strong>${e(eta(o,lang))}</strong></p>`;
       if(o.returnNeedsRequest)content+=form('request-return',button(say(lang,'Request return driver','Solicitar conductor')));
       else if(o.canCollect)content+=`<p>${e(say(lang,'Check the original delivery photo, then confirm the assigned driver collected this order.','Revise la foto original y confirme que el conductor asignado recogio este pedido.'))}</p>${form('collect',button(say(lang,'Confirm picked up','Confirmar recogida')))}`;
-      else content+=`<p>${e(say(lang,'Keep the bags here until the assigned driver collects them. Confirmation opens when Shipday records pickup.','Guarde las bolsas hasta que el conductor las recoja. La confirmacion se abre cuando Shipday registra la recogida.'))}</p><button class="btn btn-outline" disabled>${e(say(lang,'Awaiting confirmed pickup','Esperando recogida confirmada'))}</button>`;
+      else content+=`<p>${e(say(lang,'Keep the bags here until the assigned driver collects them. Confirmation opens when pickup is verified.','Guarde las bolsas hasta que el conductor las recoja. La confirmacion se abre cuando se verifica la recogida.'))}</p><button class="btn btn-outline" disabled>${e(say(lang,'Awaiting confirmed pickup','Esperando recogida confirmada'))}</button>`;
       content+=`<a class="btn btn-outline" href="/shop/orders/${o.number}?lang=${lang}">${e(say(lang,'Refresh collection status','Actualizar recogida'))}</a>`;
     }
   }

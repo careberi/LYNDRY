@@ -54,7 +54,7 @@ alternative in front of Neil:
   edits a customer by hand.
 - **Message 1 cut to two segments.** Neil rewrote it to four deliberately and
   chose to keep it as written.
-- **"Never say Stripe."** The one customer who baulked at Stripe never saw the
+- **Historical decision, superseded for website and laundromat portal copy by Neil on 29 September 2026 (see DECISIONS.md): "Never say Stripe."** The one customer who baulked at Stripe never saw the
   word in a text — she met it on the hosted card page. Neil had already asked
   for language that explains Stripe *before* that page; going quieter is the
   opposite of the fix.
