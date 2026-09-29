@@ -210,6 +210,7 @@ module.exports = { render, escapeHtml };
 
 function dynamicPriced(quote,address) {
   const one=quote.categories.ONE_TIME;
+  const subscription=quote.categories.SUBSCRIPTION;
   const plan=(name,p)=>`<div class="card card-xl quote-plan"><h3>${name}</h3><dl>
     <div><dt>Wash, dry &amp; fold</dt><dd>${money(p.rateCentsPerLb)}/lb</dd></div>
     <div><dt>Operational fee · once per order</dt><dd>${money(p.operationalFeeCents)}</dd></div>
@@ -217,11 +218,11 @@ function dynamicPriced(quote,address) {
     <div><dt>Estimated total · 30–40 lb</dt><dd>${money(p.estimated30LbCents)}–${money(p.estimated40LbCents)}</dd></div>
     </dl></div>`;
   return `<section class="container" style="padding-bottom:72px;"><div class="quote-column quote-pricing">
-    <p class="eyebrow quote-eyebrow">One-time wash, dry &amp; fold</p>
-    <h2 class="display-3 quote-rate-heading">${money(one.rateCentsPerLb)} per pound</h2>
+    <p class="eyebrow quote-eyebrow">Subscription wash, dry &amp; fold</p>
+    <h2 class="display-3 quote-rate-heading">${money(subscription.rateCentsPerLb)} per pound</h2>
     <p class="quote-address">${escapeHtml(address)}</p>
     ${quote.indicative ? '<p class="quote-address">Preliminary estimate for your address. Pickup date and time may change availability and pricing.</p>' : ''}
-    ${plan('One-time pickup',one)}${plan('Subscription pickup',quote.categories.SUBSCRIPTION)}
+    ${plan('Subscription pickup',subscription)}${plan('One-time pickup',one)}
     <p class="quote-address">No separate pickup or delivery charge. The operational fee is included in the minimum and estimated totals.</p>
     <p class="quote-address">Final weight determines your bill. Review and confirm your price when booking. Each subscription pickup receives its own quote.</p>
     <p class="quote-address">Uber and DoorDash availability was checked through Shipday for both trips. Availability is checked again when you book. No driver is requested and no payment is collected here.</p>

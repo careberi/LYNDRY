@@ -112,6 +112,7 @@ async function locate(customer) {
   if (!query) return null;
 
   const found = await throttled(() => lookup(query));
+  if(customer.order_address_override)return found;
 
   try {
     await db

@@ -16,7 +16,15 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const billing = require('../src/core/billing');
+const billing = (() => {
+  const filename = path.join(__dirname, '../src/core/billing.js');
+  const localRequire = require('node:module').createRequire(filename);
+  const module = { exports: {} };
+  const { config } = localRequire('../config');
+  require('node:vm').runInThisContext('(function(require,module){' + fs.readFileSync(filename, 'utf8') + '\n})')(
+    name => name === '../config' ? { config: { ...config, supabase: { ...config.supabase, isDevelopment: false } } } : localRequire(name), module);
+  return module.exports;
+})();
 const subscription = require('../src/core/subscription');
 
 const READ = (...bits) => fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');

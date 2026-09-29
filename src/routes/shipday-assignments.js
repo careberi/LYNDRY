@@ -47,6 +47,17 @@ function registerReturnDispatch(router,{guard,may},service=runtime,database=db){
 }
 function registerAdmin(router,{guard,may,adminPage}){
   registerReturnDispatch(router,{guard,may});
+  registerPickupDispatch(router,{guard,may});
+  router.post('/ops/orders/:id/details',guard,may('orders.override'),sameOrigin,async(req,res)=>{
+    const back='/ops/orders/'+encodeURIComponent(req.params.id);
+    try{
+      if(!require('../config').config.supabase.isDevelopment)throw Error('Order editing is available in development only.');
+      if(!/^\d+$/.test(String(req.params.id)))throw Error('Use an order number.');
+      const order=await runtime.result(db.from('orders').select('*,customers(*)').eq('order_number',req.params.id).single());
+      await require('../core/order-details-edit').save(order,req.body,req.opsUser);
+      res.redirect(303,back+'?done='+encodeURIComponent('Order details and pricing updated.'));
+    }catch(error){res.redirect(303,back+'?problem='+encodeURIComponent(error.message));}
+  });
   router.get('/ops/shipday/assignments',guard,may('orders.override'),async(req,res,next)=>{
     try{
       const [plans,drivers,settings]=await Promise.all([runtime.list(),runtime.provider.drivers(),runtime.settings()]);
@@ -75,4 +86,22 @@ function registerAdmin(router,{guard,may,adminPage}){
     try{if(!/^[a-f0-9-]{36}$/i.test(req.params.id))throw Error('Invalid assignment.');const driver=req.body?.driver;if(typeof driver!=='string'||driver.length>80)throw Error('Choose a driver.');const changed=await runtime.run(req.params.id,{mode:driver==='THIRD_PARTY'?'THIRD_PARTY':'IN_HOUSE',driverId:driver==='THIRD_PARTY'?null:driver,acceptCancellationFee:req.body.fees==='yes'},`staff:${req.opsUser.id}`);if(!changed.ok)throw Error(changed.reason);res.redirect(303,'/ops/shipday/assignments');}catch(e){fail(res,e);}
   });
 }
-module.exports={registerAdmin,registerReturnDispatch,returnDispatchCard};
+function registerPickupDispatch(router,{guard,may},service=require('../core/shipday-booking-runtime'),database=db){
+  router.post('/ops/orders/:id/dispatch-pickup',guard,may('orders.override'),sameOrigin,async(req,res)=>{
+    const back='/ops/orders/'+encodeURIComponent(req.params.id);
+    try{
+      if(!service.enabled)throw Error('Live pickup assignment is unavailable in this environment.');
+      if(!/^\d+$/.test(String(req.params.id)))throw Error('Use an order number.');
+      const order=await runtime.result(database.from('orders').select('*').eq('order_number',req.params.id).single());
+      if(order.status!=='REQUESTED')throw Error('Only a pickup awaiting collection can be assigned.');
+      const driver=String(req.body?.driver||'');
+      if(driver!=='THIRD_PARTY'&&!/^\d+$/.test(driver))throw Error('Choose a Shipday driver.');
+      const plan=await service.enqueue(order,{manual:true});
+      if(!plan)throw Error('This pickup is not eligible for Shipday dispatch.');
+      const result=await service.run(plan.id,{mode:driver==='THIRD_PARTY'?'THIRD_PARTY':'IN_HOUSE',driverId:driver==='THIRD_PARTY'?null:driver,acceptCancellationFee:req.body?.replace==='yes'},'staff:'+req.opsUser.id);
+      if(!result.ok)throw Error(result.reason||'Shipday assignment needs review.');
+      res.redirect(303,back+'?done='+encodeURIComponent('Shipday assignment updated.'));
+    }catch(error){res.redirect(303,back+'?problem='+encodeURIComponent(error.message));}
+  });
+}
+module.exports={registerAdmin,registerReturnDispatch,returnDispatchCard,registerPickupDispatch};

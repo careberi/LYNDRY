@@ -19,7 +19,7 @@ async function run(row) {
   if(plan.external_reference && plan.external_reference!==expected)throw Error('Development sync only updates linked LYNDRY-DEV deliveries.');
   const partnerId=order.partner_id||order.intended_partner_id;
   const partner=partnerId?await data(db.from('partners').select('*').eq('id',partnerId).single()):null;
-  await require('./shipday-order-sync').synchronize({provider,order,customer:order.customers,partner,plan});
+  await require('./shipday-order-sync').synchronize({provider,order,customer:require('./order-address').customerFor(order,order.customers),partner,plan});
  } catch(e) {problem=e.message || 'Shipday delivery update needs review.';}
  await data(db.rpc('finish_shipday_order_sync',{p_plan:row.plan_id,p_revision:row.revision,p_problem:problem}));
  if(order)await require('./order-events').record(order.id,{kind:'NOTE',summary:problem?'Shipday delivery update needs review: '+problem:'Shipday delivery details updated and verified',by:'system'});

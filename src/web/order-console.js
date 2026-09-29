@@ -840,7 +840,7 @@ function orderConsoleBody({
   // table existed, which is why paidTable() draws nothing without them rather
   // than inventing Card $0.
   paymentRows = [],
-  overviewHtml = '', dispatchHtml = '',
+  overviewHtml = '', dispatchHtml = '', shipdayWorkspace = false, cancellationHtml = '',
 }) {
   const n = order.order_number;
   const c = customer || {};
@@ -851,6 +851,7 @@ function orderConsoleBody({
 
   const thread = can.messages ? messagesForOrder(messages, order) : { rows: [], later: 0 };
   const actions = actionsFor(order, { tasks, can, exception, labels });
+  if(shipdayWorkspace)actions.also=actions.also.filter(action=>!['cancel','driver'].includes(action.key));
 
   const address = [c.address_line1, c.address_line2, c.city ? `${c.city} ${c.postal_code || ''}`.trim() : c.postal_code].filter(Boolean).join(', ');
   const title = can.customers ? c.name || 'Unknown' : address || `Order #${n}`;
@@ -895,22 +896,24 @@ function orderConsoleBody({
 
   return `<div class="console">
   <div class="crumb"><a href="/ops">Orders</a> / ${n}</div>
-  <div class="title-row"><h1>${escapeHtml(title)}</h1><span class="id">#${n}</span> ${chips(order, exception)}</div>
+  <div class="title-row"><h1>${escapeHtml(title)}</h1>${shipdayWorkspace&&cancellationHtml?'<button type="button" class="cbtn danger" commandfor="cancel-pickup-dialog" command="show-modal">Cancel pickup</button>':''}<span class="id">#${n}</span> ${chips(order, exception)}</div>
+  ${shipdayWorkspace&&cancellationHtml?'<dialog id="cancel-pickup-dialog" aria-label="Cancel pickup" style="max-width:640px;width:calc(100% - 40px);max-height:85vh;overflow:auto;border:1px solid #ccd5e5;border-radius:12px;padding:20px;"><form method="dialog"><button type="submit" class="cbtn">Close</button></form>'+cancellationHtml+'</dialog>':''}
 
   ${banner || ''}
   ${overviewHtml || ('<div class="order-summary">'+meta+'</div>')}
   ${dispatchHtml}
-  <details class="order-controls order-management">
+  ${shipdayWorkspace?toolbarHtml(order,actions,{...can,laundromats})+sideExtras+(can.money?cashForm(order,split,{money,can}):''):''}
+  ${shipdayWorkspace?'':`<details class="order-controls order-management">
     <summary>Manage pickup and assignments</summary>
     <div class="order-management-body">
       ${toolbarHtml(order, actions, { ...can, laundromats })}
       ${sideExtras}
       ${can.money ? cashForm(order, split, { money, can }) : ''}
     </div>
-  </details>
+  </details>`}
   ${overviewHtml ? "" : `<div class="order-intake">${intakeHtml}</div>`}
   ${stripHtml(exception)}
-  ${stageRail(order, events)}
+  ${shipdayWorkspace?'':stageRail(order, events)}
   <div class="layout order-detail-layout">
     <div>
       ${overviewHtml ? '' : '<h2>Bags</h2>'}

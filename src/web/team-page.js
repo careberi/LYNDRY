@@ -93,8 +93,18 @@ function shiftGrid(rows) {
     <div class="tm-shifts">${[1, 2, 3, 4, 5, 6, 0].map(row).join('')}</div>`;
 }
 
-function teamMemberBody({ person, isMe, hours = [], notice = null, problem = null, formatPhone }) {
-  const drives = roles.can(person, 'orders.drive');
+function staffRoles(shipdayWorkspace = false) {
+  return Object.entries(roles.ROLES).filter(([key]) => !shipdayWorkspace || key !== 'DRIVER')
+    .map(([key, role]) => [key, shipdayWorkspace && key === 'ADMIN'
+      ? { ...role, description: 'Full access to LYNDRY administration.' } : role]);
+}
+
+function staffRoleLabel(role, shipdayWorkspace = false) {
+  return shipdayWorkspace && role === 'DRIVER' ? 'Legacy access' : roles.labelFor(role);
+}
+
+function teamMemberBody({ person, isMe, hours = [], notice = null, problem = null, formatPhone, shipdayWorkspace = false }) {
+  const drives = !shipdayWorkspace && roles.can(person, 'orders.drive');
 
   return `
 <div style="max-width:720px;">
@@ -105,7 +115,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
       ${escapeHtml(person.name)}
     </h1>
     ${isMe ? '<span style="color:var(--ink-400);font-size:17px;">(you)</span>' : ''}
-    <span class="badge" style="background:${ROLE_TONE[person.role]};">${escapeHtml(roles.labelFor(person.role))}</span>
+    <span class="badge" style="background:${ROLE_TONE[person.role]};">${escapeHtml(staffRoleLabel(person.role, shipdayWorkspace))}</span>
     <span class="badge" style="background:${
       person.status === 'ACTIVE' ? 'var(--suds-300)' : 'var(--paper-200)'
     };">${escapeHtml(person.status)}</span>
@@ -149,13 +159,14 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
           isMe
             ? `<p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
                  <span class="badge" style="background:${ROLE_TONE[person.role]};">${escapeHtml(
-                   roles.labelFor(person.role)
+                   staffRoleLabel(person.role, shipdayWorkspace)
                  )}</span>
                  &nbsp; You cannot change your own role - demoting yourself out of
                  team management would lock the door behind you.
                </p>`
             : `<select class="select input-lg" id="f_role" name="role" style="width:100%;">
-                 ${Object.entries(roles.ROLES)
+                 ${shipdayWorkspace && person.role === 'DRIVER' ? '<option value="" selected disabled>Legacy access — choose a staff role</option>' : ''}
+                 ${staffRoles(shipdayWorkspace)
                    .map(
                      ([key, r]) =>
                        `<option value="${key}"${key === person.role ? ' selected' : ''}>${escapeHtml(
@@ -167,7 +178,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
         }
       </div>
 
-      <div class="field" style="margin-top:20px;">
+      ${shipdayWorkspace ? '' : `<div class="field" style="margin-top:20px;">
         <label class="field-label">On the route</label>
         ${
           person.role === 'ADMIN'
@@ -191,7 +202,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
                    Sales never drives.
                  </p>`
         }
-      </div>
+      </div>`}
 
       ${
         // Only for somebody on the route: it feeds the margin on their day, and
@@ -360,4 +371,4 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
 </div>`;
 }
 
-module.exports = { teamMemberBody, ROLE_TONE };
+module.exports = { teamMemberBody, ROLE_TONE, staffRoles, staffRoleLabel };

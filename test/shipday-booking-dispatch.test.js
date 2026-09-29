@@ -3,13 +3,63 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createBookingDispatcher,assignmentState}=require('../src/core/shipday-booking-dispatch');
 const {card,label}=require('../src/web/pickup-dispatch');
 const trip={externalId:'LYNDRY-DEV-9016-PICKUP',from:{line1:'1 Home St',city:'Fair Lawn',state:'NJ',postalCode:'07410'},to:{line1:'2 Shop St',city:'Paterson',state:'NJ',postalCode:'07514'},pickupReadyAt:'2026-09-28T20:00:00.000Z',dropoffDeadlineAt:'2026-09-28T21:00:00.000Z'};
+const inhouse={mode:'IN_HOUSE',driverId:'77',acceptCancellationFee:true};
+
+test('in-house assignment does not call third-party availability',async()=>{
+ const f=fixture({quoteError:true});await f.run('p',inhouse);
+ assert.equal(f.row().state,'ASSIGNED');assert.equal(f.calls.filter(c=>c[0]==='inhouse').length,1);
+});
+
+test('failed manual availability checks identify the step without promising an automatic retry',async()=>{
+ const f=fixture({quoteError:true});const result=await f.run('p',{mode:'THIRD_PARTY'});
+ assert.match(result.reason,/Uber\/DoorDash availability check \(HTTP 503\)/);
+ assert.match(result.reason,/Try Assign again/);assert.equal(f.calls.length,0);
+});
+test('manual in-house selection creates once and only confirms the driver after Shipday readback',async()=>{
+ const f=fixture();await f.run('p',inhouse,'staff:admin');assert.equal(f.row().state,'ASSIGNED');assert.equal(f.row().assigned_name,'LYNDRY');
+ await f.run('p',inhouse);f.advance();await f.run('p');assert.equal(f.calls.filter(c=>c[0]==='inhouse').length,1);assert.equal(f.calls.filter(c=>c[0]==='assign').length,0);
+ assert.ok(f.row().history.some(h=>h.actor==='staff:admin'));
+});
+test('pending in-house confirmation cannot dispatch a second driver',async()=>{
+ const f=fixture({unconfirmed:true});await f.run('p',inhouse);assert.equal(f.row().state,'REQUESTED');assert.equal(f.row().assigned_name,null);
+ await f.run('p',inhouse);assert.equal(f.row().state,'REVIEW');assert.equal(f.calls.filter(c=>c[0]==='inhouse').length,1);
+});
+test('third-party replacement requires consent and confirmed cancellation before in-house assignment',async()=>{
+ const f=fixture();await f.run('p');await f.run('p',{...inhouse,acceptCancellationFee:false});assert.equal(f.calls.filter(c=>c[0]==='cancel').length,0);
+ await f.run('p',inhouse);assert.equal(f.row().state,'ASSIGNED');assert.equal(f.row().assigned_name,'LYNDRY');
+ assert.ok(f.calls.findIndex(c=>c[0]==='cancel')<f.calls.findIndex(c=>c[0]==='inhouse'));
+});
+test('uncertain cancellation or assignment pauses further attempts',async()=>{
+ const f=fixture({cancelTimeout:true});await f.run('p');await f.run('p',inhouse);assert.equal(f.row().state,'REVIEW');assert.equal(f.calls.filter(c=>c[0]==='inhouse').length,0);
+ const g=fixture({inhouseTimeout:true});await g.run('p',inhouse);await g.run('p',inhouse);assert.equal(g.row().state,'REVIEW');assert.equal(g.calls.filter(c=>c[0]==='inhouse').length,1);
+});
+test('offline drivers, missing payment, foreign IDs and picked-up orders cannot be manually assigned',async()=>{
+ for(const options of [{offline:true},{block:true}]){const f=fixture(options);await f.run('p',inhouse);assert.equal(f.calls.length,0);}
+ const invalid=fixture();await invalid.run('p',{...inhouse,driverId:'pos-user-uuid'});assert.equal(invalid.calls.length,0);
+ const f=fixture();await f.run('p');f.options.remote={orderStatus:{orderState:'PICKED_UP'}};await f.run('p',inhouse);assert.equal(f.row().state,'REVIEW');assert.equal(f.calls.filter(c=>c[0]==='cancel').length,0);
+});
+test('authoritative failure overrides stale courier details and clears the old driver',async()=>{
+ const f=fixture();await f.run('p');f.advance();await f.run('p');f.options.remote={orderStatus:{orderState:'FAILED_DELIVERY'},assignedCarrier:null};f.options.statusError=true;f.advance();await f.run('p');
+ assert.equal(f.row().state,'REVIEW');assert.equal(f.row().assigned_name,null);assert.match(f.row().problem,/Pickup failed/);assert.equal(f.calls.filter(c=>c[0]==='assign').length,1);
+});
+test('pickup controls use Shipday drivers, preserve permissions and disclose real requests',()=>{
+ const plan={booking_dispatch:true,state:'PLANNED',mode:'THIRD_PARTY'};
+ const options={order:{order_number:9017},drivers:[{id:'77',name:'LYNDRY',isActive:true,isOnShift:true}],canAssign:true,enabled:true};
+ const html=card(plan,options);assert.match(html,/dispatch-pickup/);assert.match(html,/LYNDRY/);assert.match(html,/Automatic third-party assignment/);assert.match(html,/real driver/);
+ assert.doesNotMatch(card(plan,{...options,canAssign:false}),/<form/);assert.match(card(plan,{...options,enabled:false}),/disabled>Assign/);
+ const missing=card(null,options);assert.match(missing,/Awaiting dispatch/);assert.match(missing,/LYNDRY/);assert.match(missing,/dispatch-pickup/);assert.doesNotMatch(missing,/disabled>Assign|Status unavailable|View Shipday assignment/);
+});
 function fixture(options={}) {
   let time=Date.parse('2026-09-28T19:00:00Z'),row={id:'p',order_id:'o',booking_dispatch:true,simulation:false,leg:'TO_PARTNER',mode:'THIRD_PARTY',state:'PLANNED',version:0,history:[],dispatch_at:trip.pickupReadyAt,...options.row},checks=0;
   const calls=[];
   let remote=null;
   const store={get:async()=>structuredClone(row),claim:async old=>{if(old.version!==row.version||old.state!==row.state)return null;row={...row,state:'PROCESSING',version:row.version+1};return structuredClone(row);},save:async(old,patch,event)=>{if(old.version!==row.version)throw Error('Conflict');row={...row,...patch,version:row.version+1,history:[...row.history,event]};return structuredClone(row);}};
-  const provider={findOrders:async()=>options.existing?[{}]:remote?[remote]:[],
-    quote:async()=>({ok:true,options:options.noOffer?[]:[{service:'DoorDash',feeCents:750,pickupTime:trip.pickupReadyAt,deliveryTime:options.arrival||trip.dropoffDeadlineAt}]}),
+  const provider={findOrders:async()=>options.existing?[{}]:remote?[{...remote,...options.remote}]:[],
+    drivers:async()=>[{id:'77',name:'LYNDRY',isActive:true,isOnShift:!options.offline}],
+    assignDriver:async()=>{calls.push(['inhouse']);if(options.inhouseTimeout)throw Error('timeout');if(!options.unconfirmed)remote.assignedCarrier={id:77,name:'LYNDRY'};return {ok:true};},
+    cancel:async()=>{calls.push(['cancel']);if(options.cancelTimeout)throw Error('timeout');options.status={status:'canceled'};remote.assignedCarrier=null;return {ok:true};},
+    unassign:async()=>{calls.push(['unassign']);remote.assignedCarrier=null;return {ok:true};},
+    quote:async()=>{if(options.quoteError)throw Error('Shipday request failed (HTTP 503).');return {ok:true,options:options.noOffer?[]:[{service:'DoorDash',feeCents:750,pickupTime:trip.pickupReadyAt,deliveryTime:options.arrival||trip.dropoffDeadlineAt}]};},
     createOrder:async received=>{calls.push(['create',received]);remote={orderId:123,orderNumber:trip.externalId,restaurant:{address:'1 Home St, Fair Lawn, NJ, 07410'},customer:{address:'2 Shop St, Paterson, NJ, 07514'},activityLog:{expectedDeliveryDate:received.dropoffDeadlineAt.slice(0,10),expectedPickupTime:'20:00:00',expectedDeliveryTime:received.dropoffDeadlineAt.slice(11,19)},orderStatus:{orderState:'NOT_ASSIGNED'}};if(options.autoAssigned)remote.thirdPartyAssignedAnytime=true;if(options.createTimeout)throw Error('timeout');return {id:'123'};},
     assign:async(id,args)=>{calls.push(['estimate',id]);if(options.priceRefused)return {ok:false};if(options.estimateError)throw Error('quote unavailable');await args.beforeAssign();calls.push(['assign',id,args]);if(options.assignTimeout)throw Error('timeout');return {ok:true,status:'REQUESTED'};},
     status:async()=>{calls.push(['status']);if(options.statusError)throw Error('unavailable');return options.status||{status:'STARTED',courier:{name:'Alex'},trackingUrl:'https://example.com/track'};}};

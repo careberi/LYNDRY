@@ -55,7 +55,7 @@ const reports = require('../core/reports');
 const labelPdf = require('../core/label-pdf');
 const LABEL_LABEL = labelPdf.DEFAULT_LABEL;
 const { reportsBody } = require('../web/reports-page');
-const { teamMemberBody, ROLE_TONE } = require('../web/team-page');
+const { teamMemberBody, ROLE_TONE, staffRoles, staffRoleLabel } = require('../web/team-page');
 const loadout = require('../core/loadout');
 const { loadoutBody, loadWalkBody } = require('../web/loadout-page');
 // scanField and describeCodeFormat came out with pickupSequence and workCard -
@@ -1708,6 +1708,8 @@ router.post('/ops/orders/:id/sync-shipday',guard,may('orders.override'),require(
   }catch(e){next(e);}
 });
 require('./dev-journey-routes').registerAdmin(router, { guard, may, adminPage });
+require('./pricing-settings').registerAdmin(router, { guard, may, adminPage });
+require('./customer-pricing').registerAdmin(router, { guard, may });
 
 // ---------------------------------------------------------------------------
 // SCREENS THAT ONLY MEAN ANYTHING WHEN WE DO THE DRIVING.
@@ -2481,20 +2483,7 @@ function bagRow(order, l, total, canAct, done, parents = []) {
 // Behind messages.send: the people who may cause a text to reach somebody are
 // the people who may stop one. A driver has neither.
 function optOutControl(person, mayDo) {
-  if (!mayDo) return '';
-  const off = person.status === 'UNSUBSCRIBED';
-  return `<div class="card card-xl customer-texting">
-    <form method="post" action="/ops/customers/${escapeHtml(person.id)}/opt-out"
-      onsubmit="var note = window.prompt('Why did the customer ask to stop texts?'); if (!note || !note.trim()) return false; this.elements.note.value = note.trim().slice(0,200);">
-      <span id="texting-label" class="field-label">Text messages</span>
-      <input type="hidden" name="note" value="">
-      <button type="submit" class="texting-switch" role="switch" aria-labelledby="texting-label" aria-checked="${!off}" ${off ? 'disabled' : ''}>
-        <span class="texting-switch-track" aria-hidden="true"><span></span></span>
-        <span>${off ? 'Off' : 'On'}</span>
-      </button>
-    </form>
-    ${off ? '<p class="field-hint">The customer must text START to enable messages again.</p>' : ''}
-  </div>`;
+  return require('../web/customer-texting').optOutControl(person, mayDo);
 }
 
 // CALLING A PICKUP OFF, FROM THIS END.
@@ -2738,7 +2727,7 @@ function laundromatCard(order, mayPin, shops) {
     </div>`;
 }
 
-function cancelCard(order, mayCancel) {
+function cancelCard(order, mayCancel, expanded=false) {
   if (!mayCancel) return '';
   if (order.status === 'CANCELED') return '';
 
@@ -2756,7 +2745,7 @@ function cancelCard(order, mayCancel) {
   }
 
   return `
-  <details class="card" style="padding:0;margin-top:20px;">
+  <details ${expanded?'open':''} class="card" style="padding:0;margin-top:20px;">
     <summary style="padding:20px 24px;cursor:pointer;list-style:none;font-weight:700;font-size:16px;">
       Cancel this pickup
     </summary>
@@ -3219,7 +3208,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // settles a wash and returns early without a price, which a pickup that
       // has never been weighed does not have. Its own section carries id="hold".
       showMoney ? refusedHoldCard(order, can.override) : '',
-      orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
+      !shipdayWorkspace && orders.AWAITING_COLLECTION.includes(order.status) ? `<div id="cancel">${cancelCard(order, can.override)}</div>` : '',
       // WHO DOES EACH LEG. Neil, 25 September: "There also needs for me to
       // override a pickup/delivery manually so i can assign a in house driver
       // to it".
@@ -3231,13 +3220,13 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // ONLY WHILE THE ORDER IS LIVE. Past delivery there is nothing left to
       // decide, and a control that changes nothing is one somebody presses and
       // then rings up about.
-      can.override && stillRunning ? carrierCard(order) : '',
+      !shipdayWorkspace && can.override && stillRunning ? carrierCard(order) : '',
       // WHICH LAUNDROMAT IT GOES TO. Beside the carrier because they are the same
       // kind of decision - who does the work and where it is done - and both are
       // Admin only for the same reason: they are about the customer's order rather
       // than about a step in the round.
       !shipdayWorkspace && can.override && stillRunning ? laundromatCard(order, true, laundromats) : '',
-      can.customers && stillRunning
+      !shipdayWorkspace && can.customers && stillRunning
         ? `<h2>Driver</h2><div id="driver"><form method="post" action="/ops/orders/${order.order_number}/driver" style="margin:0;display:flex;gap:8px;flex-wrap:wrap;">
              <select name="driver_id" style="font:inherit;padding:4px 6px;border:1px solid #9ca3af;border-radius:3px;min-height:30px;">
                <option value=""${order.driver_id ? '' : ' selected'}>Nobody yet</option>
@@ -3270,11 +3259,15 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       }
       overviewHtml = require('../web/order-overview').orderOverview({order,customer:c,shop:destination,quote:revised,problem:priceProblem,deliverySync,
         canMoney:showMoney,canCustomer:can.customers,selector:can.override && stillRunning ? laundromatCard(order,true,laundromats) : ''});
+      if(can.override&&order.status==='REQUESTED')overviewHtml=require('../web/order-details-edit').editor(order,c)+overviewHtml;
     }
     let dispatchHtml = '';
     if(shipdayWorkspace && order.status==='REQUESTED') {
       const pickupPlan=await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg','TO_PARTNER').maybeSingle());
-      dispatchHtml=require('../web/pickup-dispatch').card(pickupPlan);
+      const pickupRuntime=require('../core/shipday-booking-runtime');
+      let pickupDrivers=[],driverProblem='';
+      if(can.override)try{pickupDrivers=await pickupRuntime.provider.drivers();}catch{driverProblem='Shipday driver list is unavailable. Reload to try again.';}
+      dispatchHtml=require('../web/pickup-dispatch').card(pickupPlan,{order,drivers:pickupDrivers,canAssign:can.override,enabled:pickupRuntime.enabled,driverProblem});
     }
     if (shipdayWorkspace && can.override && order.status === 'READY') {
       const dispatchRuntime = require('../core/shipday-dispatch-runtime');
@@ -3285,6 +3278,8 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       dispatchHtml = require('./shipday-assignments').returnDispatchCard({order,plan:returnPlan,drivers:dispatchDrivers,simulation:dispatchRuntime.simulation});
     }
     const body = orderConsoleBody({
+      shipdayWorkspace,
+      cancellationHtml:shipdayWorkspace && can.override && orders.isCancellable(order.status)?cancelCard(order,can.override,true):'',
       overviewHtml,
       dispatchHtml,
       order: consoleOrder,
@@ -4406,6 +4401,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
              offered to anybody and the refusal, if there is one, is a sentence
              on the next screen rather than a control that is missing here. -->
         <a href="/ops/customers/${person.id}/order" class="btn btn-primary btn-sm">Book a pickup</a>
+        ${require('./customer-pricing').control(person, roles.can(req.opsUser, 'service.manage'))}
       </div>
 
       ${
@@ -5098,7 +5094,7 @@ router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (re
     if (!note) {
       return res.redirect(
         303,
-        `${back}?problem=${encodeURIComponent('Say how they told you. It is the record that this was their decision.')}`
+        `${back}?problem=${encodeURIComponent('Enter how the customer asked to stop texts, such as by phone or email, then select Turn off text messages.')}`
       );
     }
 
@@ -5625,6 +5621,7 @@ router.post('/ops/orders/:id/cancel', guard, may('orders.override'), async (req,
 });
 
 router.post('/ops/orders/:id/driver', guard, may('customers.view'), async (req, res, next) => {
+  if(shipdayWorkspace)return res.status(409).send('Assign pickup drivers through Shipday in the Customer pickup card.');
   try {
     const order = await loadOrderForAction(req.params.id);
     if (!order) return notFoundPage(res, 'No order with that number.');
@@ -5893,6 +5890,7 @@ router.post('/ops/orders/:id/laundromat', guard, may('orders.override'), async (
 });
 
 router.post('/ops/orders/:id/carrier', guard, may('orders.override'), async (req, res, next) => {
+  if(shipdayWorkspace)return res.status(409).send('Assign pickup drivers through Shipday in the Customer pickup card.');
   try {
     const order = await loadOrderForAction(req.params.id);
     if (!order) return notFoundPage(res, 'No order with that number.');
@@ -10553,6 +10551,7 @@ router.get('/ops/admin', guard, withIssues, may('service.manage'), async (req, r
           orderCounts,
           leads: leadCounts,
           checkouts: unfinishedCheckouts,
+          shipdayWorkspace: config.supabase.isDevelopment,
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 200) : null,
         }),
@@ -12156,7 +12155,8 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
     if (error) throw error;
 
     // Their rotas, in one query rather than one per person.
-    const rota = await drivers.hoursForAll();
+    const shipdayWorkspace = config.supabase.isDevelopment;
+    const rota = shipdayWorkspace ? new Map() : await drivers.hoursForAll();
 
     // A LIST IS A LIST. Every control that used to be wedged into a row -
     // the role dropdown, the driving toggle, the switch-off button - now lives
@@ -12170,7 +12170,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         }`,
         escapeHtml(formatPhone(p.phone)),
         `<span class="badge" style="background:${ROLE_TONE[p.role]};">${escapeHtml(
-          roles.labelFor(p.role)
+          staffRoleLabel(p.role, shipdayWorkspace)
         )}</span>`,
         p.status === 'ACTIVE'
           ? '<span class="badge" style="background:var(--suds-300);">ACTIVE</span>'
@@ -12197,7 +12197,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
         p.last_login_at ? dateTime(p.last_login_at) : 'never',
         `<a class="btn btn-sm btn-outline" href="/ops/team/${p.id}">Edit</a>`,
       ];
-    });
+    }).map(row => shipdayWorkspace ? row.filter((_, i) => i !== 4 && i !== 5) : row);
 
     const body = `
       ${sectionHeading('Staff access', 'Team', (people || []).length).replace('<h2', '<h1').replace('</h2>', '</h1>')}
@@ -12210,7 +12210,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
           : ''
       }
       ${
-        req.query.based
+        req.query.based && !shipdayWorkspace
           ? `<div class="ops-note ops-note--good">
                <p style="font-size:16px;margin:0;">Base saved. Putting it on the map now - the
                route and the assignment start using it as soon as it lands.</p>
@@ -12232,7 +12232,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
           : ''
       }
 
-      ${table(['Name', 'Mobile', 'Role', 'Status', 'Driving', 'Home base', 'Last signed in', ''], rows)}
+      ${table(shipdayWorkspace ? ['Name', 'Mobile', 'Role', 'Status', 'Last signed in', ''] : ['Name', 'Mobile', 'Role', 'Status', 'Driving', 'Home base', 'Last signed in', ''], rows)}
 
       <div class="grid-2" style="align-items:start;margin-top:44px;">
 
@@ -12253,11 +12253,11 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
               <div class="field">
                 <label class="field-label" for="t_role">Role</label>
                 <select class="select input-lg" id="t_role" name="role">
-                  ${Object.entries(roles.ROLES)
+                  ${staffRoles(shipdayWorkspace)
                     .map(
                       ([key, r]) =>
                         `<option value="${key}"${
-                          key === roles.DEFAULT_ROLE ? ' selected' : ''
+                          key === (shipdayWorkspace ? 'SALES' : roles.DEFAULT_ROLE) ? ' selected' : ''
                         }>${escapeHtml(r.label)} — ${escapeHtml(r.description)}</option>`
                     )
                     .join('')}
@@ -12272,7 +12272,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
 
         <div class="card card-xl card-sunken" style="padding:28px;">
           ${sectionHeading('Reference', 'What each role sees')}
-          ${Object.entries(roles.ROLES)
+          ${staffRoles(shipdayWorkspace)
             .map(
               ([key, r]) => `
             <div style="padding:14px 0;border-bottom:1px solid var(--ink-100);">
@@ -12315,6 +12315,10 @@ router.post('/ops/team', guard, may('team.manage'), async (req, res, next) => {
     const role = roles.ROLES[String((req.body || {}).role || '')]
       ? String((req.body || {}).role)
       : roles.DEFAULT_ROLE;
+
+    if (config.supabase.isDevelopment && !staffRoles(true).some(([key]) => key === role)) {
+      return res.redirect(303, '/ops/team?error=' + encodeURIComponent('Choose an Admin or Sales staff role. In-house drivers are managed in Shipday.'));
+    }
 
     const { error } = await db.from('ops_users').insert({ name, phone, role, status: 'ACTIVE' });
 
@@ -12366,7 +12370,8 @@ router.get('/ops/team/:id', guard, withIssues, may('team.manage'), async (req, r
         body: teamMemberBody({
           person: { ...person, orderCount: orderCount || 0 },
           isMe: person.id === req.opsUser.id,
-          hours: await drivers.hoursFor(person.id),
+          hours: config.supabase.isDevelopment ? [] : await drivers.hoursFor(person.id),
+          shipdayWorkspace: config.supabase.isDevelopment,
           formatPhone,
           notice: req.query.note ? String(req.query.note).slice(0, 300) : null,
           problem: req.query.problem ? String(req.query.problem).slice(0, 300) : null,
@@ -12453,6 +12458,14 @@ router.post('/ops/team/:id', guard, may('team.manage'), async (req, res, next) =
     // door behind you on a tool with no other way in.
     const role = !isMe && roles.ROLES[String(body.role || '')] ? String(body.role) : person.role;
     const status = isMe ? 'ACTIVE' : String(body.active) === 'yes' ? 'ACTIVE' : 'DISABLED';
+
+    if (config.supabase.isDevelopment) {
+      if (!staffRoles(true).some(([key]) => key === role)) return refuse('Choose an Admin or Sales staff role. In-house drivers are managed in Shipday.');
+      // Staff edits do not change transport fields, routes or Shipday assignments.
+      const { error } = await db.from('ops_users').update({ name, phone, role, status }).eq('id', person.id);
+      if (error) return refuse(/duplicate|unique/i.test(error.message) ? 'Someone is already set up with that number.' : error.message);
+      return res.redirect(303, `${back}?note=Saved.`);
+    }
 
     // Only an admin has a driving choice. A driver drives by role; sales never
     // does. Changing somebody INTO a driver clears the flag, so it cannot sit

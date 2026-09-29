@@ -59,6 +59,13 @@ function money(cents) {
 // bag is on the scale. "Each order you confirm by text" is what ties an
 // individual charge back to a specific YES in the message log.
 function consentText() {
+  if (config.supabase.isDevelopment) {
+    return `You're authorizing ${site.legalName} to save this card and charge it for pickups you book. ` +
+      'Saving this card charges nothing. Your quote shows the laundry rate, operational fee, minimum and temporary card hold. ' +
+      'The hold may be a fixed amount, the order minimum, or the total at the 50 lb order limit, as shown before booking. ' +
+      'After weighing, we use the saved price to calculate your bill. The hold is applied to that bill, any unused amount is released, and any balance is charged to this card. ' +
+      'Cancel before collection and nothing is charged. Recurring pickups are covered too; you can skip or stop them. Reply STOP to stop texts.';
+  }
   // REWRITTEN 21 SEPTEMBER, and three sentences in it were wrong. Neil: "Update
   // the card page. Charge after we weigh at the door. Subscription is $1.80/lb.
   // Do not say there is no subscription." It said the card was charged "when we
@@ -943,7 +950,9 @@ function showUpCents() {
 // per-order exposure IS knowable at booking - a courier quote held against a
 // specific pickup, say - this is the one place that has to change.
 function holdFor(order) {
-  void order;
+  if (config.supabase.isDevelopment && order?.dev_quote_id && order.pricing_snapshot?.policy?.cardHold) {
+    return require('./card-hold-policy').amount(order.pricing_snapshot);
+  }
   return quote.holdCents();
 }
 

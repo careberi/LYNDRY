@@ -32,6 +32,17 @@ const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 const labelState = (l) => (l.released_at ? 'EXPIRED' : l.order_id ? 'IN_USE' : 'OUTSTANDING');
 
 const T = (s) => `2026-09-07T${s}-04:00`;
+test('Shipday order management retains cancellation and excludes team assignment',()=>{
+  const {orderConsoleBody}=require('../src/web/order-console');
+  const html=orderConsoleBody({order:{id:'o',order_number:9017,status:'REQUESTED',payment_status:'UNPAID'},customer:{},events:[],labels:[],messages:[],tasks:[],team:[],laundromats:[],limits:null,
+    can:{override:true,customers:true},view:'human',money,shortDate:String,labelState,shipdayWorkspace:true,
+    cancellationHtml:'<form action="/ops/orders/9017/cancel"><button>Cancel this pickup</button></form>',sideExtras:'<div>Other order details</div>'});
+  assert.match(html,/<h1>Unknown<\/h1><button[^>]*commandfor="cancel-pickup-dialog" command="show-modal">Cancel pickup/);
+  assert.match(html,/<dialog id="cancel-pickup-dialog"/);assert.match(html,/orders\/9017\/cancel/);
+  assert.doesNotMatch(html,/order-management|Manage pickup|Move to another driver/);
+  assert.doesNotMatch(html,/<div class="rail">/);
+  assert.match(html,/Other order details/);
+});
 const ev = (t, kind, summary, extra = {}) => ({ created_at: T(t), kind, summary, actor: 'Neil Perry', ...extra });
 
 // The spine of #1992's history, including the duplicates the store really holds.

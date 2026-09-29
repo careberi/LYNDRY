@@ -77,6 +77,7 @@ function adminDashboardBody({
   scheduled = {},
   leads = {},
   checkouts = 0,
+  shipdayWorkspace = false,
   notice,
   problem,
 }) {
@@ -121,6 +122,7 @@ ${banner(problem, 'bad')}
 <div class="ops-navigation-grid">
   ${[
     { href: '/ops/settings', eyebrow: 'Operations', title: 'Service status' },
+    ...(shipdayWorkspace ? [{ href: '/ops/pricing', eyebrow: 'Pricing', title: 'Pricing and card holds' }] : []),
     {
       href: '/ops/promotions',
       eyebrow: 'Offers',

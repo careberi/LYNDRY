@@ -20,23 +20,34 @@ function assignmentState(result) {
   }
   return 'REVIEW';
 }
+function orderResult(remote) {
+  const status=remote.orderStatus?.orderState;
+  if(['FAILED_DELIVERY','INCOMPLETE'].includes(status))return {status:'FAILED'};
+  if(['CANCELED','CANCELLED'].includes(status))return {status:'canceled'};
+  if(status==='ALREADY_DELIVERED')return {status:'delivered',courier:remote.assignedCarrier};
+  return null;
+}
 function createBookingDispatcher({store,provider,validate,now=Date.now}) {
-  async function run(id) {
+  async function run(id,override=null,actor='booking-dispatch') {
     const before = await store.get(id);
-    if (!before?.booking_dispatch || before.simulation || before.leg !== 'TO_PARTNER' || before.mode !== 'THIRD_PARTY' ||
+    if (!before?.booking_dispatch || before.simulation || before.leg !== 'TO_PARTNER' ||
+        (before.mode==='IN_HOUSE'&&!before.assignment_requested_at&&!override) ||
         !['PLANNED','BLOCKED','REQUESTED','ASSIGNED'].includes(before.state)) return {ok:false,reason:'Not eligible for automatic pickup dispatch.'};
-    if (before.next_attempt_at && Date.parse(before.next_attempt_at) > now()) return {ok:false,reason:'Retry scheduled.'};
+    if(override&&(!['THIRD_PARTY','IN_HOUSE'].includes(override.mode)||(override.mode==='IN_HOUSE'&&!/^\d+$/.test(String(override.driverId)))))return {ok:false,reason:'Choose a Shipday driver.'};
+    if (!override && before.next_attempt_at && Date.parse(before.next_attempt_at) > now()) return {ok:false,reason:'Retry scheduled.'};
     let plan = await store.claim(before);
     if (!plan) return {ok:false,reason:'Another dispatch attempt is processing.'};
     let uncertain = false;
+    let step = 'order and payment checks';
     const save = async (patch,event) => {
-      plan = await store.save(plan,patch,{event,actor:'booking-dispatch',at:new Date(now()).toISOString()});
+      plan = await store.save(plan,patch,{event,actor,at:new Date(now()).toISOString()});
     };
     const stop = async (state,problem,event='DISPATCH_BLOCKED') => {
       await save({state,problem,next_attempt_at:state==='BLOCKED'?new Date(now()+60000).toISOString():null},event);
       return {ok:false,reason:problem};
     };
     async function remoteOrder() {
+      step = 'Shipday order lookup';
       const rows = await provider.findOrders(plan.external_reference);
       if (!Array.isArray(rows) || rows.length !== 1 || !matches(rows[0],plan)) throw Error('Shipday order details do not match the scheduled pickup.');
       return rows[0];
@@ -45,15 +56,50 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
       const state = assignmentState(result);
       await save({state,assigned_name:['ASSIGNED','COMPLETED'].includes(state)?result.courier?.name||null:null,
         tracking_url:result.trackingUrl||null,
-        problem:state==='REVIEW'?'Shipday returned an unconfirmed delivery state. Check Shipday before retrying.':null,
+        problem:state==='REVIEW'?(result.status==='FAILED'?'Pickup failed in Shipday. Review the pickup before requesting another driver.':'Shipday returned an unconfirmed delivery state. Check Shipday before retrying.'):null,
         next_attempt_at:new Date(now()+30000).toISOString()},'SHIPDAY_STATUS_'+state);
       return {ok:state!=='REVIEW',state};
     }
+    async function status(remote) {
+      const terminal=orderResult(remote);
+      if(terminal)return terminal;
+      if(plan.mode==='IN_HOUSE')return {status:remote.assignedCarrier?.id&&String(remote.assignedCarrier.id)===String(plan.driver_id)?'ASSIGNED':'REQUESTED',courier:remote.assignedCarrier};
+      return provider.status(plan.shipday_order_id);
+    }
     try {
-      if (['REQUESTED','ASSIGNED'].includes(before.state) || plan.assignment_requested_at) {
+      if(override) {
+        const checked=await validate(plan);
+        if(!checked.ok||!checked.canAssign)return stop(before.state,checked.reason||'Payment checks must pass before assignment.');
+        step = 'Shipday driver lookup';
+        if(override.mode==='IN_HOUSE'&&!(await provider.drivers()).some(d=>String(d.id)===String(override.driverId)&&d.isActive&&d.isOnShift))return stop(before.state,'The selected Shipday driver is inactive or offline.');
+        if(plan.shipday_order_id) {
+          let remote=await remoteOrder();
+          if(orderResult(remote))return recordAssignment(orderResult(remote));
+          if(plan.mode==='IN_HOUSE'&&plan.assignment_requested_at&&!remote.assignedCarrier?.id)return stop('REVIEW','The previous Shipday driver request is not confirmed. Reconcile it before assigning again.');
+          if(!['NOT_ASSIGNED','NOT_ACCEPTED','NOT_STARTED_YET','STARTED'].includes(remote.orderStatus?.orderState)||remote.activityLog?.pickedUpTime)return stop('REVIEW','Pickup may have started. Resolve it in Shipday before reassigning.');
+          const thirdParty=plan.mode==='THIRD_PARTY'&&(plan.assignment_requested_at||remote.thirdPartyAssignedAnytime||remote.dOrderState);
+          if(thirdParty||remote.assignedCarrier?.id) {
+            if(plan.mode===override.mode&&(override.mode==='THIRD_PARTY'||String(remote.assignedCarrier?.id)===String(override.driverId)))return recordAssignment(await status(remote));
+            if(!override.acceptCancellationFee)return stop(before.state,'Confirm replacement of the current driver and possible cancellation charges.');
+            if(thirdParty) {
+              const live=await provider.status(plan.shipday_order_id);
+              if(!['REQUESTED','STARTED','ASSIGNED'].includes(live.status))return stop('REVIEW','Courier state does not allow safe replacement. Check Shipday.');
+            }
+            uncertain=true;
+            const released=thirdParty?await provider.cancel(plan.shipday_order_id):await provider.unassign(plan.shipday_order_id);
+            if(!released?.ok)throw Error('Release unconfirmed');
+            if(thirdParty&&!['canceled','CANCELED','CANCELLED'].includes((await provider.status(plan.shipday_order_id)).status))throw Error('Cancellation unconfirmed');
+            remote=await remoteOrder();
+            if(remote.assignedCarrier?.id||!['NOT_ASSIGNED','NOT_ACCEPTED','NOT_STARTED_YET'].includes(remote.orderStatus?.orderState))throw Error('Driver release not confirmed');
+            await save({assigned_name:null,assignment_requested_at:null,tracking_url:null},'DRIVER_RELEASE_CONFIRMED');
+            uncertain=false;
+          }
+        }
+        await save({mode:override.mode,driver_id:override.mode==='IN_HOUSE'?String(override.driverId):null},'ASSIGNMENT_SELECTED');
+      }
+      if (!override && (['REQUESTED','ASSIGNED'].includes(before.state) || plan.assignment_requested_at)) {
         // An accepted request is only polled. It must never reach assign again.
-        await remoteOrder();
-        return await recordAssignment(await provider.status(plan.shipday_order_id));
+        return await recordAssignment(await status(await remoteOrder()));
       }
       let checked = await validate(plan);
       if (!checked.ok) return stop(plan.shipday_order_id?'REVIEW':'BLOCKED',checked.reason);
@@ -61,11 +107,15 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
         return stop('REVIEW','Pickup details changed. Review the existing Shipday job before dispatch.');
       }
       if (!plan.shipday_order_id) {
+        step = 'Shipday order lookup';
         const existing = await provider.findOrders(checked.trip.externalId);
         if (!Array.isArray(existing)) throw Error('Shipday reference lookup unavailable.');
         if (existing.length) return stop('REVIEW','This pickup reference already exists in Shipday. Reconcile it before requesting a driver.');
         const latest=await validate(plan);
         if(!latest.ok || !sameTrip(latest.trip,checked.trip))return stop('BLOCKED',latest.reason||'Booking changed before scheduling. Checking again shortly.');
+        // An in-house Shipday driver does not depend on an Uber/DoorDash offer.
+        if(plan.mode==='THIRD_PARTY') {
+        step = 'Uber/DoorDash availability check';
         const quote=await provider.quote(checked.trip);
         const offer=quote.options?.find(row=>['uber','doordash'].includes(row.service.toLowerCase()) &&
           row.feeCents<=checked.budgetCents && !row.requiresFeeReview &&
@@ -75,18 +125,23 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
           (!checked.acceptEstimate||checked.acceptEstimate(row)));
         if(!offer)return stop('BLOCKED','No confirmed Uber or DoorDash service fits the pickup time, laundromat hours and saved budget. Retrying shortly.');
         checked.trip.dropoffDeadlineAt=new Date(offer.deliveryTime).toISOString();
+        } else if(checked.acceptEstimate && !checked.acceptEstimate({deliveryTime:checked.trip.dropoffDeadlineAt})) {
+          return stop('BLOCKED','The in-house arrival target falls outside laundromat hours. Choose an earlier pickup time.');
+        }
         if(checked.trip.dropoffDeadlineAt.slice(0,10)!==checked.trip.pickupReadyAt.slice(0,10))return stop('REVIEW','This pickup crosses the Shipday UTC scheduling boundary. Dispatch review is required.');
         await save({trip_snapshot:checked.trip,external_reference:checked.trip.externalId},'PICKUP_PREPARED');
         const beforeCreate=await validate(plan);
         if(!beforeCreate.ok||!sameTrip(beforeCreate.trip,plan.trip_snapshot))return stop('BLOCKED',beforeCreate.reason||'Booking changed before scheduling. Checking again shortly.');
         uncertain = true;
+        step = 'Shipday job creation';
         const created = await provider.createOrder(checked.trip);
         await save({shipday_order_id:String(created.id)},'SHIPDAY_ORDER_CREATED');
         uncertain = false;
       }
       const remote = await remoteOrder();
+      if(orderResult(remote))return recordAssignment(orderResult(remote));
       // Account-side automation or manual assignment may have acted first.
-      if (remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState) {
+      if (!override && (remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState)) {
         await save({assignment_requested_at:new Date(now()).toISOString()},'EXISTING_COURIER_REQUEST');
         return await recordAssignment(await provider.status(plan.shipday_order_id));
       }
@@ -96,6 +151,17 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
       checked = await validate(plan);
       if (!checked.ok || !sameTrip(checked.trip,plan.trip_snapshot)) return stop('REVIEW',checked.reason||'Pickup details changed before assignment.');
       if (!checked.canAssign) return stop('BLOCKED',checked.reason||'Waiting for payment authorization before requesting a courier.');
+      if(plan.mode==='IN_HOUSE') {
+        await save({assignment_requested_at:new Date(now()).toISOString()},'IN_HOUSE_REQUEST_STARTED');
+        uncertain=true;
+        step = 'Shipday in-house assignment';
+        const assigned=await provider.assignDriver(plan.shipday_order_id,plan.driver_id);
+        if(!assigned?.ok)throw Error('Assignment unconfirmed');
+        const result=await recordAssignment(await status(await remoteOrder()));
+        uncertain=false;
+        return result;
+      }
+      step = 'Uber/DoorDash assignment';
       const assigned = await provider.assign(plan.shipday_order_id,{maxFeeCents:checked.budgetCents,
         pickupReadyAt:checked.trip.pickupReadyAt,trip:checked.trip,requirePin:false,leaveAtDoor:false,
         acceptEstimate:checked.acceptEstimate,
@@ -114,15 +180,15 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
     } catch (error) {
       // A crash after claim is also reconciled by the recovery worker, never replayed.
       const requested = uncertain || plan.assignment_requested_at;
-      if (['REQUESTED','ASSIGNED'].includes(before.state) && !uncertain) {
+      if (['REQUESTED','ASSIGNED'].includes(before.state) && !uncertain && !override) {
         await save({state:before.state,problem:'Live Shipday status is temporarily unavailable. Checking again shortly.',next_attempt_at:new Date(now()+30000).toISOString()},'STATUS_UNAVAILABLE');
         return {ok:false,reason:'Status unavailable.'};
       }
       return stop(requested?'REVIEW':'BLOCKED',requested?
         'Shipday request outcome is uncertain. Check the existing reference in Shipday; automatic retries are paused.':
-        'Dispatch checks could not be completed. No new courier request was sent. Retrying shortly.','DISPATCH_CHECK_FAILED');
+        `Could not complete ${step}${/HTTP \d{3}/.exec(String(error.message)) ? ' ('+/HTTP \d{3}/.exec(String(error.message))[0]+')' : ''}. No new driver request was sent. ${override?'Try Assign again.':'Automatic dispatch will retry when enabled.'}`,'DISPATCH_CHECK_FAILED');
     }
   }
   return {run};
 }
-module.exports={createBookingDispatcher,assignmentState,matches};
+module.exports={createBookingDispatcher,assignmentState,matches,orderResult};

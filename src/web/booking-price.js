@@ -36,10 +36,11 @@ function review(quote, carriedFields) {
           <div><dt>Minimum charge<span>Includes the operational fee</span></dt><dd>${money(p.minimumTotalCents)}</dd></div>
         </dl>
         <p class="field-hint">Final weight determines your bill using the order’s per-pound rate, operational fee and minimum.</p>
+        ${p.policy?.cardHold ? `<p><strong>Temporary card hold: ${money(require('../core/card-hold-policy').amount(p))}.</strong> This is held, not charged, and is applied toward your final bill. Any unused hold is released.</p>` : ''}
         <form method="post" action="/account/book" id="wizard">
           ${carriedFields}
           <input type="hidden" name="step" value="quote"><input type="hidden" name="dev_quote_id" value="${escapeHtml(quote.id)}">
-          <p class="field-hint">By continuing, you confirm the per-pound rate, operational fee and minimum charge shown above.</p>
+          <p class="field-hint">By continuing, you confirm the per-pound rate, operational fee and minimum charge${p.policy?.cardHold ? ', and authorize the temporary card hold' : ''} shown above.</p>
           <button class="btn btn-primary btn-lg btn-full" type="submit" name="price_consent" value="yes">Confirm price and continue {{ICON_ARROW}}</button>
           <button class="btn btn-full" name="back" value="when" formnovalidate>Change pickup</button>
         </form>

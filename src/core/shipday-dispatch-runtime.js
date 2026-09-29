@@ -39,7 +39,7 @@ async function validate(plan){
   const partner=await result(db.from('partners').select('*').eq('id',partnerId).single());
   if(partner.status!=='ACTIVE')return {ok:false,reason:'The selected laundromat is inactive.'};
   const addressOf=require('./courier-legs').addressOf;
-  const customer=order.customers;
+  const customer=require('./order-address').customerFor(order,order.customers);
   if(!customer?.phone)return {ok:false,reason:'Both pickup and delivery contacts need phone numbers.'};
   const home=addressOf(customer,{name:customer.name,phone:customer.phone,notes:order.dropoff_spot});
   const shop=addressOf(partner,{name:partner.name,phone:'+12017712933',notes:'LYNDRY order #'+order.order_number+'. Match this reference with the laundromat attendant.'});

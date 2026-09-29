@@ -32,7 +32,8 @@ function payload(order, customer, partner, plan, remote) {
   if (pickup) {
     const at = dispatchInstant(order.pickup_date, String(order.pickup_time || '').slice(0,5));
     if (!at) throw Error('A valid customer-selected pickup date and time are required.');
-    const delivery = new Date(Date.parse(at) + 60 * 60 * 1000).toISOString();
+    const delivery = plan.booking_dispatch && plan.trip_snapshot?.dropoffDeadlineAt
+      ? plan.trip_snapshot.dropoffDeadlineAt : new Date(Date.parse(at) + 60 * 60 * 1000).toISOString();
     body.expectedDeliveryDate = delivery.slice(0,10);
     body.expectedPickupTime = at.slice(11,19);
     body.expectedDeliveryTime = delivery.slice(11,19);

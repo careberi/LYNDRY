@@ -24,6 +24,17 @@ function fixture(){
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../src/core/dev-checkout.js'),'utf8'),context);
  return {service:context.module.exports,writes:()=>writes,modules,shipdayClient};
 }
+test('wholesale customer receives wholesale quote for either booking plan',async()=>{
+ const f=fixture(),customer={id:'customer',pricing_category:'WHOLESALE',address_line1:'Test',city:'Test',postal_code:'07452'};
+ for(const plan of ['ONE_TIME','SUBSCRIPTION']) {
+  const quote=await f.service.createQuote(customer,{pickup_date:'2030-01-01',pickup_time:'12:00',plan});
+  assert.equal(quote.snapshot.category,'WHOLESALE');
+  assert.equal(quote.snapshot.policy.marginBps.WHOLESALE,500);
+ }
+ const standard=await f.service.createQuote({...customer,pricing_category:'ONE_TIME'},{pickup_date:'2030-01-01',pickup_time:'12:00',plan:'SUBSCRIPTION'});
+ assert.equal(standard.snapshot.category,'SUBSCRIPTION');
+});
+
 test('public preview shares checkout terms and creates no quote or order record',async()=>{
  const f=fixture(),customer={id:'customer',address_line1:'Test',city:'Test',postal_code:'07452'},form={pickup_date:'2030-01-01',pickup_time:'12:00',plan:'ONE_TIME'};
  const preview=await f.service.previewQuote(customer,form,{publicPreview:true});assert.equal(f.writes(),0);

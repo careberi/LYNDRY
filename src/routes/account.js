@@ -2252,7 +2252,7 @@ function planChoice({ value, title, price, blurb, checked, children = '' }) {
 function repeatForm(given, estimate) {
   const estimateView = require('../web/booking-price');
   const planEstimate = category => estimate && !estimate.unavailable
-    ? estimateView.planEstimate(estimate.categories[category]) : '';
+    ? estimateView.planEstimate(estimate.categories[estimate.snapshot?.category === 'WHOLESALE' ? 'WHOLESALE' : category]) : '';
   const estimateNote = estimate ? '<p class="field-hint">' + (estimate.unavailable
     ? 'An address estimate is unavailable. Choose a pickup date and time to try again.'
     : 'Preliminary estimates for your address. Shipday confirmed current Uber and DoorDash availability for both trips. We check again after you choose a pickup date and time.') + '</p>' : '';
