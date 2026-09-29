@@ -79,8 +79,21 @@ test('AND IT IS WRITTEN ONTO THE ORDER, which is what makes cancelling safe', ()
   // anything checks for that case, but because nothing afterwards can reach it.
   const src = withoutComments(SRC('core', 'orders.js'));
 
-  assert.match(src, /price_per_lb_cents: subscription\.rateForCents\(subscriptionId\)/);
+  // WRAPPED SINCE 29 SEPTEMBER, NOT REPLACED. A wholesale account has an agreed
+  // rate that beats both of these, so create() hands the answer through
+  // wholesale.rateForBooking() - which returns the second argument untouched
+  // for everybody who is not on one. What this assertion is about is that
+  // rateForCents(subscriptionId) is still the only thing choosing between
+  // $2.00 and $1.80, and that it is still handed THIS pickup's plan.
+  assert.match(src, /wholesale\.rateForBooking\(\s*customer,\s*subscription\.rateForCents\(subscriptionId\)/);
   assert.match(src, /subscription_id: subscriptionId \|\| null/);
+
+  // And nothing else in the file decides a rate.
+  assert.equal(
+    (src.match(/subscription\.rateForCents\(/g) || []).length,
+    1,
+    'orders.js works the rate out in more than one place'
+  );
 
   // And nothing anywhere rewrites a rate on an existing order except the one
   // deliberate line that prices a new subscription's first pickup.

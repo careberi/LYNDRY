@@ -108,7 +108,7 @@ test('NEITHER DOOR PRICES ANYTHING ITSELF', () => {
 
   assert.match(
     SRC('core', 'orders.js'),
-    /price_per_lb_cents: subscription\.rateForCents\(subscriptionId\)/,
+    /price_per_lb_cents: wholesale\.rateForBooking\(\s*customer,\s*subscription\.rateForCents\(subscriptionId\)/,
     'create() stopped pricing off the plan'
   );
 });

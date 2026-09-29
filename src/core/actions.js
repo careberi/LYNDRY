@@ -9,6 +9,7 @@ const issues = require('./issues');
 const lyn = require('./lyn');
 const recurring = require('./recurring');
 const subscription = require('./subscription');
+const wholesale = require('./wholesale');
 const settings = require('./settings');
 const wash = require('./wash');
 const geocode = require('./geocode');
@@ -189,8 +190,21 @@ async function createOrder(customer, input, helpers = null) {
         ? `This one is on us up to ${result.freeUpToLb} lb - anything over that is ` +
           `${perPound}, charged after we weigh it. `
         : `This one is on us, so there is nothing to pay. `
-      : `Nothing gets taken now - it's ${perPound} with a ` +
-        `${billing.money(config.pricing.minimumCents)} minimum, charged after we weigh it. `;
+      : // THE MINIMUM COMES OFF THE ORDER, not off config, so a wholesale
+        // pickup booked with no minimum is not quoted a $25.00 floor it will
+        // never be charged. Null on an order taken before the column existed,
+        // which still means the configured one.
+        `Nothing gets taken now - it's ${perPound}${
+          (result.order && result.order.minimum_cents != null
+            ? Number(result.order.minimum_cents)
+            : config.pricing.minimumCents) > 0
+            ? ` with a ${billing.money(
+                result.order && result.order.minimum_cents != null
+                  ? Number(result.order.minimum_cents)
+                  : config.pricing.minimumCents
+              )} minimum`
+            : ''
+        }, charged after we weigh it. `;
 
     return (
       `${booking.whenLine(result.order)} it is. One thing first: we need a card on ` +
@@ -905,9 +919,21 @@ async function saveDetails(customer, input, helpers = null) {
     );
   }
 
+  // THEIR RATE, NOT THE PUBLISHED ONE. No order exists yet at this beat, so it
+  // is read off the customer - a wholesale account has an agreed rate and no
+  // minimum, and quoting $2.00 with a $25.00 floor to somebody who is billed
+  // $1.00 a pound is the first thing they would read and the first thing they
+  // would correct.
+  // billing.money() rather than subscription.perPound(), which already ends in
+  // "a pound" and would have read "$1.00 a pound a pound" here.
+  const rate = wholesale.isWholesale(updated)
+    ? billing.money(wholesale.rateCentsFor(updated))
+    : site.pricePerLb;
+  const floor = wholesale.minimumCentsFor(updated);
+
   return (
-    `You're all set, ${first}! ${site.pricePerLb} a pound with a ` +
-    `${billing.money(config.pricing.minimumCents)} minimum, back the ${site.turnaround}. ` +
+    `You're all set, ${first}! ${rate} a pound` +
+    `${floor > 0 ? ` with a ${billing.money(floor)} minimum` : ''}, back the ${site.turnaround}. ` +
     `When would you like your first pickup?`
   );
 }

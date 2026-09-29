@@ -153,7 +153,7 @@ test('and the nightly pass hands the plan down to the order it books', () => {
   assert.match(orders, /subscription_id: subscriptionId \|\| null/, 'create stopped writing it');
   assert.match(
     orders,
-    /price_per_lb_cents: subscription\.rateForCents\(subscriptionId\)/,
+    /price_per_lb_cents: wholesale\.rateForBooking\(\s*customer,\s*subscription\.rateForCents\(subscriptionId\)/,
     'create stopped pricing off the plan'
   );
 

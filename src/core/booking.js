@@ -1144,6 +1144,11 @@ async function bookPickup(
 
   const order = await orders.create({
     customerId: customer.id,
+
+    // The row itself as well, because the rate this pickup is booked at can
+    // depend on the customer - a wholesale account has one of its own. Handed
+    // over rather than looked up again inside create().
+    customer,
     // What they are set up with RIGHT NOW, frozen onto this order. Changing
     // their account later moves the default for next time and leaves this
     // order alone - which is the whole point of storing it here.
@@ -1521,7 +1526,18 @@ function confirmationMessage(
   // customer reasonably reads "charged to your Visa" as "already charged", and
   // then reads the weigh text an hour later as a second bill.
   const card = billing.describeCard(customer);
-  const minimum = billing.money(config.pricing.minimumCents);
+  // THE MINIMUM IS READ OFF THE ORDER, NOT OFF CONFIG, for exactly the reason
+  // the rate above it is: a wholesale account is booked with no minimum at all,
+  // and a confirmation quoting $25.00 at somebody who will be billed 15 lb at
+  // $1.00 is the system promising a floor it is not going to charge. An order
+  // taken before minimum_cents existed carries null, which still means the
+  // configured one.
+  const minimumCents =
+    order.minimum_cents != null ? Number(order.minimum_cents) : config.pricing.minimumCents;
+
+  // "It's $1.00 a pound with a $0.00 minimum" is worse than saying nothing, so
+  // the clause disappears rather than printing a zero.
+  const withMinimum = minimumCents > 0 ? ` with a ${billing.money(minimumCents)} minimum` : '';
 
   // READ OFF THE ORDER, never passed in. Both doors send this message and so
   // does the card-saved webhook, and a flag three callers have to remember is
@@ -1571,10 +1587,10 @@ function confirmationMessage(
         // charge appearing on somebody's statement with nothing explaining it
         // is a phone call at best and a chargeback at worst. Kept to one clause
         // because this message is already at its segment ceiling.
-        ` It's ${perPound} with a ${minimum} minimum. We hold ${billing.money(heldCents)} on your ${card} to confirm, and take the real total off it at your door.`
+        ` It's ${perPound}${withMinimum}. We hold ${billing.money(heldCents)} on your ${card} to confirm, and take the real total off it at your door.`
     : card
-    ? ` It's ${perPound} with a ${minimum} minimum. We weigh it after pickup, text you the total, and take it off your ${card} then.`
-    : ` It's ${perPound} with a ${minimum} minimum. We weigh it after pickup and text you the total before anything is taken.`;
+    ? ` It's ${perPound}${withMinimum}. We weigh it after pickup, text you the total, and take it off your ${card} then.`
+    : ` It's ${perPound}${withMinimum}. We weigh it after pickup and text you the total before anything is taken.`;
 
   const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
 

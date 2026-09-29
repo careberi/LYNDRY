@@ -9,6 +9,7 @@ const settings = require('./settings');
 const promotions = require('./promotions');
 const recurring = require('./recurring');
 const subscription = require('./subscription');
+const wholesale = require('./wholesale');
 const lyn = require('./lyn');
 const orders = require('./orders');
 const format = require('./format');
@@ -1068,6 +1069,24 @@ function customerContext(customer, order, recentMessages, recentOrders, openIssu
     // So it is not in the prose any more. check_slot writes it down and this
     // reads it back, the same way the pickup windows and the weekday are
     // computed and handed over rather than left to be worked out.
+    // AN AGREED RATE BEATS THE LOCKED FACTS, AND THE MODEL HAS TO BE TOLD.
+    //
+    // THE FACTS, LOCKED says $2.00 a pound, $1.80 on a plan and a $25 minimum,
+    // because that is true of everybody the model normally talks to. A
+    // wholesale account is none of those, and a model that has been handed a
+    // block headed LOCKED will quote it - so their own rate goes in the notes
+    // about THEM, where a fact about one customer belongs.
+    //
+    // It says the discount rule too. Lyn is handed a held promotion's blurb and
+    // may repeat it once; on a wholesale account nothing comes off, and
+    // announcing 50% to somebody who will be billed the full wholesale rate is
+    // a promise the pricing code refuses to keep.
+    wholesale.isWholesale(customer)
+      ? `WHOLESALE ACCOUNT. ${wholesale.describe(customer)} This beats the rates and the ` +
+        `minimum in THE FACTS, LOCKED - never quote those to them, and never offer or ` +
+        `mention a discount, an offer or a promotion. If they ask what it costs, their ` +
+        `rate is the answer.`
+      : 'Ordinary pricing: the rates and minimum in THE FACTS, LOCKED apply.',
     pendingPickupLine(customer.pending_pickup),
     // THE SAME TEST THE INTAKE TABLE DRAWS BETWEEN EXPLICIT AND DEFAULT.
     // booking.hasPreferences() rather than "is water_temp set", which let an

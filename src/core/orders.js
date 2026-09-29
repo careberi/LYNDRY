@@ -5,6 +5,7 @@ const { config } = require('../config');
 // The one owner of which rate a pickup is booked at. Pure and standalone - it
 // reads config and nothing else - so this is a safe top-level require.
 const subscription = require('./subscription');
+const wholesale = require('./wholesale');
 // Required lazily inside the function that uses it: order-events reads db
 // only, but orders is required by half of core/ and a top-level require
 // here is one more edge in that graph for one call site.
@@ -231,6 +232,11 @@ async function create({
   // here just writes down what it was handed.
   placedVia,
   placedBy,
+
+  // THE CUSTOMER ROW, not just their id, because the rate depends on it. Only
+  // bookPickup() calls this and it has the row in hand already; loading it
+  // again here would be a second query for a fact the caller is holding.
+  customer = null,
 }) {
   const { data, error } = await db
     .from('orders')
@@ -293,8 +299,17 @@ async function create({
       // reads the ORDER's plan rather than the customer's, which is the whole
       // of "an extra pickup does not get the subscription rate just because
       // they also subscribe".
-      price_per_lb_cents: subscription.rateForCents(subscriptionId),
-      minimum_cents: config.pricing.minimumCents,
+      //
+      // AND A WHOLESALE ACCOUNT BEATS BOTH. Neil, 29 September: an agreed rate
+      // on the customer is what they pay on every order, plan or no plan, and
+      // it carries no minimum with it - see src/core/wholesale.js, which is the
+      // only place that is decided. Snapshotted here like everything else, so
+      // agreeing a different rate next year never re-prices this pickup.
+      price_per_lb_cents: wholesale.rateForBooking(
+        customer,
+        subscription.rateForCents(subscriptionId)
+      ),
+      minimum_cents: wholesale.minimumCentsFor(customer),
     })
     .select('*, customers(*)')
     .single();

@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../db');
+const wholesale = require('./wholesale');
 // For the price per pound. The free allowance is a weight the customer is told
 // and a money cap the code enforces, and one has to be derived from the other.
 const { config } = require('../config');
@@ -403,6 +404,18 @@ async function full(promo) {
 async function claimSlot(customerId, orderId) {
   if (!customerId || !orderId) return null;
 
+  // A WHOLESALE ACCOUNT TAKES NO SLOT, and it matters that this is checked
+  // HERE rather than only at pricing. The cap is "the first 20 orders", so a
+  // wholesale pickup quietly holding one of them would take a free order away
+  // from a real new customer and never spend it - the slot is claimed at
+  // booking and only released by a cancellation.
+  const { data: buyer } = await db
+    .from('customers')
+    .select('wholesale_rate_cents')
+    .eq('id', customerId)
+    .maybeSingle();
+  if (wholesale.isWholesale(buyer)) return null;
+
   const held = await heldBy(customerId);
   const capped = held.filter((p) => p.max_orders && !p.claimedOrderId);
   if (!capped.length) return null;
@@ -682,7 +695,18 @@ async function heldBy(customerId) {
 // $30" cannot be answered - and the honest thing on a board is to show the
 // promotion they are holding rather than hide one that probably applies.
 // Nobody knows yet, us included.
-function usableOn(held, { order, delivered = 0, priceCents = null }) {
+function usableOn(held, { order, delivered = 0, priceCents = null, customer = null }) {
+  // A WHOLESALE ACCOUNT TAKES NOTHING OFF, and this is the one place both the
+  // money and the board ask. Neil, 29 September: the agreed rate IS the deal,
+  // so CLEAN50 landing on top of $1.00 a pound would make it $0.50 - below
+  // what the wash costs us, decided by nobody.
+  //
+  // IT DOES NOT WITHDRAW THE GRANT. What they hold is still on their account
+  // and still shown on the promotions screen, because a promise made to
+  // somebody is not something to delete quietly. It simply never comes off a
+  // price, which is the rule rather than the record.
+  if (wholesale.isWholesale(customer)) return [];
+
   return held.filter((p) => {
     // FIRST_ORDER means their first DELIVERED order, counted by the caller.
     if (p.applies_to === 'FIRST_ORDER' && (delivered || 0) > 0) return false;
@@ -726,7 +750,7 @@ async function discountFor(customer, order, priceCents) {
     .eq('status', 'DELIVERED')
     .neq('id', order.id);
 
-  const usable = usableOn(held, { order, delivered, priceCents });
+  const usable = usableOn(held, { order, delivered, priceCents, customer });
   if (!usable.length) return null;
 
   // The one worth the most to them. If two are somehow held, the customer gets
@@ -790,6 +814,20 @@ async function expectedForMany(orders = []) {
   if (error) throw error;
   if (doneError) throw doneError;
 
+  // WHICH OF THESE ARE WHOLESALE. One query for the whole board, the same shape
+  // as the delivered count above it - a board can carry thirty orders and this
+  // runs on every page load. Without it the board would promise a discount that
+  // usableOn() is going to refuse, which is the screen and the till disagreeing
+  // about somebody's bill.
+  const { data: buyers, error: buyerError } = await db
+    .from('customers')
+    .select('id, wholesale_rate_cents')
+    .in('id', customerIds);
+  if (buyerError) throw buyerError;
+
+  const byId = {};
+  for (const row of buyers || []) byId[row.id] = row;
+
   const deliveredBy = {};
   for (const row of done || []) {
     deliveredBy[row.customer_id] = (deliveredBy[row.customer_id] || 0) + 1;
@@ -820,7 +858,7 @@ async function expectedForMany(orders = []) {
     // A DELIVERED order of their own does not count against itself.
     const delivered = Math.max(0, (deliveredBy[order.customer_id] || 0) - (order.status === 'DELIVERED' ? 1 : 0));
 
-    const usable = usableOn(held, { order, delivered });
+    const usable = usableOn(held, { order, delivered, customer: byId[order.customer_id] || null });
     if (!usable.length) continue;
 
     // No price yet, so "the one worth the most" cannot be worked out in money.

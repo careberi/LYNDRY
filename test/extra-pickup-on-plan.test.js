@@ -77,7 +77,7 @@ test('THE EXTRA PICKUP IS PRICED BY THE PLAN, NOT BY THE CUSTOMER', () => {
 
 test('and orders.create is still the only thing that writes a rate', () => {
   const orders = withoutComments(SRC('core', 'orders.js'));
-  assert.match(orders, /price_per_lb_cents: subscription\.rateForCents\(subscriptionId\)/);
+  assert.match(orders, /price_per_lb_cents: wholesale\.rateForBooking\(\s*customer,\s*subscription\.rateForCents\(subscriptionId\)/);
   assert.match(orders, /subscription_id: subscriptionId \|\| null/);
 });
 

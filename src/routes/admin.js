@@ -15,6 +15,7 @@ const throttle = require('../core/throttle');
 const roles = require('../core/roles');
 const booking = require('../core/booking');
 const subscription = require('../core/subscription');
+const wholesale = require('../core/wholesale');
 const billing = require('../core/billing');
 const format = require('../core/format');
 const pitchLink = require('../core/pitch-link');
@@ -2769,6 +2770,64 @@ function extraPickupCard(customer, schedules, { back = '', mayBook = false } = {
   </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// AN AGREED RATE, ON THE PROFILE, WHERE SOMEBODY CAN SEE IT AND CHANGE IT.
+//
+// Neil, 29 September, about Bris Avrohom: a wholesale account charged $1.00 a
+// pound on every order. THE RULE IS INVISIBLE WITHOUT THIS. It is one nullable
+// column, so a deploy proves nothing about who is on it - the same thing
+// CLAUDE.md records about the promotion audience lever, which shipped as a
+// button and changed nothing at all until somebody pressed it. A rate only a
+// script can set is a rate only whoever writes the scripts can set.
+//
+// BEHIND money.view, because it shows what somebody is charged, and posting
+// needs service.manage - agreeing a price is the same kind of decision as
+// giving money away, which is Admin only. A driver sees none of it.
+function wholesaleCard(customer, { maySee = false, maySet = false } = {}) {
+  if (!customer || !maySee) return '';
+
+  const cents = wholesale.rateCentsFor(customer);
+
+  // THE SENTENCE IS wholesale.describe()'s, not this page's. A screen with its
+  // own wording is a second copy of the rule, and the copy that disagrees is
+  // the one nobody notices - which is why a test refuses one here.
+  const now = cents
+    ? `<p style="margin:6px 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);">
+         <strong>${escapeHtml(wholesale.describe(customer))}</strong>
+         Orders already booked keep the rate they were booked at.
+       </p>`
+    : `<p style="margin:6px 0 18px;font-size:15px;line-height:1.6;color:var(--ink-700);">
+         Ordinary pricing: ${escapeHtml(subscription.oneTimeRate())} a pound,
+         ${escapeHtml(subscription.subscriptionRate())} on a plan, with a
+         ${escapeHtml(billing.money(config.pricing.minimumCents))} minimum.
+       </p>`;
+
+  if (!maySet) return `
+  <div class="card card-xl" style="padding:28px;">
+    ${sectionHeading('Pricing', cents ? 'Wholesale account' : 'Standard rates')}
+    ${now}
+  </div>`;
+
+  return `
+  <div class="card card-xl" style="padding:28px;">
+    ${sectionHeading('Pricing', cents ? 'Wholesale account' : 'Standard rates')}
+    ${now}
+
+    <form method="post" action="/ops/customers/${escapeHtml(customer.id)}/rate" style="margin:0;">
+      <label class="field-label" for="rate">Agreed rate per pound</label>
+      <input class="input input-lg" type="text" id="rate" name="rate" inputmode="decimal"
+             value="${cents ? escapeHtml((cents / 100).toFixed(2)) : ''}"
+             placeholder="1.00" style="width:100%;margin-bottom:6px;">
+      <p style="font-size:13px;color:var(--ink-500);line-height:1.55;margin:0 0 16px;">
+        Leave it empty to put them back on the standard rates. It only changes
+        what their NEXT pickup is booked at - nothing already booked moves.
+      </p>
+
+      <button class="btn btn-primary btn-lg btn-full" type="submit">Save the rate</button>
+    </form>
+  </div>`;
+}
+
 function cancelCard(order, mayCancel) {
   if (!mayCancel) return '';
   if (order.status === 'CANCELED') return '';
@@ -4534,6 +4593,11 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           mayBook: roles.can(req.opsUser, 'orders.override'),
         })}
 
+        ${wholesaleCard(person, {
+          maySee: roles.can(req.opsUser, 'money.view'),
+          maySet: roles.can(req.opsUser, 'service.manage'),
+        })}
+
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading('Wash', 'Preferences')}
           ${detail('Temperature', escapeHtml(prefs.water_temp || 'COLD'))}
@@ -5026,6 +5090,80 @@ router.post(
     }
   }
 );
+
+// POST /ops/customers/:id/rate - agree a wholesale rate, or take one away
+//
+// service.manage, the same line Promotions and the text blast already draw:
+// setting what somebody pays is a decision about money, not a step in the
+// round. An empty box puts them back on the standard rates rather than needing
+// a second button, because "no agreed rate" is what null already means.
+//
+// IT IS NEVER RETROACTIVE AND THE PAGE SAYS SO. Every order snapshots its rate
+// and its minimum at booking, so this changes the next pickup and leaves every
+// one already taken exactly as it was sold - which is the rule this codebase
+// keeps everywhere and the reason cancelling a subscription is safe.
+router.post('/ops/customers/:id/rate', guard, may('service.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id)) return next();
+
+    const back = `/ops/customers/${req.params.id}`;
+    const typed = String((req.body || {}).rate || '').trim().replace(/^\$/, '');
+
+    const { data: person } = await db
+      .from('customers')
+      .select('id, name, wholesale_rate_cents')
+      .eq('id', req.params.id)
+      .maybeSingle();
+
+    if (!person) return next();
+
+    const was = wholesale.rateCentsFor(person);
+
+    // EMPTY MEANS STANDARD RATES, and it is the only way back off wholesale.
+    let cents = null;
+    if (typed) {
+      if (!/^\d+(\.\d{1,2})?$/.test(typed)) {
+        return res.redirect(
+          303,
+          `${back}?problem=${encodeURIComponent('Write the rate as dollars a pound, like 1.00.')}`
+        );
+      }
+      cents = Math.round(Number(typed) * 100);
+      if (!cents) {
+        return res.redirect(
+          303,
+          `${back}?problem=${encodeURIComponent('A rate of zero is free laundry with a price on it. Leave it empty to go back to the standard rates.')}`
+        );
+      }
+    }
+
+    if (cents === was) {
+      return res.redirect(303, `${back}?done=${encodeURIComponent('That was already their rate.')}`);
+    }
+
+    const { error } = await db
+      .from('customers')
+      .update({ wholesale_rate_cents: cents })
+      .eq('id', person.id);
+    if (error) throw error;
+
+    console.log(
+      `${(req.opsUser && req.opsUser.name) || 'staff'} set ${person.id} to ` +
+        `${cents ? `${cents}c a pound` : 'standard rates'} (was ${was ? `${was}c` : 'standard'})`
+    );
+
+    return res.redirect(
+      303,
+      `${back}?done=${encodeURIComponent(
+        cents
+          ? `${billing.money(cents)} a pound from their next pickup. Nothing already booked has moved.`
+          : 'Back on the standard rates from their next pickup.'
+      )}`
+    );
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.post('/ops/customers/:id/opt-out', guard, may('messages.send'), async (req, res, next) => {
   try {
