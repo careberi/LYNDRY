@@ -823,7 +823,24 @@ async function expectedForMany(orders = []) {
     .from('customers')
     .select('id, wholesale_rate_cents')
     .in('id', customerIds);
-  if (buyerError) throw buyerError;
+
+  // IT REFUSES TO GUESS, AND IT DOES NOT TAKE THE BOARD DOWN WITH IT.
+  //
+  // This is the only query here that can fail for a reason that is not "the
+  // database is down": the column arrives in a migration, and a deploy that
+  // lands before it would otherwise throw on every load of the orders board -
+  // the main screen of the business, broken by a forecast column.
+  //
+  // Nor may it fail OPEN. Reading the error as "nobody is wholesale" would put
+  // CLEAN50 on the board beside a pickup the till is going to refuse it on,
+  // which is the screen and the till disagreeing about what somebody owes.
+  //
+  // So it answers with no predictions at all and says so in the log. A blank
+  // column is a visible nothing; a wrong one is somebody quoting it.
+  if (buyerError) {
+    console.error(`Could not tell which customers are wholesale: ${buyerError.message}`);
+    return {};
+  }
 
   const byId = {};
   for (const row of buyers || []) byId[row.id] = row;
