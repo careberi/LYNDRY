@@ -4,6 +4,7 @@ const db = require('../db');
 const booking = require('./booking');
 const orders = require('./orders');
 const subscription = require('./subscription');
+const wholesale = require('./wholesale');
 const { sendAndLog } = require('./notify');
 
 // ---------------------------------------------------------------------------
@@ -588,7 +589,8 @@ async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadenc
   const plan = schedules[0];
 
   if (plan && plan.id) {
-    const rate = subscription.subscriptionCents();
+    // Starting a subscription must keep an account's agreed wholesale rate.
+    const rate = wholesale.rateForBooking(customer, subscription.subscriptionCents());
 
     const { error } = await db
       .from('orders')
