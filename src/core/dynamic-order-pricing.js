@@ -20,6 +20,7 @@ function quoteCandidates(candidates, { policy, category, now = Date.now() }) {
     wholesaleCentsPerLb: winner.wholesaleCentsPerLb,
     pickupCents: winner.pickupCents, returnCents: winner.returnCents,
     source: winner.source, expiresAt: winner.expiresAt,
+    ...(winner.arrivalChecks?{arrivalChecks:winner.arrivalChecks}:{}),
     comparisons: ranked.map(row => ({ partnerId: row.id, totalCents: row.estimatedReferenceTotalCents })),
   };
 }

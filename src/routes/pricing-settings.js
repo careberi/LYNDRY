@@ -13,7 +13,8 @@ function updatedPolicy(current, form, actor) {
     if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw Error('Enter each margin percentage with no more than two decimal places.');
     return [key, Math.round(Number(value) * 100)];
   }));
-  const result = { ...current, marginBps, cardHold: holds.fromForm(form), changedBy: actor };
+  const loadingBufferMinutes=require('../core/pickup-timing').bufferMinutes(form.loading_buffer_minutes??current.loadingBufferMinutes??10);
+  const result = { ...current, marginBps, cardHold: holds.fromForm(form), loadingBufferMinutes, changedBy: actor };
   delete result.version;
   for (const key of economics.CATEGORIES) economics.validatePolicy(result, key);
   return result;
@@ -34,7 +35,7 @@ function settingsBody(policy, { notice = '', problem = '' } = {}) {
         <label>Hold amount<select name="hold_mode">${[['FIXED','Fixed dollar amount'],['MINIMUM','Order minimum total'],['MAXIMUM','Order maximum total (50 lb)']].map(([value,label]) => `<option value="${value}"${hold.mode === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
         <label>Fixed amount ($)<input name="hold_fixed" type="number" min="0.50" max="10000" step="0.01" value="${hold.fixedCents == null ? '' : (hold.fixedCents / 100).toFixed(2)}"></label>
         <p>Fixed amount is used only when selected. Minimum and maximum use each order’s saved price, including its operational fee.</p>
-      </section><button class="btn btn-primary">Save pricing and card holds</button>
+      </section><section class="card card-xl"><h2>In-house pickup timing</h2><label>Loading buffer (minutes)<input name="loading_buffer_minutes" type="number" min="0" max="120" step="1" value="${policy.loadingBufferMinutes??10}" required></label><p>Added to estimated travel time for new quotes. Existing orders retain their quoted buffer.</p></section><button class="btn btn-primary">Save pricing and card holds</button>
     </form>`;
 }
 

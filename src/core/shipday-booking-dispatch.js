@@ -34,6 +34,8 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
         (before.mode==='IN_HOUSE'&&!before.assignment_requested_at&&!override) ||
         !['PLANNED','BLOCKED','REQUESTED','ASSIGNED'].includes(before.state)) return {ok:false,reason:'Not eligible for automatic pickup dispatch.'};
     if(override&&(!['THIRD_PARTY','IN_HOUSE'].includes(override.mode)||(override.mode==='IN_HOUSE'&&!/^\d+$/.test(String(override.driverId)))))return {ok:false,reason:'Choose a Shipday driver.'};
+    if(override?.arrivalLocal&&override.mode!=='IN_HOUSE')return {ok:false,reason:'Manual arrival is only available for an in-house driver.'};
+    if(override?.arrivalLocal&&before.shipday_order_id)return {ok:false,reason:'This Shipday job already has an arrival time. Edit its pickup details before changing that time.'};
     if (!override && before.next_attempt_at && Date.parse(before.next_attempt_at) > now()) return {ok:false,reason:'Retry scheduled.'};
     let plan = await store.claim(before);
     if (!plan) return {ok:false,reason:'Another dispatch attempt is processing.'};
@@ -125,11 +127,23 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
           (!checked.acceptEstimate||checked.acceptEstimate(row)));
         if(!offer)return stop('BLOCKED','No confirmed Uber or DoorDash service fits the pickup time, laundromat hours and saved budget. Retrying shortly.');
         checked.trip.dropoffDeadlineAt=new Date(offer.deliveryTime).toISOString();
-        } else if(checked.acceptEstimate && !checked.acceptEstimate({deliveryTime:checked.trip.dropoffDeadlineAt})) {
-          return stop('BLOCKED','The in-house arrival target falls outside laundromat hours. Choose an earlier pickup time.');
+        } else {
+          const timing=require('./pickup-timing');
+          let arrival;
+          if(override?.arrivalLocal) {
+            try {arrival=timing.manualArrival(override.arrivalLocal,checked.trip.pickupReadyAt);}
+            catch(error){return stop('BLOCKED',error.message);}
+          } else {
+            step='in-house travel estimate';
+            try {arrival=timing.inHouseArrival(await provider.quote(checked.trip),checked.trip.pickupReadyAt,checked.loadingBufferMinutes??10);}
+            catch {arrival=null;}
+          }
+          if(!arrival)return stop('BLOCKED','Travel time is unavailable. Enter the expected laundromat arrival in Eastern time for this in-house assignment.');
+          if(checked.acceptEstimate&&!checked.acceptEstimate({deliveryTime:arrival}))return stop('BLOCKED','The estimated arrival does not fit laundromat hours, turnaround and next-day collection. Choose an earlier pickup or review the arrival time.');
+          checked.trip.dropoffDeadlineAt=arrival;
         }
         if(checked.trip.dropoffDeadlineAt.slice(0,10)!==checked.trip.pickupReadyAt.slice(0,10))return stop('REVIEW','This pickup crosses the Shipday UTC scheduling boundary. Dispatch review is required.');
-        await save({trip_snapshot:checked.trip,external_reference:checked.trip.externalId},'PICKUP_PREPARED');
+        await save({trip_snapshot:checked.trip,external_reference:checked.trip.externalId},override?.arrivalLocal?'PICKUP_PREPARED_MANUAL_ARRIVAL':'PICKUP_PREPARED');
         const beforeCreate=await validate(plan);
         if(!beforeCreate.ok||!sameTrip(beforeCreate.trip,plan.trip_snapshot))return stop('BLOCKED',beforeCreate.reason||'Booking changed before scheduling. Checking again shortly.');
         uncertain = true;
@@ -151,6 +165,7 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
       checked = await validate(plan);
       if (!checked.ok || !sameTrip(checked.trip,plan.trip_snapshot)) return stop('REVIEW',checked.reason||'Pickup details changed before assignment.');
       if (!checked.canAssign) return stop('BLOCKED',checked.reason||'Waiting for payment authorization before requesting a courier.');
+      if(checked.acceptEstimate&&!checked.acceptEstimate({deliveryTime:checked.trip.dropoffDeadlineAt}))return stop('BLOCKED','Laundromat hours or turnaround changed. The scheduled arrival no longer allows next-day collection.');
       if(plan.mode==='IN_HOUSE') {
         await save({assignment_requested_at:new Date(now()).toISOString()},'IN_HOUSE_REQUEST_STARTED');
         uncertain=true;

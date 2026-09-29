@@ -22,14 +22,23 @@ function requiredFee(quote, required = REQUIRED_SERVICES) {
   return Math.max(...fees);
 }
 
-async function verifyRoundTrip(client, { customer, partner }) {
+async function verifyRoundTrip(client, { customer, partner, pickupReadyAt, loadingBufferMinutes=10, acceptArrival }) {
   const [pickup, returned] = await Promise.all([
-    client.quote({ from: customer, to: partner }),
+    client.quote({ from: customer, to: partner, ...(pickupReadyAt?{pickupReadyAt}:{}) }),
     client.quote({ from: partner, to: customer }),
   ]);
   const pickupCents = requiredFee(pickup);
   const returnCents = requiredFee(returned);
   if (pickupCents === null || returnCents === null) return null;
+  let arrivals;
+  if(pickupReadyAt) {
+    const usable=pickup.options.filter(r=>/uber|doordash/i.test(r.service||'')&&Date.parse(r.pickupTime)>=Date.parse(pickupReadyAt)&&
+      Date.parse(r.pickupTime)<=Date.parse(pickupReadyAt)+30*60000&&Date.parse(r.deliveryTime)>Date.parse(r.pickupTime)&&
+      (!acceptArrival||acceptArrival(r.deliveryTime)));
+    const inHouse=require('./pickup-timing').inHouseArrival(pickup,pickupReadyAt,loadingBufferMinutes);
+    if(!usable.length||!inHouse||(acceptArrival&&!acceptArrival(inHouse)))return null;
+    arrivals=[...usable.map(r=>r.deliveryTime),inHouse];
+  }
   const expiries = [pickup.expiresAt, returned.expiresAt]
     .map(Date.parse).filter(Number.isFinite);
   if (expiries.length !== 2) throw Error('Shipday did not return fresh courier estimates.');
@@ -38,6 +47,7 @@ async function verifyRoundTrip(client, { customer, partner }) {
     returnCents,
     source: 'SHIPDAY',
     expiresAt: new Date(Math.min(...expiries)).toISOString(),
+    ...(arrivals?{arrivalChecks:arrivals}:{}),
   };
 }
 

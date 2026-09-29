@@ -70,14 +70,15 @@ async function validate(plan,{manual=false}={}) {
   // The initial placeholder is replaced with the scheduled courier estimate
   // before creation. Subsequent validations retain the saved arrival target.
   const trip={externalId:'LYNDRY-DEV-'+order.order_number+'-PICKUP',from,to,pickupReadyAt:at,
-    dropoffDeadlineAt:plan.trip_snapshot?.dropoffDeadlineAt||new Date(Date.parse(at)+3600000).toISOString(),manifest:[{name:'LYNDRY laundry pickup #'+order.order_number,quantity:1}]};
+    dropoffDeadlineAt:plan.trip_snapshot?.dropoffDeadlineAt||null,manifest:[{name:'LYNDRY laundry pickup #'+order.order_number,quantity:1}]};
   const acceptEstimate=row=>{
     const date=new Date(row.deliveryTime);
     if(!Number.isFinite(date.getTime()))return false;
     const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(date);
-    return local.slice(0,10)===order.pickup_date && require('./partners').isOpenAt(hours.get(shop.id)||[],new Date(order.pickup_date+'T12:00:00Z').getUTCDay(),local.slice(11,16));
+    return local.slice(0,10)===order.pickup_date && require('./partners').isOpenAt(hours.get(shop.id)||[],new Date(order.pickup_date+'T12:00:00Z').getUTCDay(),local.slice(11,16)) &&
+      require('./dev-checkout').scheduleFits(shop,hours.get(shop.id)||[],order.pickup_date,String(order.pickup_time).slice(0,5),row.deliveryTime);
   };
-  return {ok:true,canAssign:paymentsOk,reason:paymentsOk?null:'Waiting for the existing payment authorization window before requesting a courier.',trip,budgetCents,acceptEstimate};
+  return {ok:true,canAssign:paymentsOk,reason:paymentsOk?null:'Waiting for the existing payment authorization window before requesting a courier.',trip,budgetCents,acceptEstimate,loadingBufferMinutes:order.pricing_snapshot.policy?.loadingBufferMinutes??10};
 }
 const dispatcher=createBookingDispatcher({store:shared.store,provider,validate});
 // Per-request validation avoids changing the global scheduler switch, including

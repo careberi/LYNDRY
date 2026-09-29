@@ -96,9 +96,12 @@ function registerPickupDispatch(router,{guard,may},service=require('../core/ship
       if(order.status!=='REQUESTED')throw Error('Only a pickup awaiting collection can be assigned.');
       const driver=String(req.body?.driver||'');
       if(driver!=='THIRD_PARTY'&&!/^\d+$/.test(driver))throw Error('Choose a Shipday driver.');
+      const arrivalLocal=String(req.body?.arrival_local||'');
+      if(arrivalLocal&&driver==='THIRD_PARTY')throw Error('Manual arrival is only available for an in-house driver.');
+      if(arrivalLocal)require('../core/pickup-timing').manualArrival(arrivalLocal,require('../core/shipday-dispatch').dispatchInstant(order.pickup_date,String(order.pickup_time||'').slice(0,5)));
       const plan=await service.enqueue(order,{manual:true});
       if(!plan)throw Error('This pickup is not eligible for Shipday dispatch.');
-      const result=await service.run(plan.id,{mode:driver==='THIRD_PARTY'?'THIRD_PARTY':'IN_HOUSE',driverId:driver==='THIRD_PARTY'?null:driver,acceptCancellationFee:req.body?.replace==='yes'},'staff:'+req.opsUser.id);
+      const result=await service.run(plan.id,{mode:driver==='THIRD_PARTY'?'THIRD_PARTY':'IN_HOUSE',driverId:driver==='THIRD_PARTY'?null:driver,acceptCancellationFee:req.body?.replace==='yes',...(arrivalLocal?{arrivalLocal}:{})},'staff:'+req.opsUser.id);
       if(!result.ok)throw Error(result.reason||'Shipday assignment needs review.');
       res.redirect(303,back+'?done='+encodeURIComponent('Shipday assignment updated.'));
     }catch(error){res.redirect(303,back+'?problem='+encodeURIComponent(error.message));}

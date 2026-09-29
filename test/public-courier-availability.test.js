@@ -39,3 +39,15 @@ test('missing either courier in either direction withholds the public price', as
     customer: { line1: '1 Customer St' }, partner: { line1: '2 Laundry Ave' },
   }), null);
 });
+
+test('scheduled booking requires a usable courier arrival and a buffered in-house arrival',async()=>{
+ const pickupReadyAt='2030-01-01T17:00:00Z';
+ const client={quote:async()=>quote([
+  {service:'Uber',feeCents:674,pickupTime:'2030-01-01T16:58:00Z',deliveryTime:'2030-01-01T17:20:00Z'},
+  {service:'DoorDash',feeCents:750,pickupTime:pickupReadyAt,deliveryTime:'2030-01-01T17:15:00Z'}
+ ])};
+ const args={customer:{},partner:{},pickupReadyAt};
+ assert.ok(await verifyRoundTrip(client,{...args,acceptArrival:at=>Date.parse(at)<Date.parse('2030-01-01T17:40:00Z')}));
+ assert.equal(await verifyRoundTrip(client,{...args,acceptArrival:at=>Date.parse(at)<Date.parse('2030-01-01T17:25:00Z')}),null);
+ assert.equal(await verifyRoundTrip(client,{...args,acceptArrival:()=>false}),null);
+});

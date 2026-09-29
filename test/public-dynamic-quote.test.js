@@ -4,8 +4,8 @@ const economics=require('../src/core/pricing-economics'),dynamic=require('../src
 const policy={marginBps:{ONE_TIME:2000,SUBSCRIPTION:1000,WHOLESALE:500},processingBps:290,processingFixedCents:30,operationalFeeBps:2500,referenceWeightLb:33};
 function fixture(){
  let writes=0;
- const shipdayClient={quote:async()=>({ok:true,expiresAt:'2030-01-01T00:05:00.000Z',options:[
-  {service:'Uber',feeCents:674},{service:'DoorDash',feeCents:750}
+ const shipdayClient={quote:async({pickupReadyAt='2030-01-01T17:00:00Z'}={})=>({ok:true,expiresAt:'2030-01-01T00:05:00.000Z',options:[
+  {service:'Uber',feeCents:674,pickupTime:pickupReadyAt,deliveryTime:new Date(Date.parse(pickupReadyAt)+15*60000).toISOString()},{service:'DoorDash',feeCents:750,pickupTime:pickupReadyAt,deliveryTime:new Date(Date.parse(pickupReadyAt)+15*60000).toISOString()}
  ]})};
  const chain={select(){return this;},lte(){return this;},order(){return this;},limit(){return {data:[{id:'policy',policy}]};}};
  const modules={
@@ -14,7 +14,8 @@ function fixture(){
   '../providers/couriers/shipday':{createClient:()=>shipdayClient},
   './public-courier-availability':require('../src/core/public-courier-availability'),
   './pricing-economics':economics,'./dynamic-order-pricing':dynamic,
-  './shipday-dispatch':{dispatchInstant:()=> '2030-01-01T17:00:00Z'},
+  './shipday-dispatch':require('../src/core/shipday-dispatch'),
+  './pickup-timing':require('../src/core/pickup-timing'),
   './booking':{normaliseTime:x=>x,dateProblem:()=>null,timeProblem:()=>null,checkSlot:async()=>({ok:true})},
   './booking-intents':{firstDateFor:f=>f.pickup_date},
   './geocode':{addressLine:()=> 'Current address',lookupOnce:async()=>({lat:0,lng:0}),locate:async()=>({lat:0,lng:0}),milesBetween:()=>3},

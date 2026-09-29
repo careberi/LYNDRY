@@ -5,15 +5,32 @@ const {card,label}=require('../src/web/pickup-dispatch');
 const trip={externalId:'LYNDRY-DEV-9016-PICKUP',from:{line1:'1 Home St',city:'Fair Lawn',state:'NJ',postalCode:'07410'},to:{line1:'2 Shop St',city:'Paterson',state:'NJ',postalCode:'07514'},pickupReadyAt:'2026-09-28T20:00:00.000Z',dropoffDeadlineAt:'2026-09-28T21:00:00.000Z'};
 const inhouse={mode:'IN_HOUSE',driverId:'77',acceptCancellationFee:true};
 
-test('in-house assignment does not call third-party availability',async()=>{
- const f=fixture({quoteError:true});await f.run('p',inhouse);
+test('manual in-house arrival remains usable when travel estimates are unavailable',async()=>{
+ const f=fixture({quoteError:true});await f.run('p',{...inhouse,arrivalLocal:'2026-09-28T16:25'});
  assert.equal(f.row().state,'ASSIGNED');assert.equal(f.calls.filter(c=>c[0]==='inhouse').length,1);
+});
+
+test('in-house arrival uses estimated travel plus loading and missing estimates require manual arrival',async()=>{
+ const f=fixture({arrival:'2026-09-28T20:15:00.000Z'});await f.run('p',inhouse);
+ assert.equal(f.row().trip_snapshot.dropoffDeadlineAt,'2026-09-28T20:25:00.000Z');
+ const g=fixture({quoteError:true});const result=await g.run('p',inhouse);
+ assert.match(result.reason,/Enter the expected laundromat arrival/);assert.equal(g.calls.length,0);
+ const invalid=fixture();await invalid.run('p',{...inhouse,arrivalLocal:'2026-09-28T15:59'});assert.equal(invalid.calls.length,0);
 });
 
 test('failed manual availability checks identify the step without promising an automatic retry',async()=>{
  const f=fixture({quoteError:true});const result=await f.run('p',{mode:'THIRD_PARTY'});
  assert.match(result.reason,/Uber\/DoorDash availability check \(HTTP 503\)/);
  assert.match(result.reason,/Try Assign again/);assert.equal(f.calls.length,0);
+});
+
+test('manual arrival cannot bypass shop hours and third-party cannot use the override',async()=>{
+ const f=fixture({acceptEstimate:()=>false});
+ const denied=await f.run('p',{...inhouse,arrivalLocal:'2026-09-28T16:25'});
+ assert.match(denied.reason,/turnaround and next-day/);assert.equal(f.calls.length,0);
+ const g=fixture();await g.run('p',{mode:'THIRD_PARTY',arrivalLocal:'2026-09-28T16:25'});assert.equal(g.calls.length,0);
+ const h=fixture({quoteError:true});await h.run('p',{...inhouse,arrivalLocal:'2026-09-28T16:25'});
+ assert.ok(h.row().history.some(e=>e.event==='PICKUP_PREPARED_MANUAL_ARRIVAL'));
 });
 test('manual in-house selection creates once and only confirms the driver after Shipday readback',async()=>{
  const f=fixture();await f.run('p',inhouse,'staff:admin');assert.equal(f.row().state,'ASSIGNED');assert.equal(f.row().assigned_name,'LYNDRY');
@@ -63,7 +80,7 @@ function fixture(options={}) {
     createOrder:async received=>{calls.push(['create',received]);remote={orderId:123,orderNumber:trip.externalId,restaurant:{address:'1 Home St, Fair Lawn, NJ, 07410'},customer:{address:'2 Shop St, Paterson, NJ, 07514'},activityLog:{expectedDeliveryDate:received.dropoffDeadlineAt.slice(0,10),expectedPickupTime:'20:00:00',expectedDeliveryTime:received.dropoffDeadlineAt.slice(11,19)},orderStatus:{orderState:'NOT_ASSIGNED'}};if(options.autoAssigned)remote.thirdPartyAssignedAnytime=true;if(options.createTimeout)throw Error('timeout');return {id:'123'};},
     assign:async(id,args)=>{calls.push(['estimate',id]);if(options.priceRefused)return {ok:false};if(options.estimateError)throw Error('quote unavailable');await args.beforeAssign();calls.push(['assign',id,args]);if(options.assignTimeout)throw Error('timeout');return {ok:true,status:'REQUESTED'};},
     status:async()=>{calls.push(['status']);if(options.statusError)throw Error('unavailable');return options.status||{status:'STARTED',courier:{name:'Alex'},trackingUrl:'https://example.com/track'};}};
-  const validate=async plan=>{checks++;return options.block || (options.changedAt&&checks>=options.changedAt)?{ok:false,reason:'Card or order no longer eligible'}:{ok:true,canAssign:options.canAssign!==false,trip:{...structuredClone(trip),dropoffDeadlineAt:plan.trip_snapshot?.dropoffDeadlineAt||trip.dropoffDeadlineAt},budgetCents:750};};
+  const validate=async plan=>{checks++;return options.block || (options.changedAt&&checks>=options.changedAt)?{ok:false,reason:'Card or order no longer eligible'}:{ok:true,canAssign:options.canAssign!==false,trip:{...structuredClone(trip),dropoffDeadlineAt:plan.trip_snapshot?.dropoffDeadlineAt||trip.dropoffDeadlineAt},budgetCents:750,acceptEstimate:options.acceptEstimate};};
   const dispatcher=createBookingDispatcher({store,provider,validate,now:()=>time});
   return {...dispatcher,row:()=>row,calls,advance:()=>{time+=61000;},patch:patch=>{row={...row,...patch};},options};
 }
