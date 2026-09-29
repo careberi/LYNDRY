@@ -41,6 +41,39 @@ const { Client } = require('pg');
 const { config, describeTarget } = require('../src/config');
 
 const WRITE = process.argv.includes('--write');
+
+// ---------------------------------------------------------------------------
+// --baseline=NNNN: THE DATABASE ALREADY HAS THESE. RECORD THEM, RUN NOTHING.
+//
+// The runner was written on 25 September and production has never seen it - its
+// hundred migrations were applied by pasting SQL into a dashboard, one at a
+// time, over months. So the first honest run against production reads an empty
+// ledger and offers to replay all of them against a live database that already
+// has every one: 0013 resets the order-number sequence, several backfills are
+// not safe twice, and a handful create tables without `if not exists`.
+//
+// "Nothing to apply" is the wrong answer too, because the NEXT migration then
+// never gets a ledger to be missing from.
+//
+// So a baseline states the fact: everything up to and including this number is
+// already in that database. It writes a `schema_migrations` row per file WITH
+// ITS CHECKSUM and runs no SQL at all, which is what makes the very next run an
+// ordinary one - and what makes a file edited afterwards still get reported.
+//
+// IT IS A CLAIM SOMEBODY MAKES, not something this script can check. Nothing
+// here inspects the schema to see whether 0042 really ran; it cannot, which is
+// why the number has to be typed and why it prints what it is about to claim.
+// Use it once per database, on a database that is genuinely up to date.
+const BASELINE = (() => {
+  const arg = process.argv.find((a) => a.startsWith('--baseline'));
+  if (!arg) return null;
+  const value = arg.includes('=') ? arg.split('=')[1] : '';
+  if (!/^\d{4}$/.test(value)) {
+    console.error('--baseline=NNNN, the four-digit number of the last migration already applied.');
+    process.exit(1);
+  }
+  return value;
+})();
 const DIR = path.join(__dirname, '..', 'supabase', 'migrations');
 
 const checksum = (sql) => crypto.createHash('sha256').update(sql).digest('hex').slice(0, 16);
@@ -196,6 +229,33 @@ async function main() {
     }
 
     console.log(`${files.length} migration files, ${applied.size} already applied.`);
+
+    // The baseline runs before anything is applied and instead of it, so a
+    // command carrying both --baseline and --write records and applies nothing.
+    if (BASELINE) {
+      const upTo = files.filter((f) => f.name.slice(0, 4) <= BASELINE);
+      const toRecord = upTo.filter((f) => !applied.has(f.name));
+
+      console.log(`\nBASELINE: claiming ${upTo.length} files up to ${BASELINE} are already in this database.`
+      );
+      console.log(`${toRecord.length} of them are not in the ledger yet. NO SQL WILL BE RUN.`);
+      for (const f of toRecord) console.log(`  ${f.name}`);
+
+      if (!WRITE) {
+        console.log('\nDRY RUN. Nothing was recorded. Run again with --write to do it.');
+        return;
+      }
+
+      for (const f of toRecord) {
+        await client.query(
+          'insert into schema_migrations (name, checksum) values ($1, $2) on conflict (name) do nothing',
+          [f.name, f.checksum]
+        );
+      }
+
+      console.log(`\nRecorded ${toRecord.length}. Run again without --baseline to apply what is left.`);
+      return;
+    }
 
     if (!pending.length) {
       console.log('Nothing to apply.');
