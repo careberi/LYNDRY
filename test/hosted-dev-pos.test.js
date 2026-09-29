@@ -28,7 +28,7 @@ function render(env, project, origin) {
         await handler({query:{},opsUser:{id:'test',name:'Admin',role:'ADMIN',status:'ACTIVE',drives:true}},res,error=>{throw error;});
       }
       console.log(JSON.stringify({development:config.supabase.isDevelopment,checkout:checkout.enabled,
-        html,portal,login,dashboard,automaticDispatch:booking.enabled}));
+        html,portal,login,dashboard,automaticDispatch:booking.automaticEnabled}));
     })().catch(error=>{console.error(error);process.exitCode=1;});
   `;
   return JSON.parse(execFileSync(process.execPath, ['-e', script], {

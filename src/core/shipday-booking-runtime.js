@@ -4,16 +4,19 @@ const {config}=require('../config');
 const {dispatchInstant}=require('./shipday-dispatch');
 const {createBookingDispatcher}=require('./shipday-booking-dispatch');
 const shared=require('./shipday-dispatch-runtime');
-const enabled=config.env==='development'&&config.supabase.projectRef==='psrphpgbiifvnlrgvbdg';
+// Hosted development uses production Node mode for secure cookies. Manual
+// actions follow the database identity; automatic workers retain their gate.
+const enabled=config.supabase.projectRef==='psrphpgbiifvnlrgvbdg';
+const automaticEnabled=enabled&&config.env==='development';
 const provider=require('../providers/couriers/shipday').createClient({apiKey:config.shipday.apiKey,allowWrites:enabled});
 const data=shared.result;
 const find=id=>data(db.from('orders').select('*,customers(*)').eq('id',id).single());
 function eligible(order,setting) {
-  return enabled && setting.enabled && setting.automatic_pickups_from && order.dev_quote_id &&
+  return automaticEnabled && setting.enabled && setting.automatic_pickups_from && order.dev_quote_id &&
     Date.parse(order.created_at)>=Date.parse(setting.automatic_pickups_from);
 }
 async function enqueue(order,{recover=false,manual=false}={}) {
-  if(!enabled)return null;
+  if(!enabled||(!manual&&!automaticEnabled))return null;
   const setting=manual?null:await shared.settings();
   if(!manual&&!eligible(order,setting)&&!(recover&&setting.enabled&&order.order_number===9016))return null;
   // Manual preparation is scoped to the requested order, never a historical backfill.
@@ -38,6 +41,7 @@ async function enqueue(order,{recover=false,manual=false}={}) {
 }
 async function validate(plan,{manual=false}={}) {
   if(!enabled)return {ok:false,reason:'Automatic pickup dispatch is unavailable.'};
+  if(!manual&&!automaticEnabled)return {ok:false,reason:'Automatic pickup dispatch is unavailable in this environment.'};
   if(!manual&&!(await shared.settings()).enabled)return {ok:false,reason:'Automatic dispatch is paused.'};
   const order=await find(plan.order_id),customer=require('./order-address').customerFor(order,order.customers);
   if(order.status!=='REQUESTED')return {ok:false,reason:'Pickup is canceled or already in progress. Review the Shipday job.'};
@@ -82,7 +86,7 @@ const manualDispatcher=createBookingDispatcher({store:shared.store,provider,vali
 function run(id,override=null,actor){return (override?manualDispatcher:dispatcher).run(id,override,actor);}
 let busy=false,timer;
 async function tick() {
-  if(!enabled||busy||!config.shipday.apiKey)return;
+  if(!automaticEnabled||busy||!config.shipday.apiKey)return;
   busy=true;
   try {
     const setting=await shared.settings();
@@ -98,6 +102,6 @@ async function tick() {
     for(const plan of plans)await dispatcher.run(plan.id);
   } finally {busy=false;}
 }
-function start(){if(!enabled||timer)return;timer=setInterval(()=>tick().catch(e=>console.error('Scheduled pickup dispatch:',e.message)),30000);timer.unref();tick().catch(e=>console.error('Scheduled pickup dispatch:',e.message));}
+function start(){if(!automaticEnabled||timer)return;timer=setInterval(()=>tick().catch(e=>console.error('Scheduled pickup dispatch:',e.message)),30000);timer.unref();tick().catch(e=>console.error('Scheduled pickup dispatch:',e.message));}
 async function booked(order){const plan=await enqueue(order);if(plan)dispatcher.run(plan.id).catch(e=>console.error('Booked pickup dispatch:',e.message));}
-module.exports={enabled,provider,eligible,enqueue,validate,booked,run,tick,start};
+module.exports={enabled,automaticEnabled,provider,eligible,enqueue,validate,booked,run,tick,start};

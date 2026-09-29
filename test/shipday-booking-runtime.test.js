@@ -9,7 +9,7 @@ function fixture(options={}) {
  const plan={id:'plan',order_id:order.id,booking_dispatch:true,state:'PLANNED',mode:'THIRD_PARTY',dispatch_at:'2099-09-28T20:00:00.000Z'};
  const db={from(table){const q={select(){return q;},eq(){return q;},not(){return q;},single(){return q;},upsert(value){writes.push(value);return q;},then(resolve){return Promise.resolve({data:table==='orders'?order:table==='shipday_dispatch_plans'?plan:[]}).then(resolve);}};return q;}};
  const modules={
-  '../db':db,'../config':{config:{env:options.production?'production':'development',supabase:{projectRef:'psrphpgbiifvnlrgvbdg'},shipday:{}}},
+  '../db':db,'../config':{config:{env:options.production?'production':'development',supabase:{projectRef:options.projectRef||'psrphpgbiifvnlrgvbdg'},shipday:{}}},
   './shipday-dispatch':require('../src/core/shipday-dispatch'),'./shipday-booking-dispatch':{createBookingDispatcher:({validate})=>({run:async()=>validate({order_id:'order'})})},
   './order-address':require('../src/core/order-address'),
   './shipday-dispatch-runtime':{result:async q=>(await q).data,settings:async()=>settings,store:{}},
@@ -44,11 +44,29 @@ test('manual assignment overrides an automatic pause without resuming automatic 
  assert.equal(f.settings.enabled,false);
 });
 test('manual pause override preserves card, hold, hours, schedule and environment checks',async()=>{
- for(const options of [{order:{customers:{}}},{hold:false},{hours:false},{order:{pickup_date:'2020-01-01'}},{order:{status:'CANCELED'}},{production:true}]){
+ for(const options of [{order:{customers:{}}},{hold:false},{hours:false},{order:{pickup_date:'2020-01-01'}},{order:{status:'CANCELED'}},{projectRef:'production-project'}]){
   const f=fixture({...options,settings:{enabled:false}});
   assert.equal((await f.runtime.run('plan',{mode:'IN_HOUSE',driverId:'77'},'staff:admin')).ok,false);
  }
 });
+test('hosted development permits explicit assignment but never starts an automatic worker',async()=>{
+ const f=fixture({production:true});
+ assert.equal(f.runtime.enabled,true);
+ assert.equal((await f.runtime.enqueue(f.order,{manual:true})).id,'plan');
+ assert.equal((await f.runtime.run('plan',{mode:'IN_HOUSE',driverId:'77'},'staff:admin')).ok,true);
+ assert.equal((await f.runtime.run('plan',{mode:'THIRD_PARTY'},'staff:admin')).ok,true);
+ const count=f.writes.length;
+ assert.equal(await f.runtime.enqueue(f.order),null);
+ assert.equal((await f.runtime.run('plan')).ok,false);
+ await f.runtime.tick();f.runtime.start();assert.equal(f.writes.length,count);
+ for(const projectRef of ['production-project','unknown']) {
+  const other=fixture({production:true,projectRef});
+  assert.equal(other.runtime.enabled,false);
+  assert.equal(await other.runtime.enqueue(other.order,{manual:true}),null);
+  assert.equal((await other.runtime.run('plan',{mode:'IN_HOUSE',driverId:'77'})).ok,false);
+ }
+});
+
 test('automatic enrollment is limited to new quoted development bookings after activation',()=>{
  const f=fixture();assert.equal(Boolean(f.runtime.eligible(f.order,f.settings)),true);
  for(const setting of [{enabled:false},{automatic_pickups_from:null},{automatic_pickups_from:'2026-09-28T20:00:00Z'}])assert.equal(Boolean(f.runtime.eligible(f.order,{...f.settings,...setting})),false);
