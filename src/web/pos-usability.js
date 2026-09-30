@@ -4,6 +4,10 @@ function script() { return '<script>(' + enhancePOS.toString() + ')();</script>'
 function enhancePOS() {
   if (!location.hostname.startsWith('pos.') && !location.pathname.startsWith('/ops')) return;
   document.body.classList.add('pos-workspace');
+  // Keyboard work stays instant; only a direct pointer press gets motion feedback.
+  document.body.dataset.posInput = 'keyboard';
+  document.addEventListener('pointerdown', () => { document.body.dataset.posInput = 'pointer'; }, { passive: true });
+  document.addEventListener('keydown', () => { document.body.dataset.posInput = 'keyboard'; }, true);
   const main=document.querySelector('#pos-main'); if(!main)return;
   const path=location.pathname.replace(/^\/ops(?=\/|$)/,'')||'/';
   const element=(tag,text,cls)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;};

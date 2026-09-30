@@ -1,3 +1,9 @@
+## Current: POS interaction polish — 2026-09-30
+
+Neil explicitly requested applying emil-design-eng across pos.localhost screens. Refine shared staff POS controls: subtle pointer press feedback, instant keyboard interactions, hover only on capable devices, reduced-motion support, clearer disabled/focus states, consistent touch targets and field spacing. Preserve the existing visual identity and all business actions, permissions and forms. Public website and laundromat portal are outside this pass. Stacked on codex/report-saved-quote-total. Independent review and Neil click-test pending.
+
+Validation: all 1,595 tests pass. Browser verified pointer feedback (120ms), instant keyboard interactions (0ms), visible keyboard focus and desktop/390px form layout without page overflow. No saved settings or operational actions changed during testing. Reduced-motion and touch media rules were inspected; a physical-device check remains part of Neil’s click-test.
+
 ## Current: report saved quote total — 2026-09-30
 
 Approved alongside the POS review. Include the saved operational fee and inclusive minimum in report expected charges, preserve legacy calculations, missing weights and higher/lower weight rules. Read-only report change: never change charges, dispatch or payment state. Stacked on codex/pos-workflow-clarity. Independent review and Neil click-test pending.

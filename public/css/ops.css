@@ -1855,3 +1855,83 @@ body.pos-app {
 }
 
 @media(max-width:760px){.pos-workspace .logistics-stats{gap:8px!important}.pos-workspace .logistics-stats > *{min-height:0!important;padding:10px!important}.pos-workspace .logistics-stats .stat-value{font-size:20px!important}}
+
+/* Staff POS interaction polish. No entrances or animated table/navigation changes:
+   these screens are used repeatedly throughout the day. */
+.pos-workspace {
+  --pos-press-ease: cubic-bezier(.23, 1, .32, 1);
+  --pos-focus: #245bb0;
+}
+.pos-workspace main.container :is(.btn, .cbtn) {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  vertical-align: middle;
+  touch-action: manipulation;
+  transition: none;
+}
+.pos-workspace[data-pos-input="pointer"] main.container :is(.btn, .cbtn) {
+  transition: transform 120ms var(--pos-press-ease);
+}
+.pos-workspace[data-pos-input="pointer"] main.container :is(.btn, .cbtn):not(:disabled):not([aria-disabled="true"]):active {
+  transform: scale(.97);
+}
+.pos-workspace main.container :is(.btn, .cbtn):disabled,
+.pos-workspace main.container :is(.btn, .cbtn)[aria-disabled="true"] {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.pos-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+  outline: 3px solid var(--pos-focus);
+  outline-offset: 3px;
+}
+.pos-workspace main.container :is(input, select, textarea):focus-visible {
+  border-color: var(--pos-focus);
+}
+.pos-workspace main.container label > :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  margin-top: 6px;
+}
+.pos-workspace main.container :is(input, select, textarea):disabled {
+  cursor: not-allowed;
+  color: #56647a;
+  background: #f0f3f8;
+}
+.pos-workspace :is(button, a, input, select, textarea, summary) {
+  scroll-margin-block: 100px 32px;
+}
+.pos-workspace .pos-thread-messages,
+.pos-workspace .ops-table-wrap { overscroll-behavior: contain; }
+.pos-workspace .pos-thread-messages { overflow-wrap: anywhere; }
+.pos-workspace .logistics-stats { font-variant-numeric: tabular-nums; }
+.pos-workspace summary { user-select: none; }
+@media (hover: hover) and (pointer: fine) {
+  .pos-workspace main.container :is(.btn-primary, .btn-ink):not(:disabled):hover {
+    background: #245bb0!important;
+    border-color: #245bb0!important;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .pos-workspace main.container :is(.btn, .cbtn) { min-height: 44px; }
+  .pos-workspace main.container label:has(> input[type="checkbox"], > input[type="radio"]) {
+    min-height: 44px;
+    align-content: center;
+  }
+  .pos-workspace main.container :is(input, select, textarea) { font-size: 16px!important; }
+  .pos-workspace main.container :is(.btn, .cbtn):hover { background: #fff; border-color: #c5cfdd; }
+  .pos-workspace main.container table tr:hover td { background: #fff; }
+  .pos-workspace main.container table tr:nth-child(even):hover td { background: #fafbfd; }
+  .pos-workspace .pos-sidebar .pos-nav-link:hover { background: transparent; color: #4d5d74; }
+  .pos-workspace .pos-sidebar .pos-nav-link[aria-current="page"] { background: #eaf1ff; color: #245bb0; }
+  .pos-workspace .ops-navigation-card:hover .card { border-color: var(--c-line); background: #fff; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pos-workspace[data-pos-input] main.container :is(.btn, .cbtn) { transition: none; }
+  .pos-workspace[data-pos-input] main.container :is(.btn, .cbtn):active { transform: none!important; }
+}
+
+.pos-workspace .ops-form-stack .card > label { display:block; }
+.pos-workspace .ops-form-stack .card > label + label { margin-top:14px; }
