@@ -912,7 +912,7 @@ router.get('/quote', async (req, res) => {
     ? req.query[key].trim().slice(0, limit) : '';
   let street = part('street', 120);
   let address = street
-    ? [street, part('unit', 60), part('town', 80), 'NJ', part('zip', 5)].filter(Boolean).join(', ')
+    ? [street, part('unit', 60), part('town', 80), (config.googleAddress?.enabled ? part('state', 2) : '') || 'NJ', part('zip', 5)].filter(Boolean).join(', ')
     : part('address', 200);
 
   // The honeypot, same as every other public form: anything that fills it gets

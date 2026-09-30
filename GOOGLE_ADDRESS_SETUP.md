@@ -1,6 +1,6 @@
 # Development Google address setup
 
-Status: implementation prepared; Google Cloud project, billing and credentials do not yet exist. Feature defaults off. No live verification has been performed.
+Status as of 2026-09-30: active on localhost:3002 in development. Project lyndry-development has billing and the three required APIs enabled. Separate API-restricted keys are in ignored .env; the browser key also restricts referrers to http://localhost:3002/*. Live Google suggestions, keyboard selection, town/ZIP parsing, server validation and fabricated-address rejection passed. Production remains forced off. Monthly billing alerts at $5/$9/$10 exclude promotional credits; this is not a spending cap. Cloud Address Validation quotas displayed as non-adjustable. The server key has no IP restriction pending stable development egress.
 
 1. Create a Google Cloud project and link a billing account. Neil must enter payment details and accept terms.
 2. Enable Maps JavaScript API, Places API (New), and Address Validation API.
@@ -14,3 +14,5 @@ Google attribution is explicitly approved by Neil. The official widget supplies 
 References:
 https://developers.google.com/maps/documentation/javascript/place-autocomplete-new
 https://developers.google.com/maps/documentation/address-validation/requests-validate-address
+
+The Google-enabled UI has one search box and an optional apartment/unit field. Parsed street, town, ZIP and state are hidden; edits invalidate selection. Google subpremise fills the unit when supplied; otherwise users enter it themselves. Units are included in server validation and the quote request.
