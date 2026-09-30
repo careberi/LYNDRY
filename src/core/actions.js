@@ -1114,6 +1114,9 @@ async function handoffToHuman(customer, input, helpers = {}) {
 // message. Nothing is minted and nothing is looked up, so this is safe to say
 // as often as it comes up.
 function orderOnlineInstead() {
+  if (!config.supabase.isProduction) {
+    return `You can place your order online here: ${config.baseUrl.replace(/\/$/, '')}/account/book. Sign in with this phone number to get started.`;
+  }
   return (
     `I can't book that from here, but you can place it at ${site.domain}/account ` +
     `and it takes about a minute. Sign in with this number and it will know who you are.`

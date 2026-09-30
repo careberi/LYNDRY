@@ -1,3 +1,7 @@
+# Development AI online booking
+
+Neil requested development AI stop taking orders and send online booking links. Existing tool exclusion and execution guards remain. Add a development prompt rule overriding legacy booking instructions and use the configured development base URL plus /account/book in the guarded fallback. Production wording and existing order help remain unchanged. Regression tests cover all three prohibited actions and production fallback. No messages sent.
+
 # Contact page card removal
 
 Neil requested removal of the annotated Business details card. Removed that card and its unused two column layout. Partner invitation and footer remain. Verify rendered contact page.
@@ -289,3 +293,5 @@ Neil requested the dynamic address quote headline use the subscription per-pound
 Customer interaction validation: npm test passed all 1,595 tests. Browser verified customer scope, 120ms pointer transitions, 0ms keyboard transitions, desktop homepage and 390px pricing form without horizontal overflow. Visible address fields are 16px with approximately 54px height; submit control approximately 46px. Physical phone and independent review remain pending. No business forms submitted.
 
 Validation: all 1,595 tests passed after final changes. Browser confirmed 250ms reveal token, stationary hero text, visible scrolled content, 0/50/100ms stagger and immediate keyboard reveal. Real phone feel check and independent review pending.
+
+Validation: npm test passed all 1,599 tests, including four new redirect regressions. No real AI conversation or SMS send performed. Independent review and development conversation click test remain pending.
