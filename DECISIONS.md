@@ -1,3 +1,7 @@
+# Persistent laundromat login, 2026-09-30
+
+Neil requested laundromat sessions remain signed in until a new login elsewhere. Supersedes the eight hour inactivity policy for partner authentication only. The server imposes no age timeout on newly issued signed shop sessions; browser cookies renew for 400 days. New login, explicit sign out, inactive users or inactive shops still revoke access. Staff POS and administrator shop previews keep their existing policy. Browser storage clearing or retention limits can still require sign in.
+
 ## 2026-09-30 — Approved POS usability review
 
 Neil approved all recommendations in the POS review. Current operational exceptions and next actions lead order pages; saved customer fields and infrequent messaging controls may collapse. This supersedes earlier visual ordering of those controls, not their permissions or consent rules. Keep all existing operational state transitions.

@@ -1,3 +1,7 @@
+# Persistent laundromat sessions
+
+Neil requested no laundromat inactivity logout, with login elsewhere ending the previous session. Use signed persistent shop cookies with browser storage renewed for 400 days. Continue checking live user token, active user and shop on every request. Legacy unexpired cookies migrate on use; expired ones require login. Staff POS and admin shop preview sessions are unchanged. Browser clearing or retention limits still require login.
+
 # Development AI online booking
 
 Neil requested development AI stop taking orders and send online booking links. Existing tool exclusion and execution guards remain. Add a development prompt rule overriding legacy booking instructions and use the configured development base URL plus /account/book in the guarded fallback. Production wording and existing order help remain unchanged. Regression tests cover all three prohibited actions and production fallback. No messages sent.
@@ -295,3 +299,5 @@ Customer interaction validation: npm test passed all 1,595 tests. Browser verifi
 Validation: all 1,595 tests passed after final changes. Browser confirmed 250ms reveal token, stationary hero text, visible scrolled content, 0/50/100ms stagger and immediate keyboard reveal. Real phone feel check and independent review pending.
 
 Validation: npm test passed all 1,599 tests, including four new redirect regressions. No real AI conversation or SMS send performed. Independent review and development conversation click test remain pending.
+
+Validation: all 1,603 tests passed, including persistent age, tampering, legacy expiry and rejection after login elsewhere. No real sessions or login codes changed during testing. Independent review and two device click test remain pending.

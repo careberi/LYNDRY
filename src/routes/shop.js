@@ -32,7 +32,7 @@ const { site } = require('../web/site');
 // WHICH MAKES THE GUARD AROUND THIS PAGE THE THING THAT MATTERS, and it is three
 // separate things:
 //
-//   the session   scoped to one partner, re-read every request, eight hours
+//   the session   scoped to one partner, re-read every request, until revoked
 //   the query     every order is fetched WITH `partner_id` EQUAL TO THEIRS.
 //                 Filtered in the query, never after it, so another shop's order
 //                 never reaches the process - the same reason a driver's board

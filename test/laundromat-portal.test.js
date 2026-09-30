@@ -85,14 +85,8 @@ test('junk is refused rather than throwing', () => {
   }
 });
 
-test('A SHIFT, NOT AN HOUR, AND NOT THIRTY DAYS', () => {
-  // The ops screens time out after an hour because they hold customer addresses
-  // and the books. This is a tablet behind a counter holding order numbers and
-  // wash instructions, and signing it out hourly means an attendant with laundry
-  // in her hands waiting on a text - what she would actually do is write the
-  // code on the wall.
-  assert.ok(auth.SESSION_MINUTES > 60, 'the portal times out as fast as the ops screens');
-  assert.ok(auth.SESSION_MINUTES <= 12 * 60, 'a portal session now outlives a shift');
+test('shop cookie persists across shifts and browser restarts', () => {
+  assert.equal(auth.issueSession('user', 'token').maxAgeMs, 400 * 24 * 60 * 60 * 1000);
 });
 
 test('the code rules match the other two sign-ins', () => {

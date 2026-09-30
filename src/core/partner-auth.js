@@ -22,14 +22,14 @@ const { hit, clearBucket } = require('./throttle');
 // time, so it is the same answer.
 //
 // THE SHAPE IS COPIED FROM `admin-auth.js` ON PURPOSE, down to the constant-time
-// compares, the HMAC'd codes, the one-live-session token and the sliding expiry.
+// compares, the HMAC'd codes and the one-live-session token.
 // Everything that is different is different for a stated reason and marked.
 //
 // WHAT IS DIFFERENT:
 //
 //   the cookie      scoped to /shop, and its signature is salted 'shop.' so a
 //                   cookie from one portal cannot be replayed at another
-//   the session     EIGHT HOURS of inactivity, not one. See SESSION_MINUTES
+//   the session     no inactivity timeout; one live token per person
 //   what it proves  which PARTNER, not which role. There are no roles here:
 //                   every attendant can do everything at their own shop, and
 //                   the only question a portal request asks is which shop
@@ -40,18 +40,9 @@ const { hit, clearBucket } = require('./throttle');
 
 const COOKIE_NAME = 'ly_shop';
 
-// EIGHT HOURS OF DOING NOTHING, against the ops screens' one.
-//
-// It is the same sliding-window mechanism and a different number, because the
-// device is different. An ops session lives on Neil's phone and holds customer
-// addresses and the books; a portal session lives on a tablet behind a counter
-// and holds order numbers, wash instructions and weights. Signing that tablet
-// out every hour means an attendant with laundry in her hands waiting on a text
-// message, and what she would actually do is write the code on the wall.
-//
-// A SHIFT IS THE HONEST UNIT. Eight hours covers one and does not survive to the
-// next, so a tablet found in the morning is signed out.
-const SESSION_MINUTES = 8 * 60;
+// No application inactivity timeout. Browsers cap persistent cookies; renew on use.
+// The live database token still revokes a session on login elsewhere or sign out.
+const SESSION_MINUTES = 400 * 24 * 60;
 const SESSION_MS = SESSION_MINUTES * 60 * 1000;
 
 // Five minutes and five guesses, matching both other sign-ins. Two different
@@ -83,14 +74,14 @@ function newSessionToken() {
 }
 
 function issueSession(userId, token) {
-  const expiresAt = Date.now() + SESSION_MS;
+  const expiresAt = 'persistent';
   const payload = `${userId}.${expiresAt}.${token}`;
   return { value: `${payload}.${hmac(payload)}`, maxAgeMs: SESSION_MS };
 }
 
 // Returns { userId, token } the cookie vouches for, or null.
 //
-// This proves the cookie is OURS and still in date. It cannot prove the token is
+// This proves the cookie is OURS. Legacy timed cookies must still be in date. It cannot prove the token is
 // the live one or that the attendant is still employed - those are rows, and
 // `requirePartner` does that half where it is loading the person anyway.
 function readSession(value) {
@@ -100,7 +91,7 @@ function readSession(value) {
   const [userId, expiresAt, token, signature] = parts;
 
   const expiry = Number(expiresAt);
-  if (!Number.isFinite(expiry) || expiry < Date.now()) return null;
+  if (expiresAt !== 'persistent' && (!Number.isFinite(expiry) || expiry < Date.now())) return null;
 
   if (!sameSecret(signature, hmac(`${userId}.${expiresAt}.${token}`))) return null;
 
@@ -294,7 +285,7 @@ async function verifyCode(rawPhone, rawCode, req) {
 //
 // IT RE-READS THE ROW EVERY REQUEST, like `requireAdminPage` does. An attendant
 // who leaves is switched off and stops being able to do anything on her next tap,
-// rather than at the end of an eight-hour session. It also re-reads the PARTNER,
+// without waiting for a session timeout. It also re-reads the PARTNER,
 // because a laundromat we stop working with must not keep a live portal.
 async function requirePartner(req, res, next) {
   const signIn = (why) => {
