@@ -10,7 +10,7 @@ function render(env, project, origin) {
     require.cache[require.resolve('./src/db')]={exports:{from(table){
       if(!['orders','shipday_dispatch_plans'].includes(table))throw Error('Unexpected database table '+table);
       const rows=table==='orders'?[{id:'order',order_number:9016,status:'REQUESTED',pickup_date:require('./src/core/booking').today(),pickup_time:'16:00',customers:{name:'Test customer'}}]:
-        [{order_id:'order',state:'ASSIGNED',assigned_name:'Test driver',simulation:false}];
+        [{order_id:'order',leg:'TO_PARTNER',state:'ASSIGNED',assigned_name:'Test driver',simulation:false}];
       const q={select(){return q;},order(){return q;},eq(){return q;},in(){return q;},then(resolve){return Promise.resolve({data:rows}).then(resolve);}};return q;
     }}};
     const checkout=require('./src/core/dev-checkout');

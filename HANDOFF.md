@@ -1,3 +1,7 @@
+## Current: approved POS workflow clarity — 2026-09-30
+
+Implement the approved page-by-page review: operational exceptions first; compact responsive lists; searchable customers/messages; customer/conversation hierarchy; accessible hours and promotion forms; reversible hours-copy UI; broadcast draft recovery; clearer settings, navigation, reports, and empty states. Preserve permissions, consent, payment/dispatch state machines, manual shop pickup confirmation, and no-card/no-pickup rules. The report calculation fix is a separate follow-up branch. Desktop and phone have equal priority. Independent review and Neil click-test remain pending.
+
 ## Current: customer booking clarity (2026-09-30)
 
 Neil approved implementing the customer website critique. Preserve the bold brand; make price checking primary, clarify illustrative pickup content, simplify navigation and mobile forms, add named booking progress and existing-address context. Keep suppliers private. No payment, pricing, dispatch, reminder, SMS, or booking-state changes. Use existing service facts only. Independent review and Neil click-test pending.

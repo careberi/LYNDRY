@@ -38,8 +38,8 @@ const intake = require('../core/intake');
 // MISSING row that is actually holding something up gets the loud treatment,
 // and "missing" on an optional field gets nothing at all - see `tone()`.
 const WORDS = {
-  [intake.STATES.EXPLICIT]: 'Explicit',
-  [intake.STATES.DEFAULT]: 'Default',
+  [intake.STATES.EXPLICIT]: 'Confirmed',
+  [intake.STATES.DEFAULT]: 'Saved default',
   [intake.STATES.MISSING]: 'Missing',
   [intake.STATES.NA]: 'N/A',
 };
@@ -168,7 +168,7 @@ function intakeTable({ fields, action, canSend = false, ago = () => '', optedOut
     .join('');
 
   return `
-    <div class="intake" id="intake">
+    <details class="intake" id="intake"><summary>Customer details — ${escapeHtml(summary)}</summary>
       <div class="intake-head">
         <h2 style="margin:0;">Customer fields</h2>
         <span class="intake-summary">${escapeHtml(summary)}</span>
@@ -187,7 +187,7 @@ function intakeTable({ fields, action, canSend = false, ago = () => '', optedOut
           <tbody>${rows}</tbody>
         </table>
       </div>
-    </div>`;
+    </details>`;
 }
 
 module.exports = { intakeTable };

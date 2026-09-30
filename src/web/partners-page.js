@@ -140,25 +140,25 @@ function hoursGrid(rows) {
   };
 
   const box = (name, value) =>
-    `<input class="input" type="time" name="${name}" value="${value ? escapeHtml(String(value).slice(0, 5)) : ''}"
+    `<input aria-label="${escapeHtml(partners.WEEKDAYS[Number(name.split('_')[1])])} ${name.endsWith('_2') ? 'second interval' : 'first interval'} ${name.includes('_open') ? 'opens' : 'closes'}" class="input" type="time" name="${name}" value="${value ? escapeHtml(String(value).slice(0, 5)) : ''}"
             style="width:100%;min-width:0;">`;
 
   const row = (day) => {
     const first = at(day, 0);
     const second = at(day, 1);
     return `
-    <div class="ph-row">
+    <div class="ph-row" data-hours-day="${day}">
       <span class="ph-day">${escapeHtml(partners.WEEKDAYS[day])}</span>
       <div class="ph-pair">
         ${box(`hours_${day}_open`, first && first.opens_at)}
         <span class="ph-dash">to</span>
         ${box(`hours_${day}_close`, first && first.closes_at)}
       </div>
-      <div class="ph-pair ph-second">
+      <details class="ph-extra" ${second ? 'open' : ''}><summary>Second interval</summary><div class="ph-pair ph-second">
         ${box(`hours_${day}_open_2`, second && second.opens_at)}
         <span class="ph-dash">to</span>
         ${box(`hours_${day}_close_2`, second && second.closes_at)}
-      </div>
+      </div></details>
     </div>`;
   };
 
@@ -196,7 +196,7 @@ function hoursGrid(rows) {
       the middle of the day.
     </p>
 
-    <div class="ph-head">
+    <div class="pos-hours-copy" hidden><label>Copy hours from<select data-hours-source>${order.map(day=>'<option value="'+day+'">'+escapeHtml(partners.WEEKDAYS[day])+'</option>').join('')}</select></label><fieldset><legend>Apply to selected days</legend>${order.map(day=>'<label><input type="checkbox" data-hours-target value="'+day+'"> '+escapeHtml(partners.WEEKDAYS[day])+'</label>').join('')}</fieldset><button type="button" class="btn" data-copy-hours>Copy hours to selected days</button><p class="hint" role="status" data-hours-feedback>Existing hours on selected days will be replaced in this form. Save changes to apply them.</p></div><div class="ph-head">
       <span></span><span>Open</span><span>And again</span>
     </div>
     <div class="ph-grid">
@@ -250,7 +250,7 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
           ${option('PROPERTY_MANAGER', partners.TYPES.PROPERTY_MANAGER, p.type)}
         </select>
         <span class="field-hint" style="display:block;margin-top:6px;">
-          The rate, hours and capacity below only apply to a laundromat, and are
+          <strong>Changing to a management company clears saved laundromat settings.</strong> The rate, hours and capacity below only apply to a laundromat, and are
           cleared if you switch this to a management company.
         </span>
       </div>
@@ -393,8 +393,9 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
     </div>
 
     <button type="submit" class="btn btn-lg btn-full">
-      ${editing ? 'Save changes' : 'Add this partner'}
+      ${editing ? 'Save changes' : 'Add partner'}
     </button>
+    <a class="btn btn-outline" href="/ops/partners">Cancel</a>
   </form>
 </div>`;
 }
@@ -732,7 +733,7 @@ ${
     ${p.notes ? `<p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:var(--ink-700);white-space:pre-wrap;">${escapeHtml(p.notes)}</p>` : ''}
   </div>
 
-  ${staffCard(p, staff, canOpenPortal)}
+  <div class="pos-partner-staff">${staffCard(p, staff, canOpenPortal)}</div>
 
   ${
     // THEIR SCALE AGAINST OURS IS A VAN QUESTION AND CANNOT BE ASKED UNDER A

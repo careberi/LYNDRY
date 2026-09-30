@@ -267,6 +267,7 @@ ${body}
     });
   })();
   </script>
+${pos ? require('./pos-usability').script() : ''}
 </body>
 </html>`;
 }

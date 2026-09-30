@@ -479,9 +479,9 @@ ${
       settings.opens_on
         ? `Customers can book today, and the earliest pickup anyone can choose is
            that date. The AI offers it, the website picker starts there, and
-           <code>bookPickup()</code> refuses anything sooner.`
+           The booking service refuses anything sooner.`
         : `Nothing is holding pickups back. Set a date here if you want to take
-           bookings before the van starts running.`
+           bookings before collections begin.`
     }
   </p>
   <form method="post" action="/ops/settings/opens-on"
@@ -491,7 +491,7 @@ ${
       <input class="input input-lg" type="date" id="opens_on" name="opens_on"
              value="${settings.opens_on ? escapeHtml(String(settings.opens_on).slice(0, 10)) : ''}">
     </div>
-    <button class="btn btn-primary btn-lg" type="submit">Save it</button>
+    <button class="btn btn-primary btn-lg" type="submit">Save service settings</button>
     ${
       settings.opens_on
         ? // A DIFFERENT NAME FROM THE DATE FIELD. Sharing it meant a click sent
@@ -515,8 +515,8 @@ ${
   <ul style="margin:0;padding-left:20px;font-size:16px;line-height:1.7;color:var(--ink-700);">
     <li>The AI will not book, will not offer a date, and will not collect an
         address to "get you ready"</li>
-    <li><code>bookPickup()</code> refuses, so the website form and the standing
-        order job are shut too. The AI being talked route changes nothing</li>
+    <li>The booking service refuses, so the website form and the standing
+        order job are shut too. This applies to every booking channel</li>
     <li>Everything else still works: questions get answered, new numbers are
         still saved, and anyone on a promotion still holds it</li>
   </ul>
@@ -1011,7 +1011,7 @@ ${
       <div style="padding-top:22px;border-top:2px solid var(--ink-100);">
         <p class="eyebrow" style="margin:0 0 12px;color:var(--suds-500);">2 &middot; Audience</p>
 
-        <select class="field" id="p_audience" name="audience">${audienceOptions}</select>
+        <select aria-label="Promotion audience" class="field" id="p_audience" name="audience">${audienceOptions}</select>
         ${audienceNotes}
 
         <!-- Only for a promotion people claim by texting a code. Hidden rather
@@ -1095,7 +1095,7 @@ ${
           Written by you, because a discount is money and the AI never invents money.
           It gets worked into a reply rather than quoted. Plain words, no dashes.
         </p>
-        <input class="field" id="p_blurb" name="blurb" maxlength="200"
+        <input class="field" aria-label="Customer-facing offer wording" id="p_blurb" name="blurb" maxlength="200"
                placeholder="you have 30% off your next order">
         <p class="field-hint" style="margin:8px 0 0;">
           <strong>Leave it blank and the promotion is silent.</strong> It still comes
@@ -1105,7 +1105,7 @@ ${
       </div>
 
       <div>
-        <button class="btn btn-ink btn-lg" type="submit">Create it ${icon('arrow-right', '22')}</button>
+        <button class="btn btn-ink btn-lg" type="submit">Create promotion ${icon('arrow-right', '22')}</button>
       </div>
     </form>
   </div>
@@ -1215,7 +1215,7 @@ const AUDIENCES = Object.freeze([
   { key: 'CUSTOMERS', label: 'People who have had at least one order' },
 ]);
 
-function broadcastBody({ counts, recent, notice, problem, draft = '' }) {
+function broadcastBody({ counts, recent, notice, problem, draft = '', audience = 'ALL' }) {
   const rows = recent
     .map(
       (b) => `
@@ -1256,7 +1256,7 @@ ${banner(problem, 'bad')}
       <label class="field-label" for="b_audience">Audience</label>
       <select class="field" id="b_audience" name="audience">
         ${AUDIENCES.map(
-          (a) => `<option value="${a.key}">${escapeHtml(a.label)} (${counts[a.key] || 0})</option>`
+          (a) => `<option value="${a.key}"${audience === a.key ? ' selected' : ''}>${escapeHtml(a.label)} (${counts[a.key] || 0})</option>`
         ).join('')}
       </select>
     </div>
@@ -1266,14 +1266,15 @@ ${banner(problem, 'bad')}
       <p class="field-hint" style="margin:0 0 8px;">
         SMS charges depend on message length and recipient count.
       </p>
-      <textarea class="field" id="b_body" name="body" rows="4" required maxlength="480"
+      <textarea class="field" id="b_body" name="body" rows="4" required maxlength="480" data-broadcast-draft
                 placeholder="It's LYNDRY. We open next week and you are first in line.">${escapeHtml(draft)}</textarea>
     </div>
 
     <label style="display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.5;">
       <input type="checkbox" name="confirm" value="yes" required style="margin-top:4px;width:22px;height:22px;">
-      <span>I confirm this message is ready to send.</span>
+      <span>I confirm this message and selected audience are ready to send.</span>
     </label>
+    <output class="pos-broadcast-preview" aria-live="polite"></output>
 
     <div><button class="btn btn-ink btn-lg" type="submit">Send broadcast ${icon('arrow-right', '22')}</button></div>
   </form>

@@ -1,3 +1,7 @@
+## 2026-09-30 — Approved POS usability review
+
+Neil approved all recommendations in the POS review. Current operational exceptions and next actions lead order pages; saved customer fields and infrequent messaging controls may collapse. This supersedes earlier visual ordering of those controls, not their permissions or consent rules. Keep all existing operational state transitions.
+
 ## 2026-09-30 — Customer website clarity
 
 Price checking is the homepage primary action; returning customers retain a direct booking link. Booking progress uses stable named stages, not changing step totals when saved preferences skip a form. Preserve the existing LYNDRY visual identity and all transaction rules.

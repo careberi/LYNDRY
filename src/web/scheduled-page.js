@@ -155,7 +155,7 @@ ${
   live.length
     ? live.map(followUpCard).join('')
     : `<div class="card" style="padding:16px;margin-bottom:12px;">
-         <p style="margin:0;font-size:13px;">No follow-ups scheduled.</p>
+         <p style="margin:0;font-size:13px;">No follow-ups scheduled. Eligible conversations will appear here when a follow-up is due.</p>
        </div>`
 }
 
@@ -175,7 +175,7 @@ ${
   reminders.length
     ? reminders.map(reminderCard).join('')
     : `<div class="card" style="padding:16px;">
-         <p style="margin:0;font-size:13px;">No pickup reminders scheduled.</p>
+         <p style="margin:0;font-size:13px;">No pickup reminders scheduled. Confirmed pickups appear here when their reminder is queued.</p>
        </div>`
 }`;
 }

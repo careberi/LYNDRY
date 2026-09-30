@@ -108,7 +108,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
 
   return `
 <div style="max-width:720px;">
-  <a href="/ops/team" style="font-size:15px;font-weight:600;">&larr; Everyone</a>
+  <a href="/ops/team" style="font-size:15px;font-weight:600;">&larr; All team members</a>
 
   <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;margin:18px 0 26px;">
     <h1 style="font-family:var(--font-display);font-weight:900;font-size:38px;letter-spacing:-0.03em;margin:0;">
@@ -296,7 +296,7 @@ function teamMemberBody({ person, isMe, hours = [], notice = null, problem = nul
         : ''
     }
 
-    <button type="submit" class="btn btn-ink btn-lg">Save ${icon('arrow-right', '22')}</button>
+    <button type="submit" class="btn btn-ink btn-lg">Save team member ${icon('arrow-right', '22')}</button><a class="btn btn-outline" href="/ops/team">Cancel</a>
   </form>
 
   ${

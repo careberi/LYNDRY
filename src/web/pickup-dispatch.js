@@ -26,4 +26,9 @@ function card(plan,{order,drivers=[],canAssign=false,enabled=false,driverProblem
     (plan.problem?'<p role="status">'+e(plan.problem)+'</p>':'')+
     controls+'</section>';
 }
-module.exports={label,summary,card};
+function returnSummary(plan) {
+  if(!plan)return 'Not scheduled';
+  const name=plan.simulation?'Simulated dispatch':({PLANNED:'Scheduled',PROCESSING:'Requesting courier',BLOCKED:'Needs attention',REQUESTED:'Awaiting driver',ASSIGNED:'Driver assigned',REVIEW:'Needs review',COMPLETED:'Delivery complete',CANCELED:'Canceled'})[plan.state]||'Status unavailable';
+  return '<strong>'+e(name)+'</strong>'+(plan.assigned_name?'<br>'+e(plan.assigned_name):'')+(plan.problem?'<p role="status">'+e(plan.problem)+'</p>':'');
+}
+module.exports={label,summary,card,returnSummary};

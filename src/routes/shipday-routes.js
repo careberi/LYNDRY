@@ -5,7 +5,7 @@ const { sameOrigin } = require('./spending-routes');
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function body({ configured, services = null, checkedAt = null, problem = null, quote = null, from = '', to = '', activeProvider = '' }) {
-  return `<p><a href="/ops/couriers">← Couriers</a> · <a href="/ops/shipday/assignments">Driver assignments</a></p>
+  return `<p><a href="/ops">← Orders</a> · <a href="/ops/shipday/assignments">Driver assignments</a></p>
     <p class="eyebrow">Integration</p><h1>Shipday</h1>
     <div class="ops-note ops-note--warn"><strong>Live dispatch disabled.</strong> Connection and quote checks do not create orders or request drivers. Current booking provider: ${esc(activeProvider)}.</div>
     ${problem ? `<div class="ops-note ops-note--bad" role="alert">${esc(problem)}</div>` : ''}

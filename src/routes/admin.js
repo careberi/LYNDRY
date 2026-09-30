@@ -1384,7 +1384,7 @@ function phoneStep({ error = '', next = '/ops', phone = '' } = {}) {
       <form method="post" action="/ops/login" class="card card-xl" style="padding:28px;">
         <input type="hidden" name="next" value="${escapeHtml(next)}">
         <div class="field">
-          <label class="field-label" for="phone">Mobile number</label>
+          <h2>Contact information</h2><label class="field-label" for="phone">Mobile number</label>
           <input class="input input-lg" type="tel" id="phone" name="phone" required
                  autocomplete="tel" inputmode="tel" placeholder="201-555-0142"
                  value="${escapeHtml(phone)}" autofocus>
@@ -1818,7 +1818,9 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     if (error) throw error;
 
     const all = data || [];
-    const pickupPlans = new Map(shipdayWorkspace && all.length ? (await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('order_id,state,assigned_name,problem,simulation').eq('leg','TO_PARTNER').in('order_id',all.map(o=>o.id)))).map(p=>[p.order_id,p]) : []);
+    const dispatchPlans = shipdayWorkspace && all.length ? await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('order_id,leg,state,assigned_name,problem,simulation').in('order_id',all.map(o=>o.id))) : [];
+    const pickupPlans = new Map(dispatchPlans.filter(p=>p.leg==='TO_PARTNER').map(p=>[p.order_id,p]));
+    const returnPlans = new Map(dispatchPlans.filter(p=>p.leg==='TO_CUSTOMER').map(p=>[p.order_id,p]));
     const now = today();
 
     // WHICH PROMOTION IS COMING no longer has a column to go in. Neil's
@@ -2002,7 +2004,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         escapeHtml(booking.requestedPickupLabel(o) || 'Time not selected'),
 
         statusBadge(o.status, o),
-        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id))]:[]),
+        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id)), require('../web/pickup-dispatch').returnSummary(returnPlans.get(o.id))]:[]),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
 
@@ -2019,7 +2021,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       'Pickup date',
       'Requested pickup time',
       'Status',
-      ...(shipdayWorkspace?['Pickup dispatch']:[]),
+      ...(shipdayWorkspace?['Pickup dispatch','Return dispatch']:[]),
       'Clock',
       'Weight',
     ];
@@ -2139,7 +2141,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         <a class="btn btn-sm btn-outline" href="/ops?date=${shift(viewDate, -1)}"
            aria-label="The day before">&larr;</a>
         <div>
-          <label class="field-label" for="date" style="margin-bottom:4px;">Date</label>
+          <label class="field-label" for="date" style="margin-bottom:4px;">View day</label>
           <input class="field" id="date" name="date" type="date" value="${escapeHtml(viewDate)}"
                  max="${escapeHtml(now)}" style="min-width:170px;">
         </div>
@@ -2193,8 +2195,8 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       }`;
 
     const body = isToday ? `<div class="logistics-board">
-      <header class="logistics-header"><div><p class="eyebrow">Operations</p><h1>Dispatch dashboard</h1></div></header>
-      ${dayStrip}
+      <header class="logistics-header"><div><p class="eyebrow">Operations</p><h1>Orders</h1></div></header>
+      ${dayStrip}<p class="hint">Today shows all active work and recent history. Select a past day to see pickups and deliveries recorded that day.</p>
       <div class="logistics-stats">
         ${statCard('Awaiting pickup', g.collect.length, g.collect.length ? 'var(--suds-300)' : undefined)}
         ${
@@ -3194,9 +3196,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     const askedView = String(req.query.log || '').trim();
     const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
     const banner = req.query.problem
-      ? `<div class="flash problem">${escapeHtml(String(req.query.problem))}</div>`
+      ? `<div role="alert" class="flash problem">${escapeHtml(String(req.query.problem))}</div>`
       : req.query.done
-        ? `<div class="flash done">${escapeHtml(String(req.query.done))}</div>`
+        ? `<div role="status" class="flash done">${escapeHtml(String(req.query.done))}</div>`
         : '';
     // Everything with a form on it that the toolbar links to by anchor. These
     // are the existing cards, unchanged, so every mutation posts exactly where
@@ -3832,7 +3834,7 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
       <input class="field" id="name" name="name" type="text" required maxlength="80"
              value="${v('name')}" style="width:100%;margin-bottom:18px;">
 
-      <label class="field-label" for="address_line1">Street address</label>
+      <h2>Pickup address</h2><label class="field-label" for="address_line1">Street address</label>
       <input class="field" id="address_line1" name="address_line1" type="text" required maxlength="120"
              value="${v('address_line1')}" style="width:100%;margin-bottom:10px;">
 
@@ -3861,7 +3863,7 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
         Use the same location for pickup and delivery.
       </p>
 
-      ${washField('water_temp')}
+      <h2>Wash preferences</h2>${washField('water_temp')}
       ${washField('fabric_softener')}
 
       <div style="border-top:2px solid var(--ink-100);margin:8px 0 20px;padding-top:20px;">
@@ -3891,7 +3893,7 @@ function phoneCustomerForm({ values = {}, problem = null } = {}) {
         </label>
       </div>
 
-      <button class="btn btn-primary btn-lg" type="submit">Save and text them</button>
+      <button class="btn btn-primary btn-lg" type="submit" data-customer-save>Save customer and text card link</button>
       <a class="btn btn-ghost btn-lg" href="/ops/customers">Cancel</a>
     </form>`;
 }
@@ -4110,7 +4112,7 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
         </span>
       </label>
 
-      <button class="btn btn-primary btn-lg" type="submit">Book it</button>
+      <button class="btn btn-primary btn-lg" type="submit">Book pickup</button>
       <a class="btn btn-ghost btn-lg" href="/ops/customers/${customer.id}">Cancel</a>
     </form>`;
 }
@@ -4424,7 +4426,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
            order to read it in - and the control itself was a collapsed toggle
            at the foot of the details card, which Neil looked for, could not
            find, and reasonably took for a missing feature. -->
-      ${optOutControl(person, roles.can(req.opsUser, 'messages.send'))}
+      <details class="pos-secondary" ${person.status === 'UNSUBSCRIBED' ? 'open' : ''}><summary>Text messaging preferences${person.status === 'UNSUBSCRIBED' ? ' — opted out' : ''}</summary>${optOutControl(person, roles.can(req.opsUser, 'messages.send'))}</details>
 
       <!-- THE ASK BUTTONS MOVED TO THE CONVERSATION. Neil's call: sending
            somebody a text belongs where the rest of the texts are, not on the
@@ -4441,7 +4443,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         // screen, because it is the part people get wrong about this system:
         // there is nothing to send them and nothing for them to remember. The
         // AI knows who is texting, so it comes off the price by itself.
-        mayPromote || holding.length
+        (holding.length || (mayPromote && offerable.length))
           ? `<div class="card card-xl" style="padding:24px;margin-bottom:32px;">
                <p class="eyebrow" style="margin:0 0 14px;">Offers</p>
 
@@ -4517,7 +4519,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         <div class="card card-xl" style="padding:28px;">
           ${sectionHeading('Contact', 'Details')}<table class="customer-details-table"><tbody>
           ${detail('Phone', `<a href="tel:${escapeHtml(person.phone)}">${escapeHtml(format.displayPhone(person.phone))}</a>`)}
-          ${detail('Email', `<a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email || '—')}</a>`)}
+          ${detail('Email', person.email ? `<a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email)}</a>` : '—')}
           ${detail('Address', escapeHtml(addressOf(person)) || '—')}
           ${detail('Signed up', dateTime(person.created_at))}
           ${detail('Signup source', signedUpVia(person))}
@@ -4945,7 +4947,7 @@ function signedUpVia(person) {
 
   // The raw value beside the sentence, small. The sentence is for reading; the
   // value is what somebody would grep the database for.
-  return `${escapeHtml(label)} <span style="color:var(--ink-400);">&middot; ${escapeHtml(source)}</span>`;
+  return `<span title="Source: ${escapeHtml(source)}">${escapeHtml(label)}</span>`;
 }
 
 // One way only. See optOutControl() above for why: consent is the customer's to
@@ -8761,7 +8763,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
               ? `<a href="/ops/orders/${o.order_number}" class="ops-text-link">Order #${o.order_number}</a>`
               : '<span style="font-size:13px;color:var(--ink-500);">No linked order</span>'
           }
-          <span style="font-size:13px;color:var(--ink-500);">${escapeHtml(dateTime(i.created_at))}</span>
+          <span style="font-size:13px;color:var(--ink-500);">${escapeHtml(dateTime(i.created_at))} · ${escapeHtml(require('../web/checkouts-page').since(i.created_at))}</span>
           ${
             // WAS ANYBODY TOLD. An open issue nobody was paged about is the
             // worst state this screen can show - a customer promised a person
@@ -8794,7 +8796,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
         };">
           <a href="/ops/customers/${c.id}" class="ops-text-link">${escapeHtml(c.name || 'Unknown')}</a>
           <a href="tel:${escapeHtml(c.phone || '')}">${escapeHtml(formatPhone(c.phone || ''))}</a>
-          <a href="/ops/messages/${encodeURIComponent(String(c.phone || '').replace(/\\D/g, ''))}">View messages</a>
+          <a href="/ops/messages/${encodeURIComponent(String(c.phone || '').replace(/\D/g, ''))}">View messages</a>
         </div>
 
         ${
@@ -8802,7 +8804,7 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
             ? `<form method="post" action="/ops/issues/${i.id}/resolve"
                      style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;border-top:2px solid var(--ink-900);padding-top:18px;margin:0;">
                  <input class="input" type="text" name="resolution" maxlength="200"
-                        placeholder="Resolution notes" style="flex:1;min-width:240px;">
+                        aria-label="Resolution notes" placeholder="Resolution notes" style="flex:1;min-width:240px;">
                  <button type="submit" class="btn btn-primary">Mark resolved</button>
                </form>`
             : `<p style="font-size:13px;color:var(--ink-500);margin:14px 0 0;">
@@ -9050,7 +9052,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     };
 
     const body = `
-      ${sectionHeading('Messages', 'Conversations', threads.length).replace('<h2', '<h1').replace('</h2>', '</h1>')}
+      ${sectionHeading('Messages', 'Messages', threads.length).replace('<h2', '<h1').replace('</h2>', '</h1>')}
 
       ${
         leads.length
@@ -9150,7 +9152,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
     res.type('html').send(
       adminPage({
         // Slice three, People. The terminal skin. See adminPage().
-        terminal: true, title: 'Conversations', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
+        terminal: true, title: 'Messages', active: '/ops/messages', body, user: req.opsUser, openIssues: req.openIssues, serviceClosed: req.serviceClosed })
     );
   } catch (err) {
     next(err);
@@ -9582,7 +9584,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
       <div class="card card-xl" style="padding:28px;">
         ${
           thread.length
-            ? `<div style="display:flex;flex-direction:column;gap:20px;">${thread.map(bubble).join('')}</div>`
+            ? `<div class="pos-thread-messages" tabindex="0" role="region" aria-label="Conversation history">${thread.map(bubble).join('')}</div>`
             : `<p style="font-size:13px;color:var(--ink-500);margin:0;">No messages to display.</p>`
         }
 
@@ -11393,7 +11395,7 @@ router.get('/ops/broadcast', guard, withIssues, may('service.manage'), async (re
       adminPage({
         // Slice four, Admin and Business. The terminal skin. See adminPage().
         terminal: true,
-        title: 'Send a text blast',
+        title: 'Customer broadcast',
         active: '/ops/broadcast',
         body: broadcastBody({
           counts,
@@ -11416,24 +11418,24 @@ router.post('/ops/broadcast', guard, may('service.manage'), async (req, res, nex
     const text = String(body.body || '').trim().slice(0, 480);
     const key = AUDIENCES.some((a) => a.key === body.audience) ? body.audience : 'ALL';
 
+    const renderProblem = async message => {
+      const counts = {};
+      for (const a of AUDIENCES) counts[a.key] = (await audienceOf(a.key)).length;
+      return res.status(400).type('html').send(adminPage({terminal:true,title:'Customer broadcast',active:'/ops/broadcast',user:req.opsUser,
+        body:broadcastBody({counts,recent:[],problem:message,draft:text,audience:key})}));
+    };
     if (!text) {
-      return res.redirect(303, `/ops/broadcast?problem=${encodeURIComponent('Nothing to send.')}`);
+      return renderProblem('Enter a message to send.');
     }
 
     if (body.confirm !== 'yes') {
-      return res.redirect(
-        303,
-        `/ops/broadcast?problem=${encodeURIComponent('Tick the box to confirm before sending.')}`
-      );
+      return renderProblem('Confirm the message and audience before sending.');
     }
 
     const people = await audienceOf(key);
 
     if (!people.length) {
-      return res.redirect(
-        303,
-        `/ops/broadcast?problem=${encodeURIComponent('Nobody is in that group.')}`
-      );
+      return renderProblem('Nobody is in that group. Choose another audience; your message has been kept.');
     }
 
     let sent = 0;
@@ -12268,7 +12270,7 @@ router.get('/ops/team', guard, withIssues, may('team.manage'), async (req, res, 
               </div>
             </div>
             <button type="submit" class="btn btn-ink btn-lg" style="margin-top:20px;">
-              Add them ${icon('arrow-right', '22')}
+              Add team member ${icon('arrow-right', '22')}
             </button>
           </form>
         </div>

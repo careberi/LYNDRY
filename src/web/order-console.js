@@ -900,8 +900,8 @@ function orderConsoleBody({
   ${shipdayWorkspace&&cancellationHtml?'<dialog id="cancel-pickup-dialog" aria-label="Cancel pickup" style="max-width:640px;width:calc(100% - 40px);max-height:85vh;overflow:auto;border:1px solid #ccd5e5;border-radius:12px;padding:20px;"><form method="dialog"><button type="submit" class="cbtn">Close</button></form>'+cancellationHtml+'</dialog>':''}
 
   ${banner || ''}
+  ${dispatchHtml ? '<section class="pos-next-action" aria-label="Dispatch and next action"><h2>Dispatch and next action</h2>'+dispatchHtml+'</section>' : ''}
   ${overviewHtml || ('<div class="order-summary">'+meta+'</div>')}
-  ${dispatchHtml}
   ${shipdayWorkspace?toolbarHtml(order,actions,{...can,laundromats})+sideExtras+(can.money?cashForm(order,split,{money,can}):''):''}
   ${shipdayWorkspace?'':`<details class="order-controls order-management">
     <summary>Manage pickup and assignments</summary>

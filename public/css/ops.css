@@ -1810,3 +1810,48 @@ body.pos-app {
 .pos-app main.container .btn.shop-pickup-confirm--waiting { background:#15803d; border-color:#166534; color:#fff; opacity:1; }
 .pos-app main.container .btn.shop-pickup-confirm--needed { background:#b91c1c; border-color:#991b1b; color:#fff; }
 .pos-app main.container .shop-pickup-confirm:disabled { cursor:not-allowed; }
+
+/* POS review: compact work surfaces, clear actions, and readable phone rows. */
+.pos-workspace .logistics-stats {display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+.pos-workspace .logistics-stats > * {flex:1 1 115px;min-width:0!important;padding:10px 12px!important;}
+.pos-workspace .logistics-stats .eyebrow {font-size:11px;letter-spacing:.02em;}
+.pos-workspace .pos-secondary {margin:16px 0;}
+.pos-workspace summary {cursor:pointer;min-height:44px;padding-block:10px;font-weight:600;}
+.pos-workspace .intake {margin-block:16px;}
+.pos-workspace .intake > summary {padding:12px 16px;}
+.pos-workspace .pos-next-action {margin:20px 0;}
+.pos-workspace .pos-next-action > h2 {margin:0 0 10px;}
+.pos-workspace .pos-payment-total {font-size:20px;}
+.pos-workspace .pos-thread-messages {display:flex;flex-direction:column;gap:16px;max-height:52vh;overflow:auto;padding:12px;scrollbar-gutter:stable;}
+.pos-workspace .pos-directory-search {margin:18px 0;max-width:520px;}
+.pos-workspace .pos-directory-search input {display:block;width:100%;margin-top:8px;}
+.pos-workspace .pos-secondary-column {display:none;}
+.pos-workspace .pos-all-columns .pos-secondary-column {display:table-cell;}
+.pos-workspace .pos-order-table {min-width:0!important;}
+.pos-workspace .pos-order-table a {display:inline-block;padding-block:8px;}
+.pos-workspace .pos-hours-copy {padding:16px 0;border-block:1px solid var(--ink-100);margin-bottom:20px;}
+.pos-workspace .pos-hours-copy fieldset {display:flex;flex-wrap:wrap;gap:12px;border:0;padding:12px 0;}
+.pos-workspace .pos-hours-copy select {display:block;margin-top:6px;}
+.pos-workspace .pos-day-state {display:block;letter-spacing:normal;text-transform:none;font-size:13px;margin-top:8px;}
+.pos-workspace .pos-day-closed input[type=time] {opacity:.5;}
+.pos-workspace .ph-extra summary {font-size:13px;}
+.pos-workspace .ph-second {opacity:1;}
+.pos-workspace .pos-partner-staff {grid-column:1/-1;}
+.pos-workspace .pos-admin-group {margin:28px 0;}
+.pos-workspace .pos-admin-group h2 {margin-bottom:12px;}
+.pos-workspace .pos-broadcast-preview {display:block;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.6;}
+.pos-workspace .ops-table-wrap:focus-visible {outline:3px solid #3165c9;outline-offset:3px;}
+.pos-workspace input:disabled {background:#eef1f7;}
+@media(max-width:760px){
+ .pos-workspace .logistics-stats > * {flex:1 1 27%;padding:8px!important;}
+ .pos-workspace .logistics-stats > * > div:first-child {font-size:21px!important;}
+ .pos-workspace .pos-order-table thead {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+ .pos-workspace .pos-order-table,.pos-workspace .pos-order-table tbody,.pos-workspace .pos-order-table tr {display:block;width:100%;}
+ .pos-workspace .pos-order-table tr {padding:12px 0;border-bottom:1px solid #ccd5e5;}
+ .pos-workspace .pos-order-table td:not(.pos-secondary-column),.pos-workspace .pos-order-table.pos-all-columns td {display:grid;grid-template-columns:115px minmax(0,1fr);gap:10px;white-space:normal;padding:5px 12px!important;border:0!important;}
+ .pos-workspace .pos-order-table td:before {content:attr(data-label);font-weight:600;font-size:12px;}
+ .pos-workspace .pos-order-table a {min-height:28px;}
+ .pos-workspace .pos-thread-messages {max-height:48vh;}
+}
+
+@media(max-width:760px){.pos-workspace .logistics-stats{gap:8px!important}.pos-workspace .logistics-stats > *{min-height:0!important;padding:10px!important}.pos-workspace .logistics-stats .stat-value{font-size:20px!important}}

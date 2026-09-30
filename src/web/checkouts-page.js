@@ -104,6 +104,8 @@ function row(intent, { showNames }) {
 function checkoutsBody({ intents = [], showNames = true, minutes = 20 }) {
   return `
   <h1>Unfinished checkouts</h1>
+  <p>People who started booking but have not completed it. These are not confirmed pickups. Open their messages to follow up without duplicating reminders.</p>
+  ${!intents.length ? '<p role="status" class="ops-note">No unfinished checkouts.</p>' : `
   <div class="ops-table-wrap">
     <table class="ops-table">
       <thead><tr>
@@ -114,7 +116,7 @@ function checkoutsBody({ intents = [], showNames = true, minutes = 20 }) {
         ${intents.map((i) => row(i, { showNames })).join('')}
       </tbody>
     </table>
-  </div>`;
+  </div>`}`;
 }
 
 module.exports = { checkoutsBody, when, since };
