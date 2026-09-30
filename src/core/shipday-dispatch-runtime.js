@@ -33,6 +33,7 @@ async function validate(plan){
   const refusal=dispatch.collectRefusal(order,held);
   if(refusal)return {ok:false,reason:refusal.detail};
   if(plan.leg==='TO_PARTNER' && order.payment_status!=='WAIVED' && !billing.holdIsFresh(order))return {ok:false,reason:'A current payment authorization is required.'};
+  if(plan.leg==='TO_CUSTOMER' && !(await result(db.rpc('partner_return_weight_allowed',{p_order:order.id}))))return {ok:false,reason:'Return weight verification is required.'};
   if(plan.leg==='TO_CUSTOMER' && !['PAID','WAIVED'].includes(order.payment_status))return {ok:false,reason:'Settle payment before return delivery.'};
   const partnerId=order.partner_id||order.intended_partner_id;
   if(!partnerId)return {ok:false,reason:'Select the laundromat before dispatch.'};

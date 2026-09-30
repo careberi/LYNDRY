@@ -51,12 +51,12 @@ function createRouter(service) {
     try {
       const result = await service.act({ partner: req.partner.id, staff: req.partnerUser,
         number: req.params.number, action: req.params.action,
-        weight: req.body.weight_lb });
+        weight: req.body.weight_lb, shopReference: req.body.shop_reference ?? '' });
       if (!result.ok) {
         const order = await service.detail(req.partner.id, req.params.number);
         if (!order) return res.status(404).type('html').send(view.missing(ctx));
         return res.status(400).type('html').send(view.detail({ ...ctx, order, notice: result.reason,
-          draft: { weight: req.body.weight_lb } }));
+          draft: { weight: req.body.weight_lb, shopReference:req.body.shop_reference } }));
       }
       if(result.notice==='collected')return res.redirect(303, `/shop?lang=${ctx.lang}&notice=collected`);
       return res.redirect(303, `/shop/orders/${req.params.number}?lang=${ctx.lang}&notice=${result.notice}`);

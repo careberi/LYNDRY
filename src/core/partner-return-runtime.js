@@ -18,10 +18,11 @@ async function load(orderId,partnerId){
     data(db.from('partner_order_intakes').select('*').eq('order_id',orderId).eq('partner_id',partnerId).maybeSingle()),
     data(db.from('courier_deliveries').select('status').eq('order_id',orderId).eq('leg','TO_CUSTOMER').not('delivery_id','is',null)),
   ]);
+  const returnWeightAllowed=await data(db.rpc('partner_return_weight_allowed',{p_order:orderId}));
   const dispatch=require('./dispatch');
   const held=await dispatch.heldCustomerIds([order.customer_id]);
   const dispatchRefused=Boolean(dispatch.collectRefusal(order,held));
-  return {order,customer:order.customers,shop,intake,dispatchRefused,hasCourier:couriers.some(c=>!['canceled','cancelled'].includes(String(c.status).toLowerCase()))};
+  return {order,customer:order.customers,shop,intake,returnWeightAllowed,dispatchRefused,hasCourier:couriers.some(c=>!['canceled','cancelled'].includes(String(c.status).toLowerCase()))};
 }
 const store={...sharedStore,async ensure(order){
   await data(db.from('shipday_dispatch_plans').upsert({order_id:order.id,leg:'TO_CUSTOMER',mode:'IN_HOUSE',simulation:false,dispatch_at:new Date().toISOString()}, {onConflict:'order_id,leg',ignoreDuplicates:true}));

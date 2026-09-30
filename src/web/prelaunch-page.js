@@ -122,7 +122,7 @@ ${banner(problem, 'bad')}
 <div class="ops-navigation-grid">
   ${[
     { href: '/ops/settings', eyebrow: 'Operations', title: 'Service status' },
-    ...(shipdayWorkspace ? [{ href: '/ops/pricing', eyebrow: 'Pricing', title: 'Pricing and card holds' }] : []),
+    ...(shipdayWorkspace ? [{ href: '/ops/pricing', eyebrow: 'Pricing', title: 'Pricing and card holds' }, { href:'/ops/laundry-checks', eyebrow:'Laundromats', title:'Return weight checks' }] : []),
     {
       href: '/ops/promotions',
       eyebrow: 'Offers',

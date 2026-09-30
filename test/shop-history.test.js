@@ -3,14 +3,14 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createService}=require('../src/core/partner-intake');
 const {board}=require('../src/web/shop-intake-page');
 test('history reads confirmed collections for only the signed-in shop with stable bounded paging',async()=>{
- const calls=[];const rows=Array.from({length:11},(_,i)=>({orders:{order_number:9015-i,name:'PRIVATE'},weight_lb:30,collected_at:'2026-09-28T17:36:00Z',customer:{name:'PRIVATE'}}));
+ const calls=[];const rows=Array.from({length:11},(_,i)=>({orders:{order_number:9015-i,name:'PRIVATE'},weight_lb:99,return_weight_lb:30,shop_reference:'SHOP-12',collected_at:'2026-09-28T17:36:00Z',customer:{name:'PRIVATE'}}));
  const db={from(table){calls.push(['table',table]);const q={select(v){calls.push(['select',v]);return q;},eq(...a){calls.push(['eq',...a]);return q;},not(...a){calls.push(['not',...a]);return q;},order(...a){calls.push(['order',...a]);return q;},range(...a){calls.push(['range',...a]);return Promise.resolve({data:rows});}};return q;}};
  const service=createService({db});const result=await service.history('shop-A',2);
  assert.equal(result.page,2);assert.equal(result.hasNext,true);assert.equal(result.orders.length,10);
- assert.deepEqual(result.orders[0],{number:9015,weight:30,collectedAt:'2026-09-28T17:36:00Z'});
+ assert.deepEqual(result.orders[0],{number:9015,weight:30,shopReference:'SHOP-12',collectedAt:'2026-09-28T17:36:00Z'});
  assert.ok(calls.some(c=>JSON.stringify(c)===JSON.stringify(['eq','partner_id','shop-A'])));
  assert.ok(calls.some(c=>JSON.stringify(c)===JSON.stringify(['not','collected_at','is',null])));
- assert.deepEqual(calls.at(-1),['range',10,20]);assert.equal(calls.find(c=>c[0]==='select')[1],'weight_lb,collected_at,orders!inner(order_number)');
+ assert.deepEqual(calls.at(-1),['range',10,20]);assert.equal(calls.find(c=>c[0]==='select')[1],'return_weight_lb,shop_reference,collected_at,orders!inner(order_number)');
  for(const page of ['0','-1','bad','100000',['2','3']])assert.equal((await service.history('shop-A',page)).page,1);
 });
 test('completed history is separate from active queue counts, private fields, delivery claims and action forms',()=>{

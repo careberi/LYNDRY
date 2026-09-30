@@ -22,7 +22,7 @@ test('no driver, cancellation, failure, unconfirmed third-party request and wron
 test('incoming list, counts, search and detail omit unverified orders; completed intake remains visible',async()=>{
  const orders=[1,2,3].map(n=>({id:String(n),order_number:9015+n,status:'REQUESTED'}));
  const intake={order_id:'3',received_at:'now',received_verified_at:'now',completed_at:'now',completed_by:'staff',weight_lb:33};
- const db={from(table){const q={select(){return q;},or(){return q;},eq(){return q;},in(){return q;},order(){return q;},then(resolve){return Promise.resolve({data:table==='orders'?orders:table==='partner_order_intakes'?[intake]:[]}).then(resolve);}};return q;}};
+ const db={from(table){const q={select(){return q;},maybeSingle(){return q;},or(){return q;},eq(){return q;},in(){return q;},order(){return q;},then(resolve){return Promise.resolve({data:table==='orders'?orders:table==='partner_order_intakes'?[intake]:[]}).then(resolve);}};return q;}};
  const service=createService({db,deliveryInfo:async o=>o.id==='2'?{assignmentVerified:true,driver:'Alex',scheduledArrivalAt:'2026-09-29T21:00:00Z'}:{assignmentVerified:false}});
  const views=await service.list('shop');assert.deepEqual(views.map(o=>o.number),[9017,9018]);assert.equal(views[1].stage,'WASH');assert.equal(await service.detail('shop','9016'),null);
  const html=board({shop:{name:'Shop'},lang:'en',orders:views});assert.doesNotMatch(html,/#9016/);assert.match(html,/Scheduled arrival/);assert.match(html,/Sep 29, 2026/);assert.match(html,/5:00 PM/);assert.match(html,/Live ETA/);

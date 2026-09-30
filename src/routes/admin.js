@@ -1709,6 +1709,7 @@ router.post('/ops/orders/:id/sync-shipday',guard,may('orders.override'),require(
 });
 require('./dev-journey-routes').registerAdmin(router, { guard, may, adminPage });
 require('./pricing-settings').registerAdmin(router, { guard, may, adminPage });
+require('./laundromat-checks').registerAdmin(router, { guard, may, adminPage });
 require('./customer-pricing').registerAdmin(router, { guard, may });
 
 // ---------------------------------------------------------------------------

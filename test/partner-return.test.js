@@ -20,7 +20,7 @@ test('ready creates one real in-house return and repeated/concurrent requests do
  assert.equal((await f.request('order','shop','admin')).already,true);assert.equal(f.calls.length,2);
 });
 test('not-ready, unverified, unpaid, held and existing courier orders never request a driver',async()=>{
- for(const change of [f=>f.context.order.status='AT_PARTNER',f=>f.context.order.payment_status='UNPAID',f=>f.context.intake.received_verified_at=null,f=>f.context.hasCourier=true,f=>f.context.shop.status='INACTIVE',f=>f.context.dispatchRefused=true]){
+ for(const change of [f=>f.context.order.status='AT_PARTNER',f=>f.context.order.payment_status='UNPAID',f=>f.context.intake.received_verified_at=null,f=>f.context.hasCourier=true,f=>f.context.shop.status='INACTIVE',f=>f.context.dispatchRefused=true,f=>f.context.returnWeightAllowed=false]){
   const f=fixture();change(f);assert.equal((await f.request('order','shop','admin')).ok,false);assert.equal(f.calls.length,0);
  }
 });

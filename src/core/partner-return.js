@@ -35,6 +35,7 @@ function createRequester({store,provider,load,enabled,now=Date.now}) {
     if(!order || order.status!=='READY' || !intake?.ready_at || !intake.completed_at || !intake.received_verified_at)return 'Laundry intake and readiness must be complete.';
     if(!['PAID','WAIVED'].includes(order.payment_status))return 'Settle payment before return delivery.';
     if(!shop || shop.id!==order.partner_id || shop.status!=='ACTIVE' || shop.type!=='LAUNDROMAT')return 'The laundromat assignment changed.';
+    if(context.returnWeightAllowed===false)return 'Return weight check needs LYNDRY review before dispatch.';
     if(context.dispatchRefused)return 'This return needs attention from LYNDRY before dispatch.';
     if(hasCourier)return 'A courier booking already exists. Contact LYNDRY.';
     if(!customer?.phone || !customer.address_line1 || !shop.address_line1)return 'Return delivery details are incomplete.';

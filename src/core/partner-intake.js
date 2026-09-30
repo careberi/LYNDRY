@@ -2,6 +2,7 @@
 
 const OPEN = ['REQUESTED', 'IN_PROCESS', 'AT_PARTNER', 'READY'];
 const FIELDS = 'id,order_number,status,partner_id,intended_partner_id,at_partner_at,pickup_date,pickup_time';
+const validReference = value => typeof value==='string' && value.trim().length<=64 && !/[\x00-\x1f\x7f]/.test(value);
 const validNumber = value => /^[1-9]\d{0,9}$/.test(String(value || ''));
 function validIntake(weight) {
   return /^\d+(\.\d{1,2})?$/.test(String(weight)) && Number(weight) > 0 && Number(weight) <= 50;
@@ -23,6 +24,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
     const orders = await data(db.from('orders').select(FIELDS).or(scope(partner)).in('status', OPEN).order('order_number'));
     if (!orders.length) return [];
     const ids = orders.map(o => o.id);
+    const policy=await data(db.from('laundromat_workflow_settings').select('weight_tolerance_lb').eq('id',true).maybeSingle());
     const [intakes, plans, legs] = await Promise.all([
       data(db.from('partner_order_intakes').select('*').eq('partner_id', partner).in('order_id', ids)),
       data(db.from('shipday_dispatch_plans').select('order_id,leg,state,mode,assigned_name,shipday_order_id,external_reference,simulation').in('order_id', ids)),
@@ -60,9 +62,14 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         canCollect: stage === 'READY' && plan?.state === 'ASSIGNED' && live?.canCollect === true,
         returnNeedsRequest: stage === 'READY' && !courier && (!plan || (!['PROCESSING','REVIEW'].includes(plan.state) && (plan.simulation || ['PLANNED','BLOCKED'].includes(plan.state)))),
         receivedVerified: Boolean(intake?.received_verified_at),
-        weight: intake?.weight_lb || null,
+        intakeComplete: complete(intake),
+        shopReference: intake?.shop_reference || null,
+        weightCheckEnabled: policy?.weight_tolerance_lb != null,
+        returnCheckStatus: intake?.return_check_status || 'PENDING',
+        returnDueAt: intake?.return_due_at || null,
+        weight: stage==='READY' && ['PASSED','RELEASED'].includes(intake?.return_check_status) ? intake.return_weight_lb : null,
         receivedAt: intake?.received_at || null,
-        officeReview: intake?.needs_review === true,
+        officeReview: intake?.needs_review === true || intake?.return_check_status === 'HELD',
       };
     })));
     return views.filter(Boolean);
@@ -72,12 +79,12 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
     const size=10, start=(page-1)*size;
     // Completion here means this shop confirmed handoff, not customer delivery.
     const rows=await data(db.from('partner_order_intakes')
-      .select('weight_lb,collected_at,orders!inner(order_number)')
+      .select('return_weight_lb,shop_reference,collected_at,orders!inner(order_number)')
       .eq('partner_id',partner).not('collected_at','is',null)
       .order('collected_at',{ascending:false}).order('order_id',{ascending:false})
       .range(start,start+size));
     return {page,hasNext:rows.length>size,orders:rows.slice(0,size).map(row=>({
-      number:row.orders.order_number,weight:row.weight_lb,collectedAt:row.collected_at,
+      number:row.orders.order_number,weight:row.return_weight_lb,shopReference:row.shop_reference,collectedAt:row.collected_at,
     }))};
   }
   async function detail(partner, number) {
@@ -118,9 +125,10 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
     return url ? readDeliveryPhoto(url) : null;
   }
   const working = new Set();
-  async function act({ partner, staff, number, action, weight }) {
+  async function act({ partner, staff, number, action, weight, shopReference='' }) {
     const order = await find(partner, number, action==='collect');
     if (!order) return { ok: false, reason: 'unavailable' };
+    if (action === 'intake' && !validReference(shopReference)) return {ok:false,reason:'invalid_reference'};
     if (action === 'intake' && !validIntake(weight)) return { ok: false, reason: 'invalid_intake' };
     if (!['intake','ready','request-return','collect'].includes(action)) return { ok: false, reason: 'unavailable' };
     if (working.has(order.id)) return { ok: false, reason: 'busy' };
@@ -138,8 +146,8 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
       }
       const result = await data(db.rpc(staff.isOpsAdmin ? 'record_partner_intake_admin' : 'record_partner_intake', {
         p_order: order.id, p_partner: partner, [staff.isOpsAdmin ? 'p_admin' : 'p_staff']: staff.id, p_action: action,
-        p_tracking: null,
-        p_weight: action === 'intake' ? Number(weight) : null,
+        p_tracking: action === 'intake' ? shopReference.trim() || null : null,
+        p_weight: ['intake','ready'].includes(action) && validIntake(weight) ? Number(weight) : null,
       }));
       if (!result.ok) return result;
       if (result.already && action === 'intake') return {ok:true,notice:'intake'};
@@ -166,4 +174,4 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
   }
   return { list, history, detail, deliveryPhoto, act };
 }
-module.exports = { createService, validIntake, validNumber, complete };
+module.exports = { createService, validIntake, validReference, validNumber, complete };

@@ -2061,3 +2061,7 @@ body.ly-pop-locked { overflow: hidden; }
 .account-charge summary { cursor: pointer; color: var(--ink-700); font-size: 14px; white-space: nowrap; }
 .account-charge summary:focus-visible { outline: 2px solid var(--ink-900); outline-offset: 4px; }
 .account-charge > span { display: block; margin-top: 8px; font-size: 14px; font-weight: 400; white-space: nowrap; }
+
+/* Laundromat deadlines include readable status, not color alone. */
+.shop-turnaround{display:inline-block;padding:5px 9px;border-radius:6px;font-weight:700}
+.shop-turnaround--green{background:#daf6e6;color:#165437}.shop-turnaround--yellow{background:#fff2c4;color:#6d4c00}.shop-turnaround--red{background:#ffe1df;color:#9b2020}.shop-turnaround--unknown{background:#eef1f7;color:#40516b}.shop-deadline-detail{margin-bottom:22px}.shop-deadline-detail small{display:block;margin-top:6px}
