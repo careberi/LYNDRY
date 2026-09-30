@@ -2080,13 +2080,13 @@ body.ly-pop-locked { overflow: hidden; }
 .pricing-address-form { padding:28px; gap:18px; }
 .pricing-address-form .input { min-height:54px; }
 .nav-toggle > summary { min-height:44px; min-width:60px; display:flex; align-items:center; justify-content:center; }
-.booking-heading { border-bottom:3px solid var(--ink-900); }
-.booking-heading > .container { max-width:660px; padding-block:28px; }
-.booking-heading .display-2 { font-size:clamp(34px,5vw,52px); text-wrap:balance; }
-.booking-content { max-width:660px; padding-top:24px; padding-bottom:64px; }
+.booking-heading { background:transparent; border-bottom:0; }
+.booking-heading > .container { max-width:700px; padding-top:32px; padding-bottom:0; }
+.booking-heading .display-2 { font-size:clamp(30px,4vw,42px); line-height:1.1; text-wrap:balance; }
+.booking-content { max-width:700px; padding-top:24px; padding-bottom:64px; }
 .booking-progress ol { display:flex; list-style:none; margin:0 0 24px; padding:0; gap:8px; }
-.booking-progress li { flex:1; padding:8px 0; border-bottom:2px solid currentColor; font-size:14px; opacity:.75; }
-.booking-progress li[aria-current="step"] { opacity:1; font-weight:800; border-bottom-width:4px; }
+.booking-progress li { flex:1; padding:8px 0; border-bottom:3px solid var(--ink-200); font-size:14px; color:var(--ink-700); }
+.booking-progress li[aria-current="step"] { color:var(--suds-700); font-weight:700; border-bottom-color:var(--suds-700); }
 .booking-address { font-size:14px; line-height:1.5; overflow-wrap:anywhere; margin:0 0 16px; }
 @media(max-width:560px) {
   .pricing-heading { padding-top:28px; }
@@ -2181,3 +2181,22 @@ body.ly-pop-locked { overflow: hidden; }
 }
 
 .google-address-form [hidden] { display: none !important; }
+
+/* Booking is a focused task: legible labels and consistent field rhythm. */
+.booking-content .field-label {
+  font-family:inherit; font-size:15px; font-weight:650; letter-spacing:0; text-transform:none; line-height:1.4;
+}
+.booking-content .field-hint { font-size:14px; line-height:1.45; color:var(--ink-700); }
+.booking-content .stack { gap:22px; }
+.booking-content .google-address-form .address-status { min-height:0; }
+.booking-content :is(.input, .select, gmp-place-autocomplete) { min-height:54px; font-size:16px; }
+.booking-content textarea { min-height:96px; font-size:16px; }
+.booking-content .btn:disabled { background:#e3e5dc; color:#51584e; opacity:1; box-shadow:none; border-color:transparent; cursor:not-allowed; }
+.booking-content > p:last-child a { display:inline-flex; align-items:center; min-height:44px; }
+@media(max-width:560px) {
+  .booking-heading > .container { padding-top:24px; }
+  .booking-progress ol { gap:12px; margin-bottom:20px; }
+  .booking-progress li { font-size:13px; }
+  .booking-content { padding-top:20px; }
+  .booking-content .stack { gap:20px; }
+}
