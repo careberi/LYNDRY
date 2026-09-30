@@ -75,7 +75,9 @@ function rowFor(order) {
   const expectedCents =
     billedWeightLb == null
       ? null
-      : Math.max(Math.round(billedWeightLb * rate), floor) + additionsCents;
+      : (order.pricing_snapshot
+          ? require('./pricing-economics').quotedTotal({ ...order.pricing_snapshot, weightLb: billedWeightLb })
+          : Math.max(Math.round(billedWeightLb * rate), floor)) + additionsCents;
 
   const partner = order.partners || null;
   const wholesale = partner ? num(partner.wholesale_per_lb_cents) : null;
@@ -152,7 +154,7 @@ async function rows({ from = null, to = null, partnerId = null } = {}) {
     .from('orders')
     .select(
       'id, order_number, status, pickup_date, weight_lb, partner_weight_lb, ' +
-        'return_weight_lb, price_cents, price_per_lb_cents, minimum_cents, payment_status, ' +
+        'return_weight_lb, price_cents, price_per_lb_cents, minimum_cents, payment_status, pricing_snapshot, ' +
         // NAMED RELATIONSHIP, because orders points at partners TWICE - partner_id
         // is where the bag actually went and intended_partner_id is where it was
         // planned to go when it was booked. An unqualified embed is ambiguous and

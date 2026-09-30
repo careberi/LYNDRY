@@ -130,6 +130,7 @@ function reportsBody({ report, partners = [], form = {} }) {
   ${
     rows.length
       ? `
+  <div class="ops-note"><strong>Recorded charges: ${cash(totals.chargedCents)}</strong> · Expected before discounts: ${cash(totals.expectedCents)} · Partner payable: ${cash(totals.partnerOwedCents)}<p>Totals include only recorded values. Review missing weights above before reconciling.</p></div>
   <div class="ops-table-wrap">
     <table class="ops-table">
       <thead>
@@ -146,7 +147,7 @@ function reportsBody({ report, partners = [], form = {} }) {
           ${th('Return weight (lb)', 'right')}
           ${th('Add-ons', 'right')}
           ${th('Billed weight (higher)', 'right')}
-          ${th('Customer paid', 'right')}
+          ${th('Recorded charge', 'right')}
           ${th('Expected charge', 'right')}
           ${th('Payable weight (lower)', 'right')}
           ${th('Partner payable', 'right')}
@@ -206,7 +207,7 @@ function reportsBody({ report, partners = [], form = {} }) {
 
   <p style="font-size:14px;line-height:1.6;color:var(--ink-500);margin:18px 0 0;max-width:70ch;">
     <strong>Weight difference</strong>: partner weight minus LYNDRY weight.
-    <strong>Expected charge</strong>: billed weight at the stored order rate, plus add-ons.
+    <strong>Expected charge</strong>: billed weight using the saved quote, including its operational fee and minimum, plus add-ons, before discounts. Older orders use their stored rate and minimum. Recorded charge does not itself confirm payment.
     <strong>Payable weight</strong>: the lower of the two recorded weights.
     <strong>Gross balance</strong>: customer payment minus partner payable, before transport, labor, and payment processing costs.
   </p>`

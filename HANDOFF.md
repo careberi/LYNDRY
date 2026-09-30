@@ -1,6 +1,14 @@
+## Current: report saved quote total — 2026-09-30
+
+Approved alongside the POS review. Include the saved operational fee and inclusive minimum in report expected charges, preserve legacy calculations, missing weights and higher/lower weight rules. Read-only report change: never change charges, dispatch or payment state. Stacked on codex/pos-workflow-clarity. Independent review and Neil click-test pending.
+
+Validation: all 1,595 tests pass, including saved fee, inclusive minimum, fractional rounding, legacy orders and missing weights. Browser confirms #9019 expected $44.60 equals its recorded $44.60. No charge, message or driver was requested.
+
 ## Current: approved POS workflow clarity — 2026-09-30
 
 Implement the approved page-by-page review: operational exceptions first; compact responsive lists; searchable customers/messages; customer/conversation hierarchy; accessible hours and promotion forms; reversible hours-copy UI; broadcast draft recovery; clearer settings, navigation, reports, and empty states. Preserve permissions, consent, payment/dispatch state machines, manual shop pickup confirmation, and no-card/no-pickup rules. The report calculation fix is a separate follow-up branch. Desktop and phone have equal priority. Independent review and Neil click-test remain pending.
+
+Validation: 1,591 tests passed before the report follow-up. Desktop and 390px phone checks covered board, dispatch detail, profile, conversation, hours-copy and broadcast preview. Nine inherited accent-border detector findings retained as existing status/quotation styling. No business-state form was submitted.
 
 ## Current: customer booking clarity (2026-09-30)
 
