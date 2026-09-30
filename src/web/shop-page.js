@@ -331,6 +331,7 @@ function page({
       : { text: site.name, href: '/shop', label: site.name },
     nav: usePos ? shopPosNav(lang, { active, isOwner, signedIn }) : signedIn ? shopNav(lang, { active, isOwner }) : '',
     aside: langToggle(lang, here),
+    sidebarIdentity: signedIn && shop ? {name:shop.name,address:[shop.address_line1,shop.address_line2,shop.city,shop.state,shop.postal_code].filter(Boolean).join(', ')} : null,
     signOut: signedIn ? { action: '/shop/logout', label: word('signOut', lang) } : null,
     // ITS OWN, SCOPED TO /shop. Sharing the ops one would give a laundromat's
     // tablet a home-screen app scoped to /ops that opens on the driver's route

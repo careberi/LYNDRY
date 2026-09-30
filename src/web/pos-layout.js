@@ -14,11 +14,11 @@ const paths = {
 function posIcon(name) {
   return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[name] || paths.tools)+'</svg>';
 }
-function posChrome({ title, mark, nav, aside, signOut }) {
+function posChrome({ title, mark, nav, aside, signOut, sidebarIdentity }) {
   return '<a class="pos-skip" href="#pos-main">Skip to workspace</a>' +
     '<header class="pos-topbar"><a class="pos-brand" href="'+escapeHtml(mark.href)+'">LYNDRY<span>POS</span></a>' +
     '<div class="pos-context"><span>Wash &amp; fold</span><span class="pos-context-divider">/</span><strong>'+escapeHtml(title)+'</strong></div>' +
     '<div class="pos-account">'+aside+(signOut ? '<form method="post" action="'+escapeHtml(signOut.action)+'"><button class="btn btn-outline" type="submit">Sign out</button></form>' : '')+'</div></header>' +
-    '<aside class="pos-sidebar"><details class="pos-navigation" open><summary>Navigation <span aria-hidden="true">☰</span></summary><nav aria-label="Operations">'+nav+'</nav></details><div class="pos-sidebar-foot">LYNDRY Operations<br><span>Wash &amp; fold delivery</span></div></aside>';
+    '<aside class="pos-sidebar"><details class="pos-navigation" open><summary>Navigation <span aria-hidden="true">☰</span></summary><nav aria-label="Operations">'+nav+'</nav></details><div class="pos-sidebar-foot">'+(sidebarIdentity ? escapeHtml(sidebarIdentity.name)+'<br><span>'+escapeHtml(sidebarIdentity.address)+'</span>' : 'LYNDRY Operations<br><span>Wash &amp; fold delivery</span>')+'</div></aside>';
 }
 module.exports = { posIcon, posChrome };

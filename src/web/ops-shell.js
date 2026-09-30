@@ -111,6 +111,7 @@ function opsShell({
   // Whatever sits to the right of the nav - the signed-in person's name and
   // role on ops, a language toggle on the portal.
   aside = '',
+  sidebarIdentity = null,
 
   // `{ action, label }`, or null for no button at all. The old shell rendered
   // Sign out unconditionally even with no user, and posted a hardcoded
@@ -191,7 +192,7 @@ ${head}
     // do, and a nav offering nine other places to be is an invitation to read
     // ahead - which is the thing that screen was built not to allow.
     pos && !bare
-      ? posChrome({ title, mark, nav, aside, signOut })
+      ? posChrome({ title, mark, nav, aside, signOut, sidebarIdentity })
       : bare
       ? `<div class="container" style="padding-top:22px;text-align:center;">
            ${logo('compact', { href: mark.href, label: mark.label })}

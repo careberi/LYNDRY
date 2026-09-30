@@ -18,7 +18,7 @@ test('completed history is separate from active queue counts, private fields, de
  const html=board(ctx),section=html.slice(html.indexOf('<section id="section-history"'));
  assert.match(section,/Completed orders/);assert.match(section,/#9015/);assert.match(section,/30 lb/);assert.match(section,/Sep 28, 2026/);assert.match(section,/1:36 PM/);
  assert.match(section,/history_page=2#section-history/);assert.doesNotMatch(section,/SECRET_CUSTOMER|9876|\/orders\/9015|\/intake|Delivered to customer/);
- assert.match(html,/Incoming deliveries/);assert.match(html,/Ready to wash/);assert.match(html,/Ready to return/);
+ assert.match(html,/Incoming deliveries/);assert.match(html,/Washing/);assert.match(html,/Outgoing deliveries/);
  assert.match(board({...ctx,lang:'es'}),/Pedidos completados/);
  assert.match(board({...ctx,history:{page:1,hasNext:false,orders:[]}}),/No completed orders yet/);
 });

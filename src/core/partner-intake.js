@@ -63,6 +63,8 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         returnNeedsRequest: stage === 'READY' && !courier && (!plan || (!['PROCESSING','REVIEW'].includes(plan.state) && (plan.simulation || ['PLANNED','BLOCKED'].includes(plan.state)))),
         receivedVerified: Boolean(intake?.received_verified_at),
         intakeComplete: complete(intake),
+        washCompletedAt: intake?.wash_completed_at || null,
+        washStartedAt: intake?.wash_started_at || null,
         shopReference: intake?.shop_reference || null,
         weightCheckEnabled: policy?.weight_tolerance_lb != null,
         returnCheckStatus: intake?.return_check_status || 'PENDING',
@@ -130,7 +132,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
     if (!order) return { ok: false, reason: 'unavailable' };
     if (action === 'intake' && !validReference(shopReference)) return {ok:false,reason:'invalid_reference'};
     if (action === 'intake' && !validIntake(weight)) return { ok: false, reason: 'invalid_intake' };
-    if (!['intake','ready','request-return','collect'].includes(action)) return { ok: false, reason: 'unavailable' };
+    if (!['intake','wash-complete','ready','request-return','collect'].includes(action)) return { ok: false, reason: 'unavailable' };
     if (working.has(order.id)) return { ok: false, reason: 'busy' };
     working.add(order.id);
     try {

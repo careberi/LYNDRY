@@ -32,9 +32,9 @@ test('incoming order requests weight only and keeps instructions absent in both 
     assert.doesNotMatch(html,/SECRET_WASH|\/ready"/);
   }
 });
-test('saved intake shows structured wash instructions and readiness action',()=>{
+test('saved intake shows wash instructions and wash-complete action',()=>{
   const html=page.detail({...ctx,order:washed});
-  assert.match(html,/Cold/);assert.doesNotMatch(html,/T-501/);assert.match(html,/\/9015\/ready/);
+  assert.match(html,/Cold/);assert.doesNotMatch(html,/T-501/);assert.match(html,/\/9015\/wash-complete/);
   assert.doesNotMatch(html,/name="weight_lb"|name="tracking_number"/);
 });
 test('private customer fields and tracking links never enter the rendered portal',()=>{

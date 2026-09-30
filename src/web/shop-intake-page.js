@@ -8,10 +8,12 @@ const { posIcon } = require('./pos-layout');
 const { customerText } = require('./customer-copy');
 const labels = {
   INCOMING: ['Incoming deliveries', 'Entregas por llegar'],
-  WASH: ['Ready to wash', 'Lista para lavar'],
-  READY: ['Ready to return', 'Lista para devolver'],
+  WASH: ['Washing', 'En lavado'],
+  READY: ['Outgoing deliveries', 'Entregas de salida'],
 };
 const messages = {
+  'wash-complete':['Wash complete. Weigh the full order again to prepare its return.','Lavado completo. Vuelva a pesar el pedido para preparar la devolucion.'],
+  wash_complete_first:['Mark the wash complete before entering the return weight.','Marque el lavado completo antes de ingresar el peso de devolucion.'],
   invalid_reference:['Use an optional reference up to 64 characters.','Use una referencia opcional de hasta 64 caracteres.'],
   return_weight_required:['Enter a fresh full-order weight before requesting a return driver.','Ingrese un peso nuevo antes de solicitar al conductor.'],
   return_weight_held:['Return blocked. Keep this order here and contact LYNDRY for a weight review.','Devolucion bloqueada. Guarde el pedido y contacte a LYNDRY para revisar el peso.'],
@@ -45,7 +47,7 @@ function shell(ctx, title, body) {
     body:say(ctx.lang,'Actions are recorded under your LYNDRY admin account.','Las acciones se registran con su cuenta de administrador.'),
     // The portal has no navigation back into POS, even for LYNDRY admins.
 }) : '';
-  return page({ ...ctx, signedIn: true, active: '/shop', showProcessingGuide: false, title, body: `<div class="shop-intake">${body}</div>`+require('./shop-deadline-clock').script,
+  return page({ ...ctx, signedIn: true, active: '/shop', showProcessingGuide: false, title, body: `<div class="shop-intake">${body}</div>`+require('./shop-deadline-clock').script+require('./shop-return-weight').script,
     notes: [adminNote, message ? opsNote({ tone: ['accept','intake','ready','return_requested','collected'].includes(notice) ? 'good' : 'bad', title: e(message[ctx.lang === 'es' ? 1 : 0]) }) : ''].filter(Boolean) });
 }
 const {phone} = require('../providers/couriers/shipday-tracking');
@@ -91,7 +93,7 @@ function scheduledArrival(o,lang) {
   return '<small>'+e(label)+'</small><strong>'+e(new Date(value).toLocaleString(lang==='es'?'es-US':'en-US',{timeZone:'America/New_York',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))+'</strong><small>'+e(say(lang,'Eastern time · Live ETA:','Hora del este · ETA en vivo:'))+'</small>';
 }
 const stageIcon={INCOMING:'delivery',WASH:'tools',READY:'delivery'};
-const badge=(lang,stage)=>`<span class="shop-status shop-status--${stage.toLowerCase()}">${e(label(lang,stage))}</span>`;
+const badge=(lang,stage,washed=false)=>`<span class="shop-status shop-status--${stage.toLowerCase()}">${e(stage==='WASH'&&washed?say(lang,'Wash complete','Lavado completo'):label(lang,stage))}</span>`;
 function boardUrl(lang,stage='',query='') {
   const params=new URLSearchParams({lang});if(stage)params.set('stage',stage);if(query)params.set('q',query);return '/shop?'+params;
 }
@@ -102,7 +104,7 @@ function shopReference(o,lang) {
 function turnaround(o,lang) {
  const c=require('../core/laundromat-countdown').countdown(o.returnDueAt,Date.now(),lang);
  const due=o.returnDueAt ? new Date(o.returnDueAt).toLocaleString(lang==='es'?'es-US':'en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
- return '<span class="shop-turnaround shop-turnaround--'+c.tone+'"'+(due?' data-shop-deadline="'+e(o.returnDueAt)+'" data-lang="'+lang+'"':'')+'>'+e(c.text)+'</span>'+(due?'<small>'+e(say(lang,'Leave by ','Salir antes de ')+due+' ET')+'</small>':'');
+ return '<span class="shop-turnaround shop-turnaround--'+c.tone+'"'+(due?' data-shop-deadline="'+e(o.returnDueAt)+'" data-lang="'+lang+'"':'')+'>'+e(c.text)+'</span>';
 }
 function returnWeightField(o,lang) {
  if(!o.weightCheckEnabled || ['PASSED','RELEASED'].includes(o.returnCheckStatus))return '';
@@ -133,10 +135,10 @@ function board(ctx) {
       const weight=`<td>${o.weight?e(o.weight)+' lb':'—'}</td>`;
       const link=(text)=>`<a id="order-action-${o.number}" class="btn btn-outline" href="${href}">${e(text)}</a>`;
       if(s==='INCOMING')return `<tr>${identity}<td>${driver(o,lang)}</td><td><span class="shop-delivery-status">${e(deliveryStatus(o,lang))}</span>${o.deliveryStatus==='ALREADY_DELIVERED'?`<small>${e(say(lang,'Awaiting intake','Pendiente de registro'))}</small>`:''}${o.deliveryPhotoCount?`<a href="${href}#delivery-photo">${e(say(lang,'View delivery photo','Ver foto de entrega'))}</a>`:''}</td><td>${scheduledArrival(o,lang)}<strong data-live-eta>${e(eta(o,lang))}</strong>${o.checkedAt?`<small>${e(say(lang,'Checked','Actualizado'))} ${e(new Date(o.checkedAt).toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}))}</small>`:''}</td><td>${o.canAccept?`<a id="order-action-${o.number}" data-intake-link class="btn btn-primary" href="${href}">${e(say(lang,'Intake','Registrar'))}</a>`:`<button class="btn btn-outline" disabled>${e(say(lang,'Intake','Registrar'))}</button><small><a href="${href}">${e(say(lang,'View status','Ver estado'))}</a></small>`}</td></tr>`;
-      if(s==='WASH')return `<tr>${identity}<td>${turnaround(o,lang)}</td><td>${badge(lang,s)}</td><td>${link(say(lang,'View wash instructions','Ver instrucciones de lavado'))}</td></tr>`;
+      if(s==='WASH')return `<tr>${identity}<td>${turnaround(o,lang)}</td><td>${badge(lang,s,Boolean(o.washCompletedAt))}</td><td>${link(o.washCompletedAt?say(lang,'Weigh for return','Pesar para devolver'):say(lang,'View wash instructions','Ver instrucciones de lavado'))}</td></tr>`;
       return `<tr>${identity}${weight}<td>${turnaround(o,lang)}</td><td>${driver(o,lang)}</td><td>${e(o.deliveryStatus?deliveryStatus(o,lang):say(lang,'Awaiting return driver','Esperando conductor de vuelta'))}</td><td><strong data-live-eta>${e(eta(o,lang))}</strong></td><td>${link(o.canCollect?say(lang,'Confirm pickup','Confirmar recogida'):say(lang,'View collection','Ver recogida'))}</td></tr>`;
     }).join('');
-    return `<section id="section-${s.toLowerCase()}" class="card shop-orders-panel shop-delivery-section"><div class="shop-panel-heading"><div><h2>${e(label(lang,s))} <span class="shop-section-count">${list.length}</span></h2><p>${e(s==='INCOMING'?say(lang,'Match the arriving order, then weigh and intake the laundry.','Identifique el pedido, pese y registre la ropa.'):s==='WASH'?say(lang,'Open the wash instructions. Mark ready when washing and packing are finished.','Abra las instrucciones. Marque listo al terminar de lavar y empacar.'):say(lang,'Keep each order ready until its return driver collects it.','Guarde cada pedido hasta que llegue su conductor.'))}</p></div></div><div class="shop-delivery-scroll"><table class="shop-delivery-table"><thead><tr>${heading.map(h=>`<th scope="col">${e(h)}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td class="shop-section-empty" colspan="${heading.length}">${e(say(lang,'No orders in this section','No hay pedidos en esta seccion'))}</td></tr>`}</tbody></table></div></section>`;
+    return `<section id="section-${s.toLowerCase()}" class="card shop-orders-panel shop-delivery-section"><div class="shop-panel-heading"><div><h2>${e(label(lang,s))} <span class="shop-section-count">${list.length}</span></h2><p>${e(s==='INCOMING'?say(lang,'Match the arriving order, then weigh and intake the laundry.','Identifique el pedido, pese y registre la ropa.'):s==='WASH'?say(lang,'Mark the wash complete, then weigh the full order for outtake.','Marque el lavado completo y pese el pedido para la salida.'):say(lang,'Keep each order ready until its return driver collects it.','Guarde cada pedido hasta que llegue su conductor.'))}</p></div></div><div class="shop-delivery-scroll"><table class="shop-delivery-table"><thead><tr>${heading.map(h=>`<th scope="col">${e(h)}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td class="shop-section-empty" colspan="${heading.length}">${e(say(lang,'No orders in this section','No hay pedidos en esta seccion'))}</td></tr>`}</tbody></table></div></section>`;
   }
   const time=new Date().toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit',second:'2-digit'});
   return shell({...ctx,here:boardUrl(lang,stage,query)},say(lang,'Laundry board','Panel de pedidos'),`<header class="shop-workspace-heading"><div><p class="eyebrow">${e(ctx.shop.name)}</p><h1>${e(say(lang,'Laundry board','Panel de pedidos'))}</h1><p>${e(say(lang,'Receive. Wash. Return.','Recibir. Lavar. Devolver.'))}</p></div><a class="btn btn-outline" href="${e(boardUrl(lang,stage,query))}">${e(say(lang,'Refresh orders','Actualizar pedidos'))}</a></header>
@@ -156,7 +158,7 @@ function deliveryProof(o,lang) {
 function detail(ctx) {
   const {order:o,lang}=ctx;
   const form=(action,contents)=>`<form method="post" action="/shop/orders/${o.number}/${action}" class="stack"><input type="hidden" name="csrf" value="${e(ctx.csrf)}"><input type="hidden" name="lang" value="${lang}">${contents}</form>`;
-  const button=text=>`<button class="btn btn-primary btn-lg btn-full" type="submit">${e(text)}</button>`;
+  const button=(text,disabled=false)=>`<button class="btn btn-primary btn-lg btn-full" type="submit"${disabled?' disabled data-return-submit':''}>${e(text)}</button>`;
   let content;
   if(o.stage==='INCOMING') {
     content=`<h2>${e(say(lang,'Intake laundry','Registrar ropa'))}</h2>${courier(o,lang)}<p>${e(say(lang,'Check the delivery photo and weigh all of this order’s laundry together.','Revise la foto de entrega y pese toda la ropa del pedido junta.'))}</p>`;
@@ -168,8 +170,11 @@ function detail(ctx) {
       `${unlocked?`<h2>${e(say(lang,'Wash instructions','Instrucciones de lavado'))}</h2><div class="ops-table-wrap"><table class="ops-table"><tbody>${(o.washLines||[]).map(([k,v])=>`<tr><th>${e(translate(k))}</th><td>${e(translate(v))}</td></tr>`).join('')}</tbody></table></div>`:''}`;
     if(o.returnCheckStatus==='HELD') {
       content+=`<p role="alert" class="shop-review-flag">${e(say(lang,'Return is on hold because the weights do not match within the allowed range. Keep this order here until LYNDRY resolves it.','La devolucion esta retenida por una diferencia de peso. Guarde el pedido hasta que LYNDRY lo resuelva.'))}</p>`;
+    } else if(unlocked && o.stage==='WASH' && !o.washCompletedAt) {
+      content+=`<p>${e(say(lang,'When washing and packing are finished, mark the wash complete. You will weigh the full order again next.','Al terminar de lavar y empacar, marque el lavado completo. Despues volvera a pesar el pedido.'))}</p>${form('wash-complete',button(say(lang,'Mark wash complete','Marcar lavado completo')))}`;
     } else if(unlocked && (o.stage==='WASH' || (o.weightCheckEnabled && !['PASSED','RELEASED'].includes(o.returnCheckStatus)))) {
-      content+=`<p>${e(o.weightCheckEnabled?say(lang,'When washing and packing are finished, confirm the return weight before requesting your driver.','Al terminar de lavar y empacar, confirme el peso antes de solicitar al conductor.'):say(lang,'When washing and packing are finished, mark ready to return to request your LYNDRY driver.','Al terminar de lavar y empacar, marque listo para solicitar el conductor de LYNDRY.'))}</p>${form('ready',returnWeightField(o,lang)+button(say(lang,'Ready to return','Listo para devolver')))}`;
+      const weightField=returnWeightField(o,lang);
+      content+=`<p>${e(say(lang,'Wash complete. Confirm the return weight before requesting your driver.','Lavado completo. Confirme el peso antes de solicitar al conductor.'))}</p>${form('ready',weightField+button(say(lang,'Outtake','Salida'),Boolean(weightField)))}`;
     } else {
       content+=`<h2>${e(say(lang,'Return collection','Recogida de vuelta'))}</h2>${o.assigned?courier(o,lang):`<p>${e(say(lang,'No return driver is assigned yet. Keep this order at the laundromat.','Aun no hay conductor asignado. Guarde el pedido en la lavanderia.'))}</p>`}<p>${e(say(lang,'Pickup ETA','ETA de recogida'))}: <strong>${e(eta(o,lang))}</strong></p>`;
       if(o.returnNeedsRequest)content+=form('request-return',button(say(lang,'Request return driver','Solicitar conductor')));
@@ -178,9 +183,9 @@ function detail(ctx) {
       content+=`<a class="btn btn-outline" href="/shop/orders/${o.number}?lang=${lang}">${e(say(lang,'Refresh collection status','Actualizar recogida'))}</a>`;
     }
   }
-  const names=[['Intake','Registro'],['Ready to wash','Lista para lavar'],['Ready to return','Lista para devolver']],index=Object.keys(labels).indexOf(o.stage);
+  const names=[['Intake','Registro'],['Washing','En lavado'],['Outtake','Salida']],index=o.stage==='INCOMING'?0:o.stage==='READY'?2:1;
   const steps=names.map((n,i)=>`<li class="${i<index?'is-complete':i===index?'is-current':''}"${i===index?' aria-current="step"':''}><span>${i<index?'✓':i+1}</span><div><strong>${e(n[lang==='es'?1:0])}</strong><small>${e(i<index?say(lang,'Complete','Completado'):i===index?say(lang,'Current step','Paso actual'):say(lang,'Next','Siguiente'))}</small></div></li>`).join('');
-  return shell({...ctx,here:`/shop/orders/${o.number}`},`LYNDRY #${o.number}`,`<div class="shop-intake-detail"><a class="shop-back" href="/shop?lang=${lang}">&larr; ${e(say(lang,'Laundry board','Panel de pedidos'))}</a><header class="shop-workspace-heading"><div><p class="eyebrow">${e(ctx.shop.name)}</p><h1>LYNDRY #${o.number}</h1>${shopReference(o,lang)}</div>${badge(lang,o.stage)}</header><div class="shop-detail-grid"><section class="card shop-intake-panel">${o.stage!=='INCOMING'?`<div class="shop-deadline-detail">${turnaround(o,lang)}</div>`:''}${content}</section><aside class="shop-order-sidebar">${deliveryProof(o,lang)}<section class="card"><h2>${e(say(lang,'Order progress','Progreso del pedido'))}</h2><ol class="shop-progress">${steps}</ol></section>${o.stage==='INCOMING'?`<section class="card shop-handover"><h2>${e(say(lang,'Match the handover','Verifique la entrega'))}</h2><p class="shop-reference">${e(o.reference)}</p><p>${e(say(lang,'If the laundry or order reference does not match, contact LYNDRY before proceeding.','Si la ropa o referencia no coincide, contacte a LYNDRY antes de continuar.'))}</p><a href="tel:+12017712933">${e(say(lang,'Contact LYNDRY','Contacte a LYNDRY'))} &rarr;</a></section>`:''}</aside></div></div>`);
+  return shell({...ctx,here:`/shop/orders/${o.number}`},`LYNDRY #${o.number}`,`<div class="shop-intake-detail"><a class="shop-back" href="/shop?lang=${lang}">&larr; ${e(say(lang,'Laundry board','Panel de pedidos'))}</a><header class="shop-workspace-heading"><div><p class="eyebrow">${e(ctx.shop.name)}</p><h1>LYNDRY #${o.number}</h1>${shopReference(o,lang)}</div>${badge(lang,o.stage,Boolean(o.washCompletedAt))}</header><div class="shop-detail-grid"><section class="card shop-intake-panel">${o.stage!=='INCOMING'?`<div class="shop-deadline-detail">${turnaround(o,lang)}</div>`:''}${content}</section><aside class="shop-order-sidebar">${deliveryProof(o,lang)}<section class="card"><h2>${e(say(lang,'Order progress','Progreso del pedido'))}</h2><ol class="shop-progress">${steps}</ol></section>${o.stage==='INCOMING'?`<section class="card shop-handover"><h2>${e(say(lang,'Match the handover','Verifique la entrega'))}</h2><p class="shop-reference">${e(o.reference)}</p><p>${e(say(lang,'If the laundry or order reference does not match, contact LYNDRY before proceeding.','Si la ropa o referencia no coincide, contacte a LYNDRY antes de continuar.'))}</p><a href="tel:+12017712933">${e(say(lang,'Contact LYNDRY','Contacte a LYNDRY'))} &rarr;</a></section>`:''}</aside></div></div>`);
 }
 function missing(ctx){return shell(ctx,'LYNDRY',`<h1>${e(say(ctx.lang,'Order unavailable','Pedido no disponible'))}</h1><a href="/shop">${e(say(ctx.lang,'Back to your orders','Volver a sus pedidos'))}</a>`);}
 module.exports={board,detail,missing};

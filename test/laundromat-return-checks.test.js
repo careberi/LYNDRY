@@ -11,7 +11,7 @@ test('wash board and detail contain no previous weight or handover card',()=>{
   assert.doesNotMatch(html,/31\.27|Match the handover|shop-handover/);
   assert.match(html,/INTERNAL-12/);
  }
- const detail=page.detail({...ctx,order:wash});
+ const detail=page.detail({...ctx,order:{...wash,stage:'WASH',washCompletedAt:'2026-09-29T12:00:00Z'}});
  assert.match(detail,/name="weight_lb"/);assert.doesNotMatch(detail,/value="31/);
 });
 test('only verified return weight is displayed on detail',()=>{
