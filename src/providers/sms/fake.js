@@ -51,7 +51,8 @@ function parseDeliveryReceipt(body) {
   };
 }
 
-async function sendMessage({ to, text, from }) {
+async function sendMessage({ to, text, from, mediaPath }) {
+  if(mediaPath)console.log("  [SIMULATED delivery photo attachment]");
   counter += 1;
 
   console.log('');

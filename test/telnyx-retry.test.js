@@ -88,3 +88,12 @@ test('a hard outage still ends, and the error is one readable line', async () =>
   });
   assert.equal(calls.length, telnyx.ATTEMPTS, 'it did not stop at the limit');
 });
+
+test('delivery MMS uses the existing sender, attaches the photo and never retries an uncertain request',async()=>{
+ const calls=scripted(reply(200,{data:{id:'photo-message'}}));
+ await telnyx.sendMessage({to:'+12015550199',text:'Your delivery photo.',mediaUrls:['https://example.com/photo.jpg'],noRetry:true});
+ const body=JSON.parse(calls[0].body);assert.equal(body.type,'MMS');assert.deepEqual(body.media_urls,['https://example.com/photo.jpg']);assert.ok('from' in body);
+ const uncertain=scripted(new Error('timeout'));
+ await assert.rejects(telnyx.sendMessage({to:'+12015550199',text:'Your delivery photo.',mediaUrls:['https://example.com/photo.jpg'],noRetry:true}));
+ assert.equal(uncertain.length,1);
+});

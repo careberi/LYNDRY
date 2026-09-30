@@ -9186,6 +9186,8 @@ function deliveryNote(m) {
   }</span>`;
 }
 
+require('./message-photos').register(router,{db,guard,may});
+
 function bubble(m) {
   const inbound = m.direction === 'INBOUND';
 
@@ -9205,7 +9207,7 @@ function bubble(m) {
       color:var(--ink-900);
       white-space:pre-wrap;
       overflow-wrap:anywhere;
-    ">${escapeHtml(m.body)}</div>
+    ">${escapeHtml(m.body)}${require('../web/message-attachment').attachment(m)}</div>
     <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-500);">
       <span>${escapeHtml(dateTime(m.created_at))}</span>
       ${deliveryNote(m)}
@@ -9242,7 +9244,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         // sent ourselves from a text to a customer. An unselected column reads
         // as undefined, which here would make EVERY outbound row look like an
         // alert - the eighth time that trap would have bitten in this codebase.
-        .select('direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone')
+        .select('id, direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone, media_path')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
       // THE WHOLE ROW, NOT SIX COLUMNS. nudges.gapsFor() asks the same

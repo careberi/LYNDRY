@@ -41,7 +41,8 @@ async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
     if(etaMinutes !== null && etaMinutes <= 10) rank = 2;
   }
   return {rank,etaMinutes,observedAt:new Date(now()).toISOString(),remoteId:String(remote.orderId),
-    terminal:status === 'ALREADY_DELIVERED'};
+    terminal:status === 'ALREADY_DELIVERED',
+    deliveryPhotos:!pickup ? require('../providers/couriers/shipday-proof').deliveryPhotos(remote) : []};
 }
 
 function estimate(observation,now) {

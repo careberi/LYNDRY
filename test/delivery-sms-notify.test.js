@@ -21,3 +21,17 @@ test('delivery worker can distinguish sent, opted out and uncertain provider res
   fail=true;assert.equal((await sendAndLog('+12017710000','LYNDRY test','customer')).uncertain,true);
  }finally{db.from=originalFrom;sms.sendMessage=originalSend;}
 });
+
+test('photo messages retain STOP and attachment ownership checks and log the image in the customer thread',async()=>{
+ const originalFrom=db.from,originalSend=sms.sendMessage;
+ const customer='11111111-1111-4111-8111-111111111111',path='delivery-sms/'+customer+'/22222222-2222-4222-8222-222222222222.jpg';
+ const logged=[],sent=[];let stopped=true;
+ db.from=()=>({select(){return this;},eq(){return this;},gt(){return this;},maybeSingle:async()=>({data:{status:stopped?'UNSUBSCRIBED':'ACTIVE'}}),limit:async()=>({data:[]}),insert:async row=>{logged.push(row);return {error:null};}});
+ sms.sendMessage=async row=>{sent.push(row);return {providerMessageId:'photo-test'};};
+ try {
+  assert.equal((await sendAndLog('+12017710000','Photo',customer,{mediaPath:path,noRetry:true})).refused,'opted_out');assert.equal(sent.length,0);
+  assert.equal((await sendAndLog('+12017710000','Photo','OTHER',{mediaPath:path})).refused,'invalid_attachment');
+  stopped=false;assert.equal((await sendAndLog('+12017710000','Photo',customer,{mediaPath:path,noRetry:true})).sent,true);
+  assert.equal(sent[0].noRetry,true);assert.equal(logged[0].media_path,path);assert.equal(logged[0].customer_id,customer);
+ }finally{db.from=originalFrom;sms.sendMessage=originalSend;}
+});

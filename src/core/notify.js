@@ -209,8 +209,9 @@ async function sendAndLog(
   to,
   body,
   customerId,
-  { sentBy = null, kind = null, compliance = false, askedFor = null } = {}
+  { sentBy = null, kind = null, compliance = false, askedFor = null, mediaPath = null, noRetry = false } = {}
 ) {
+  if(mediaPath && (!customerId || !require('./delivery-photo').validPath(mediaPath,customerId)))return {sent:false,refused:'invalid_attachment'};
   let providerMessageId = null;
   let sendFailed = false;
   // Provider tracking pages expose the partner and route. Keep them internal.
@@ -293,7 +294,13 @@ async function sendAndLog(
   if (isFictional(to)) {
     console.log(`[fictional] would have texted ${to}: ${text}`);
   } else try {
-    const result = await sms.sendMessage({ to, text });
+    let mediaUrls;
+    if(mediaPath && !sms.isFake) {
+      const {data:signed,error}=await db.storage.from('delivery-photos').createSignedUrl(mediaPath,3600);
+      if(error || !signed?.signedUrl)throw Error('Delivery photo unavailable for picture message.');
+      mediaUrls=[signed.signedUrl];
+    }
+    const result = await sms.sendMessage({ to, text, ...(mediaPath?{mediaUrls:mediaUrls||[],mediaPath}:{}), ...(noRetry?{noRetry:true}:{}) });
     providerMessageId = result && result.providerMessageId;
   } catch (err) {
     // Log the attempt anyway. A message we failed to send is exactly the kind
@@ -319,6 +326,7 @@ async function sendAndLog(
     // say "asked, awaiting reply" instead of inviting the same question again
     // an hour later. See src/core/intake.js and migration 0099.
     asked_for: askedFor || null,
+    ...(mediaPath ? {media_path:mediaPath} : {}),
   });
 
   if (error) console.error('Failed to log outbound message:', error.message);

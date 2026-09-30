@@ -191,12 +191,15 @@ function parseDeliveryReceipt(body) {
 // which is what a two-way conversation needs. Passed in, it overrides the
 // sender for that one message — that is how sign-in codes can come from a
 // short code or a second number while the conversation stays where it is.
-async function sendMessage({ to, text, from }) {
+async function sendMessage({ to, text, from, mediaUrls, noRetry = false }) {
   const sender = from || config.telnyx.phoneNumber;
+  const attempts=noRetry?1:ATTEMPTS;
+  if(mediaUrls && (!Array.isArray(mediaUrls) || mediaUrls.length!==1 || !/^https:\/\//.test(mediaUrls[0])))throw Error('One HTTPS photo is required for MMS.');
 
   const body = {
     to,
     text,
+    ...(mediaUrls ? {type:'MMS',media_urls:mediaUrls} : {}),
     // Prefer the messaging profile if we have one — it is what carrier
     // registration is attached to. Otherwise send from the number directly.
     ...(config.telnyx.messagingProfileId
@@ -206,7 +209,7 @@ async function sendMessage({ to, text, from }) {
 
   let lastError = null;
 
-  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     let response;
 
     try {
@@ -223,9 +226,9 @@ async function sendMessage({ to, text, from }) {
       });
     } catch (err) {
       lastError = new Error(
-        `Telnyx did not answer (try ${attempt} of ${ATTEMPTS}): ${err.message}`
+        `Telnyx did not answer (try ${attempt} of ${attempts}): ${err.message}`
       );
-      if (attempt < ATTEMPTS) {
+      if (attempt < attempts) {
         console.warn(`${lastError.message} - trying again.`);
         await sleep(BACKOFF_MS[attempt - 1]);
         continue;
@@ -235,16 +238,17 @@ async function sendMessage({ to, text, from }) {
 
     if (response.ok) {
       const result = await response.json();
+      if(noRetry && !result.data?.id)throw Error('Message acceptance could not be confirmed.');
       if (attempt > 1) console.log(`Telnyx accepted a text to ${to} on try ${attempt}.`);
       return { providerMessageId: result.data && result.data.id };
     }
 
     const detail = summarise(await response.text());
     lastError = new Error(
-      `Telnyx refused the message (HTTP ${response.status}, try ${attempt} of ${ATTEMPTS}): ${detail}`
+      `Telnyx refused the message (HTTP ${response.status}, try ${attempt} of ${attempts}): ${detail}`
     );
 
-    if (!retryable(response.status) || attempt === ATTEMPTS) throw lastError;
+    if (!retryable(response.status) || attempt === attempts) throw lastError;
 
     console.warn(`${lastError.message} - trying again.`);
     await sleep(BACKOFF_MS[attempt - 1]);

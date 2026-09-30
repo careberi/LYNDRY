@@ -54,7 +54,8 @@ const grounded = {
   verifySignature: telnyx.verifySignature,
   parseInbound: telnyx.parseInbound,
   parseDeliveryReceipt: telnyx.parseDeliveryReceipt,
-  sendMessage: async ({ to, text, from }) => {
+  sendMessage: async ({ to, text, from, mediaPath }) => {
+    if(mediaPath)console.log("  [SIMULATED delivery photo attachment]");
     console.log('');
     console.log('  ┌─ TEXT TO ' + to + (from ? `  (from ${from})` : ''));
     for (const line of String(text == null ? '' : text).split('\n')) console.log('  │  ' + line);
