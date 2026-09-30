@@ -25,6 +25,7 @@ function refreshBoard() {
       // Stale ETAs and enabled intake actions must not masquerade as current information.
       board.querySelectorAll('[data-live-eta]').forEach(el=>{el.textContent=note.dataset.unavailable;});
       board.querySelectorAll('[data-intake-link]').forEach(el=>{el.setAttribute('aria-disabled','true');el.removeAttribute('href');});
+      board.querySelectorAll('[data-collection-submit]').forEach(el=>{el.disabled=true;});
       note.textContent=note.dataset.failed;
     } finally {clearTimeout(timer);busy=false;}
   }

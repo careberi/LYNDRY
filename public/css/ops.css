@@ -1805,3 +1805,8 @@ body.pos-app {
 .shop-delivery-proof a { display:block; }
 .shop-delivery-proof a span { display:block; margin-top:9px; font-size:12px; }
 .shop-delivery-proof p { font-size:13px; color:#58677d; }
+
+/* Driver collection is evidence; the laundromat still confirms the handoff. */
+.pos-app main.container .btn.shop-pickup-confirm--waiting { background:#15803d; border-color:#166534; color:#fff; opacity:1; }
+.pos-app main.container .btn.shop-pickup-confirm--needed { background:#b91c1c; border-color:#991b1b; color:#fff; }
+.pos-app main.container .shop-pickup-confirm:disabled { cursor:not-allowed; }

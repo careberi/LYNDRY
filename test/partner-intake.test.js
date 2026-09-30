@@ -131,3 +131,14 @@ test('ready intake requests the return for every order and preserves readiness w
   assert.equal((await service.act(args)).notice,'return_pending');
   assert.deepEqual(holds,[]);
 });
+
+test('a verified collected return in request review exposes manual confirmation without auto-completing',async()=>{
+ const order={id:'order',order_number:9019,status:'READY'};
+ const intake={order_id:'order',received_at:'now',received_verified_at:'now',completed_at:'now',completed_by:'staff',weight_lb:30,ready_at:'now',return_check_status:'PASSED'};
+ let canCollect=true;
+ const db={from(table){const q={select(){return q;},or(){return q;},in(){return q;},eq(){return q;},order(){return q;},maybeSingle(){return q;},then(resolve){return Promise.resolve({data:table==='orders'?[order]:table==='partner_order_intakes'?[intake]:table==='shipday_dispatch_plans'?[{order_id:'order',leg:'TO_CUSTOMER',state:'REVIEW',shipday_order_id:'123'}]:[],error:null}).then(resolve);}};return q;}};
+ const service=createService({db,deliveryInfo:async()=>({ok:true,canCollect,provider_status:'ALREADY_DELIVERED'})});
+ assert.equal((await service.list('shop'))[0].canCollect,true);
+ assert.equal((await service.list('shop'))[0].stage,'READY');
+ canCollect=false;assert.equal((await service.list('shop'))[0].canCollect,false);
+});

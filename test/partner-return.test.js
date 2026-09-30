@@ -67,7 +67,21 @@ test('return ETA uses minutes to laundromat pickup, never customer-arrival estim
 test('ready portal shows weight, pickup ETA, original photos and gated collection action without customer data',()=>{
  const ctx={lang:'en',csrf:'test',shop:{name:'Cedar'},order:{number:9015,stage:'READY',weight:30,driver:'LYNDRY',assigned:true,deliveryStatus:'STARTED',etaMinutes:8,deliveryPhotoCount:1,reference:'LYNDRY #9015',customer:{name:'PRIVATE_CUSTOMER'}}};
  let html=page.detail(ctx);assert.match(html,/Pickup ETA/);assert.match(html,/8 min/);assert.match(html,/delivery-photos\/0/);assert.doesNotMatch(html,/\/collect"|PRIVATE_CUSTOMER/);
- html=page.detail({...ctx,order:{...ctx.order,canCollect:true}});assert.match(html,/\/9015\/collect"/);assert.match(html,/Confirm picked up/);
+ html=page.detail({...ctx,order:{...ctx.order,canCollect:true}});assert.match(html,/\/9015\/collect"/);assert.match(html,/Confirm Pickup/);
  html=page.detail({...ctx,order:{...ctx.order,assigned:false,returnNeedsRequest:true}});assert.match(html,/\/request-return"/);
  html=page.board({...ctx,orders:[ctx.order]});assert.match(html,/30 lb/);assert.match(html,/Pickup ETA/);assert.match(html,/8 min/);assert.doesNotMatch(html,/PRIVATE_CUSTOMER/);
+});
+
+test('outgoing action posts manual confirmation with a fresh CSRF token and switches green to red',()=>{
+ const ctx={lang:'en',csrf:'token-current',shop:{name:'Laundry'},orders:[{number:9019,stage:'READY',deliveryStatus:'STARTED'}]};
+ let html=page.board(ctx);
+ assert.match(html,/action="\/shop\/orders\/9019\/collect"/);
+ assert.match(html,/name="csrf" value="token-current"/);
+ assert.match(html,/shop-pickup-confirm--waiting[^>]*disabled>Confirm Pickup/);
+ assert.doesNotMatch(html,/View collection/);
+ ctx.orders[0].canCollect=true;ctx.orders[0].deliveryStatus='ALREADY_DELIVERED';
+ html=page.board(ctx);assert.match(html,/shop-pickup-confirm--needed[^>]*>Confirm Pickup/);
+ assert.doesNotMatch(html,/shop-pickup-confirm--needed[^>]*disabled/);
+ ctx.orders[0].officeReview=true;html=page.board(ctx);
+ assert.match(html,/shop-pickup-confirm--waiting[^>]*disabled/);
 });

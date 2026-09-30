@@ -59,7 +59,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         deliveryPhotoCount: live?.ok ? (live.deliveryPhotos || []).length : 0,
         assigned: live ? Boolean(live.driver) : Boolean(assigned || courier),
         canAccept: stage === 'INCOMING' && live?.ok === true,
-        canCollect: stage === 'READY' && plan?.state === 'ASSIGNED' && live?.canCollect === true,
+        canCollect: stage === 'READY' && ['ASSIGNED','REVIEW','COMPLETED'].includes(plan?.state) && live?.canCollect === true,
         returnNeedsRequest: stage === 'READY' && !courier && (!plan || (!['PROCESSING','REVIEW'].includes(plan.state) && (plan.simulation || ['PLANNED','BLOCKED'].includes(plan.state)))),
         receivedVerified: Boolean(intake?.received_verified_at),
         intakeComplete: complete(intake),
