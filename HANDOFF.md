@@ -1,3 +1,7 @@
+# Address focus outline correction
+
+Match pickup address focus to the unchanged apartment input: same outline color, width, offset and focus shadow. Remove the extra Google inset ring and retain keyboard selection visibility in suggestions. Browser comparison confirmed. Development only; independent review pending.
+
 # Shared customer address entry
 
 Customer address entry now uses the same Google pickup address search and optional apartment, suite or unit in pricing, empty quote entry, booking and account settings. Parsed components keep the existing customer address schema. Server validation runs before address persistence and stores verified coordinates. Guest validation does not write an empty account. Clearing an optional unit remains cleared through wizard answers. Production stays feature gated off. All 1613 tests pass. Live pricing suggestions and selection verified. Independent review, authenticated browser checks and physical phone testing remain pending. No production deployment.

@@ -2149,7 +2149,14 @@ body.ly-pop-locked { overflow: hidden; }
   background-color: #fff; color: var(--ink-900); font-family: inherit; font-size: 16px;
 }
 .google-address-form gmp-place-autocomplete:focus-within {
-  outline: 2px solid var(--teal-600, #00856a); outline-offset: 3px;
+  outline: 3px solid var(--suds-700); outline-offset: 4px; box-shadow: var(--focus-ring);
+}
+/* The host supplies the shared field ring; avoid Google's second inset ring. */
+.google-address-form gmp-place-autocomplete::part(focus-ring) {
+  border: 0; outline: none; box-shadow: none;
+}
+.google-address-form gmp-place-autocomplete::part(prediction-item-selected) {
+  outline: 2px solid var(--suds-700); outline-offset: -2px;
 }
 .google-address-form gmp-place-autocomplete::part(prediction-list) {
   border-radius: 12px; font-family: inherit; font-size: 16px;
