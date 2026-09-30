@@ -60,3 +60,15 @@ the implementer.
 - `npm test` passes
 - Grok review findings for this Issue are resolved or explicitly deferred by Neil
 - Neil has clicked the flow
+
+## Development notes
+
+For every meaningful development change, update Neil's Obsidian vault at
+`C:\Users\neil\Desktop\Agnets\LYNDRY` before reporting completion.
+Read the vault CLAUDE.md, Index.md and latest Log.md first. Update the
+Development Updates note, relevant topic notes and Log.md with the date,
+what changed and why, branch or commit, validation performed, release status
+and remaining actions. Distinguish development from shipped main and
+implementation from independent review. Never copy customer contact details,
+payment records or secrets. If the vault is unavailable, report the missing
+update explicitly rather than claiming it was done.
