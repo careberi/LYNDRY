@@ -1,3 +1,7 @@
+# Contact page card removal
+
+Neil requested removal of the annotated Business details card. Removed that card and its unused two column layout. Partner invitation and footer remain. Verify rendered contact page.
+
 # Customer motion refinement
 
 Neil requested better existing customer website animation using Animate. Marketing reveals use 12px movement and 250ms strong ease out. Forms show immediately. Parallax is restricted to decorative artwork, capped at 24px and disabled for touch, narrow screens, keyboard and reduced motion. Runtime preference changes reset movement. No business behavior changes. Independent review and phone feel check pending.
