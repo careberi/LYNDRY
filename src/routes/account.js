@@ -65,6 +65,7 @@ function accountPage(res, {
     .type('html')
     .send(
       renderPage({
+        signedIn: Boolean(res.req && auth.isSignedIn(res.req)),
         title,
         description: 'Book a LYNDRY pickup.',
         path: '/account',
@@ -1036,7 +1037,7 @@ function settingsPage({ title, blurb, form, error = '' }) {
   </div>
 </section>
 
-<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+<section class="container booking-content">
   ${error ? banner(escapeHtml(error)) : ''}
   <div class="card card-xl" style="padding:30px;">${form}</div>
   <p style="margin:22px 0 0;"><a href="/account">Back to your account</a></p>
@@ -2025,9 +2026,9 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
           );
 
   return `
-<section class="hero" style="border-bottom:3px solid var(--ink-900);">
-  <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
-    <p class="eyebrow eyebrow-brand">Place an order &middot; ${escapeHtml(labels[step])}</p>
+<section class="hero booking-heading">
+  <div class="container">
+    ${require("../web/booking-progress").render(step, customer)}
     <h1 class="display-2" style="margin-bottom:10px;">${escapeHtml(title)}</h1>
     <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
       ${escapeHtml(blurb)}
@@ -2035,7 +2036,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
   </div>
 </section>
 
-<section class="container" style="max-width:600px;padding-top:40px;padding-bottom:96px;">
+<section class="container booking-content">
   ${error ? banner(escapeHtml(error)) : ''}
   <div class="card card-xl" style="padding:30px;">${form}</div>
   <p style="margin:22px 0 0;">${backControl(step, guest, customer)}</p>

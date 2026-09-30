@@ -523,6 +523,7 @@ async function render(req, res, page, extra = {}, status = 200, conversionId = n
 
   res.status(status).type('html').send(
     renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
       title: page.title,
       description: page.description,
       path: page.path,
@@ -780,6 +781,7 @@ router.get('/for-laundromats/:token', (req, res) => {
   if (check.ok) {
     return res.type('html').send(
       renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
         title: 'For laundromats',
         fullTitle: 'Laundromat Partners, Wash and Fold Work from LYNDRY',
         description:
@@ -800,6 +802,7 @@ router.get('/for-laundromats/:token', (req, res) => {
       .type('html')
       .send(
         renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
           title: 'That link has expired',
           description: 'Links to our laundromat overview are good for a few minutes.',
           path: '/for-laundromats',
@@ -870,6 +873,7 @@ router.get('/lyndry.vcf', (req, res) => {
 router.get('/bergen/sent', (req, res) => {
   res.type('html').send(
     renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
       title: 'Check your phone',
       description: BERGEN_DESCRIPTION,
       path: '/bergen/sent',
@@ -942,6 +946,7 @@ router.get('/quote', async (req, res) => {
 
   res.type('html').send(
     renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
       title: 'Your price',
       fullTitle: `What Laundry Pickup Costs at Your Address | ${site.name}`,
       description: `See wash and fold pricing for your address and pickup schedule, including the operational fee and minimum total.`,
@@ -1029,6 +1034,7 @@ router.post('/quote/interest', async (req, res, next) => {
 router.get('/bergen', (req, res) => {
   res.type('html').send(
     renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
       title: 'Laundry pickup in Bergen County',
       description: BERGEN_DESCRIPTION,
       path: '/bergen',
@@ -1829,6 +1835,7 @@ router.post('/partners', async (req, res, next) => {
 function notFound(req, res) {
   res.status(404).type('html').send(
     renderPage({
+      signedIn: require("../core/customer-auth").isSignedIn(req),
       title: 'Page not found',
       description: 'That page does not exist.',
       path: req.path,

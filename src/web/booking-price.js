@@ -15,6 +15,7 @@ function review(quote, carriedFields) {
     ? new Date(quote.pickup_date+'T'+String(quote.pickup_time).slice(0,5)+':00Z').toLocaleString('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'})
     : '';
   return `<section class="container booking-review">
+    ${require("./booking-progress").render("review")}
     <header class="booking-review-heading"><p class="eyebrow">Your pickup · price review</p>
       <h1>Review your pickup.</h1>
       <p>Wash, dry &amp; fold, with pickup and return. Up to <strong>50 lb per order.</strong></p>

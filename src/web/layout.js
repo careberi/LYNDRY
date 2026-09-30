@@ -57,7 +57,6 @@ const NAV_LINKS = [
   // from the hero eyebrow and Contact, which is what keeps it reachable.
   { href: '/faq', label: 'FAQ' },
   { href: '/contact', label: 'Contact' },
-  { href: '/partners', label: 'Partners' },
 
   // One direct label for the one account door. /account/login sends anybody
   // already signed in straight on to /account, so the navigation does not need
@@ -203,15 +202,16 @@ const ICON_TOKENS = Object.freeze({
 
 // Sticky ink header. The design system pins exactly one thing on the site and
 // this is it — 68px of ink, and the hero is sized to fill what's left.
-function navBar(currentPath) {
-  const links = NAV_LINKS
+function navBar(currentPath, signedIn = false) {
+  const accountLinks = NAV_LINKS.map(link => link.href === "/account/login" && signedIn ? { href: "/account", label: "My account" } : link);
+  const links = accountLinks
     .map(({ href, label }) => {
       const current = href === currentPath ? ' aria-current="page"' : '';
       return `<a href="${href}"${current}>${label}</a>`;
     })
     .join('\n          ');
 
-  const mobileLinks = NAV_LINKS
+  const mobileLinks = accountLinks
     .map(({ href, label }) => `<a href="${href}">${label}</a>`)
     .join('\n            ');
 
@@ -234,21 +234,21 @@ function navBar(currentPath) {
              is hidden under 900px and the hamburger takes over, so leaving one
              behind would mean a phone and a laptop sending the same person to
              two different places. -->
-        <a href="/account/login" class="btn btn-primary btn-sm">Book a Pickup</a>
+        <a href="/account/login?next=%2Faccount%2Fbook" class="btn btn-primary btn-sm">Book a pickup</a>
 
         <!-- Mobile menu. Built on <details> so it needs no JavaScript. -->
         <details class="nav-toggle">
           <summary class="btn btn-primary btn-sm" aria-label="Menu">Menu</summary>
           <div class="nav-panel">
             ${mobileLinks}
-            <a href="/account/login">Book a Pickup</a>
+            <a href="/account/login?next=%2Faccount%2Fbook">Book a pickup</a>
           </div>
         </details>
       </div>
     </header>`;
 }
 
-function footer() {
+function footer(signedIn = false) {
   const year = new Date().getFullYear();
 
   return `
@@ -290,7 +290,7 @@ function footer() {
         <div>
           <p class="footer-head">Your account</p>
           <div style="display:flex;flex-direction:column;gap:10px;">
-            <a href="/account/login">Log in</a>
+            <a href="${signedIn ? '/account' : '/account/login'}">${signedIn ? 'My account' : 'Log in'}</a>
           </div>
         </div>
 
@@ -308,8 +308,8 @@ function footer() {
         <!-- Centred rather than pulled to the top with the columns. It is one
              control against three blocks of text, and sitting it on the same
              line as the headings leaves it stranded above a lot of nothing. -->
-        <a href="/account/login" class="btn btn-primary btn-lg" style="align-self:center;">
-          Place an order ${icon('arrow-right', '22')}
+        <a href="/account/login?next=%2Faccount%2Fbook" class="btn btn-primary btn-lg" style="align-self:center;">
+          Book a pickup ${icon('arrow-right', '22')}
         </a>
 
       </div>
@@ -402,6 +402,7 @@ function renderPage({
   extra = {},
   noindex = false,
   bare = false,
+  signedIn = false,
   head = '',
   ogImage = null,
   // A PAGE MAY OWN ITS WHOLE TITLE. Most pages want "Pricing — LYNDRY" built
@@ -492,11 +493,11 @@ ${head}
 </head>
 <body>
 ${devBand()}
-${bare ? bareHeader() : navBar(path)}
+${bare ? bareHeader() : navBar(path, signedIn)}
 <main>
 ${body}
 </main>
-${bare ? '' : footer()}
+${bare ? '' : footer(signedIn)}
 ${popupHtml}
 
 <script>

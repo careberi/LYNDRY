@@ -154,10 +154,11 @@
              There is no text box here either: texting is strictly outbound, so
              an sms: link would point at a number that answers nobody. -->
         <div class="hero-actions">
-          <a href="/account/login" class="hero-cta">
-            <span>Place an order online</span>
+          <a href="/pricing" class="hero-cta">
+            <span>Check my price</span>
             {{ICON_ARROW}}
           </a>
+          <p class="hero-booking-note">See your estimate before you book. <a href="/account/login?next=%2Faccount%2Fbook">Book a pickup</a></p>
         </div>
 
       </div>
@@ -176,15 +177,15 @@
       <div class="pickup-wrap" data-parallax="-0.09" aria-hidden="true">
         <div class="pickup-card">
           <div class="pickup-card__head">
-            <span>Your pickup</span>
+            <span>Example pickup</span>
           </div>
 
           <div class="pickup-card__body">
             <div class="pickup-when">
               <span class="pickup-when__icon">{{ICON_TRUCK}}</span>
               <div>
-                <div class="pickup-when__day">Tomorrow</div>
-                <div class="pickup-when__window">9am&ndash;12pm pickup window</div>
+                <div class="pickup-when__day">Your chosen time</div>
+                <div class="pickup-when__window">Choose your day when booking</div>
               </div>
             </div>
 
@@ -292,10 +293,18 @@
          site. This says something true instead. -->
     <div class="card card-lg card-xl card-accent" style="padding:34px;" data-parallax="0.05">
       <span class="icon icon-clock icon-30" aria-hidden="true"></span>
-      <p style="font-family:var(--font-display);font-weight:800;font-size:27px;line-height:1.15;letter-spacing:-0.02em;color:var(--ink-900);margin:18px 0 0;">
-        Book your pickup online, tell us where to collect your bags,
-        and we will take care of the laundry.
+      <p style="font-family:var(--font-display);font-weight:800;font-size:27px;line-height:1.35;letter-spacing:-0.02em;color:var(--ink-900);margin:18px 0 0;">
+        Laundry done your way.
       </p>
+      <p class="care-description">Choose your wash temperature and fabric softener preference when you book. We wash, dry and fold your laundry before bringing it back.</p>
     </div>
   </div>
+</section>
+
+<section class="container home-faq">
+  <h2 class="display-3">Before your first pickup.</h2>
+  <details><summary>How much will it cost?</summary><p>Check your address for your per-pound rate, order minimum and operational fee. Your final weight determines the bill. Review your price before confirming your booking.</p></details>
+  <details><summary>Do I need to be home?</summary><p>No. Leave your bag in the pickup spot you choose, or hand it to the driver. Add access instructions when you book.</p></details>
+  <details><summary>Can I choose how my laundry is washed?</summary><p>Yes. Choose your wash temperature and fabric softener preference during booking. Your preferences are saved for future pickups.</p></details>
+  <a href="/faq">More questions? Read our FAQ {{ICON_ARROW}}</a>
 </section>
