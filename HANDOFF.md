@@ -1,3 +1,7 @@
+# Development Google address entry
+
+Neil authorized Google attribution and implementation. Pricing gets the official accessible Places widget, town and ZIP filling, and server Address Validation checks before any quote, including direct query requests. Use verified coordinates for dynamic quotes. Reject incomplete, replaced, unresolved or non NJ addresses; provider outages withhold quotes. Per IP limit bounds validation calls. Separate browser and server keys; production forced off. No keys or Google Cloud project currently exist. Enable Maps JavaScript API, Places API (New), Address Validation API and billing before live testing. Independent review pending.
+
 # Persistent laundromat sessions
 
 Neil requested no laundromat inactivity logout, with login elsewhere ending the previous session. Use signed persistent shop cookies with browser storage renewed for 400 days. Continue checking live user token, active user and shop on every request. Legacy unexpired cookies migrate on use; expired ones require login. Staff POS and admin shop preview sessions are unchanged. Browser clearing or retention limits still require login.
@@ -301,3 +305,5 @@ Validation: all 1,595 tests passed after final changes. Browser confirmed 250ms 
 Validation: npm test passed all 1,599 tests, including four new redirect regressions. No real AI conversation or SMS send performed. Independent review and development conversation click test remain pending.
 
 Validation: all 1,603 tests passed, including persistent age, tampering, legacy expiry and rejection after login elsewhere. No real sessions or login codes changed during testing. Independent review and two device click test remain pending.
+
+Validation: all 1,610 tests passed. New tests cover valid components, approximate and unconfirmed addresses, missing keys, provider failure and client key separation. Live Google calls and real widget interaction remain unverified because no project or credentials exist. Google Cloud setup is at identity verification. Feature defaults off; independent review pending.

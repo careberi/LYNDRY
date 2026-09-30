@@ -1,3 +1,7 @@
+# Google address attribution exception, 2026-09-30
+
+Neil explicitly approved Google attribution on address suggestions. Development pricing may use the official Places widget and server Address Validation. This is a narrow exception to vendor-neutral public copy. Real customer production remains disabled for this implementation.
+
 # Persistent laundromat login, 2026-09-30
 
 Neil requested laundromat sessions remain signed in until a new login elsewhere. Supersedes the eight hour inactivity policy for partner authentication only. The server imposes no age timeout on newly issued signed shop sessions; browser cookies renew for 400 days. New login, explicit sign out, inactive users or inactive shops still revoke access. Staff POS and administrator shop previews keep their existing policy. Browser storage clearing or retention limits can still require sign in.

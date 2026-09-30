@@ -499,6 +499,7 @@ ${body}
 </main>
 ${bare ? '' : footer(signedIn)}
 ${popupHtml}
+${path === '/pricing' ? require('./google-address').script(config.googleAddress) : ''}
 
 <script>
   document.addEventListener('pointerdown', function () {

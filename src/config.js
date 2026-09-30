@@ -310,6 +310,11 @@ const config = Object.freeze({
   // Neil's setting in the conversion action. It is not revenue and nothing here
   // treats it as such.
   // ---------------------------------------------------------------------------
+  googleAddress: Object.freeze({
+    enabled: process.env.GOOGLE_ADDRESS_ENABLED === 'true' && !supabaseIsProduction,
+    browserKey: process.env.GOOGLE_MAPS_BROWSER_KEY || '',
+    serverKey: process.env.GOOGLE_ADDRESS_SERVER_KEY || '',
+  }),
   googleAds: Object.freeze({
     id: process.env.GOOGLE_ADS_ID || 'AW-18438272002',
     leadLabel: process.env.GOOGLE_ADS_LEAD_LABEL || 'n0sjCK-C1_McEILohthE',

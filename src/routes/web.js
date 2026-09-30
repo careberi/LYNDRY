@@ -53,11 +53,11 @@ const money = (cents) => `$${(cents / 100).toFixed(2)}`;
 //
 // ONE QUOTE COVERS BOTH LEGS. Uber returned the same fee in both directions for
 // the same pair, so the round trip is that fee doubled rather than two calls.
-async function quoteFor(address) {
+async function quoteFor(address, validatedPlace = null) {
   // lookupOnce(), not lookup(): the exported one goes through the shared
   // throttle, which is what keeps us inside the free geocoder's usage policy.
   // A public page anybody can type into is exactly where that matters.
-  const place = await geocode.lookupOnce(address);
+  const place = validatedPlace || await geocode.lookupOnce(address);
   if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) {
     return { quote: null, error: 'not_found' };
   }
@@ -910,8 +910,8 @@ router.get('/quote', async (req, res) => {
   // Pricing submits separate address fields; existing quote links keep working.
   const part = (key, limit) => typeof req.query[key] === 'string'
     ? req.query[key].trim().slice(0, limit) : '';
-  const street = part('street', 120);
-  const address = street
+  let street = part('street', 120);
+  let address = street
     ? [street, part('unit', 60), part('town', 80), 'NJ', part('zip', 5)].filter(Boolean).join(', ')
     : part('address', 200);
 
@@ -924,20 +924,32 @@ router.get('/quote', async (req, res) => {
   const dynamicPreview = checkout.enabled;
   let result = { quote: null, error: null };
   const addressEstimate = !pickupDate && !pickupTime;
-  if (dynamicPreview && address && !isBot) {
+  let validatedPlace = null;
+  if (config.googleAddress?.enabled && address && !isBot) {
     try {
-      const place = await geocode.lookupOnce(address);
+      if (throttle.hit('address-validation:'+req.ip, 10, 60000)) throw Error('Too many address checks');
+      validatedPlace = await require('../core/google-address').validate(address,{key:config.googleAddress.serverKey});
+      if (!validatedPlace) result.error = 'not_found';
+      else {
+        street = validatedPlace.street;
+        address = [street,part('unit',60),validatedPlace.town,'NJ',validatedPlace.zip].filter(Boolean).join(', ');
+      }
+    } catch (error) { result.error = 'unavailable'; }
+  }
+  if (dynamicPreview && address && !isBot && !result.error) {
+    try {
+      const place = validatedPlace || await geocode.lookupOnce(address);
       if (!place) throw Error('We could not locate this address. Check the street, town, and ZIP.');
-      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:part('town',80),postal_code:part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME'}, {publicPreview:true,addressEstimate});
+      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:validatedPlace?.town || part('town',80),postal_code:validatedPlace?.zip || part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME'}, {publicPreview:true,addressEstimate});
       result.quote = {ok:true,dynamic:true,indicative:!pickupDate && !pickupTime,...preview};
     } catch (err) {
       if (/No eligible laundromat/i.test(err.message)) result.error = 'unavailable_area';
       else result.error = 'unavailable';
     }
   }
-  if (!dynamicPreview && address && !isBot) {
+  if (!dynamicPreview && address && !isBot && !result.error) {
     try {
-      result = await quoteFor(address);
+      result = await quoteFor(address, validatedPlace);
     } catch (err) {
       console.error(`Quote failed for an address: ${err.message}`);
       result = { quote: null, error: 'unavailable' };
@@ -957,7 +969,7 @@ router.get('/quote', async (req, res) => {
         QUOTE_FORM: address && !isBot ? '' : readPageBody('quote-form.html').replace('{{ADDRESS_VALUE}}', quoteResult.escapeHtml(address)),
         // The pricing page owns address input; the result has no second scheduling form.
         QUOTE_RESULT: quoteResult.render({ ...result, address,
-          fields: { street, unit: part('unit', 60), town: part('town', 80), zip: part('zip', 5) },
+          fields: { street, unit: part('unit', 60), town: validatedPlace?.town || part('town', 80), zip: validatedPlace?.zip || part('zip', 5) },
           interest: part('interest', 20) }),
         COURIER_MINIMUM: money(config.pricing.minimumCents),
       },
