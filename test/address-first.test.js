@@ -1,4 +1,6 @@
 'use strict';
+// These checkout tests isolate courier coverage; Google validation has its own tests.
+process.env.GOOGLE_ADDRESS_ENABLED='false';
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const express=require('express');

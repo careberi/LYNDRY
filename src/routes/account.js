@@ -1549,9 +1549,9 @@ router.post('/account/card', auth.requireCustomer, async (req, res) => {
 
 async function saveAddress(customer, form) {
   const name = String(form.name || '').trim();
-  const addressLine1 = String(form.address_line1 || '').trim();
-  const city = String(form.city || '').trim();
-  const postalCode = String(form.postal_code || '').trim();
+  let addressLine1 = String(form.address_line1 || '').trim();
+  let city = String(form.city || '').trim();
+  let postalCode = String(form.postal_code || '').trim();
   // THE LIST OR THE BOX, NEVER BOTH. "Somewhere else" with nothing typed is
   // not an answer, and it is the one the driver acts on - so it is refused
   // rather than saved as a blank that reads on the run sheet as "we were never
@@ -1566,6 +1566,22 @@ async function saveAddress(customer, form) {
   }
   if (!/^\d{5}$/.test(postalCode)) {
     return { ok: false, error: 'Please enter a five-digit ZIP code.' };
+  }
+
+  let verifiedAddress = null;
+  if (config.googleAddress?.enabled) {
+    try {
+      verifiedAddress = await require('../core/google-address').validate(
+        [addressLine1, String(form.address_line2 || '').trim(), city, String(form.state || 'NJ'), postalCode].filter(Boolean).join(', '),
+        { key: config.googleAddress.serverKey }
+      );
+      if (!verifiedAddress) return { ok: false, error: 'Please choose a complete New Jersey pickup address and check any apartment or unit number.' };
+      addressLine1 = verifiedAddress.street;
+      city = verifiedAddress.town;
+      postalCode = verifiedAddress.zip;
+    } catch {
+      return { ok: false, error: 'We could not verify your address right now. Please try again.' };
+    }
   }
 
   // The development quote already verifies both courier legs for an exact
@@ -1624,9 +1640,11 @@ async function saveAddress(customer, form) {
     city,
     state: 'NJ',
     postal_code: postalCode,
+    ...(verifiedAddress ? { lat: verifiedAddress.lat, lng: verifiedAddress.lng, geocoded_at: new Date().toISOString(), geocode_failed: false } : {}),
     preferences,
   };
 
+  if (!customer.id) return { ok: true, customer: { ...customer, ...changes } };
   const { error } = await db.from('customers').update(changes).eq('id', customer.id);
   if (error) throw error;
 
@@ -1736,7 +1754,7 @@ function withAnswers(customer, given) {
     ...customer,
     name: given.name || customer.name,
     address_line1: given.address_line1 || customer.address_line1,
-    address_line2: given.address_line2 || customer.address_line2,
+    address_line2: given.address_line2 !== undefined ? given.address_line2 : customer.address_line2,
     city: given.city || customer.city,
     postal_code: given.postal_code || customer.postal_code,
     preferences,
@@ -2644,8 +2662,8 @@ router.post('/account/book', async (req, res, next) => {
 
       // Validate the address BEFORE creating anything, so a typo does not leave
       // an empty account behind.
-      const checked = await saveAddress({ id: null, preferences: {} }, form).catch(() => null);
-      if (checked && !checked.ok) return reshow('address', checked.error);
+      const checked = await saveAddress({ id: null, preferences: {} }, form).catch(() => ({ ok: false, error: 'We could not verify your address. Please try again.' }));
+      if (!checked.ok) return reshow('address', checked.error);
 
       const started = await onboarding.startConversation({
         phone: who.customer.phone,

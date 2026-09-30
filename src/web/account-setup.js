@@ -187,7 +187,7 @@ function addressForm(customer) {
   const v = (value) => escapeHtml(String(value || ''));
 
   return `
-    <form method="post" action="/account/details">
+    <form method="post" action="/account/details" data-customer-address>
       <div class="stack">
         ${field(
           { id: 'name', text: 'Your name' },

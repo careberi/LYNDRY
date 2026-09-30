@@ -1,29 +1,24 @@
 <section class="container" style="padding-bottom:72px;">
-  <form method="get" action="/quote" class="card card-xl" style="padding:26px 28px;max-width:52ch;" data-reveal>
-    <label for="address" style="display:block;font:700 12px/1 var(--font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-700);margin-bottom:10px;">
-      Your street address
-    </label>
-
-    <input id="address" name="address" type="text" required
-           value="{{ADDRESS_VALUE}}"
-           placeholder="16 Chandler Dr, Fair Lawn NJ"
-           autocomplete="street-address"
-           style="width:100%;margin-bottom:14px;">
-
-    <!-- A hidden field a person never sees. Anything that fills it is not a
-         person, and gets the same answer as everybody else. -->
-    <div style="position:absolute;left:-9999px;" aria-hidden="true">
-      <label for="q-company">Company</label>
-      <input id="q-company" name="company" type="text" tabindex="-1" autocomplete="off">
+  <form method="get" action="/quote" class="card card-lg card-xl pricing-address-form">
+    <div class="field">
+      <label class="field-label" for="pricing-street">Street address</label>
+      <input class="input" id="pricing-street" name="street" autocomplete="address-line1" required maxlength="120">
     </div>
-
-    <button type="submit" class="btn btn-ink" style="width:100%;">
-      See my price {{ICON_ARROW}}
-    </button>
-
-    <p style="font-size:13px;line-height:1.5;color:var(--ink-500);margin:14px 0 0;">
-      We only use this to work out the distance. Nothing is saved and you are not
-      signed up for anything.
-    </p>
+    <div class="pricing-address-row">
+      <div class="field">
+        <label class="field-label" for="pricing-town">Town</label>
+        <input class="input" id="pricing-town" name="town" autocomplete="address-level2" required maxlength="80">
+      </div>
+      <div class="field">
+        <label class="field-label" for="pricing-zip">ZIP code</label>
+        <input class="input" id="pricing-zip" name="zip" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" required>
+      </div>
+    </div>
+    <div style="position:absolute;left:-9999px;" aria-hidden="true">
+      <label for="p-company">Company</label>
+      <input id="p-company" name="company" tabindex="-1" autocomplete="off">
+    </div>
+    <button type="submit" class="btn btn-ink btn-full">Check my price {{ICON_ARROW}}</button>
+    <p class="pricing-address-hint">We only use this to work out the distance. Nothing is saved and you are not signed up for anything.</p>
   </form>
 </section>
