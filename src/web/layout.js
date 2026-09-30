@@ -511,106 +511,62 @@ ${popupHtml}
   // Motion. Two systems, both off entirely under prefers-reduced-motion.
   // ---------------------------------------------------------------------
   (function () {
-    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) return;
-
-    // --- Scroll reveal ---------------------------------------------------
-    //
-    // The hiding class goes on from JavaScript, never from plain CSS. A
-    // browser that never runs this — or a script that fails to load — then
-    // shows the whole page normally instead of a page of invisible sections.
-    if ('IntersectionObserver' in window) {
+    var preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var reveal = [].slice.call(document.querySelectorAll('[data-reveal]'));
+    var watcher;
+    function showAll() {
+      reveal.forEach(function (el) { el.style.transitionDelay = '0ms'; el.classList.add('is-in'); });
+      if (watcher) watcher.disconnect();
+    }
+    // Functional controls never wait for an entrance or move while being read.
+    if (!preference.matches && 'IntersectionObserver' in window) {
       document.documentElement.classList.add('js-anim');
-
-      var hidden = [];
-      var reveal = document.querySelectorAll('[data-reveal]');
-
-      // Anything already on screen at load is shown immediately. Only what is
-      // below the fold gets hidden and waits for its turn.
-      for (var i = 0; i < reveal.length; i++) {
-        if (reveal[i].getBoundingClientRect().top < window.innerHeight * 0.9) {
-          reveal[i].classList.add('is-in');
-        } else {
-          hidden.push(reveal[i]);
-        }
-      }
-
-      var watcher = new IntersectionObserver(function (entries) {
+      watcher = new IntersectionObserver(function (entries) {
         entries.forEach(function (entry) {
           if (!entry.isIntersecting) return;
           entry.target.classList.add('is-in');
           watcher.unobserve(entry.target);
         });
-      }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-
-      hidden.forEach(function (el) { watcher.observe(el); });
-
-      // A fast scroll or a jump to an anchor can carry an element past the
-      // viewport without the observer ever firing, which would strand it
-      // dimmed and 26px out of place. This sweep is what stops that.
-      var sweep = function () {
-        for (var i = hidden.length - 1; i >= 0; i--) {
-          var el = hidden[i];
-          if (el.classList.contains('is-in')) { hidden.splice(i, 1); continue; }
-          if (el.getBoundingClientRect().top < window.innerHeight * 0.92) {
-            el.classList.add('is-in');
-            watcher.unobserve(el);
-            hidden.splice(i, 1);
-          }
+      }, { rootMargin: '0px 0px -32px 0px', threshold: 0 });
+      reveal.forEach(function (el) {
+        if (el.matches('form') || el.querySelector('form, input, select, textarea') ||
+            el.getBoundingClientRect().top < window.innerHeight) {
+          el.classList.add('is-in');
+        } else {
+          var siblings = [].slice.call(el.parentElement.children).filter(function (node) { return node.hasAttribute('data-reveal'); });
+          el.style.transitionDelay = Math.min(2, siblings.indexOf(el)) * 50 + 'ms';
+          watcher.observe(el);
         }
-      };
-      window.addEventListener('scroll', sweep, { passive: true });
-    }
-
-    // --- Parallax --------------------------------------------------------
-    //
-    // Each element's untransformed document position is measured once, then
-    // displacement accumulates only from the moment it enters the viewport —
-    // so nothing is shifted at page load, only as you scroll past it.
-    //
-    // An element never carries both data-parallax and data-reveal: they both
-    // write transform and would fight over it.
-    // Parallax is a desktop effect. On a narrow screen the layout is a single
-    // column with no room for anything to drift, and moving blocks around
-    // under a thumb is just noise.
-    if (window.innerWidth < 900) return;
-
-    var items = [].slice.call(document.querySelectorAll('[data-parallax],[data-parallax-x]'));
-    if (!items.length) return;
-
-    var measure = function () {
-      items.forEach(function (el) {
-        el.style.transform = 'none';
-        el.__base = el.getBoundingClientRect().top + window.scrollY;
       });
-    };
+    } else showAll();
+    // Anchor jumps and keyboard focus must never land on dimmed content.
+    document.addEventListener('keydown', showAll);
+    document.addEventListener('focusin', function (event) {
+      var section = event.target.closest('[data-reveal]');
+      if (section) section.classList.add('is-in');
+    });
+    window.addEventListener('hashchange', showAll);
 
+    // Only decorative artwork gets depth; text and interactive cards stay still.
+    var items = [].slice.call(document.querySelectorAll('[aria-hidden="true"][data-parallax]'));
+    var pointer = window.matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)');
     var frame = null;
-    var apply = function () {
+    function apply() {
       frame = null;
-      var y = window.scrollY;
+      var enabled = pointer.matches && !preference.matches && document.body.dataset.inputMode !== 'keyboard';
       items.forEach(function (el) {
-        // The scroll position at which this element first entered the
-        // viewport. Clamped at zero: an element that is already on screen when
-        // the page loads has a threshold of 0, so it starts undisplaced and
-        // moves only once you actually scroll. Without the clamp, everything
-        // above the fold is thrown out of place before you touch anything.
-        var threshold = Math.max(0, el.__base - window.innerHeight);
-        var d = Math.max(0, y - threshold);
-        var sy = parseFloat(el.getAttribute('data-parallax')) || 0;
-        var sx = parseFloat(el.getAttribute('data-parallax-x')) || 0;
-        el.style.transform = 'translate3d(' + (-d * sx).toFixed(1) + 'px,' + (d * sy).toFixed(1) + 'px,0)';
+        var displacement = enabled ? Math.max(-24, Math.min(24, window.scrollY * (parseFloat(el.dataset.parallax) || 0))) : 0;
+        el.style.transform = displacement ? 'translate3d(0,' + displacement.toFixed(1) + 'px,0)' : '';
       });
-    };
-
-    var onScroll = function () {
+    }
+    function schedule() {
       if (frame === null) frame = window.requestAnimationFrame(apply);
-    };
-
-    measure();
+    }
+    window.addEventListener('scroll', schedule, { passive: true });
+    document.addEventListener('keydown', apply);
+    pointer.addEventListener('change', apply);
+    preference.addEventListener('change', function () { showAll(); apply(); });
     apply();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', function () { measure(); apply(); });
   })();
 </script>
 </body>

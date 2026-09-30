@@ -1,3 +1,7 @@
+# Customer motion refinement
+
+Neil requested better existing customer website animation using Animate. Marketing reveals use 12px movement and 250ms strong ease out. Forms show immediately. Parallax is restricted to decorative artwork, capped at 24px and disabled for touch, narrow screens, keyboard and reduced motion. Runtime preference changes reset movement. No business behavior changes. Independent review and phone feel check pending.
+
 # Customer interaction polish
 
 Neil requested the Emil design engineering skill on the customer website. Scope: shared customer layout only, retaining the established brand and business behavior. Refine pointer and keyboard feedback, focus visibility, touch controls and reduced motion. No payment, dispatch, messaging or order rules change. Validate with npm test and browser checks; independent review and physical phone checks remain pending. Update Obsidian.
@@ -279,3 +283,5 @@ Neil hit a generic pre-request failure assigning LYNDRY to #9017. Read-only veri
 Neil requested the dynamic address quote headline use the subscription per-pound rate, clearly labeled Subscription, and the subscription card precede the one-time card. Presentation only; both saved calculations, fees, minimums and booking choices stay unchanged.
 
 Customer interaction validation: npm test passed all 1,595 tests. Browser verified customer scope, 120ms pointer transitions, 0ms keyboard transitions, desktop homepage and 390px pricing form without horizontal overflow. Visible address fields are 16px with approximately 54px height; submit control approximately 46px. Physical phone and independent review remain pending. No business forms submitted.
+
+Validation: all 1,595 tests passed after final changes. Browser confirmed 250ms reveal token, stationary hero text, visible scrolled content, 0/50/100ms stagger and immediate keyboard reveal. Real phone feel check and independent review pending.

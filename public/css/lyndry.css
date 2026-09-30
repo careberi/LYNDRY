@@ -1594,12 +1594,12 @@ button {
 
 .js-anim [data-reveal] {
   opacity: 0.4;
-  transform: translate3d(0, 26px, 0);
+  transform: translate3d(0, 12px, 0);
 }
 .js-anim [data-reveal].is-in {
   opacity: 1;
   transform: none;
-  transition: opacity var(--dur-entrance) var(--ease-pop), transform var(--dur-entrance) var(--ease-pop);
+  transition: opacity var(--dur-entrance) var(--ease-out), transform var(--dur-entrance) var(--ease-out);
 }
 
 /* Anyone whose device asks for less motion gets none of it. This kills the
@@ -2098,9 +2098,9 @@ body.ly-pop-locked { overflow: hidden; }
 }
 
 /* Customer interaction polish. Preserve the brand's offset shadows. */
-.customer-site { --customer-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+.customer-site { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --dur-entrance: 250ms; }
 .customer-site :is(.btn, .hero-cta) {
-  transition: transform 120ms var(--customer-ease), box-shadow 120ms var(--customer-ease), filter 120ms ease;
+  transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out), filter 120ms ease;
   touch-action: manipulation;
   user-select: none;
 }
