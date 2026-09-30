@@ -4,6 +4,7 @@
 // assignment separate: a failed/ambiguous write must be reconciled, never retried
 // as a new booking. The caller must durably save the order ID before assignment.
 const BASE = 'https://api.shipday.com';
+const {contactFields} = require('./shipday-contact');
 
 function cents(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
@@ -142,7 +143,7 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
       }
       const pickup = instant(pickupReadyAt), dropoff = instant(dropoffDeadlineAt);
       if (dropoff <= pickup) throw new Error('Delivery must follow pickup.');
-      const result = await request('POST', '/orders', {
+      const result = await request('POST', '/orders', contactFields({
         orderNumber: externalId, restaurantName: from.name, restaurantAddress: address(from),
         restaurantPhoneNumber: from.phone, customerName: to.name, customerAddress: address(to),
         customerPhoneNumber: to.phone, expectedDeliveryDate: dropoff.slice(0, 10),
@@ -150,7 +151,7 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
         pickupInstruction: from.notes || '', deliveryInstruction: to.notes || '',
         orderSource: 'LYNDRY', orderItem: manifest.map((item) => ({ name: item.name,
           quantity: item.quantity, unitPrice: 0 })),
-      }, true);
+      }), true);
       if (!result || result.success !== true || !result.orderId) {
         const error = new Error('Shipday order creation was not confirmed. Reconcile before retrying.');
         error.uncertain = true;
@@ -161,7 +162,7 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
     async editOrder(orderId, body) {
       identifier(orderId);
       if (String(body?.orderId) !== String(orderId) || !body.orderNo) throw new Error('A matching existing order is required.');
-      const result = await request('PUT', '/order/edit/' + orderId, body, 'edit');
+      const result = await request('PUT', '/order/edit/' + orderId, contactFields(body), 'edit');
       if (result?.success !== true) { const error = new Error('Shipday delivery update was not confirmed. Reconcile before retrying.'); error.uncertain = true; throw error; }
       return {ok:true};
     },

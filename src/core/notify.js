@@ -212,6 +212,11 @@ async function sendAndLog(
   { sentBy = null, kind = null, compliance = false, askedFor = null } = {}
 ) {
   let providerMessageId = null;
+  let sendFailed = false;
+  // Provider tracking pages expose the partner and route. Keep them internal.
+  if (/\b(?:ordertracking\.io|(?:[a-z0-9-]+\.)?shipday\.com)\b/i.test(String(body))) {
+    return {sent:false,refused:'internal_tracking_link'};
+  }
 
   // ---------------------------------------------------------------------
   // THE LAST GATE ON AN OPTED-OUT NUMBER, AND THE ONLY ONE THAT CATCHES
@@ -294,6 +299,7 @@ async function sendAndLog(
     // Log the attempt anyway. A message we failed to send is exactly the kind
     // of thing worth being able to look up afterwards.
     console.error(`Failed to send SMS to ${to}:`, err.message);
+    sendFailed = true;
   }
 
   const { error } = await db.from('messages').insert({
@@ -316,6 +322,8 @@ async function sendAndLog(
   });
 
   if (error) console.error('Failed to log outbound message:', error.message);
+  return {sent:!sendFailed && !error,simulated:sms.isFake || isFictional(to),providerMessageId,
+    ...(sendFailed || error ? {uncertain:true} : {})};
 }
 
 module.exports = {

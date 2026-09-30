@@ -2,7 +2,7 @@
 
 // Editing delivery details must never create, assign, cancel or replace a trip.
 const { dispatchInstant } = require('./shipday-dispatch');
-const phone = '+12017712933';
+const phone = require('../providers/couriers/shipday-contact').BUSINESS_PHONE;
 const clean = value => String(value || '').replace(/[^a-zA-Z0-9 .'-]/g, ' ').replace(/\s+/g, ' ').trim();
 const comparable = value => String(value || '').toLowerCase().replace(/\b(usa|united states)\b/g, '').replace(/[^a-z0-9]/g, '');
 const address = row => [row.address_line1, row.address_line2, row.city, row.state, row.postal_code].filter(Boolean).join(', ');
@@ -24,7 +24,7 @@ function payload(order, customer, partner, plan, remote) {
     orderId: Number(plan.shipday_order_id), orderNo: remote.orderNumber,
     restaurantName: clean(from.name), restaurantAddress: address(from), restaurantPhoneNumber: pickup ? customer.phone : phone,
     customerName: clean(to.name), customerAddress: address(to), customerPhoneNumber: pickup ? phone : customer.phone,
-    customerEmail: remote.customer?.emailAddress || '',
+    customerEmail: '',
     pickupInstruction: pickup ? location : 'Collect LYNDRY order #' + order.order_number + '. Match the reference with the attendant.',
     deliveryInstruction: notes,
   };
