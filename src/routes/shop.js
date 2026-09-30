@@ -252,9 +252,9 @@ router.get('/shop/app.webmanifest', (req, res) => {
       start_url: '/shop',
       scope: '/shop',
       display: 'standalone',
-      orientation: 'portrait',
-      background_color: '#FFF8EC',
-      theme_color: '#101210',
+      orientation: 'any',
+      background_color: config.supabase.isDevelopment ? '#f6f8fc' : '#FFF8EC',
+      theme_color: config.supabase.isDevelopment ? '#ffffff' : '#101210',
       icons: [
         { src: '/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
         { src: '/app-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

@@ -2,6 +2,7 @@
 // Progressive UI enhancements only; server permissions and form actions remain authoritative.
 function script() { return '<script>(' + enhancePOS.toString() + ')();</script>'; }
 function enhancePOS() {
+  if (document.body.classList.contains('shop-mobile')) return;
   if (!location.hostname.startsWith('pos.') && !location.pathname.startsWith('/ops')) return;
   document.body.classList.add('pos-workspace');
   // Keyboard work stays instant; only a direct pointer press gets motion feedback.

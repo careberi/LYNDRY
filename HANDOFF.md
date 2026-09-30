@@ -1,3 +1,9 @@
+## Current: laundromat mobile-native polish — 2026-09-30
+
+Neil requested mobile-native improvements across laundromat shop pages. Add opt-in portal viewport/safe-area support, dynamic shell height, touch control feedback, 16px inputs on touch devices and keyboard hints. Keep pinch zoom, selectable order/address text, native scrolling and all intake/outtake/confirmation rules. No new app framework or business action. Browser checks plus npm test; physical-phone verification and independent review pending.
+
+Validation: 1,595 tests pass. Browser verified portal opt-in classes, viewport metadata, 16px sign-in input and no page overflow at 390px; opened the existing admin portal without altering an order. Real-phone testing of keyboard, notch, landscape and installed-app behavior remains pending.
+
 ## Current: POS interaction polish — 2026-09-30
 
 Neil explicitly requested applying emil-design-eng across pos.localhost screens. Refine shared staff POS controls: subtle pointer press feedback, instant keyboard interactions, hover only on capable devices, reduced-motion support, clearer disabled/focus states, consistent touch targets and field spacing. Preserve the existing visual identity and all business actions, permissions and forms. Public website and laundromat portal are outside this pass. Stacked on codex/report-saved-quote-total. Independent review and Neil click-test pending.

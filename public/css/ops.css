@@ -1935,3 +1935,53 @@ body.pos-app {
 
 .pos-workspace .ops-form-stack .card > label { display:block; }
 .pos-workspace .ops-form-stack .card > label + label { margin-top:14px; }
+
+/* Laundromat portal only. Keep document refresh/zoom and selectable content;
+   contain scroll chaining only in the horizontally scrolling order tables. */
+.shop-mobile-root { -webkit-text-size-adjust:100%; color-scheme:light; }
+body.shop-mobile { min-height:100dvh; }
+.shop-mobile.pos-app > main.container {
+  min-height:calc(100dvh - 98px);
+  padding-bottom:calc(48px + env(safe-area-inset-bottom, 0px))!important;
+}
+.shop-mobile .pos-topbar {
+  height:auto; min-height:calc(72px + env(safe-area-inset-top, 0px));
+  padding-top:env(safe-area-inset-top, 0px);
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.shop-mobile .ops-table-wrap,.shop-mobile .shop-table-scroll { overscroll-behavior-x:contain; }
+.shop-mobile :is(button,.btn,.cbtn,summary) {
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none;
+}
+.shop-mobile :is(a,input,select,textarea) { touch-action:manipulation; }
+.shop-mobile main.container :is(.btn,.cbtn):not(:disabled):not([aria-disabled="true"]):active { opacity:.78; }
+.shop-mobile :is(input,select,textarea,button,summary) { scroll-margin-block:100px 24px; }
+@media (any-pointer:coarse) {
+  .shop-mobile main.container :is(input,select,textarea) { font-size:16px!important; min-height:44px; }
+  .shop-mobile main.container input:is([type="checkbox"],[type="radio"]) { min-height:20px; width:20px; height:20px; }
+  .shop-mobile main.container :is(.btn,.cbtn),.shop-mobile summary { min-height:44px; }
+}
+@media (hover:none), (pointer:coarse) {
+  .shop-mobile main.container table tr:hover td { background:#fff; }
+  .shop-mobile main.container table tr:nth-child(even):hover td { background:#fafbfd; }
+  .shop-mobile .shop-order-row:hover { background:transparent; }
+  .shop-mobile main.container .shop-stat:hover { background:#fff; border-color:var(--c-line); }
+  .shop-mobile .pos-sidebar .pos-nav-link:hover { background:transparent; }
+  .shop-mobile .pos-sidebar .pos-nav-link[aria-current="page"] { background:#eaf1ff; }
+  .shop-mobile main.container :is(.btn,.cbtn):hover { transform:none; box-shadow:none; }
+}
+@media(max-width:760px) {
+  .shop-mobile .pos-topbar { min-height:calc(64px + env(safe-area-inset-top, 0px)); }
+  .shop-mobile.pos-app > main.container {
+    padding-left:max(14px, env(safe-area-inset-left, 0px))!important;
+    padding-right:max(14px, env(safe-area-inset-right, 0px))!important;
+  }
+  .shop-mobile .pos-sidebar { padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
+}
+
+.shop-mobile:not(.pos-app) .site-header-bar.ops-bar { padding-top:env(safe-area-inset-top,0px); padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px)); }
+.shop-mobile:not(.pos-app) > main.container { padding-bottom:calc(32px + env(safe-area-inset-bottom,0px)); }

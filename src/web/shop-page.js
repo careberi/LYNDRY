@@ -344,6 +344,7 @@ function page({
     // A COUNTER IS A DOORSTEP. 52px controls and real input targets, the same
     // reason the driver's screens set it.
     touch: true,
+    shopMobile: true,
   });
 }
 
@@ -380,7 +381,7 @@ function phoneStep({ lang = 'en', error = '', phone = '', next = '/shop', shop =
         <div class="field">
           <label class="field-label" for="phone">${s('mobile', lang)}</label>
           <input class="input input-lg" type="tel" id="phone" name="phone" required
-                 autocomplete="tel" inputmode="tel" placeholder="201-555-0142"
+                 autocomplete="tel" inputmode="tel" enterkeyhint="next" placeholder="201-555-0142"
                  value="${escapeHtml(phone)}" autofocus>
         </div>
         <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
@@ -415,7 +416,7 @@ function codeStep({ lang = 'en', error = '', phone = '', code = '', next = '/sho
         <div class="field">
           <label class="field-label" for="code">${s('sixDigits', lang)}</label>
           <input class="input input-lg" type="text" id="code" name="code" required
-                 inputmode="numeric" pattern="[0-9]*" maxlength="6"
+                 inputmode="numeric" enterkeyhint="done" autocapitalize="none" autocorrect="off" pattern="[0-9]*" maxlength="6"
                  autocomplete="one-time-code" autofocus value="${escapeHtml(code)}"
                  style="letter-spacing:0.4em;text-align:center;">
         </div>
@@ -657,7 +658,7 @@ function orderPage({
       <div class="field">
         <label class="field-label" for="weight_lb">${s('pounds', lang)}</label>
         <input class="input input-lg" type="text" id="weight_lb" name="weight_lb" required
-               inputmode="decimal" autocomplete="off" placeholder="24.5" autofocus
+               inputmode="decimal" enterkeyhint="done" autocomplete="off" placeholder="24.5" autofocus
                style="text-align:center;">
       </div>
       <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">
@@ -797,7 +798,7 @@ function staffPage({ lang = 'en', shop, staff = [], me, flash = null } = {}) {
       <div class="field" style="margin-top:10px;">
         <label class="field-label" for="phone">${s('mobile', lang)}</label>
         <input class="input input-lg" type="tel" id="phone" name="phone" required
-               autocomplete="off" inputmode="tel" placeholder="201-555-0142">
+               autocomplete="off" inputmode="tel" enterkeyhint="next" placeholder="201-555-0142">
       </div>
       <p class="field-hint" style="margin-top:8px;">${s('addHint', lang)}</p>
       <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:14px;">

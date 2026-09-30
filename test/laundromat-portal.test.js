@@ -538,7 +538,7 @@ test('THE PORTAL WEARS THE OPS SKIN, WHICH IS WHAT WAS ASKED FOR', () => {
   const rendered = page.board({ lang: 'en', shop: SHOP, orders: [] });
 
   assert.match(rendered, /ops\.css/, 'the portal is not loading the ops stylesheet');
-  assert.match(rendered, /class="(?:pos-app )?ops-terminal ops-touch"/, 'the portal is not wearing the terminal skin');
+  assert.match(rendered, /class="(?:pos-app )?ops-terminal ops-touch shop-mobile"/, 'the portal is not wearing the terminal skin');
 
   // AND NOT A SINGLE /ops LINK. An attendant must never be offered an internal
   // screen - the shell cannot see a user, so it cannot derive a driver's nav.

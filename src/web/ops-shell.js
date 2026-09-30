@@ -137,12 +137,13 @@ function opsShell({
   bare = false,
   terminal = false,
   touch = false,
+  shopMobile = false,
 } = {}) {
   return `<!doctype html>
-<html lang="${escapeHtml(lang)}">
+<html lang="${escapeHtml(lang)}"${shopMobile ? ' class="shop-mobile-root"' : ''}>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1${shopMobile ? ', viewport-fit=cover, interactive-widget=resizes-content' : ''}">
   <title>${config.supabase.isProduction ? '' : '[DEV] '}${escapeHtml(title)} — ${escapeHtml(titleSuffix)}</title>
   <!-- Internal, and full of customer addresses. Never index it. -->
   <meta name="robots" content="noindex, nofollow">
@@ -160,12 +161,12 @@ function opsShell({
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="${escapeHtml(site.name)}">
-  <meta name="theme-color" content="#101210">${
+  <meta name="theme-color" content="${shopMobile && pos ? '#ffffff' : '#101210'}">${
     manifest ? `\n  <link rel="manifest" href="${escapeHtml(manifest)}">` : ''
   }
   <!-- The same icons as the public site, from the same list. -->
   ${ICON_LINKS}
-  <meta name="theme-color" content="#101210">
+  ${shopMobile ? '<meta name="color-scheme" content="light">' : ''}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grandstander:wght@900&display=swap">
@@ -182,7 +183,7 @@ function opsShell({
   <link rel="stylesheet" href="${CSS_BASE}/ops.css">
 ${head}
 </head>
-<body${pos || terminal ? ` class="${pos ? 'pos-app ' : ''}ops-terminal${touch ? ' ops-touch' : ''}${bare ? ' pos-focused' : ''}"` : ''}>
+<body${pos || terminal ? ` class="${pos ? 'pos-app ' : ''}ops-terminal${touch ? ' ops-touch' : ''}${shopMobile ? ' shop-mobile' : ''}${bare ? ' pos-focused' : ''}"` : ''}>
   ${devBand()}
   ${
     // A BARE PAGE IS JUST THE MARK. Neil's call for the driver's route: it
