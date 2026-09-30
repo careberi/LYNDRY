@@ -1,3 +1,7 @@
+# Customer interaction polish
+
+Neil requested the Emil design engineering skill on the customer website. Scope: shared customer layout only, retaining the established brand and business behavior. Refine pointer and keyboard feedback, focus visibility, touch controls and reduced motion. No payment, dispatch, messaging or order rules change. Validate with npm test and browser checks; independent review and physical phone checks remain pending. Update Obsidian.
+
 ## Current: laundromat mobile-native polish — 2026-09-30
 
 Neil requested mobile-native improvements across laundromat shop pages. Add opt-in portal viewport/safe-area support, dynamic shell height, touch control feedback, 16px inputs on touch devices and keyboard hints. Keep pinch zoom, selectable order/address text, native scrolling and all intake/outtake/confirmation rules. No new app framework or business action. Browser checks plus npm test; physical-phone verification and independent review pending.
@@ -273,3 +277,5 @@ Neil reports deleting #9017's Shipday job while LYNDRY still blocks edits. A rea
 Neil hit a generic pre-request failure assigning LYNDRY to #9017. Read-only verification confirmed current payment checks pass, LYNDRY is active/on-shift, and no remote reference exists. The earlier failure did not reproduce, but the in-house path incorrectly depended on Uber/DoorDash availability. Skip that quote for in-house selection while retaining scheduled arrival, laundromat hours, card, identity and duplicate guards. Identify the failed check and safe HTTP status in pre-write errors; manual errors say Try Assign again instead of falsely promising automatic retries. No real driver request made during diagnosis or tests.
 ## 2026-09-28: lead the public quote with subscription pricing
 Neil requested the dynamic address quote headline use the subscription per-pound rate, clearly labeled Subscription, and the subscription card precede the one-time card. Presentation only; both saved calculations, fees, minimums and booking choices stay unchanged.
+
+Customer interaction validation: npm test passed all 1,595 tests. Browser verified customer scope, 120ms pointer transitions, 0ms keyboard transitions, desktop homepage and 390px pricing form without horizontal overflow. Visible address fields are 16px with approximately 54px height; submit control approximately 46px. Physical phone and independent review remain pending. No business forms submitted.

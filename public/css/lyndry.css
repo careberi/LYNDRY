@@ -2096,3 +2096,49 @@ body.ly-pop-locked { overflow: hidden; }
   .booking-content > .card { padding:22px !important; }
   .home-faq { padding-block:48px; }
 }
+
+/* Customer interaction polish. Preserve the brand's offset shadows. */
+.customer-site { --customer-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+.customer-site :is(.btn, .hero-cta) {
+  transition: transform 120ms var(--customer-ease), box-shadow 120ms var(--customer-ease), filter 120ms ease;
+  touch-action: manipulation;
+  user-select: none;
+}
+.customer-site :is(a, button, summary, input, select, textarea):focus-visible {
+  outline: 3px solid var(--suds-700);
+  outline-offset: 4px;
+}
+.customer-site :is(.site-header, .site-footer) :is(a, button):focus-visible {
+  outline-color: var(--sunbeam-500);
+}
+.customer-site :is(input, select, textarea) { scroll-margin-block: 110px; }
+.customer-site textarea { min-height: 112px; }
+.customer-site :is(.btn, .hero-cta):is(:disabled, [aria-disabled='true']) {
+  transform: none;
+  filter: none;
+  cursor: not-allowed;
+}
+.customer-site[data-input-mode='keyboard'] *,
+.customer-site[data-input-mode='keyboard'] *::before,
+.customer-site[data-input-mode='keyboard'] *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+.customer-site[data-input-mode='keyboard'] :is(.btn, .hero-cta):active { transform: none; }
+@media (hover: none), (pointer: coarse) {
+  .customer-site :is(.btn, .hero-cta) { min-height: 44px; }
+  .customer-site :is(input, select, textarea) { font-size: max(16px, 1em); }
+  .customer-site :is(.site-nav a, .site-footer a, summary) { min-height: 44px; }
+  .customer-site .site-footer a { display: inline-flex; align-items: center; }
+  .customer-site .btn:hover { transform: none; filter: none; box-shadow: var(--shadow-pop-sm); }
+  .customer-site .btn-lg:hover { box-shadow: var(--shadow-pop-md); }
+  .customer-site .btn-ink:hover { box-shadow: 4px 4px 0 var(--lilac-500); }
+  .customer-site .btn-ghost:hover { box-shadow: none; text-decoration: none; }
+  .customer-site .hero-cta:hover { transform: none; box-shadow: 6px 6px 0 var(--ink-900); }
+  .customer-site :is(.btn, .hero-cta):active:not(:disabled):not([aria-disabled='true']) {
+    transform: scale(0.98); filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .customer-site *, .customer-site *::before, .customer-site *::after {
+    animation: none !important; transition: none !important; scroll-behavior: auto !important;
+  }
+  .customer-site :is(.btn, .hero-cta):is(:hover, :active) { transform: none !important; }
+}

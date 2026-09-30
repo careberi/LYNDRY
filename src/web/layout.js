@@ -491,7 +491,7 @@ function renderPage({
   <link rel="stylesheet" href="${CSS_BASE}/lyndry.css">
 ${head}
 </head>
-<body>
+<body class="customer-site">
 ${devBand()}
 ${bare ? bareHeader() : navBar(path, signedIn)}
 <main>
@@ -501,6 +501,12 @@ ${bare ? '' : footer(signedIn)}
 ${popupHtml}
 
 <script>
+  document.addEventListener('pointerdown', function () {
+    document.body.dataset.inputMode = 'pointer';
+  }, { passive: true });
+  document.addEventListener('keydown', function () {
+    document.body.dataset.inputMode = 'keyboard';
+  });
   // ---------------------------------------------------------------------
   // Motion. Two systems, both off entirely under prefers-reduced-motion.
   // ---------------------------------------------------------------------
