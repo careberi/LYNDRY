@@ -449,7 +449,7 @@ const TOOLS = [
 // The system prompt
 // ---------------------------------------------------------------------------
 
-function systemPrompt(today, now, { paused = null, promo = null, opensOn = null } = {}) {
+function systemPrompt(today, now, { paused = null, promo = null, opensOn = null, endedOffer = null } = {}) {
   // THE FIRST MESSAGE IS NOT THE MODEL'S TO WRITE.
   //
   // Neil, 21 September: the same introduction, the same offer and the same
@@ -531,6 +531,16 @@ IT RUNS OUT ON ${booking.readableDate(String(promo.expiresAt).slice(0, 10))}, AN
 
 `
       : ''
+}${
+  // AN OFFER THEY WERE TOLD THEY HAD, TAKEN BACK. Neil, 1 October, on CLEAN50:
+  // nobody is texted that it is gone; they are told individually, when it
+  // comes up. See promotions.withdrawnFrom().
+  endedOffer
+    ? `THEY WERE TOLD THEY HAD THIS, AND IT IS NO LONGER AVAILABLE: ${endedOffer}
+It has ended and does not apply to them any more. If they ask about it, mention a discount or an offer, or are about to book, tell them plainly and once that it is no longer available. One sentence, no long apology, and never offer anything in its place or say it might come back. If an earlier message in the thread already told them, do not say it again. Never tell them they still have it.
+
+`
+    : ''
 }WHERE WE GO
 ${site.serviceArea}, and nowhere else.
 YOU DO NOT DECIDE WHETHER AN ADDRESS IS IN THE AREA. The code does, when the address is saved, and it refuses one that is not. So never work it out from the name of a town, never list the towns or counties we cover, never say "we don't come that far" and never say "yes we cover you" before an address has been saved. Somebody asking whether we reach them gets asked for the address, and saving it is what answers. If saving it comes back refused, that reply is the whole answer - do not explain where the line is or guess when we might get there, because nobody has drawn it.
@@ -1322,6 +1332,9 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
   // was told; this only decides what the model is allowed to say.
   const promo = held.find((h) => String(h.blurb || '').trim()) || null;
 
+  // Taken back rather than spent: they were told they had it and do not.
+  const endedOffer = customer && customer.id ? await promotions.withdrawnFrom(customer) : null;
+
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 2000,
@@ -1331,7 +1344,7 @@ async function decide({ customer, order, recentMessages, recentOrders, openIssue
     output_config: { effort: 'low' },
 
     system:
-      `${systemPrompt(today, now, { paused, promo, opensOn })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
+      `${systemPrompt(today, now, { paused, promo, opensOn, endedOffer })}\n\n${customerContext(customer, order, recentMessages, recentOrders, openIssue)}` +
       // WHAT THE SYSTEM WILL PUT IN FRONT OF THIS REPLY, word for word - the
       // introduction and the offer on a first reply, or the comeback line.
       // Without it the model greets them a second time and repeats the offer

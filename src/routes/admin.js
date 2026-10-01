@@ -4236,6 +4236,7 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
           rolled: result.rolled,
           freeOrder: result.freeOrder,
           freeUpToLb: result.freeUpToLb,
+          endedOffer: result.endedOffer,
         }),
         customer.id
       );
@@ -5072,6 +5073,7 @@ router.post(
             rolled: result.rolled,
             freeOrder: result.freeOrder,
             freeUpToLb: result.freeUpToLb,
+            endedOffer: result.endedOffer,
           }),
           customer.id
         )

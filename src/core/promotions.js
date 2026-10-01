@@ -95,9 +95,14 @@ function live(promo, now = new Date()) {
 // have stripped fifteen people of an offer they had been texted about.
 //
 // WHAT STILL WITHDRAWS A GRANT: the holder's own expiry (see expired() below),
-// and a promotion that has not started yet. ends_at is left behaving as it
-// always has - nothing sets it today, and whether a scheduled end should also
-// withdraw from holders is a separate decision from pressing End.
+// a promotion that has not started yet, and ends_at.
+//
+// ENDS_AT IS THE WITHDRAWAL, AND IT HAS BEEN USED ONCE. Neil, 1 October, on
+// CLEAN50: "Everybody who holds the fifty percent off promotion does not have
+// that anymore. It's totally gone." That is the opposite of End, on purpose,
+// so it is a different field: End stops new grants, ends_at takes it off the
+// people already holding it. Nobody is texted about it - see withdrawnFrom()
+// below for how they find out.
 function honoured(promo, now = new Date()) {
   if (!promo) return false;
   if (promo.starts_at && new Date(promo.starts_at) > now) return false;
@@ -110,6 +115,18 @@ function honoured(promo, now = new Date()) {
 // are up.
 function expired(grant, now = new Date()) {
   return Boolean(grant && grant.expires_at && new Date(grant.expires_at) <= now);
+}
+
+// WAS THIS GRANT TAKEN BACK, rather than spent or run out.
+//
+// Derived, not stored: the promotion's ends_at is in the past, and the
+// holder's own expiry was still to come when it landed. Somebody whose thirty
+// days were already up lost nothing and is told nothing.
+function withdrawn(grant, promo, now = new Date()) {
+  if (!grant || !promo || !promo.ends_at || grant.redeemed_at) return false;
+  const endedAt = new Date(promo.ends_at);
+  if (endedAt > now) return false;
+  return !grant.expires_at || new Date(grant.expires_at) > endedAt;
 }
 
 async function list({ includeEnded = false } = {}) {
@@ -681,6 +698,70 @@ async function heldBy(customerId) {
     }));
 }
 
+// THE OFFER SOMEBODY WAS TOLD THEY HAD AND NO LONGER HAS, or null.
+//
+// Neil, 1 October, after CLEAN50 was taken off everybody holding it: no text
+// goes out to say so. Instead, "if somebody places an order and they had it,
+// just say this promotion is not available anymore. Just individually." So
+// this is asked at the two moments that matter: the booking confirmation, and
+// Lyn's next reply to them.
+//
+// Returns the blurb - the sentence they were told - because that is what has
+// to be taken back. No blurb, nothing to take back: a silent promotion was
+// never announced to them.
+//
+// ONLY WHILE THE OFFER WOULD STILL HAVE MEANT SOMETHING:
+//   - a first-order offer stops mattering once they have had a first order
+//   - a wholesale account was never going to get it
+//   - forBooking: the confirmation of the order just booked says it only when
+//     that is their one order, so a second pickup booked the same week is not
+//     told twice. Lyn reads the thread and is told not to repeat it.
+//
+// FAILS QUIET. A lookup that errors returns null, so the worst case is a
+// confirmation that does not mention an offer they no longer have - which is
+// what every confirmation said before this existed.
+async function withdrawnFrom(customer, { forBooking = null } = {}) {
+  try {
+    if (!customer || !customer.id || wholesale.isWholesale(customer)) return null;
+
+    const { data, error } = await db
+      .from('customer_promotions')
+      .select(`id, redeemed_at, expires_at, promotions (${FIELDS})`)
+      .eq('customer_id', customer.id)
+      .is('redeemed_at', null);
+    if (error) throw error;
+
+    const now = new Date();
+    const taken = (data || []).find(
+      (row) => withdrawn(row, row.promotions, now) && String(row.promotions.blurb || '').trim()
+    );
+    if (!taken) return null;
+
+    const { data: orders, error: oe } = await db
+      .from('orders')
+      .select('id, status')
+      .eq('customer_id', customer.id)
+      .neq('status', 'CANCELED');
+    if (oe) throw oe;
+
+    const rows = orders || [];
+    if (rows.some((o) => o.status === 'DELIVERED')) return null;
+    if (forBooking && rows.some((o) => o.id !== forBooking)) return null;
+
+    return String(taken.promotions.blurb).trim();
+  } catch (err) {
+    console.error(`withdrawnFrom failed: ${err.message}`);
+    return null;
+  }
+}
+
+// The one sentence the confirmation adds. Plain ASCII, no dash, and it says
+// only what is true whatever else they hold: that this offer is gone. Not
+// "so this is full price" - somebody who also scanned a door hanger is not.
+function withdrawnLine(blurb) {
+  return blurb ? `Just so you know, ${blurb} is no longer available.` : '';
+}
+
 // WHICH OF SOMEBODY'S GRANTS COULD APPLY TO ONE ORDER.
 //
 // Pulled out of discountFor() so the ORDERS BOARD can say which promotion is
@@ -1030,6 +1111,7 @@ function describe(promo) {
 // never disagree with what discountFor() would do: used up, run out, or still
 // good.
 async function holders(promotionId) {
+  const promo = await find(promotionId);
   const { data, error } = await db
     .from('customer_promotions')
     // THE JOIN HAS TO NAME ITS FOREIGN KEY. There are two columns pointing at
@@ -1065,7 +1147,15 @@ async function holders(promotionId) {
       order: row.orders || null,
       // Used up beats run out: somebody who spent it before it expired got what
       // they were promised, and the row should say so.
-      state: row.redeemed_at ? 'USED' : gone ? 'EXPIRED' : 'HOLDING',
+      // Taken back beats ran out for the same reason: the row should say
+      // what actually happened to the promise.
+      state: row.redeemed_at
+        ? 'USED'
+        : withdrawn(row, promo, now)
+          ? 'WITHDRAWN'
+          : gone
+            ? 'EXPIRED'
+            : 'HOLDING',
     };
   });
 }
@@ -1099,6 +1189,9 @@ module.exports = {
   live,
   honoured,
   expired,
+  withdrawn,
+  withdrawnFrom,
+  withdrawnLine,
   limitOf,
   AUDIENCES,
   audienceOf,

@@ -853,8 +853,13 @@ function standDownCard({ promo, isAutomatic }) {
 
 function promotionDetailBody({ promo, holders, notice, problem, popupOn = false, popupOffer = null, isAutomatic = false }) {
   const aud = promotionsCore.audienceOf(promo.audience);
-  const tone = { HOLDING: 'var(--suds-300)', USED: 'var(--paper-200)', EXPIRED: 'var(--sunbeam-500)' };
-  const words = { HOLDING: 'Holding it', USED: 'Used it', EXPIRED: 'Ran out' };
+  const tone = {
+    HOLDING: 'var(--suds-300)',
+    USED: 'var(--paper-200)',
+    EXPIRED: 'var(--sunbeam-500)',
+    WITHDRAWN: 'var(--paper-200)',
+  };
+  const words = { HOLDING: 'Holding it', USED: 'Used it', EXPIRED: 'Ran out', WITHDRAWN: 'Taken back' };
 
   const counted = (state) => holders.filter((h) => h.state === state).length;
 
@@ -952,6 +957,7 @@ ${standDownCard({ promo, isAutomatic })}
     ${stat(counted('HOLDING'), 'still holding')}
     ${stat(counted('USED'), 'used it')}
     ${stat(counted('EXPIRED'), 'ran out')}
+    ${counted('WITHDRAWN') ? stat(counted('WITHDRAWN'), 'taken back') : ''}
   </div>
 
   <p style="margin:20px 0 0;padding:12px 16px;border:2px solid var(--ink-900);border-radius:10px;

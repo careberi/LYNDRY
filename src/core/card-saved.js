@@ -141,6 +141,7 @@ async function cardWasSaved(link) {
           rolled: booked.rolled,
           freeOrder: free.freeOrder,
           freeUpToLb: free.freeUpToLb,
+          endedOffer: await promotions.withdrawnFrom(customer, { forBooking: booked.order.id }),
         }) + settledLine,
         customer.id
       );
@@ -278,6 +279,7 @@ async function cardWasSaved(link) {
             opener: 'Card saved',
             freeOrder: free.freeOrder,
             freeUpToLb: free.freeUpToLb,
+            endedOffer: await promotions.withdrawnFrom(customer, { forBooking: pending.id }),
           }) + alsoLine,
       customer.id
     );

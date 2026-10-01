@@ -242,6 +242,7 @@ async function createOrder(customer, input, helpers = null) {
     rolled: result.rolled,
     freeOrder: result.freeOrder,
     freeUpToLb: result.freeUpToLb,
+    endedOffer: result.endedOffer,
   });
 }
 

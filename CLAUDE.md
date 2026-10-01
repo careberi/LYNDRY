@@ -424,6 +424,22 @@ second, never the other way round.
 
 ### The offer popup
 
+**CLEAN50 IS GONE, FOR EVERYBODY, SINCE 1 OCTOBER.** Neil: *"Everybody who
+holds the fifty percent off promotion does not have that anymore. It's totally
+gone."* Ended, `auto_grant` off, `website_popup` off, and **`ends_at` set** -
+which is what takes it off people already holding it, since `honoured()` refuses
+a promotion past its `ends_at` while End alone leaves holders their grant. The
+41 grants were left untouched on purpose: `promotions.withdrawn()` reads a grant
+whose expiry was still to come when `ends_at` landed as **taken back**, and the
+holders page says so.
+
+**NOBODY WAS TEXTED.** Neil, twice: no broadcast. A holder is told individually
+when it comes up - one sentence in the confirmation of their first order ("Just
+so you know, 50% off your first order is no longer available."), and Lyn is told
+in her prompt to say it once if they ask. `promotions.withdrawnFrom()` decides
+both, and `test/withdrawn-offer.test.js` holds every confirmation door to
+passing it.
+
 **IT CARRIES CLEAN50 AGAIN SINCE 24 SEPTEMBER, AND IT WAS EMPTY FOR TWO DAYS.**
 Neil took the 50% off the website and off every new customer on 22 September,
 then put both back on the 24th: *"Automatically put back the 50% off for the

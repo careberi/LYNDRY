@@ -2951,6 +2951,7 @@ router.post('/account/book', async (req, res, next) => {
         rolled: result.rolled,
         freeOrder: result.freeOrder,
         freeUpToLb: result.freeUpToLb,
+        endedOffer: result.endedOffer,
       }),
       customer.id
     );

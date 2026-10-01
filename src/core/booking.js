@@ -1366,6 +1366,11 @@ async function bookPickup(
     // somebody's spring clean, and found out two days later in the price text.
     // Saying the allowance at booking is what stops that being an argument.
     freeUpToLb: promotions.freeAllowanceLb(claimed),
+
+    // AN OFFER THEY WERE TOLD THEY HAD AND NO LONGER DO, said once in the
+    // confirmation of their first order. See withdrawnFrom() - it is the one
+    // place anybody hears that CLEAN50 was taken back.
+    endedOffer: await promotions.withdrawnFrom(customer, { forBooking: order.id }),
     needsCard: billing.needsCardOnFile(customer),
 
     // WHETHER THE CARD CONFIRMED IT. `holdRefused` is the one a caller must
@@ -1468,7 +1473,14 @@ const DOORS = Object.freeze({ THREAD: 'THREAD', WEB: 'WEB', PHONE: 'PHONE' });
 function confirmationMessage(
   customer,
   order,
-  { rolled = false, opener = null, source = DOORS.THREAD, freeOrder = false, freeUpToLb = null } = {}
+  {
+    rolled = false,
+    opener = null,
+    source = DOORS.THREAD,
+    freeOrder = false,
+    freeUpToLb = null,
+    endedOffer = null,
+  } = {}
 ) {
   const prefs = customer.preferences || {};
 
@@ -1630,8 +1642,14 @@ function confirmationMessage(
   // the same thing.
   const bag = ` Put it in any bag, even a trash bag - it comes back in a fresh plastic bag, and we return anything reusable.`;
 
+  // THE OFFER THEY NO LONGER HAVE, straight after the money, because that is
+  // where they would look for it. Neil, 1 October: nobody is texted that
+  // CLEAN50 was taken back; they are told here, on the order it would have
+  // come off. It costs a segment, on a handful of first orders.
+  const ended = endedOffer ? ` ${promotions.withdrawnLine(endedOffer)}` : '';
+
   return (
-    `${lead} pickup ${whenLine(order)}${address}. ${handover}${washLine}${money}${bag} ` +
+    `${lead} pickup ${whenLine(order)}${address}. ${handover}${washLine}${money}${ended}${bag} ` +
     `Back with you the ${site.turnaround}.`
   );
 }
