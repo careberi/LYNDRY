@@ -2200,3 +2200,32 @@ body.ly-pop-locked { overflow: hidden; }
   .booking-content { padding-top:20px; }
   .booking-content .stack { gap:20px; }
 }
+
+/* Occasional customer feedback. Layout and readable values remain immediate. */
+@keyframes customer-status-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes customer-menu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes customer-success-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+.customer-site .address-status[data-state='success']::before {
+  content: '\2713'; display: inline-block; margin-right: .4em;
+  animation: customer-status-in 140ms var(--ease-out);
+}
+.customer-site .nav-toggle[open] > .nav-panel {
+  transform-origin: top right; animation: customer-menu-in 160ms var(--ease-out);
+}
+.customer-site :is(.faq, .home-faq) details[open] > :not(summary) {
+  animation: customer-status-in 140ms var(--ease-out);
+}
+.customer-site .customer-success-cue {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; margin-block: 10px; border-radius: 50%;
+  background: #e8f2ec; color: #126246; font-size: 20px; font-weight: 700;
+  animation: customer-success-in 220ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .customer-site:not([data-input-mode='keyboard']) :is(.nav-toggle[open] > .nav-panel, .customer-success-cue),
+  .customer-site:not([data-input-mode='keyboard']) :is(.faq, .home-faq) details[open] > :not(summary),
+  .customer-site:not([data-input-mode='keyboard']) .address-status[data-state='success']::before {
+    animation: customer-status-in 80ms var(--ease-out) !important;
+    transform: none !important;
+  }
+}

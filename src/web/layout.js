@@ -502,11 +502,15 @@ ${popupHtml}
 ${require('./google-address').script(config.googleAddress)}
 
 <script>
+  // Keep keyboard navigation immediate across full page form transitions.
+  try { document.body.dataset.inputMode = sessionStorage.getItem('lyndry-input-mode') || ''; } catch (_) {}
   document.addEventListener('pointerdown', function () {
     document.body.dataset.inputMode = 'pointer';
+    try { sessionStorage.setItem('lyndry-input-mode', 'pointer'); } catch (_) {}
   }, { passive: true });
   document.addEventListener('keydown', function () {
     document.body.dataset.inputMode = 'keyboard';
+    try { sessionStorage.setItem('lyndry-input-mode', 'keyboard'); } catch (_) {}
   });
   // ---------------------------------------------------------------------
   // Motion. Two systems, both off entirely under prefers-reduced-motion.

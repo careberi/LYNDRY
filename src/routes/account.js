@@ -1441,6 +1441,7 @@ function orderConfirmedPage({ customer, order, others, free }) {
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
     <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
+    <span class="customer-success-cue" aria-hidden="true">&#10003;</span>
     <h1 class="display-2" style="margin-bottom:10px;">Thank you for your order.</h1>
     <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
       ${order.pricing_snapshot ? 'Development booking confirmed. Text messages and courier trips are simulated.' : `Please check your texts${textUs}. Your confirmation is there.`}
@@ -3099,6 +3100,7 @@ function bookedPage({ customer, orders: waiting, saved }) {
 <section class="hero" style="border-bottom:3px solid var(--ink-900);">
   <div class="container" style="max-width:600px;padding-top:60px;padding-bottom:44px;">
     <p class="eyebrow eyebrow-brand">Place an order &middot; done</p>
+    <span class="customer-success-cue" aria-hidden="true">&#10003;</span>
     <h1 class="display-2" style="margin-bottom:10px;">You're booked.</h1>
     <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
       We have texted you the details. Leave the bag out and we will do the rest.
