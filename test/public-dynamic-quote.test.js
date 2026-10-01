@@ -43,11 +43,11 @@ test('public preview shares checkout terms and creates no quote or order record'
  for(const key of ['rateCentsPerLb','operationalFeeCents','minimumTotalCents','estimated30LbCents','estimated40LbCents'])assert.equal(preview.categories.ONE_TIME[key],bookedQuote.snapshot[key]);
  assert.ok(preview.categories.SUBSCRIPTION.rateCentsPerLb<preview.categories.ONE_TIME.rateCentsPerLb);
 });
-test('dynamic quote shows one fee and inclusive totals, never a separate delivery charge',()=>{
+test('legacy dynamic quote shows fees and minimum without weight estimates',()=>{
  const input={wholesaleCentsPerLb:100,pickupCents:899,returnCents:899,policy};
  const categories=Object.fromEntries(['ONE_TIME','SUBSCRIPTION'].map(category=>[category,economics.preview({...input,category})]));
  const html=view.render({quote:{ok:true,dynamic:true,categories},address:'<Test>'});
- assert.match(html,/Operational fee/);assert.match(html,/Minimum total/);assert.match(html,/30–40 lb/);assert.match(html,/\$4.50/);
+ assert.match(html,/Operational fee/);assert.match(html,/Minimum total/);assert.doesNotMatch(html,/Estimated total|30–40 lb/);assert.match(html,/\$4.50/);
  assert.doesNotMatch(html,/\$17.98|charged separately|Round trip/);assert.match(html,/&lt;Test&gt;/);
 });
 test('public quote does not show a schedule refinement card',()=>{

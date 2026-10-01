@@ -172,7 +172,7 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
       If you already have an account, we will text you a secure sign-in code.
     </p>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:14px 0 0;">
-      ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, operational fee and minimum total before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
+      ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, fees and minimum total before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
     </p>
   </div>
 </section>
@@ -1424,7 +1424,7 @@ function orderConfirmedPage({ customer, order, others, free }) {
   // THE PRICE, SAID THE WAY THE TEXT SAYS IT. A free order with a ceiling names
   // the ceiling, because nobody has seen the laundry yet.
   const price = order.pricing_snapshot
-    ? `${billing.money(order.pricing_snapshot.rateCentsPerLb)}/lb + ${billing.money(order.pricing_snapshot.operationalFeeCents)} operational fee per order; ${billing.money(order.pricing_snapshot.minimumTotalCents)} minimum total, including the fee`
+    ? `${billing.money(order.pricing_snapshot.rateCentsPerLb)}/lb + ${billing.money(order.pricing_snapshot.operationalFeeCents)} ${require('../web/pricing-label')(order.pricing_snapshot).toLowerCase()} per order; ${billing.money(order.pricing_snapshot.minimumTotalCents)} minimum total, including the fee`
     : free.freeOrder
     ? free.freeUpToLb
       ? `Free up to ${free.freeUpToLb} lb, then ${site.pricePerLb} a pound`
@@ -1471,7 +1471,7 @@ function orderConfirmedPage({ customer, order, others, free }) {
     ${card ? row('Card on file', escapeHtml(card)) : ''}
     ${order.pricing_snapshot ? [
       row('Wash, dry &amp; fold', billing.money(order.pricing_snapshot.rateCentsPerLb)+'/lb'),
-      row('Operational fee · once per order', billing.money(order.pricing_snapshot.operationalFeeCents)),
+      row(require('../web/pricing-label')(order.pricing_snapshot) + ' · once per order', billing.money(order.pricing_snapshot.operationalFeeCents)),
       row('Minimum total · includes the fee', billing.money(order.pricing_snapshot.minimumTotalCents))
     ].join('') : row('Price', escapeHtml(price))}
     ${free.freeOrder && !free.freeUpToLb ? '' : row('You are charged', 'after we weigh it', true)}
@@ -2189,7 +2189,7 @@ function cardStep({ customer, intent }) {
       A payment method is required to confirm your pickup.
     </p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      ${intent.dev_quote_id ? 'Your quoted per-pound rate, operational fee, and inclusive minimum apply. Payment is collected after weighing. If your quote expires before card setup finishes, request a new quote.' : '{{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on file and charge it after we weigh your laundry at your door.'}
+      ${intent.dev_quote_id ? 'Your quoted per-pound rate, fees, and inclusive minimum apply. Payment is collected after weighing. If your quote expires before card setup finishes, request a new quote.' : '{{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on file and charge it after we weigh your laundry at your door.'}
     </p>
 
     <form method="post" action="/account/card" style="margin:0;">

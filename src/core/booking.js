@@ -1852,7 +1852,7 @@ function confirmationMessage(
   const perPound = subscription.perPound(order.price_per_lb_cents || config.pricing.perPoundCents);
 
   const money = order.pricing_snapshot
-    ? ` Quoted price: ${perPound} plus ${billing.money(order.pricing_snapshot.operationalFeeCents)} operational fee; ${billing.money(order.pricing_snapshot.minimumTotalCents)} inclusive minimum. Final weight determines the total.`
+    ? ` Quoted price: ${perPound} plus ${billing.money(order.pricing_snapshot.operationalFeeCents)} ${require('../web/pricing-label')(order.pricing_snapshot).toLowerCase()}; ${billing.money(order.pricing_snapshot.minimumTotalCents)} inclusive minimum. Final weight determines the total.`
     : freeOrder
     ? freeUpToLb
       ? ` This one is on us up to ${freeUpToLb} lb - anything over that is ${perPound}, and we'll text you the total after we weigh it.`

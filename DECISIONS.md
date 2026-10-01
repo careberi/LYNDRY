@@ -1,3 +1,45 @@
+## 20260930 Independent laundromat customer pricing base
+
+Neil approved a third laundromat rate in admin. Wholesale remains the rate the laundromat charges LYNDRY and continues to drive partner payables and actual washing cost reporting. Retail remains the walk in reference. Customer pricing base is separately editable and drives new customer quotes before the existing category margin and processing calculation.
+
+Quote comparison and the quoted destination use the resulting complete customer total, including combined delivery fees. Existing saved order prices retain their snapshots. New snapshots retain both the customer base and the true wholesale cost. This supersedes the prior assumption that wholesale cost must also be the customer pricing base.
+
+The new field starts at each existing laundromat's wholesale rate, preserving current prices until an admin edits it. Blank falls back to wholesale. Invalid, zero, negative or more than two decimal place entries are rejected. Older forms that omit the field do not erase a saved base. A management company does not retain a laundromat pricing base.
+
+Example: wholesale $0.70 and customer base $1.00 produces one time $1.30 per pound, subscription $1.15 and wholesale category $1.09 at current category targets and processing assumptions. The invoice cost remains $0.70 per pound. The $1.00 figure is an example, not a rate applied to every shop. Delivery fees and the $15 minimum are unchanged.
+
+Development migration applied. All 1627 tests pass, covering independent saves, invalid values, fallback, legacy snapshots, true cost reports and selection using customer prices. Admin browser reached sign in, so signed in visual verification and Neil click testing remain pending. No production release or implementation commit. Source: Neil's request and the development code, tests and database checks in this conversation.
+
+## 20260930 Approved cost based pricing with $15 minimum
+
+Neil explicitly approved implementation after the earlier pricing reversal. This supersedes the instruction to leave pricing unchanged for new development quotes only. Existing accepted order snapshots keep their original prices.
+
+New category targets are 20% for one time, 10% for subscription and 5% for wholesale. These are contribution targets after modeled direct costs, not net profit after all business overhead. Divide wholesale washing cost per pound by one minus the category margin minus the processing percentage, rounding upward to cents. Separately divide combined pickup and return cost plus the fixed processing cost by that same denominator, rounding upward to cents. Present the second amount as one Delivery + fees line. Processing is built into the price and is not surcharged afterward.
+
+The customer total is the greater of $15 or the rounded laundry amount plus combined fees. The $15 floor includes those fees and is not added again. The previous $30 minimum, separate $2 service fee and penny adjustment proposal are not implemented. The 33 lb reference remains for comparing laundromats and planning capacity; it no longer determines the rate or spreads transportation into laundry pricing. Promotions on new paid orders cannot reduce the bill below $15. Older saved promotion terms and explicit authorized waivers remain unchanged. Costs that change after booking are not passed through to an accepted order.
+
+Updated quotes, booking review, confirmations, order summaries, administration explanations and settlement calculations. The existing saved fee field stores the entire combined fee for this policy version, so database weighing and saved quote billing use the same arithmetic. Old policy versions retain their old calculations and fee label. New policy activated only in the development database. No production release.
+
+Validation: all 1621 tests pass. New tests cover all three categories, inclusive minimum, fractional weights, card holds, legacy snapshots and both van and laundromat billing totals. Browser verified the updated quote. No real payment was made and no pickup was booked. Independent review and Neil click testing remain pending. No implementation commit yet.
+
+Source: Neil's direct approval and the development code, tests, browser and database checks in this conversation. Example costs of $0.70 per pound and $13.98 transportation yield subscription $0.81 per pound plus $16.40 fees, one time $0.91 plus $18.53 and wholesale $0.77 plus $15.51.
+
+## 20260930 Pricing implementation reverted
+
+Neil requested reversal of the pricing implementation started in this conversation. Restored the previous pricing calculations, quote display, booking confirmation and billing code. Removed the unapplied migration. The proposed $30 minimum, separate $2 service fee and rate adjustment for profitability are not active. Existing dynamic pricing remains in place.
+
+Confirmed the development database never activated the new policy or migration. All 1613 tests pass after restoration. Unrelated website changes were preserved. No production release. Source: Neil's direct instruction and development code and database checks in this conversation.
+
+## 20260930 Pricing decision: keep the current method
+
+Neil explicitly cancelled the proposed pricing overhaul and instructed us to keep the current pricing structure and calculations unchanged. He does not accept the proposed replacement. This supersedes the pricing proposals, comparison tables and pending implementation plan from this discussion. They are not approved work.
+
+Preserve the existing dynamic per pound rate, dynamic operational fee, dynamic inclusive minimum, category rules, quote presentation and billing behavior. Do not introduce the proposed included weight allowance, affine replacement, transportation buffer, new fee allocation or payment changes. Reopening this work requires a new explicit instruction from Neil. This records a product decision, not a claim that every order meets a guaranteed margin.
+
+Documentation only. No pricing code, settings, database records, customer quotes or billing were changed for this decision. No production release.
+
+Source: Neil's direct instruction in this conversation on 20260930.
+
 # Google address attribution exception, 2026-09-30
 
 Neil explicitly approved Google attribution on address suggestions. Development pricing may use the official Places widget and server Address Validation. This is a narrow exception to vendor-neutral public copy. Real customer production remains disabled for this implementation.

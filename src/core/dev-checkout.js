@@ -77,6 +77,7 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
     });
     if (!verified) continue;
     candidates.push({id:shop.id,eligible:true,wholesaleCentsPerLb:shop.wholesale_per_lb_cents,
+      customerBaseCentsPerLb:shop.customer_base_per_lb_cents ?? shop.wholesale_per_lb_cents,
       ...verified});
   }
   if(!candidates.length&&timingRejected)throw Error('No eligible laundromat is available for this pickup: arrival, washing turnaround and next-day collection must fit opening hours. Choose an earlier pickup or another day.');

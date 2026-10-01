@@ -61,7 +61,7 @@ function money(cents) {
 function consentText() {
   if (config.supabase.isDevelopment) {
     return `You're authorizing ${site.legalName} to save this card and charge it for pickups you book. ` +
-      'Saving this card charges nothing. Your quote shows the laundry rate, operational fee, minimum and temporary card hold. ' +
+      'Saving this card charges nothing. Your quote shows the laundry rate, fees, minimum and temporary card hold. ' +
       'The hold may be a fixed amount, the order minimum, or the total at the 50 lb order limit, as shown before booking. ' +
       'After weighing, we use the saved price to calculate your bill. The hold is applied to that bill, any unused amount is released, and any balance is charged to this card. ' +
       'Cancel before collection and nothing is charged. Recurring pickups are covered too; you can skip or stop them. Reply STOP to stop texts.';

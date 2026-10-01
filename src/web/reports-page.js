@@ -207,7 +207,7 @@ function reportsBody({ report, partners = [], form = {} }) {
 
   <p style="font-size:14px;line-height:1.6;color:var(--ink-500);margin:18px 0 0;max-width:70ch;">
     <strong>Weight difference</strong>: partner weight minus LYNDRY weight.
-    <strong>Expected charge</strong>: billed weight using the saved quote, including its operational fee and minimum, plus add-ons, before discounts. Older orders use their stored rate and minimum. Recorded charge does not itself confirm payment.
+    <strong>Expected charge</strong>: billed weight using the saved quote, including its fees and minimum, plus add-ons, before discounts. Older orders use their stored rate and minimum. Recorded charge does not itself confirm payment.
     <strong>Payable weight</strong>: the lower of the two recorded weights.
     <strong>Gross balance</strong>: customer payment minus partner payable, before transport, labor, and payment processing costs.
   </p>`

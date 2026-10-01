@@ -13,6 +13,7 @@ const events = require('./order-events');
 const recurring = require('./recurring');
 const partners = require('./partners');
 const promotions = require('./promotions');
+const pricing = require('./pricing');
 const settings = require('./settings');
 const tags = require('./tags');
 const issues = require('./issues');
@@ -112,7 +113,10 @@ function perPoundOf(order) {
 // `verb` is the only thing that differs between callers, and it is not
 // cosmetic: with a promotion still to come off, "that is" is honest and "the
 // total is" is not, because a lower number follows in the next clause.
-function pricedSentence({ opening, byWeight, floor, surcharge, total, perPound, verb = 'that is' }) {
+function pricedSentence({ opening, byWeight, floor, surcharge, total, perPound, quotedParts = null, verb = 'that is' }) {
+  if (quotedParts) {
+    return `${opening}. At ${perPound}, plus ${money(quotedParts.operationalFee)} delivery and fees, with a ${money(quotedParts.floor)} minimum${surcharge > 0 ? ` and ${money(surcharge)} wash options` : ''}, ${verb} ${money(total)}. Processing is included.`;
+  }
   const extras = surcharge > 0 ? ` plus ${money(surcharge)} for the wash options you chose` : '';
 
   if (floor > byWeight) {
@@ -504,7 +508,8 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // The terms stored on the order, never today's terms. Changing the price or
   // the minimum must not re-price work that was already quoted.
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
-  const byWeight = Math.round(weight * rate);
+  const quotedParts = order.pricing_snapshot?.pricingMethod === 'COST_PLUS_MARGIN_15' ? pricing.priceOn(order, weight) : null;
+  const byWeight = quotedParts ? quotedParts.byWeight : Math.round(weight * rate);
 
   // THE MINIMUM IS PART OF THE PRICE, not just part of the charging.
   //
@@ -530,7 +535,7 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // mean a 6 lb order paid for its fragrance-free detergent out of the minimum
   // and we did that part for nothing.
   const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
-  const priceCents = Math.max(byWeight, floor) + surcharge;
+  const priceCents = quotedParts ? quotedParts.beforeDiscount : Math.max(byWeight, floor) + surcharge;
 
   // The photo goes up BEFORE the weight is written. If storage is having a bad
   // day we would rather refuse the whole step than record a charge whose
@@ -626,7 +631,7 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // NOT against the final total - the surcharge also makes priceCents exceed
   // byWeight, and reading that as "the minimum applied" would tell a 35 lb
   // customer their load was under our minimum.
-  const minimumApplied = floor > byWeight;
+  const minimumApplied = quotedParts ? quotedParts.atMinimum : floor > byWeight;
 
   // A SECOND WEIGHING IS A CORRECTION, and has to read like one.
   //
@@ -654,6 +659,7 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
     surcharge,
     total: priceCents,
     perPound: perPoundOf(order),
+    quotedParts,
     // Nothing comes off after this one, so it really is the total.
     verb: 'the total is',
   });
@@ -1402,7 +1408,8 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   // changing the price must not re-price work already quoted.
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
   const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
-  const byWeight = Math.round(billable * rate);
+  const quotedParts = order.pricing_snapshot?.pricingMethod === 'COST_PLUS_MARGIN_15' ? pricing.priceOn(order, billable) : null;
+  const byWeight = quotedParts ? quotedParts.byWeight : Math.round(billable * rate);
 
   // PAID WASH OPTIONS SIT ON TOP OF THE MINIMUM, NOT INSIDE IT.
   //
@@ -1413,7 +1420,7 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   // did. Folding the surcharge in first would mean a 6 lb order paid for its
   // fragrance-free detergent out of the minimum and we did that work for free.
   const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
-  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
+  const beforeDiscount = quotedParts ? quotedParts.beforeDiscount : Math.max(byWeight, floor) + surcharge;
 
   // THE DISCOUNT COMES OFF AFTER THE MINIMUM, not before it.
   //
@@ -1428,7 +1435,7 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
       return null;
     });
 
-  const discountCents = deal ? deal.cents : 0;
+  const discountCents = pricing.allowedDiscount(order, beforeDiscount, deal ? deal.cents : 0);
   const priceCents = Math.max(0, beforeDiscount - discountCents);
 
   const { data: settled, error } = await db
@@ -1511,6 +1518,7 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
     surcharge,
     total: beforeDiscount,
     perPound: perPoundOf(order),
+    quotedParts,
   });
 
   // SAY WHAT CAME OFF. A total that is lower than the arithmetic the customer
@@ -1772,11 +1780,12 @@ async function loadVan(order, { by = {} } = {}) {
   const floor = order.minimum_cents != null ? order.minimum_cents : 0;
   const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
 
-  const byWeight = Math.round(weight * rate);
+  const quotedParts = order.pricing_snapshot?.pricingMethod === 'COST_PLUS_MARGIN_15' ? pricing.priceOn(order, weight) : null;
+  const byWeight = quotedParts ? quotedParts.byWeight : Math.round(weight * rate);
   // Paid wash options sit on top of the minimum, not inside it - the same order
   // settleWeight() has always used, because the minimum is what a small load is
   // worth and an extra we were asked for is separate work.
-  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
+  const beforeDiscount = quotedParts ? quotedParts.beforeDiscount : Math.max(byWeight, floor) + surcharge;
 
   const deal = customer
     ? await promotions.discountFor(customer, order, beforeDiscount).catch((err) => {
@@ -1785,7 +1794,7 @@ async function loadVan(order, { by = {} } = {}) {
       })
     : null;
 
-  const discountCents = deal ? deal.cents : 0;
+  const discountCents = pricing.allowedDiscount(order, beforeDiscount, deal ? deal.cents : 0);
   const priceCents = Math.max(0, beforeDiscount - discountCents);
 
   // --- The card, before anything is written --------------------------------
@@ -1910,6 +1919,7 @@ async function loadVan(order, { by = {} } = {}) {
             deal,
             customer,
             perPound: perPoundOf(order),
+            quotedParts,
           });
 
     await sendAndLog(customer.phone, text, customer.id).catch((err) =>
@@ -1938,7 +1948,7 @@ async function loadVan(order, { by = {} } = {}) {
 // used to be handed a `minimumApplied` boolean instead, and then printed
 // beforeDiscount as though that were the minimum - so a 13 lb load with a $2
 // wash option read "under our $27.00 minimum" when the minimum is $25.00.
-function doorTotalText({ weight, byWeight, floor, surcharge, beforeDiscount, priceCents, deal, customer, perPound }) {
+function doorTotalText({ weight, byWeight, floor, surcharge, beforeDiscount, priceCents, deal, customer, perPound, quotedParts = null }) {
   const card = billing.describeCard(customer) || 'card';
   const opening = `Your laundry weighed ${weight} lb`;
 
@@ -1949,13 +1959,14 @@ function doorTotalText({ weight, byWeight, floor, surcharge, beforeDiscount, pri
     surcharge,
     total: beforeDiscount,
     perPound,
+    quotedParts,
   });
 
   // SAY WHAT CAME OFF. A total lower than the arithmetic somebody can do in
   // their head reads as a mistake unless the reason is in the same message. The
   // promotion's blurb, never its internal name.
   const off = deal
-    ? ` ${deal.promotion.blurb || 'Your discount'} takes ${money(deal.cents)} off, so the total is ${money(priceCents)}.`
+    ? ` ${deal.promotion.blurb || 'Your discount'} takes ${money(beforeDiscount - priceCents)} off, so the total is ${money(priceCents)}.`
     : '';
 
   return `${base}${off} Charged to your ${card}. Back with you the ${site.turnaround}.`;

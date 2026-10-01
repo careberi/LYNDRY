@@ -961,7 +961,7 @@ router.get('/quote', async (req, res) => {
       signedIn: require("../core/customer-auth").isSignedIn(req),
       title: 'Your price',
       fullTitle: `What Laundry Pickup Costs at Your Address | ${site.name}`,
-      description: `See wash and fold pricing for your address and pickup schedule, including the operational fee and minimum total.`,
+      description: `See wash and fold pricing for your address and pickup schedule, including the fees and minimum total.`,
       path: '/quote',
       body: readPageBody('quote.html'),
       tracking: true,

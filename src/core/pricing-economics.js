@@ -67,10 +67,29 @@ function quotedTotal({ weightLb, rateCentsPerLb, operationalFeeCents, minimumTot
 
 function preview(input) {
   const { policy, category, pickupCents, returnCents } = input;
-  const { marginBps } = validatePolicy(policy, category);
+  const { marginBps, keepBps } = validatePolicy(policy, category);
   integer(pickupCents, 'Pickup cost');
   integer(returnCents, 'Return cost');
   const courierCents = cents(BigInt(pickupCents) + BigInt(returnCents));
+  if (policy.pricingMethod === 'COST_PLUS_MARGIN_15') {
+    integer(input.wholesaleCentsPerLb, 'Wholesale rate', 1);
+    const customerBaseCentsPerLb = integer(input.customerBaseCentsPerLb ?? input.wholesaleCentsPerLb, 'Customer pricing base rate', 1);
+    // Keep the saved fee field for compatibility with atomic database billing.
+    // In this version it represents the complete delivery and fees amount.
+    // Processing is included in both components, never added again at payment.
+    const prices = {
+      pricingMethod: policy.pricingMethod,
+      customerBaseCentsPerLb,
+      rateCentsPerLb: cents(ceiling(BigInt(customerBaseCentsPerLb) * SCALE, BigInt(keepBps))),
+      operationalFeeCents: cents(ceiling((BigInt(courierCents) + BigInt(policy.processingFixedCents)) * SCALE, BigInt(keepBps))),
+      minimumTotalCents: 1500,
+    };
+    return { ...prices, category, targetMarginBps: marginBps, referenceWeightLb: policy.referenceWeightLb,
+      courierCents, requiredReferenceTotalCents: requiredTotal({ ...input, weightLb: policy.referenceWeightLb }),
+      estimatedReferenceTotalCents: quotedTotal({ ...prices, weightLb: policy.referenceWeightLb }),
+      estimated30LbCents: quotedTotal({ ...prices, weightLb: 30 }),
+      estimated40LbCents: quotedTotal({ ...prices, weightLb: 40 }) };
+  }
   // Nearest cent, half up. Unlike the fee allocation, the rate rounds upward.
   const operationalFeeCents = cents((BigInt(courierCents) * BigInt(policy.operationalFeeBps) + 5000n) / SCALE);
   const requiredReferenceTotalCents = requiredTotal({ ...input, weightLb: policy.referenceWeightLb });

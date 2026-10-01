@@ -1,4 +1,5 @@
 'use strict';
+const feeBreakdown = require('./quote-fee-breakdown');
 
 // ---------------------------------------------------------------------------
 // THE ANSWER BLOCK ON /quote.
@@ -213,17 +214,15 @@ function dynamicPriced(quote,address) {
   const subscription=quote.categories.SUBSCRIPTION;
   const plan=(name,p)=>`<div class="card card-xl quote-plan"><h3>${name}</h3><dl>
     <div><dt>Wash, dry &amp; fold</dt><dd>${money(p.rateCentsPerLb)}/lb</dd></div>
-    <div><dt>Operational fee · once per order</dt><dd>${money(p.operationalFeeCents)}</dd></div>
-    <div><dt>Minimum total · includes fee</dt><dd>${money(p.minimumTotalCents)}</dd></div>
-    <div><dt>Estimated total · 30–40 lb</dt><dd>${money(p.estimated30LbCents)}–${money(p.estimated40LbCents)}</dd></div>
-    </dl></div>`;
+    ${feeBreakdown(p).map(([label, cents]) => `<div><dt>${label}</dt><dd>${money(cents)}</dd></div>`).join('')}
+    </dl><p class="quote-minimum">Minimum total: ${money(p.minimumTotalCents)}</p></div>`;
   return `<section class="container" style="padding-bottom:72px;"><div class="quote-column quote-pricing">
     <p class="eyebrow quote-eyebrow">Subscription wash, dry &amp; fold</p>
     <h2 class="display-3 quote-rate-heading">${money(subscription.rateCentsPerLb)} per pound</h2>
     <p class="quote-address">${escapeHtml(address)}</p>
     ${quote.indicative ? '<p class="quote-address">Preliminary estimate for your address. Pickup date and time may change availability and pricing.</p>' : ''}
     ${plan('Subscription pickup',subscription)}${plan('One-time pickup',one)}
-    <p class="quote-address">No separate pickup or delivery charge. The operational fee is included in the minimum and estimated totals.</p>
+    <p class="quote-address">${one.pricingMethod === 'COST_PLUS_MARGIN_15' ? 'Delivery, operational and service fees apply once per order. Payment processing is included; there is no additional processing charge.' : 'No separate pickup or delivery charge. The operational fee is included in the minimum total.'}</p>
     <p class="quote-address">Final weight determines your bill. Review and confirm your price when booking. Each subscription pickup receives its own quote.</p>
     <p class="quote-address">Pickup and return availability has been checked. Availability is checked again when you book. No driver is requested and no payment is collected here.</p>
     <a href="/account/login?next=%2Faccount%2Fbook" class="btn btn-primary btn-lg btn-full quote-order-button">Book a pickup</a>

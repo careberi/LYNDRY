@@ -204,6 +204,14 @@ function clean(value, max) {
 
 // Turn a submitted form into a row. Used by both create and update, so the two
 // cannot disagree about what a field means.
+function customerBaseProblem(form) {
+  if (form.type === 'PROPERTY_MANAGER' || form.customer_base_per_lb == null || String(form.customer_base_per_lb).trim() === '') return null;
+  const text = String(form.customer_base_per_lb).trim();
+  const cents = Number(text) * 100;
+  return /^\d+(?:\.\d{1,2})?$/.test(text) && cents > 0 && cents <= 2147483647
+    ? null : 'Enter a positive customer pricing base rate with no more than two decimal places.';
+}
+
 function fromForm(form) {
   const type = TYPES[form.type] ? form.type : 'LAUNDROMAT';
   const isLaundromat = type === 'LAUNDROMAT';
@@ -229,6 +237,9 @@ function fromForm(form) {
     hours: isLaundromat ? clean(form.hours, 300) : null,
     retail_per_lb_cents: isLaundromat ? centsFrom(form.retail_per_lb) : null,
     wholesale_per_lb_cents: isLaundromat ? centsFrom(form.wholesale_per_lb) : null,
+    // Older forms do not know this field. Their unrelated edits must preserve it.
+    ...(!isLaundromat ? { customer_base_per_lb_cents: null } :
+      Object.hasOwn(form, 'customer_base_per_lb') ? { customer_base_per_lb_cents: centsFrom(form.customer_base_per_lb) } : {}),
     daily_capacity_lb: isLaundromat ? wholeFrom(form.daily_capacity_lb) : null,
 
     // Entered in hours because that is how a laundromat talks about it, stored
@@ -385,6 +396,8 @@ async function ensureSlug(partner) {
 }
 
 async function create(form) {
+  const pricingProblem = customerBaseProblem(form);
+  if (pricingProblem) return { ok: false, detail: pricingProblem };
   const row = fromForm(form);
   if (!row.name) return { ok: false, detail: 'A partner needs a name.' };
 
@@ -403,6 +416,8 @@ async function create(form) {
 }
 
 async function update(id, form) {
+  const pricingProblem = customerBaseProblem(form);
+  if (pricingProblem) return { ok: false, detail: pricingProblem };
   const row = fromForm(form);
   if (!row.name) return { ok: false, detail: 'A partner needs a name.' };
 

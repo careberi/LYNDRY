@@ -1,3 +1,65 @@
+## 20260930 Remove public quote total estimates
+
+Removed the estimated total range from both public quote cards at Neil's request. Retained per pound rates, itemized fees and the smaller minimum total. Updated supporting copy to remove references to estimated totals. Pricing and billing unchanged. Development only. Source: browser annotation in this conversation.
+
+## 20260930 Itemized public quote fees
+
+Neil requested separate Delivery, Operational fee and Service fee rows on both public quote cards, replacing the combined line. This is a display allocation of the existing quoted fee, not extra charges. Operational allocation uses the saved transportation cost and policy percentage, currently 25%. Service allocation is $2, with delivery receiving the remainder. Allocations are capped at the existing combined fee for unusually low fee totals so no negative delivery amount or additional charge is introduced. Old quote versions retain their original operational fee.
+
+Moved Minimum total below Estimated total in smaller text. Current subscription example shows delivery $10.90, operational $3.50 and service $2.00, summing to the unchanged $16.40. One time shows $13.03, $3.50 and $2.00, summing to the unchanged $18.53. Quote calculations, routing, billing and the $15 total floor are unchanged. Other booking screens still use the combined fee label.
+
+All 1628 tests pass. Browser verified the three fee rows and the smaller minimum beneath the estimate. Development only. Source: Neil's browser annotation and development verification in this conversation.
+
+## 20260930 Independent laundromat customer pricing base
+
+Neil approved a third laundromat rate in admin. Wholesale remains the rate the laundromat charges LYNDRY and continues to drive partner payables and actual washing cost reporting. Retail remains the walk in reference. Customer pricing base is separately editable and drives new customer quotes before the existing category margin and processing calculation.
+
+Quote comparison and the quoted destination use the resulting complete customer total, including combined delivery fees. Existing saved order prices retain their snapshots. New snapshots retain both the customer base and the true wholesale cost. This supersedes the prior assumption that wholesale cost must also be the customer pricing base.
+
+The new field starts at each existing laundromat's wholesale rate, preserving current prices until an admin edits it. Blank falls back to wholesale. Invalid, zero, negative or more than two decimal place entries are rejected. Older forms that omit the field do not erase a saved base. A management company does not retain a laundromat pricing base.
+
+Example: wholesale $0.70 and customer base $1.00 produces one time $1.30 per pound, subscription $1.15 and wholesale category $1.09 at current category targets and processing assumptions. The invoice cost remains $0.70 per pound. The $1.00 figure is an example, not a rate applied to every shop. Delivery fees and the $15 minimum are unchanged.
+
+Development migration applied. All 1627 tests pass, covering independent saves, invalid values, fallback, legacy snapshots, true cost reports and selection using customer prices. Admin browser reached sign in, so signed in visual verification and Neil click testing remain pending. No production release or implementation commit. Source: Neil's request and the development code, tests and database checks in this conversation.
+
+## 20260930 Quote label refinement
+
+Shortened both customer quote cards to Delivery + Fees and Minimum total as requested. Copy only; pricing and billing unchanged. Development only.
+
+## 20260930 Approved cost based pricing with $15 minimum
+
+Neil explicitly approved implementation after the earlier pricing reversal. This supersedes the instruction to leave pricing unchanged for new development quotes only. Existing accepted order snapshots keep their original prices.
+
+New category targets are 20% for one time, 10% for subscription and 5% for wholesale. These are contribution targets after modeled direct costs, not net profit after all business overhead. Divide wholesale washing cost per pound by one minus the category margin minus the processing percentage, rounding upward to cents. Separately divide combined pickup and return cost plus the fixed processing cost by that same denominator, rounding upward to cents. Present the second amount as one Delivery + fees line. Processing is built into the price and is not surcharged afterward.
+
+The customer total is the greater of $15 or the rounded laundry amount plus combined fees. The $15 floor includes those fees and is not added again. The previous $30 minimum, separate $2 service fee and penny adjustment proposal are not implemented. The 33 lb reference remains for comparing laundromats and planning capacity; it no longer determines the rate or spreads transportation into laundry pricing. Promotions on new paid orders cannot reduce the bill below $15. Older saved promotion terms and explicit authorized waivers remain unchanged. Costs that change after booking are not passed through to an accepted order.
+
+Updated quotes, booking review, confirmations, order summaries, administration explanations and settlement calculations. The existing saved fee field stores the entire combined fee for this policy version, so database weighing and saved quote billing use the same arithmetic. Old policy versions retain their old calculations and fee label. New policy activated only in the development database. No production release.
+
+Validation: all 1621 tests pass. New tests cover all three categories, inclusive minimum, fractional weights, card holds, legacy snapshots and both van and laundromat billing totals. Browser verified the updated quote. No real payment was made and no pickup was booked. Independent review and Neil click testing remain pending. No implementation commit yet.
+
+Source: Neil's direct approval and the development code, tests, browser and database checks in this conversation. Example costs of $0.70 per pound and $13.98 transportation yield subscription $0.81 per pound plus $16.40 fees, one time $0.91 plus $18.53 and wholesale $0.77 plus $15.51.
+
+## 20260930 Pricing implementation reverted
+
+Neil requested reversal of the pricing implementation started in this conversation. Restored the previous pricing calculations, quote display, booking confirmation and billing code. Removed the unapplied migration. The proposed $30 minimum, separate $2 service fee and rate adjustment for profitability are not active. Existing dynamic pricing remains in place.
+
+Confirmed the development database never activated the new policy or migration. All 1613 tests pass after restoration. Unrelated website changes were preserved. No production release. Source: Neil's direct instruction and development code and database checks in this conversation.
+
+# Customer motion feedback
+
+Neil approved the four animation opportunities on 20260930. Add subtle address success feedback, mobile menu entrance, FAQ answer fade and confirmed submission icons. Keep prices, form layout, payment and booking behavior unchanged. Keyboard interactions stay immediate, including across navigation. Reduced motion uses a short opacity cue only. Development only; independent review and Neil click testing remain pending. Validation: all 1613 tests pass. Browser confirmed FAQ fade at 140ms, mobile menu at 160ms, keyboard mode and no horizontal overflow at 390px. Transactional success and address completion were inspected in source without submitting a booking or address lookup. Reduced motion has an 80ms opacity only override; device preference testing remains pending.
+
+## 20260930 Pricing decision: keep the current method
+
+Neil explicitly cancelled the proposed pricing overhaul and instructed us to keep the current pricing structure and calculations unchanged. He does not accept the proposed replacement. This supersedes the pricing proposals, comparison tables and pending implementation plan from this discussion. They are not approved work.
+
+Preserve the existing dynamic per pound rate, dynamic operational fee, dynamic inclusive minimum, category rules, quote presentation and billing behavior. Do not introduce the proposed included weight allowance, affine replacement, transportation buffer, new fee allocation or payment changes. Reopening this work requires a new explicit instruction from Neil. This records a product decision, not a claim that every order meets a guaranteed margin.
+
+Documentation only. No pricing code, settings, database records, customer quotes or billing were changed for this decision. No production release.
+
+Source: Neil's direct instruction in this conversation on 20260930.
+
 # Booking page refinement
 
 Refined the customer booking page while preserving booking behavior and the existing brand. Compact heading, aligned progress indicator, readable sentence case labels, consistent spacing, touch sized fields and clear disabled buttons. Desktop and 390px mobile inspected; no horizontal overflow. All 1613 tests pass. No booking was submitted. Development only; independent review and physical phone testing pending.

@@ -326,6 +326,15 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
       </div>
 
       ${field({
+        name: 'customer_base_per_lb',
+        label: 'Customer pricing base rate, per lb',
+        value: p.customer_base_per_lb_cents == null ? '' : (p.customer_base_per_lb_cents / 100).toFixed(2),
+        type: 'number',
+        attrs: 'step="0.01" min="0.01" placeholder="1.00"',
+        hint: 'Used for new customer quotes and laundromat selection before category margin and processing. Blank uses what they charge us. Their invoice still uses the wholesale rate.',
+      })}
+
+      ${field({
         name: 'daily_capacity_lb',
         label: 'Most they can take in a day, in lb',
         value: p.daily_capacity_lb,
@@ -716,6 +725,9 @@ ${
             'They charge walk-ins',
             p.retail_per_lb_cents == null ? '&mdash;' : `${escapeHtml(money(p.retail_per_lb_cents))} / lb`
           ) +
+          fact('Customer pricing base', p.customer_base_per_lb_cents == null
+            ? 'Uses wholesale rate'
+            : `${escapeHtml(money(p.customer_base_per_lb_cents))} / lb before category margin and processing`) +
           fact('Daily capacity', p.daily_capacity_lb ? `${p.daily_capacity_lb} lb` : '&mdash;') +
           fact(
             'Turnaround',

@@ -2010,6 +2010,7 @@ body.ly-pop-locked { overflow: hidden; }
 .quote-plan dl > div { display: flex; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid var(--ink-100); }
 .quote-plan dd { margin: 0; text-align: right; font-weight: 700; }
 .quote-plan p { margin: 18px 0 0; }
+.quote-plan .quote-minimum { margin: 8px 0 0; font-size: 14px; line-height: 1.5; font-weight: 400; color: var(--ink-600); }
 .quote-pricing .price-row { text-align: left; gap: 20px; }
 .quote-address { font-size: 17px; line-height: 1.6; color: var(--ink-700); margin: 0; overflow-wrap: anywhere; }
 .quote-order-button { min-height: 64px; font-size: 21px; margin-top: 28px; }

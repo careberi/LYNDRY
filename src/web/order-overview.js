@@ -4,8 +4,8 @@ const economics=require('../core/pricing-economics');
 const money=n=>'$'+(n/100).toFixed(2);
 function prices(snapshot,title){
  if(!snapshot)return '';
- const rows=[['Wash, dry & fold',money(snapshot.rateCentsPerLb)+'/lb'],['Operational fee',money(snapshot.operationalFeeCents)],['Estimated total · 30–40 lb',money(economics.quotedTotal({...snapshot,weightLb:30}))+'–'+money(economics.quotedTotal({...snapshot,weightLb:40}))],['Minimum total',money(snapshot.minimumTotalCents)],['Maximum · 50 lb',money(economics.quotedTotal({...snapshot,weightLb:50}))]];
- return '<section class="order-price-panel"><h3>'+e(title)+'</h3><dl>'+rows.map(([key,value])=>'<div><dt>'+e(key)+'</dt><dd>'+e(value)+'</dd></div>').join('')+'</dl><p class="hint">Totals include the operational fee. Final weight determines the bill.</p></section>';
+ const rows=[['Wash, dry & fold',money(snapshot.rateCentsPerLb)+'/lb'],[require('./pricing-label')(snapshot),money(snapshot.operationalFeeCents)],['Estimated total · 30–40 lb',money(economics.quotedTotal({...snapshot,weightLb:30}))+'–'+money(economics.quotedTotal({...snapshot,weightLb:40}))],['Minimum total',money(snapshot.minimumTotalCents)],['Maximum · 50 lb',money(economics.quotedTotal({...snapshot,weightLb:50}))]];
+ return '<section class="order-price-panel"><h3>'+e(title)+'</h3><dl>'+rows.map(([key,value])=>'<div><dt>'+e(key)+'</dt><dd>'+e(value)+'</dd></div>').join('')+'</dl><p class="hint">Totals include fees. Final weight determines the bill.</p></section>';
 }
 function orderOverview({order,customer,shop,quote,problem,selector,canMoney,canCustomer,deliverySync=[]}){
  customer=require('../core/order-address').customerFor(order,customer);

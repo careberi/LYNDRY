@@ -1,10 +1,11 @@
 'use strict';
+const feeLabel = require('./pricing-label');
 const { escapeHtml } = require('./quote-result');
 const money = cents => '$' + (cents / 100).toFixed(2);
 function planEstimate(p) {
   return `<dl class="booking-plan-estimate">
     <div><dt>Estimated laundry rate</dt><dd>${money(p.rateCentsPerLb)}/lb</dd></div>
-    <div><dt>Operational fee · per order</dt><dd>${money(p.operationalFeeCents)}</dd></div>
+    <div><dt>${feeLabel(p)} · per order</dt><dd>${money(p.operationalFeeCents)}</dd></div>
     <div><dt>Minimum · includes fee</dt><dd>${money(p.minimumTotalCents)}</dd></div>
     <div><dt>Estimated total · 30–40 lb</dt><dd>${money(p.estimated30LbCents)}–${money(p.estimated40LbCents)}</dd></div>
   </dl>`;
@@ -26,22 +27,22 @@ function review(quote, carriedFields) {
         <p class="eyebrow">${p.category === 'SUBSCRIPTION' ? 'Subscription pickup' : p.category === 'WHOLESALE' ? 'Wholesale pickup' : 'One-time pickup'} · Your estimate</p><h2 id="price-summary-title">${money(p.rateCentsPerLb)}/lb</h2>
         <p>Wash, dry &amp; fold</p>
         <dl class="booking-price-lines">
-          <div><dt>Operational fee<span>Once per order</span></dt><dd>${money(p.operationalFeeCents)}</dd></div>
+          <div><dt>${feeLabel(p)}<span>Once per order</span></dt><dd>${money(p.operationalFeeCents)}</dd></div>
         </dl>
       </section>
       <section class="card card-xl booking-order-totals" aria-labelledby="order-totals-title">
         <h2 id="order-totals-title">Order totals</h2>
-        <p>These totals include your laundry and operational fee. They are not additional charges.</p>
+        <p>These totals include your laundry and fees. They are not additional charges.</p>
         <dl class="booking-price-lines">
-          <div><dt>Estimated total · 30–40 lb<span>Includes the operational fee</span></dt><dd>${money(p.estimated30LbCents)}–${money(p.estimated40LbCents)}</dd></div>
-          <div><dt>Minimum charge<span>Includes the operational fee</span></dt><dd>${money(p.minimumTotalCents)}</dd></div>
+          <div><dt>Estimated total · 30–40 lb<span>Includes fees</span></dt><dd>${money(p.estimated30LbCents)}–${money(p.estimated40LbCents)}</dd></div>
+          <div><dt>Minimum charge<span>Includes fees</span></dt><dd>${money(p.minimumTotalCents)}</dd></div>
         </dl>
-        <p class="field-hint">Final weight determines your bill using the order’s per-pound rate, operational fee and minimum.</p>
+        <p class="field-hint">Final weight determines your bill using the order’s per-pound rate, fees and minimum.</p>
         ${p.policy?.cardHold ? `<p><strong>Temporary card hold: ${money(require('../core/card-hold-policy').amount(p))}.</strong> This is held, not charged, and is applied toward your final bill. Any unused hold is released.</p>` : ''}
         <form method="post" action="/account/book" id="wizard">
           ${carriedFields}
           <input type="hidden" name="step" value="quote"><input type="hidden" name="dev_quote_id" value="${escapeHtml(quote.id)}">
-          <p class="field-hint">By continuing, you confirm the per-pound rate, operational fee and minimum charge${p.policy?.cardHold ? ', and authorize the temporary card hold' : ''} shown above.</p>
+          <p class="field-hint">By continuing, you confirm the per-pound rate, fees and minimum charge${p.policy?.cardHold ? ', and authorize the temporary card hold' : ''} shown above.</p>
           <button class="btn btn-primary btn-lg btn-full" type="submit" name="price_consent" value="yes">Confirm price and continue {{ICON_ARROW}}</button>
           <button class="btn btn-full" name="back" value="when" formnovalidate>Change pickup</button>
         </form>

@@ -26,7 +26,7 @@ function settingsBody(policy, { notice = '', problem = '' } = {}) {
     ${notice ? `<p role="status">${e(notice)}</p>` : ''}${problem ? `<p role="alert">${e(problem)}</p>` : ''}
     <p>Changes apply to new quotes. Existing accepted quotes and card holds keep their saved amounts.</p>
     <form method="post" action="/ops/pricing" class="ops-form-stack">
-      <section class="card card-xl"><h2>Margin after direct costs</h2>
+      <section class="card card-xl"><h2>Margin after direct costs</h2>${policy.pricingMethod === 'COST_PLUS_MARGIN_15' ? '<p>Washing cost and combined transportation costs are each priced for the category margin, with payment processing included. New orders have a $15 inclusive minimum. The reference weight is used for shop comparison and capacity, not to spread transportation into the laundry rate.</p>' : ''}
         <p>The percentage remaining after washing, courier and payment-processing costs. Other business expenses are excluded, so this is not net profit.</p>
         ${economics.CATEGORIES.map(key => `<label>${e({ ONE_TIME: 'One-time pickup', SUBSCRIPTION: 'Subscription', WHOLESALE: 'Wholesale' }[key])} (%)<input name="${key}" type="number" min="0" max="99.99" step="0.01" value="${policy.marginBps[key] / 100}" required></label>`).join('')}
       </section>
@@ -34,7 +34,7 @@ function settingsBody(policy, { notice = '', problem = '' } = {}) {
         <p>A temporary hold, not an additional charge. The final bill still uses the actual laundry weight.</p>
         <label>Hold amount<select name="hold_mode">${[['FIXED','Fixed dollar amount'],['MINIMUM','Order minimum total'],['MAXIMUM','Order maximum total (50 lb)']].map(([value,label]) => `<option value="${value}"${hold.mode === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
         <label>Fixed amount ($)<input name="hold_fixed" type="number" min="0.50" max="10000" step="0.01" value="${hold.fixedCents == null ? '' : (hold.fixedCents / 100).toFixed(2)}"></label>
-        <p>Fixed amount is used only when selected. Minimum and maximum use each order’s saved price, including its operational fee.</p>
+        <p>Fixed amount is used only when selected. Minimum and maximum use each order’s saved price, including its quoted fees.</p>
       </section><section class="card card-xl"><h2>In-house pickup timing</h2><label>Loading buffer (minutes)<input name="loading_buffer_minutes" type="number" min="0" max="120" step="1" value="${policy.loadingBufferMinutes??10}" required></label><p>Added to estimated travel time for new quotes. Existing orders retain their quoted buffer.</p></section><button class="btn btn-primary">Save pricing and card holds</button>
     </form>`;
 }

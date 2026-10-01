@@ -82,4 +82,12 @@ function priceOn(order, weightLb) {
   };
 }
 
-module.exports = { rateFor, floorFor, surchargeFor, priceOn };
+// New paid quotes retain their $15 floor even when a promotion applies.
+// Authorized waivers remain a separate payment decision; old promotions keep their terms.
+function allowedDiscount(order, beforeDiscount, requestedCents) {
+  if (order?.pricing_snapshot?.pricingMethod !== 'COST_PLUS_MARGIN_15') return requestedCents;
+  const floor = floorFor(order);
+  return Math.min(Math.max(0, requestedCents), Math.max(0, beforeDiscount - floor));
+}
+
+module.exports = { rateFor, floorFor, surchargeFor, priceOn, allowedDiscount };
