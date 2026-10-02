@@ -164,7 +164,7 @@ async function addAndReprice(order, { code, weightLb, by = null, reason = null }
       return null;
     });
 
-  const discountCents = pricing.allowedDiscount(fresh, parts.beforeDiscount, deal ? deal.cents : 0);
+  const discountCents = pricing.allowedDiscount(fresh, parts.beforeDiscount, deal ? deal.cents : 0, billable);
   const priceCents = Math.max(0, parts.beforeDiscount - discountCents);
 
   const wasPrice = Number(fresh.price_cents || 0);

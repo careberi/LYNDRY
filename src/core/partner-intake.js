@@ -68,6 +68,8 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         shopReference: intake?.shop_reference || null,
         weightCheckEnabled: policy?.weight_tolerance_lb != null,
         returnCheckStatus: intake?.return_check_status || 'PENDING',
+        heldIntakeWeight: intake?.return_check_status === 'HELD' ? intake.weight_lb : null,
+        heldReturnWeight: intake?.return_check_status === 'HELD' ? intake.return_weight_lb : null,
         returnDueAt: intake?.return_due_at || null,
         weight: stage==='READY' && ['PASSED','RELEASED'].includes(intake?.return_check_status) ? intake.return_weight_lb : null,
         receivedAt: intake?.received_at || null,

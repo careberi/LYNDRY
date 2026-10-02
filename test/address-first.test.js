@@ -31,7 +31,7 @@ test('booking starts with saved-address confirmation and removes premature plan 
   const post=async data=>fetch(base+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)});
   const invalid=await post({step:'address',name:'Test',postal_code:'bad'});assert.equal(invalid.status,400);assert.equal(writes,0);
   html=await(await post({step:'address',name:'Test Customer',address_line1:'1 Test Street',city:'Lodi',postal_code:'07644',spot:'Front door'})).text();
-  assert.match(html,/One-Time or Subscription\?/);assert.match(html,/name="address_confirmed" value="yes"/);assert.doesNotMatch(html,/\$2\.00|\$1\.80|Save 10%/);assert.equal(writes,1);
+  assert.match(html,/Choose your pickup plan\./);assert.match(html,/name="address_confirmed" value="yes"/);assert.doesNotMatch(html,/\$2\.00|\$1\.80|Save 10%/);assert.equal(writes,1);
   html=await(await post({step:'repeat',address_confirmed:'yes',plan:'ONE_TIME'})).text();
   assert.match(html,/Schedule your pickup/);
   assert.match(html,/Pickup times depend on the laundromats/);
@@ -75,7 +75,7 @@ test('Fair Lawn signup uses the full address and handles coverage separately fro
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
  const form={step:'address',name:'Test Customer',address_line1:'16-50 Chandler Dr.',address_line2:'Unit 2',city:'Fair Lawn',postal_code:'07410',spot:'Front door'};
  const post=extra=>fetch('http://127.0.0.1:'+server.address().port+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({...form,...extra})});
- let response=await post({});assert.equal(response.status,200);assert.match(await response.text(),/One-Time or Subscription/);
+ let response=await post({});assert.equal(response.status,200);assert.match(await response.text(),/Choose your pickup plan/);
  assert.equal(legacyCalls,0);assert.equal(writes,1);
  assert.deepEqual(checked[0],{address:{address_line1:'16-50 Chandler Dr.',address_line2:'Unit 2',city:'Fair Lawn',state:'NJ',postal_code:'07410'},options:{publicPreview:true,addressEstimate:true}});
  response=await post({postal_code:'10036'});assert.equal(response.status,400);assert.match(await response.text(),/serve New Jersey/);assert.equal(checked.length,1);

@@ -1,3 +1,125 @@
+## 20261002 Shipday IDs and compact toolbar
+
+Show stored Shipday pickup and return IDs separately in order details. Missing associations say Not linked yet. Remove visible explanatory lines under disabled Update order and Cancel order; preserve their eligibility and tooltip explanations. Presentation only, no order or Shipday mutations. Update Obsidian and verify rendering.
+
+## 20261001 Order recovery actions
+
+Neil explicitly authorizes building the suggested top actions, prioritizing Shipday reconciliation and manual delivery recovery. Add status sync, reasoned proof based admin completion, internal note and delivery management beside existing actions. Completion requires OUT_FOR_DELIVERY and settled or waived payment. Verify exact return identity and endpoints through the existing observer, current assignment and evidence freshness. Atomic audited transition, harmless replay. No charges, courier mutations or duplicate customer notifications. Development only. Existing edit and cancellation guards stay in force. Other lifecycle overrides require specific validated transitions rather than arbitrary status changes.
+
+## 20261001 Order details and header actions
+
+Neil requests destination as order detail rows, saved quote beside order details, and update, cancel and delivery actions at the top. Scope is presentation and reuse of existing guarded forms. Preserve permission checks, lifecycle eligibility, delivery photo requirements, payment, dispatch and messaging behavior. Unavailable actions show a reason. No actual order is changed during verification. Development only. Independent review and Neil acceptance pending.
+
+## 20261001 Customer pricing base restored for new quotes
+
+Neil explicitly confirmed that the customer pricing base must drive customer quotes and destination comparisons. This supersedes the actual wholesale pricing basis for new development quotes. Keep three distinct rates with identical labels on edit and profile: Laundromat walk-in rate, Our laundromat cost per lb, and Customer pricing base per lb. Walk-in is reference only. Our laundromat cost remains the supplier payment and actual profit basis. Customer pricing base replaces only the washing input to the inclusive customer formula. Keep delivery, processing, tier targets, the 18 lb minimum and 50 lb maximum. If the base is blank, explicitly disclose the existing fallback to our laundromat cost. The target is a pricing margin on the selected base; actual contribution may differ.
+
+Version the new pricing basis in the policy and saved quote. Existing accepted snapshots retain their old calculation even if a historical snapshot contains a customer base field. Freeze both rates for new orders. Update application and atomic database billing consistently, preserve payment and dispatch behavior, and test quoting, minimums, ranking, measured-weight billing, real cost reporting and legacy snapshots. Activate only development. Update Obsidian. Independent review and Neil acceptance remain pending.
+
+Verified on 20261001: migration 0138 activated CUSTOMER_BASE_V1 only in development. Application and database billing matched in 7,788 cases, including all tiers, weights, minimum boundaries, settlement modes and legacy quotes. All 32 focused tests pass. Full suite reports 1,666 passes and the same two preexisting unrelated partner profile wording failures. Browser inspection confirmed the three separate values and explanations in edit and profile, and refreshed public quotes. Existing partner rate values were not changed. Obsidian updated. No commit, push or production release. Grok review and Neil acceptance remain pending.
+
+## 20261001 Home hero reference update
+
+Neil explicitly requested a home hero update using his attached visual reference. Retain the existing green bubble background and customer typography. Use a four line service heading, two prominent actions with Book a pickup first, and a larger receipt style example card with a lavender offset panel and a five stage icon timeline. Show the example below the actions on phones. Keep conditional next day language. The receipt is an illustrative 30 lb subscription example from the current development model, not an address quote or a universal rate. Delivery and processing are included, never advertised as free. No changes to pricing, booking, payment, dispatch, routing or the rest of the homepage. This supersedes the previous three line heading and giant single CTA visual decision for this hero only. Development only; update Obsidian and verify responsive layout and action destinations.
+
+Implementation verified on 20261001: four line hero, two prominent actions and responsive receipt are available on localhost. All 33 focused tests pass. Full suite reports 1,660 passes and the same two unrelated partner profile wording failures. Both action destinations were clicked without submitting a booking. Desktop, user width, tablet and phone layouts were inspected, including measured containment at 320 pixels. Fresh Impeccable visual review returned ship with no material findings at its visual and source scope. Obsidian Development Updates, Marketing and Funnel, Decisions and Log were updated. No commit, push or production release. Grok review, physical phone testing and Neil acceptance remain pending.
+
+## 20261001 Eighteen pound minimum and thirty pound starting quote
+
+Neil explicitly replaced the fixed $28 minimum with an 18 lb minimum for new development quotes. Calculate each destination and tier minimum from its existing inclusive cost formula at 18 lb, save that dollar amount in the quote, and charge that minimum for smaller bags. Keep the displayed minimum order rate equal to that total divided by 18 below the allowance. Above 18 lb, calculate from actual weight. Keep the 50 lb maximum, existing category targets, cost inputs and payment flow. Existing accepted snapshots keep their saved minima and bills.
+
+Default new estimates to 30 lb while preserving an explicitly selected weight. Show subscription and one time rates at both ends of the slider: up to 18 lb and at 50 lb. Apply the minimum to public quote, booking, saved review and final billing through the shared snapshot calculation. Admin pricing settings edit minimum weight instead of a universal dollar floor for this policy. The page keeps the customer brand, one heading, compact weight controls, aligned tier cards and visible full totals. This supersedes the $28 instruction below. Development only. Update Obsidian, regression tests, database parity checks and desktop and mobile browser verification.
+
+Implementation verified on 20261001: migration 0137 is active only in development. Minimum prices are frozen at 18 lb for new quotes; earlier accepted snapshots retain their minima. Public comparison and confirmed destination minima are separately tested. New estimates start at 30 lb, endpoint labels show both tiers, and weight controls and minimum boundaries work. Twenty one focused regressions pass; npm test reports 1,659 pass and two preexisting unrelated partner profile wording failures. JavaScript and database totals matched across 1,944 cases. Physical phone checks, Grok code review and Neil booking click testing remain pending. Obsidian Development Updates, Pricing and Promotions, Decisions and Log updated. No commit, push or production release.
+
+Fresh Impeccable finish review returned ship for the quote page refinement, with no material visual fixes. This is separate from Grok code review and production readiness. Existing design tokens remain authoritative. Lower mobile review used a full page capture with a known right edge crop, supported by a valid upper viewport capture and measured balanced gutters. A physical phone check remains pending. Wholesale booking labels use only their own tier; the public comparison remains subscription and one time.
+
+## 20261001 Minimum order rate display
+
+Neil explicitly requested that the per pound headline remain fixed below the weight covered by the monetary minimum. Keep the configured $28 minimum. Derive the included weight independently for each tier from the existing rounded pricing calculation, conservatively to hundredths of a pound and capped at 50 lb. Below that weight, show minimum divided by included weight as a Minimum order rate, alongside the full minimum total and included allowance. Above it, show the calculated total divided by selected weight. Do not call the capped figure the actual average for a smaller bag.
+
+Apply the same presentation to public quotes, booking plan selection and quote review. Preliminary comparisons use their eligible destination price schedule; accepted quote review uses the saved destination and cost terms. If the minimum does not cover even one pound, show the actual estimate without inventing an allowance. Preserve billing totals, cost targets, payments, routing and accepted snapshots. This supersedes the earlier instruction to display actual average per pound below the minimum. Development only. Update Obsidian and verify minimum boundaries and slider interaction.
+
+## 20261001 Weight based inclusive pricing in development
+
+Neil explicitly requested implementation of the weight based workbook model. This supersedes the customer base rate and separate fee model for NEW development quotes only. Existing accepted snapshots retain their calculation. Use actual laundromat wholesale cost, both quoted courier legs, payment processing and configurable other costs. Targets are subscription 10%, one time 20% and wholesale 5%. The inclusive monetary minimum is $28 and the maximum order weight is 50 lb. Round totals upward and verify the target against rounded processing costs. Account for the existing hold plus balance settlement when estimating processing; do not change the card flow.
+
+Customers choose estimated weight from 1 to 50 lb. Show subscription first, an inclusive estimated total and the effective average per pound, with delivery and processing included. Recalculate from measured weight using frozen costs and policy, not the estimate's displayed average rate. The minimum can produce a higher margin for small bags. Do not advertise $2 as a universal ceiling. Compare eligible destinations at the chosen weight. No partner costs or internal targets in public calculator data. Discounts cannot undercut the new model's minimum or modeled target; explicit waivers retain their existing behavior.
+
+Update quoting, booking, consent, confirmation, saved order displays, actual weight billing and database weighing together. Retain order access, payment, dispatch and no card safeguards. Verify integer and fractional weights, all tiers, minima, estimated versus actual weight, rounding, legacy snapshots and destination selection. Development only. No production activation or merge. Independent review and Neil click testing remain pending.
+
+Implementation and validation on 20261001: Development policy WEIGHT_BASED_MARGIN_V1 is active through migration 0136. The quote and booking use inclusive tier estimates, and measured weight billing uses frozen cost terms. Fixed or minimum holds reserve two fixed processing fees; minimums and rounding can exceed the target. Application and database totals matched across 1,944 cases. Nine new pricing regression tests pass. Full suite: 1,648 pass and two preexisting laundromat profile wording failures. Desktop, mobile, keyboard, minimum, maximum and invalid weight browser checks passed. No payment or dispatch was submitted. Public pricing explanations and order summaries were aligned. Obsidian Development Updates, Pricing and Promotions, Decisions, Index and Log were updated.
+
+Only the new development migration was applied. Historical migration ledger inconsistencies were not replayed or repaired in this change. No implementation commit, push or production release. Independent review and Neil's final click test remain pending.
+
+## 20261001 Resolve weight holds and request return dispatch
+
+Neil explicitly authorized connecting issue resolution to laundromat hold release and automatic return dispatch. For an identified weight issue, administrator resolution releases the recorded hold, marks completed laundry ready, closes the issue and attempts the existing guarded return request. Already resolved issues offer recovery. Failed release or readiness prevents closure. Payment, assignment and duplicate dispatch checks remain enforced. Uncertain remote writes still require review rather than another driver request.
+
+All 1640 tests pass, including five resolution regression tests. Development order 9020 is RELEASED and READY. Its existing return trip was verified against the saved reference, driver and both endpoints and is reported delivered by Shipday. A stale local dispatch review from the earlier failed verification was reconciled without a remote write or marking the customer order delivered. Local development only. Not committed, pushed or shipped. Independent review and Neil click testing remain pending.
+
+Source: Neil's request and repository, test and development database verification on 20261001.
+
+## 20261001 Laundromat escalation contact correction
+
+Neil corrected the weight hold call button to use the business contact number and the label Call this number, without a personal name. Updated the development configuration and shared board and order detail button, including Spanish wording. This supersedes the earlier personal contact instruction. No hold or release behavior changes. Local development only, not committed or pushed.
+
+Source: Neil's browser annotation on 20261001.
+
+## 20261001 Visible laundromat weight holds
+
+Added red mismatch notifications to the laundry board and order detail, displaying incoming and outgoing weights only after a return hold. Replaced normal return actions with a direct Call Neil button and instructions to double check bags and scale readings and retain the laundry until LYNDRY resolves the hold. English and Spanish are supported. The private escalation number is configured for authenticated portal alerts and is not added to public pages. This is Neil's explicit exception for private portal escalation. Existing tolerance and release rules remain unchanged.
+
+All 1635 tests pass. Browser inspection confirmed the held order and direct telephone destination. No call was placed. Local development only, not committed or pushed. Independent review and physical phone click testing remain pending. Source: Neil's screenshots and request on 20261001.
+
+## 20261001 Order costs and contribution
+
+Added recorded pickup, billable and laundromat weights to POS order details. Business costs now appear beside customer charges with estimated contribution dollars and percentage underneath. Calculations use saved wholesale terms, settled partner weight when available, courier records with quote fallback, and payment ledger based processing estimates including per transaction fixed fees. Missing costs remain unavailable. Unrecorded overhead and refunds are explicitly excluded; the result is not represented as final net profit. Money visibility permissions remain enforced. Billing and routing behavior are unchanged.
+
+Validated with regression tests and order screen inspection. Local development only, not committed or pushed. Independent review remains pending. Source: Neil's request and implementation verification on 20261001.
+
+## 20261001 Order cost and contribution summary
+
+Spec: Add visible recorded and billable weights to the POS order detail. Show business costs beside the customer charge breakdown and contribution dollars and percentage below. Use saved quote terms, settled partner weight when available, recorded courier fees when available, and the existing payment ledger. Label calculated supplier and processing estimates. Missing values must not become zero or fabricated net profit. Preserve money permissions, billing, routing and historical quotes. Add regression coverage. Local development only; independent review pending.
+
+## 20261001 Cohesive booking plan cards
+
+Neil requested a further booking design refinement using Emil design engineering, Apple design and mobile native guidance. Replaced the oversized enclosing card with separate subscription and one time cards matching public quote styling. Unified plan and price typography with the site body font, aligned fee rows, and added compact frequency controls with visible selected states and mobile touch targets. Subscription remains first. Pricing and booking behavior are unchanged.
+
+All 1629 tests pass. Desktop and phone sized browser review confirmed selectable plans and frequencies, itemized fees and no horizontal overflow. Physical phone testing and independent review remain pending. Local development only, not committed or pushed.
+
+## 20261001 Booking plan screen polish
+
+Reviewed the booking plan screen with the impeccable skill. Kept subscription first and preserved the existing customer visual identity. Added clearer plan headings, readable itemized pricing, aligned numeric amounts, a divider between plans and larger vertically spaced frequency controls. Removed nested price panel backgrounds and the cramped frequency row. Frequency choices use a named fieldset and remain available without JavaScript. Selected plan values, fees, minimum, card holds and booking behavior are unchanged.
+
+All 1629 tests pass. Mechanical design scan returned no findings. Desktop and mobile browser review confirmed subscription first, readable fee rows, separated choices and no horizontal overflow. No booking or payment was submitted. Local development only, not committed or pushed. Independent review remains pending. Source: Neil's request, skill review and development verification on 20261001.
+
+## 20261001 Subscription first in booking
+
+Moved the subscription option, price breakdown and frequency choices before one time pickup in booking. Preserved the customer's existing selection and all pricing and booking behavior. Source: Neil's browser annotation on 20261001. Local development only, not committed or pushed.
+
+## 20261001 Booking pricing matches public quote
+
+Neil requested the same itemized pricing presentation across public quotes and booking. Booking selection and price review now show wash and fold per pound, delivery, operational fee and service fee using the shared quote allocation. The inclusive minimum appears in smaller text beneath the breakdown. Removed example weight totals and estimated total ranges. Labels say pricing while preserving the notice that pickup date and time can change availability and pricing. Actual weighing determines the final bill. Card hold disclosure and consent remain intact.
+
+All 1629 tests passed for the booking presentation change, including updated rendering assertions. Browser verification of the booking steps encountered a browser timeout and remains pending. Local development only, not committed or pushed. No payment or order was submitted. Source: Neil's annotations and instructions in this conversation on 20261001.
+
+## 20261001 Conditional next day website wording
+
+Neil requested that customer website language stop promising next day returns. Shared wording now says: Most wash and fold orders return next day when available. Updated the homepage, booking copy, shared footer, FAQ, how it works, landing pages, service area pages and search descriptions. Operational turnaround values and scheduling rules are unchanged.
+
+All 1629 tests pass. Local development only, not yet committed or pushed. Independent review and final click testing remain pending. Source: Neil's request and development verification in this conversation on 20261001.
+
+## 20261001 Revised transportation fee calculation
+
+Neil explicitly approved transportation divided by one minus category margin, rounded to the nearest cent. This supersedes the previous transportation formula that included percentage and fixed processing costs. Laundry rate calculation is unchanged. Operational allocation is the saved policy percentage, currently 25%, of the adjusted fee total. Service allocation is $1.99 and delivery is the remainder. The allocations are not added again. Low totals cap allocations to prevent negative delivery.
+
+New quote snapshots carry TRANSPORT_MARGIN_V2. Existing accepted snapshots retain their original prices and old fee allocation. The inclusive $15 minimum, final weight billing and category selection remain. Actual processing costs still appear in cost reporting, so the fee target is before transportation processing costs and does not guarantee net profit.
+
+For $13.98 transportation, subscription fees are $15.53 with delivery $9.66, operational $3.88 and service $1.99. One time fees are $17.48 with delivery $11.12, operational $4.37 and service $1.99. Wholesale fees are $14.72 at a 5% target. All 1629 tests pass including billing settlement, rounding, legacy snapshots and low fee cases. Browser confirmed both public quote examples. Development implementation only, not yet committed or pushed. Independent review and final click testing remain pending.
+
+Source: Neil's exact formulas in this conversation on 20261001 and development verification.
+
 ## 20260930 Remove public quote total estimates
 
 Removed the estimated total range from both public quote cards at Neil's request. Retained per pound rates, itemized fees and the smaller minimum total. Updated supporting copy to remove references to estimated totals. Pricing and billing unchanged. Development only. Source: browser annotation in this conversation.
@@ -125,98 +247,133 @@ Validation: 1,591 tests passed before the report follow-up. Desktop and 390px ph
 Neil approved implementing the customer website critique. Preserve the bold brand; make price checking primary, clarify illustrative pickup content, simplify navigation and mobile forms, add named booking progress and existing-address context. Keep suppliers private. No payment, pricing, dispatch, reminder, SMS, or booking-state changes. Use existing service facts only. Independent review and Neil click-test pending.
 
 ## 2026-09-29: customer delivery photo messages (implementation assigned by Neil)
+
 After a newly observed, verified return delivery, send the customer's matching drop-off photo as a picture message from the existing LYNDRY number, in the same customer conversation. Keep delivered text prompt; send the photo separately as soon as available, checking for late proof for up to 24 hours. Never send pickup/laundromat photos, maps, tracking links, vendor names or other customers' proof. Validate exact linked return identity, endpoints, driver and completed state again before sending. Prepare a metadata-free size-limited JPEG in private storage and record the attachment in the employee message thread. Durable claims prevent duplicate photo sends across local/hosted workers; uncertain carrier outcomes require review instead of retry. Preserve STOP, card eligibility, current sender and simulated development messaging. Existing completed trips are not backfilled and manual laundromat handoff is independent of customer photo messaging. No production activation, payment, reminder or route changes. Tests must cover wrong leg/order, delayed/missing photos, duplicate/restarted workers, opt-out and uncertain sends. Independent review and Neil click-test pending.
+
 Validation: npm test passed all 1,584 tests, including the actual customer-conversation attachment renderer. Migration 0133 applied only to development. Transaction checks verified one photo claim and eligibility only after delivered text; changes rolled back. Generated-image storage/signing/download was verified in the private bucket and the temporary image was removed. Customer delivery SMS remains fake in development (no API key); no live customer text or photo was sent. Manual collection 0132 checks also passed with all order changes rolled back; #9019 remains awaiting Neil's manual confirmation. Browser verified the red Confirm Pickup button. Independent review and Neil click-test pending.
 
-
 ## 2026-09-29: manual pickup confirmation (implementation assigned by Neil)
+
 Keep collection manual. Replace View collection on outgoing rows with a direct Confirm Pickup form. Awaiting verified collection is green and disabled; verified collected/delivered return is red and enabled with an explicit confirmation-needed label. The existing refresh updates both color and eligibility; failed refresh disables submission. Confirmation rechecks the exact linked return, endpoints, assigned driver and collection state, preserves weight/payment/shop/CSRF guards, records the actor, and moves the order to completed shop history without claiming customer delivery. A matching in-house trip left in REVIEW by an uncertain request (or already COMPLETED) can be confirmed only with fresh verified collection; never request or reassign a driver to clear that flag. No automatic collection, production activation, payment, reminder or route changes. Regression tests required; independent review and Neil click-test pending.
 
 ## 2026-09-29: washing completion and simplified laundromat board
+
 Neil requests three active board sections: Incoming deliveries, Washing, and Outgoing deliveries. Verified intake enters Washing directly, with no separate Start washing action. Persist Mark wash complete with timestamp and actor, requiring verified intake and shop scope; repeat submissions are harmless. This action does not dispatch a driver, settle payment, change billed weight or mark the order READY.
+
 Only after wash completion, reveal the fresh full-order return-weight form. The Outtake button stays visibly disabled until a valid weight is entered (greater than zero, no more than 50 lb, at most two decimals), and disables again if cleared or invalid. The server independently requires wash completion and applies the configurable inclusive +/-1 lb check. Preserve sticky discrepancy holds and the existing driver-request behavior after successful Outtake. Keep Intake, Washing, Outtake in order progress; completed wash awaiting weighing remains in Washing with a Wash complete badge. Preserve already-ready orders without resetting their workflow.
+
 Remove the Leave by date/time text while retaining the colored countdown. Show the signed-in laundromat's own escaped name and saved address in the sidebar footer; no customer or other-shop data. The three-section flow supersedes the intermediate four-section proposal.
+
 Validation: all 1,568 tests pass. Browser verified the three sections, sidebar identity, no deadline date line, wash-complete-only action, and Outtake enabling for valid weight then disabling when cleared. Database transaction checks verified scope, replay, missing-completion rejection, required weight, inclusive boundaries and sticky holds, with test changes rolled back. Migrations 0129-0131 applied only to development; 0131 removes the intermediate start-washing requirement. No real driver request, message, payment or retained order mutation was performed. Independent review and Neil click-test pending.
 
 ## 2026-09-29: blind return weighing and laundromat board (implementation assigned by Neil)
+
 Hide intake weight from the shop's wash board, detail page and response data. Show the Match the handover reference card only on the incoming intake screen, never on wash or return screens. Show only verified return weight after a passing reweigh or an explicitly reviewed release. An optional, escaped shop reference (up to 64 characters) is saved at intake and follows the order through the portal/history; it has no pricing, dispatch, identity or payment effect and never replaces the LYNDRY number. This supersedes the earlier removal of all internal ticket entry, adding only an optional label.
+
 Build a configurable absolute weight tolerance in pounds. Neil chose an inclusive 1 lb difference in either direction on 29 September 2026; it is active in development and editable under Admin > Return weight checks. Once configured, require a fresh full-order weighing before readiness/return dispatch, compare on the server, preserve the original billed intake weight, and hold mismatches with an issue and audit record. Holds are sticky across retries and setting changes; only an active LYNDRY admin can release with a review reason. Portal, POS, background dispatch and collection must respect the hold. No customer payment is recalculated from return weight.
+
 Provisional countdown rule pending Neil's preference: snapshot the laundromat's closing time on the next Eastern calendar day after receipt. Never treat this as an exact 24-hour promise. Show deadline unavailable when tomorrow has no opening hours. Green above 10 hours, yellow above 2 through 10 hours, red at/below 2 hours and overdue; text labels accompany color. Completed orders stop counting down. Development only; production unchanged. Independent review and Neil click-test pending.
 
 Validation: all 1,561 tests pass. Browser verified hidden wash weight, live countdown, intake-only handover card and the administrator settings page. Development migrations 0126, 0127 and 0128 are applied only to psrphpgbiifvnlrgvbdg. Transaction checks verified sticky mismatches, blocked direct readiness, administrator release, and duplicate SMS claims, with test changes rolled back. The weight tolerance was unconfigured during initial validation. Neil subsequently selected 1 lb in either direction; it was saved through the admin portal and the empty return-weight field was verified in the laundromat portal. Development SMS remains simulated. No driver was requested or payment made during verification. Independent review and Neil click-test remain pending.
 
 ## 2026-09-29: LYNDRY delivery texts (implementation assigned by Neil)
+
 Use the existing LYNDRY SMS service for delivery updates: retain booking confirmations, add driver on the way/approaching, laundry collected, out for delivery and delivered. Only verified matching live trips generate updates. Customer-side ETA comes from internal tracking, never laundromat arrival ETA for a customer pickup. No tracking URLs, vendor names, partner identity, addresses or driver instructions in these messages. Suppress stale, duplicate and regressing observations across localhost and hosted workers. Record ambiguous sends for review without automatic retries. Preserve STOP, card requirements, billing, dispatch and simulated development SMS. Start with the exact development database; production activation is separate. First observation of a completed trip establishes a baseline without historical messages.
+
 Neil corrected the phone masking proposal: retain the customer phone at their endpoint for driver contact and the business number at the laundromat endpoint. Shipday account tracking/receipt/feedback SMS and email stay off while internal tracking remains available. Do not rewrite active jobs. Independent review and Neil click-test pending.
+
 Photo audit: third-party delivery PHOTO is requested. Mandatory pickup photos and enforcement at both stops in the in-house app remain unverified. Written instructions are not enforcement.
 
 ## 2026-09-29: vendor-neutral customer and laundromat websites
+
 Neil explicitly requires that no third-party vendor names appear to non-employees. Replace public quote, booking, payment, informational and privacy-page vendor references with plain service descriptions; preserve truthful availability and data-sharing disclosures. Remove vendor names from English and Spanish laundromat status/photo messages and from provider-supplied driver labels. Keep actual driver contact available. Suppress vendor-bearing booking errors while retaining diagnostic logs. Employee POS integration controls and integration identifiers remain intact. No payment, routing, dispatch, consent or SMS behavior changes. Regression-test public pages, quotes and both portal languages. Independent review and Neil click-test pending.
+
 Scope limitation: externally hosted card-entry pages and third-party photographic content are not controlled by LYNDRY copy; this change does not replace payment hosting or edit driver photographs.
 
 ## 2026-09-28: arrival estimates shared by booking and assignment
+
 Neil approved replacing the fixed in-house hour with estimated travel plus a configurable loading buffer, default ten minutes. Use the travel segment of Shipday estimates, excluding courier wait, and label it as an estimate. Scheduled quotes verify courier arrivals and buffered in-house arrival against opening hours, cutoff, turnaround and next-day collection; final booking rechecks saved arrival estimates. Explicit in-house assignment refreshes travel estimates or accepts an administrator's Eastern arrival override when needed; validate arrival after pickup and the same shop rules, audit the override, and never rewrite an existing remote job via this control. Third-party assignment continues to use its actual offered arrival and saved budget. Preserve all payment, identity, duplicate and worker gates. No real driver request during verification. Independent review and Neil click-test pending.
+
 Validation: all 1,533 tests pass. Read-only scheduled Shipday preview for September 30 at noon succeeded, with courier arrival at 12:19 and buffered in-house arrival at 12:34 Eastern. No order or driver created. A scheduled quote needs at least one qualifying courier arrival; both vendors remain required for round-trip pricing. The buffer is configurable under Pricing and card holds and is saved with new pricing policies.
 
 ## 2026-09-28: hosted development manual pickup assignment
+
 Neil reports order #9018 blocked by the environment on pos-dev.lyndry.com. Permit explicit manual pickup actions for the exact development database independently of Node mode. Keep automatic enrollment, direct automatic runs, timers and ticks gated to local development mode. Preserve payment, schedule, hours, duplicate and replacement checks, production/unknown database exclusion, and secure hosted cookies. Verify with mocked providers; never assign #9018 during testing. Independent review and Neil click-test pending.
 
 ## 2026-09-28: customer wholesale switch
+
 Neil requests a wholesale toggle beside the customer heading. Development admin service.manage users can switch customers.pricing_category between WHOLESALE and ONE_TIME; stale forms must not overwrite a newer setting. New quotes use wholesale economics for either booking plan; both plan estimates also display wholesale terms. Switching off restores plan-based pricing for new quotes. Do not change saved orders, subscriptions, holds, dispatch, or customer consent. Existing pricing_category column is reused; no migration required. Independent review and Neil click-test pending.
+
 Validation: npm test passed all 1,527 tests, including wholesale precedence for both plans, restoring standard subscription pricing, switch state, stale-form rejection and production exclusion. No actual customer classification changed during verification. Local development only; not deployed.
 
 ## 2026-09-28: manual dispatch overrides the automatic pause
+
 Neil explicitly requires a manual order assignment to override the automatic scheduler's live/paused setting. Manual enrollment and every pre-write validation bypass only that setting, scoped to the administrator's request; do not resume the scheduler or change environment activation, payment, schedule, hours, identity or duplicate-request checks. Continue polling accepted jobs while automatic dispatch is paused, but do not create/retry planned jobs automatically. No real driver request as part of testing.
 
 ## 2026-09-28: edit individual pickup details
+
 Neil assigned development implementation: explain the dispatch refusal, edit address/date/time/pickup location/service/wash choices from the order page, and remove all six stage-rail cells. Development dispatch is currently paused; report that specific refusal without resuming it. Order edits must preserve the customer's home and other orders, use an order-scoped address, recheck coverage/hours and quote, keep wholesale classification and fixed Standard detergent, and commit details/pricing/audit atomically. Service selection changes this pickup's pricing only, not recurring scheduling. Reject stale forms, past times, collected orders and existing/processing courier jobs; never silently alter an active driver's instructions. Migration 0124 adds only the guarded edit function, applied to development. Rolled-back database tests verified successful atomic edit, stale snapshot rejection and active-dispatch rejection; no order edits or driver actions retained. Independent review and Neil click-test pending.
 
 ## 2026-09-28: Shipday pickup assignment controls
+
 Follow-up: always show the Shipday selector on the individual order, including when no dispatch plan exists. An explicit Assign may prepare that one eligible quoted order without broad automatic enrollment; retain current schedule/payment checks and report their exact refusal. Remove Manage pickup entirely in development. Place Cancel pickup next to the customer heading, opening the existing reason/notification choices in a dialog. Do not cancel or dispatch #9017 during verification; its pickup time is past.
+
 Follow-up verification: 1,503 tests passed; the dialog-only adjustment also passed the 21 order-console tests. Browser verification on #9017 confirms Automatic third-party assignment and the actual Shipday LYNDRY option, an enabled Assign button, no Manage pickup section, and the header cancellation dialog opening/closing without submitting. No assignment or cancellation was performed. Google address autocomplete was discussed separately and is not implemented in this change.
+
 Neil explicitly assigned implementation in development. Keep only cancellation in Manage pickup; move driver selection to Customer pickup. Load in-house choices from Shipday, never POS team users, with third-party courier as the other choice. Preserve card, authorization, hours, schedule and saved courier budget checks. Verify the exact remote order and current status, require explicit replacement consent, confirm release before requesting a replacement, and pause uncertain writes without duplicate retries. Assignment requests are not confirmed drivers until Shipday readback confirms them. Poll in-house assignments through order details; treat authoritative failed/canceled order states ahead of stale on-demand details. Disable the old development team/transport POST actions. Keep production and return dispatch unchanged, including existing environment activation gates. Tests use mocked vendors; do not request real drivers as verification. Independent review and Neil click-test pending.
 
 Validation: npm test passes all 1,501 tests, including mocked driver replacement, cancellation uncertainty, duplicate requests, failed-pickup readback, authorization/origin checks and cancellation-only management rendering. No vendor mutations were used for testing. Local port 3000 was not listening at browser verification, so Neil's click-test remains pending. Changes are in the development checkout on codex/shipday-pickup-assignment; not yet deployed.
 
 ## 2026-09-28: hosted development POS parity
+
 Neil requested that Keen Hope's pos-dev.lyndry.com show the same POS as pos.localhost:3000. Use the exact known development database identity for POS navigation, pickup dispatch display, portal access/layout and development checkout eligibility, independent of NODE_ENV. Preserve production-mode HTTPS cookies and other runtime security behavior. Hosted portal administrator links use the configured POS host rather than localhost. Keep separate real courier mutation/worker gates unchanged so a presentation deployment does not activate another dispatch worker. No database migration or manual courier actions. Test both Node modes, production/unknown database exclusion and portal links; independent review and Neil click-test pending.
 
 ## 2026-09-28: enable Keen Hope POS domain
+
 Neil configured pos-dev.lyndry.com on Keen Hope and requested implementation, commit and push to dev. Recognize that hostname as the POS automatically for the known development database, regardless of NODE_ENV. Allow an explicit POS_HOST hostname override; retain pos.lyndry.com as the production default and pos.localhost for local work. Keep customer links on APP_BASE_URL, shared staff authorization, host-only cookies and existing child paths. Test host separation, login and actions. Independent review and Neil click-test pending.
 
 ## 2026-09-28: retire localhost ops URLs
+
 Neil requested removal of localhost:3000/ops and every child URL. Return HTTP 410 for all methods under /ops on the localhost website before staff handlers execute. Keep pos.localhost pages, authentication, actions and internal API aliases working through the shared handlers. This supersedes local legacy URL compatibility only; Railway and live host behavior are outside this change. No database, payment, messaging or dispatch changes. Regression tests required; independent review and Neil click-test pending.
 
 ## 2026-09-28: automatic scheduled Shipday pickup booking
+
 Neil explicitly requested implementation after reviewing #9016: after booking and payment checks, create the real scheduled Shipday pickup and initiate Uber/DoorDash assignment without waiting for pickup time. Preserve the selected Eastern pickup time, photo-only proof, saved price and courier budget. Create once, retain the remote ID, distinguish awaiting driver from confirmed assignment, retry only known-safe failures, and pause uncertain mutations for review. Preserve existing card/authorization rules; never advance payment timing or activate production. Scope activation to new development bookings plus explicit recovery of #9016 if its pickup is still valid; do not backfill historical/simulated trips. This supersedes the previous simulation-only pickup restriction, not the return workflow. Show dispatch status/problems in POS. Laundromat incoming rows/counts require current verified driver assignment and must show scheduled arrival date/time separately from live ETA. Tests and development verification required; independent review and Neil click-test pending.
 
 Development verification: migration 0123 validated in a rolled-back transaction, then applied alone. New-booking activation enabled; only existing #9016 was recovered. Shipday job 54009697 scheduled for 4:00pm Eastern, target arrival 4:17pm, DoorDash request accepted at 19:28:47 UTC for a reported $6.68, within the $6.99 budget. No driver was confirmed at verification. POS showed Awaiting driver and the laundromat incoming count stayed zero. The per-order estimate endpoint returned immediate pickups; scheduled assignment now uses a fresh availability quote with the requested pickup time. No production changes. Review and Neil click-test remain pending.
 
 ## 2026-09-28: remove maximum-charge display
+
 Neil requested removal of the Maximum at 50 lb row from booking review. Remove its calculated amount and references in confirmation/login copy. Retain the per-pound rate, operational fee, estimated total, minimum charge and existing 50 lb weight limit. This changes presentation only. Review and Neil click-test pending.
 
 ## 2026-09-28: operating hours follow the serving laundromat
+
 Neil requires each scheduled development order to fit an eligible laundromat's operating hours on pickup day and its ability to release finished laundry the next calendar day. Reject a requested time at/after closing, before opening, during a break, or past the shop cutoff. A shop closed tomorrow cannot fulfill a next-day order; another eligible shop may qualify. Recheck the selected shop and current hours before final booking, and require a fresh quote if it no longer qualifies. Missing or invalid hours do not establish availability. Remove the legacy van's fixed time bounds and end-of-day rollover from development booking controls; exact submitted times must still pass server checks. Checkout currently asks for pickup time, not a customer-selected return time. This does not add a guaranteed travel duration or a return-time selector. Historical orders and van scheduling remain unchanged. Independent review and Neil click-test pending.
 
 Validation: 1,465 tests pass, including actual partner-hour evaluation for 6pm/7pm, split shifts, next-day closure, malformed hours and a shop closing after quote approval. Signup regression exercises the real account HTTP handler for 07410, New York, no eligible shop and provider failure. Read-only development verification of the full Fair Lawn address returned a Shipday-backed quote. No customer or order was created for verification. Review and Neil click-test remain pending.
 
 ## 2026-09-28: prevent false NJ address rejection
+
 Neil assigned a fix for signup rejecting Fair Lawn ZIP 07410 after the public quote accepted the full address. Development address submissions must verify the submitted street, unit, town and ZIP through the existing Shipday quote path, without using stale saved coordinates or the legacy ZIP-only courier check. Distinguish genuine lack of service from failed lookup/provider checks. Preserve validation, saved customer details on refusal, and later schedule/payment/booking guards. Include complete laundromat addresses in the shared service-area query so later courier checks receive real endpoints. Add regression coverage for 07410, out-of-state ZIPs, refusal and temporary failure. Independent review and Neil click-test pending.
 
 ## 2026-09-28: Shipday-verified public quotes
+
 Neil requires the public quote to confirm through Shipday that both Uber and DoorDash currently offer both legs between the customer and an eligible laundromat before showing a price. Missing either courier or either direction excludes that shop; provider failures withhold the price. Use the higher confirmed fee per leg so the displayed economics support either approved courier. These are read-only availability calls: no order, driver request, charge or future promise. Recheck at booking. Remove the public “Refine your estimate” date/time card. This supersedes simulated courier costs for new development quotes; preserve saved quotes and production behavior.
 
 Validation: all 1,462 tests pass. A read-only Shipday check for 16-50 Chandler Dr, Fair Lawn and the active Fancy K Laundry location returned Uber and DoorDash offers in both directions ($6.74 Uber and $7.50 DoorDash per leg). The rendered quote used the conservative $7.50 leg cost, stated that both services were checked, and omitted the refinement card. No Shipday order or driver request was created.
 
 ## 2026-09-28: Laundromat completed-order history
+
 Neil requested a high-level record of work after return pickup is confirmed. Add Completed orders below the three active queues, showing only order number, measured weight and collection date/time (Eastern), newest first, ten per page with older/newer navigation. Scope records to the signed-in shop through its confirmed collection record. Completion means laundromat handoff; never mark the customer delivery complete. Keep customer details, charges, vendor IDs, editing and intake actions out of history. Refresh history with the existing board update. No order mutation, migration or courier request is needed.
 
 ## 2026-09-28: Return delivery time target
+
 Neil flagged the four-hour requested-delivery offset on the in-house return. Replace it with a 30-minute target after the requested pickup instant. This is a scheduling target, not a travel-time estimate or confirmation of pickup. Preserve Shipday live ETA and custody checks. Correct the existing development #9015 return in place only if Shipday confirms the same pre-start in-house assignment; do not create, reassign or cancel a trip.
 
 Validation: all 1,456 npm tests pass, including an exact 30-minute requested pickup-to-delivery interval. Shipday return #54002936 changed from NOT_ACCEPTED to STARTED during verification; the pre-start guard refused the existing-order edit, so its original schedule and driver remain unchanged. New return requests use the corrected target. Local development correction on codex/return-delivery-target; not yet committed or pushed.
 
 ## 2026-09-28: In-house return collection in development
+
 Neil assigned implementation: Ready to return requests a real Shipday return trip from the laundromat to the customer, assigned to the single active/on-shift in-house driver. Existing ready simulated records offer Request return driver. Never book a third-party courier here. Require completed verified intake, readiness, and settled/waived payment. Preserve shop scope and administrator audit identity. Claims, stable references, saved remote IDs and readback prevent duplicate requests; uncertain mutations require review.
 
 Ready rows show order, weight, driver/contact, collection status and pickup-location ETA, refreshed every 30 seconds. Do not substitute customer-arrival ETA. Original incoming delivery photo remains available on collection detail. Confirm picked up requires fresh matching Shipday order, endpoint and assigned-driver evidence of pickup, then atomically stamps collection and moves READY to OUT_FOR_DELIVERY. Replays are harmless. No customer information enters the portal. This supersedes the earlier simulated-return-only limitation for explicit development in-house requests. Production and third-party dispatch remain disabled. Independent review and Neil click-test pending.
@@ -224,49 +381,65 @@ Ready rows show order, weight, driver/contact, collection status and pickup-loca
 Validation: 1,456 npm tests pass. Migration 0122 passed rolled-back database checks for shop/staff/admin scope, endpoint/driver/plan identity, fresh pickup evidence, payment state and idempotent audit before application only to development. Browser verified #9015’s incoming Shipday delivery image loads (including Shipday’s image/jpg alias), no intake checkbox, and the ready-order request control. No live return was dispatched or collected during verification. Independent review and Neil’s return-flow click-test are still pending.
 
 ## 2026-09-28: Shipday delivery photos on laundromat intake
+
 Neil requested the driver's delivery photo on the order intake screen and removal of the handover checkbox and its sentence. Show the verified incoming leg's delivery photos beside the weight form, with full-size viewing and an explicit missing/unavailable state. Incoming rows show Delivered / Awaiting intake and a photo link when available. Keep the same incoming photos visible on the order after intake. Photos are served through the authenticated shop/order scope; do not expose vendor payloads, customer pickup photos, return-to-customer photos, addresses or tracking links. Validate remote order ID/reference and destination before exposing any photo. Only the weight form's explicit Accept laundry submission records receipt; a delivered status or photograph never auto-intakes or reveals instructions. Remove the separate handover confirmation requirement, retaining fresh delivery verification, CSRF, weight limits, actor checks and atomic receipt. This supersedes the checkbox requirement in earlier intake decisions. Development only; do not intake #9015 or alter payments/dispatch during verification.
 
-
 ## 2026-09-28: refresh the laundromat board every 30 seconds
+
 The laundromat laundry board must fetch current order status, driver and ETA data every 30 seconds without reloading the page. Replace only the live board region so the search field and any attendant input outside it remain untouched. If refresh fails, label ETA data unavailable and disable intake links until a later successful refresh. Keep the manual Refresh orders control.
+
 ## 2026-09-28: dispatch return delivery from a ready order
+
 Neil requested direct dispatch controls on a READY order when no driver is assigned. On the POS order page, show a prominent Return delivery card with separate third-party and active in-house driver choices. The action creates or reuses the durable Shipday TO_CUSTOMER plan and requests the chosen assignment through the existing dispatcher. Recheck order status, settled or waived payment, active in-house availability, existing assignment state, addresses, destination, card/payment eligibility and live-dispatch restrictions at action time. Never replace an assigned or uncertain driver from this shortcut; send those cases to Shipday assignments for review. Showing the card does not book a driver. Development simulation must say that no real driver is requested. No production activation, payment, SMS or automatic dispatch change.
 
 ## 2026-09-28: retire separate spending approvals in development
+
 Neil explicitly chose “Retire the approval workflow throughout.” Remove spending-limit screens, proposals and approval holds from booking, intake, dispatch and payment. Checkout still confirms the displayed price; actual weight uses the saved rate, operational fee and inclusive minimum, with the existing 50 lb ceiling. Weight or courier-cost variance does not silently change the rate. An authorized POS destination change immediately saves the recalculated quote and updates the visible price; no separate customer approval is requested. Archive old pending proposals without recording fictional customer consent; preserve historical audit records. Existing pending proposals are archived; effective prices remain in place until an explicit destination change, without inventing weight or a final bill. Preserve authentication, card/hold checks, payment replay protection, settled-payment requirements, verified receipt and live-dispatch restrictions. No payments, messages or driver bookings as part of migration. This supersedes prior spending-limit and revised-price approval rules for this development flow. Main/production unchanged; independent review and user click-test pending.
 
 Validation: all 1,439 npm tests pass. Development migration 0121 applied after transaction tests for history preservation, disabled old RPCs, quote linking without a cap, immediate destination pricing, stale-price rejection, weight bounds and settled-payment replay. Fixtures rolled back; migration sent no messages, payments or courier bookings. Browser verified the account banner/texting removal, collapsed charge disclosure and reveal, equal contact-button baselines, centered pricing form and homepage button navigation. Screenshots saved. Independent review and Neil’s click-test remain pending.
 
 ## 2026-09-28: customer account and contact-page presentation
+
 Neil requested removing the account spending-approval notice and texting prompt, making past-order charges less prominent, and aligning the three contact actions. Past charges stay available in a collapsed View charge disclosure. The presentation changes do not alter historical charges. The separately approved workflow retirement is documented above. Development only.
 
 ## 2026-09-28: center the pricing address form
+
 Neil requested centering the address card on the development /pricing page. Add automatic inline margins to its existing bounded-width form; retain input alignment and responsive sizing. The homepage Check my price button links to /pricing, as requested. No pricing or submission behavior changes.
 
 Validation: 1,445 npm tests pass. Migration 0120 applied only to development. Rolled-back database fixtures verified atomic receipt and weight, no partial writes on invalid/unverified/future deliveries, staff isolation, audit actors and replay protection. Browser verified all three tables, real #9015 locked pending pickup, and timed refresh on the signed-in Cedar Lane portal. A separate localhost-only fictional order exercised weight submission, wash reveal and both queue transitions; no real order was intaken. Temporary test server stopped. Public tracking feed verified read-only; driver contacts come from the official API, ETA fallback is display-only and fails to Unavailable. Main/production and live courier assignments unchanged. Independent review and Neil click-test remain pending.
 
 ## 2026-09-28: three-section laundry board and combined intake
+
 Neil explicitly assigned development implementation. Show Incoming deliveries, Ready to wash and Ready to return as separate tables. Incoming rows show anonymous LYNDRY order number, driver/contact, status, destination ETA and Intake. Refresh the open board every 60 seconds without touching intake forms. Prefer documented Shipday driver fields; use its public tracking feed only for sanitized supplemental ETA/contact, never eligibility. Keep tracking/customer payloads and raw IDs out of the portal. Missing, failed or stale data is explicit and never authorizes receipt.
+
 Intake submits full-order weight and physical handover confirmation together, rechecks the matching collected Shipday leg and current shop, then records receipt/weight atomically and reveals wash instructions. Remove the separate acceptance/awaiting-intake stage. Retain weight bounds, actor/shop checks, replay safety, customer privacy, payment and return-dispatch guards. Ready to return marks existing intent, not a driver booking promise. This supersedes the previous two-stage receipt flow. Development only; no main/production changes or live courier mutations. Review and user click-test pending.
 
 Verified receipt validation: all 1,439 npm tests pass. Regression checks cover assignment/start versus collection, future dates, wrong remote ID/reference/destination, provider outage, third-party collection confirmation, stale or forged acceptance requests, all-role enforcement, and weight-only intake without wash-data leakage. Database transaction tests cover stale evidence, destination/schedule changes, shop isolation, verified receipt replay, weight bounds and intake replay; fixtures rolled back. Migration 0119 applied only to development. Order 9015 had an unweighed, unverified receipt while Shipday 53977334 remained NOT_ASSIGNED; restored it to REQUESTED with partner_id/at_partner_at cleared, preserving intended Cedar Lane destination and original intake/audit history. Browser verified disabled acceptance and no false success notice. Main/production unchanged; independent review and Neil click-test pending.
+
 ## 2026-09-28: verified laundromat receipt; weight-only intake
+
 Neil requires a fresh Shipday collection confirmation for the exact linked pickup and current destination before receipt. Assignment/STARTED alone never qualifies. Future pickup dates, unknown/canceled/failed deliveries, provider outages and mismatched destination stay locked for every role including POS admins. Require attendant confirmation of physical laundry and matching anonymous reference. Persist short-lived server evidence and enforce it again atomically in the intake transaction. Remove internal ticket collection/search/display; keep historical values stored. Weight alone after verified receipt unlocks wash instructions. Correct only demonstrably premature, unweighed #9015 receipt with an audit event. No driver dispatch, charges, messages or production changes. This supersedes the earlier assigned-only acceptance and mandatory ticket rules.
 
 Validation (development, 27 September): 1,434 npm tests pass. Transaction tests verified order/customer/partner update triggers, changes arriving during an in-flight synchronization, explicit reconciliation after failure, and exclusion of simulated trips; fixtures rolled back. Shipday order 53977334 (LYNDRY-DEV-9015-PICKUP) was updated in place and read back: 25 Windham Pl, Glen Rock to Meadowlands Wash, 900 Paterson Plank Rd, Carlstadt; 9am Eastern pickup; laundromat phone +12017712933; front-door note in deliveryInstruction. It remains unassigned, as found; no driver booked/canceled, no new order, no fee/payment change. Shipday ignores pickupInstruction on edit and geocodes address coordinates; verify the documented deliveryInstruction and returned addresses. Dev migration 0118 applied. Sync status verified in POS. Earlier order overview/pricing changes passed 1,428 tests plus transactional approval tests (no invented weight/final bill); customer field actions verified on profile. Main/production unchanged. Independent review and Neil click-test remain pending.
+
 ## 2026-09-27: synchronize existing Shipday delivery details
+
 Neil requested that delivery-affecting POS changes update the linked Shipday order, including correcting #9015. Queue changed order destination, pickup time/location and customer/partner contact/address data durably. Update and read back the same remote ID; never create a duplicate, assign a courier, cancel or change provider. Development permits only linked LYNDRY-DEV references. Pre-start in-house/unassigned edits may sync; active third-party trips or started/closed trips require visible dispatch review. Failures remain visible and require reconciliation. Supersedes the earlier no-external-assignment-update limitation for delivery details only. Existing customer price approval remains separate. Main/production unchanged.
 
 ## 2026-09-27: order overview and destination pricing
+
 Neil assigned implementation: show pickup/order details, destination and customer pricing prominently; keep customer field actions on the customer profile. Destination changes on unpaid pre-handover development orders create a revised price proposal using the approved quote policy/category and current eligible shop costs. Preserve approved terms until customer approval. Approval must not invent an actual weight or final bill. No automatic change to existing third-party dispatches. No messages sent by this change. Main unchanged; review/click-test pending.
 
 ## 2026-09-27: keep portal staff management inside the portal
+
 Neil requested no portal navigation into the LYNDRY backend for any role. Replace the admin Staff redirect with the same shop-scoped staff screen and attendant management used by owners. Remove the Back to laundromat POS link. Logout returns to the shop sign-in, not POS. Keep authorization, CSRF, and shop scope enforced; no role promotion from the portal.
 
 ## 2026-09-27: POS administrators can open every laundromat portal
+
 Neil explicitly assigned implementation. Active POS ADMIN accounts, including his 443-745-2665 account, can open each shop from its partner page using their verified POS session. Do not hardcode a phone bypass, create partner-owner records, impersonate an attendant, or broaden sales/driver access. Shop URLs scope each tab and all order actions. Preserve staff-only access to their own shop, existing intake/payment/dispatch rules and audit each admin action as that administrator. This supersedes the earlier instruction to add yourself as a shop owner. Development only; main is unchanged. Review and Neil click-test pending.
 
 ## Current: retire obsolete development POS screens
+
 Neil explicitly assigned implementation. Hide Your route, Couriers, How it all works, and What happens to a bag, omit empty navigation groups and the legacy Driver progress section. Authenticated old route/courier screens redirect to Shipday; resource screens redirect to Orders. Preserve delivery backend handlers, payment and reminder behavior. Development only; no main changes or deployment. Review and Neil click-test remain pending.
 
 # Current work — laundromat receipt and intake (27 September 2026)
@@ -330,7 +503,9 @@ Limitations: dispatch uses a labeled development simulator; live writes remain d
 # HANDOFF
 
 Issue: Audit-fix — collect door, hold page, select lists  
+
 Owner of the keyboard: Neil  
+
 Status: implemented locally; branch `fix/audit-hold-doors` cut from current main. Apply the patch, then click-test. Do not merge to main yet.
 
 ## Goal
@@ -340,17 +515,25 @@ Close the eight holes from the 15 September repo audit. Do not touch QR, clips, 
 ## What must land (patch in the Grok project: artifacts/fix-audit-hold-doors.patch)
 
 1. `fulfilment.collect()` uses `dispatch.collectRefusal()` + `heldCustomerIds()` — sibling hold and refused show-up hold refuse at the mutation, not only on the board.
+
 2. `issues.ensurePaymentHold()` + `billing.ensureExistingHolds()` so already-FAILED in-hand rows page once. `markFailed()` uses balance, not price.
+
 3. `heldCustomerIds()` selects `amount_paid_cents`.
+
 4. Board `inHand` includes `AT_PARTNER` so a plant-floor hold is named.
+
 5. `chargeOrder()` comment no longer teaches deliver-and-chase for in-hand laundry.
+
 6. Reminder skip log names `show-up hold refused` instead of `no card on file`.
+
 7. `DECISIONS.md` live pricing line: $2.00 / $1.80. $39-bag notes stay historical.
 
 ## Must not happen
 
 - Do not commit to main until Neil click-tests Collected on a sibling of a held order.
+
 - Do not WAIVE #2060.
+
 - Do not start QR, clips, CLEAN50, or $80 auth on this branch.
 
 NEXT — apply `fix-audit-hold-doors.patch` onto this branch (or paste to Claude: implement HANDOFF on fix/audit-hold-doors). Then click-test and merge.
@@ -360,16 +543,27 @@ Validation: npm test passed (1,424 tests). Browser verified all four redirects, 
 Admin portal validation: all 1,426 tests pass. Database transactions verified active admin access, denied sales/driver/disabled and cross-shop requests, audited admin identity, staff compatibility and replay safety; all test data rolled back. Browser opened Fold & Fluff Bergen using Neil's existing POS session. No real order changes, no messages, no deployment.
 
 Portal Staff validation: 1,426 tests pass. Browser verified Cedar Lane Staff renders inside the portal without POS navigation. Covered scoped add/status actions, CSRF rejection, no role injection and portal logout. Fixed the pre-existing partner-staff field mismatch (last_login_at). No staff records or real orders changed.
+
 ## 2026-09-28: staff roles and customer texting controls
+
 Neil requested removal of the backend Driver role from the development Team UI because Shipday owns in-house assignments. Remove driver selection, route/home-base columns, driving/wage/rota controls and admin route copy. Reject new Driver role submissions; preserve existing accounts and historical transport data without reallocating routes on staff edits. Separately, fix the customer opt-out control: replace its script-dependent prompt with a visible required request-note field and explicit Turn off text messages action, clarify validation, preserve the existing one-way consent rule and send no text. These are local changes; review and Neil click-tests pending.
+
 ## 2026-09-28: pricing and card hold settings
+
 Neil requested visible percentage controls and fixed/minimum/maximum authorization holds in development. Add Admin > Pricing and card holds, backed by the existing versioned pricing-policy table. Percentages remain contribution after direct costs, not net profit. Save the selected hold policy in each new quote; minimum uses its inclusive minimum, maximum uses its saved rate and fee at the existing 50 lb ceiling. Existing quotes and holds retain their settings; no retroactive authorization. Disclose the hold before booking and use it in the shared authorization path for quoted development orders. Keep production, capture timing, retry identity and card eligibility unchanged. No live charges or settings changes during verification. Review and Neil click-tests pending.
+
 ## 2026-09-28: reconcile Shipday before pickup edits
+
 Validation: 1,521 tests pass. Migration 0125 installed only in development after rolled-back checks for atomic missing-job detachment and stale-lease rejection. A separate rolled-back test verified existing-job ID and assignment retention. Mocked vendor tests cover in-place editing/readback, missing references, outages, conflicting identities, and unsafe active jobs. Browser verified pricing/hold controls, Team cleanup and visible opt-out note/action. No payment, SMS, Shipday write or order test mutation was retained; settings were not changed. Local code remains uncommitted and has not been deployed to Railway. Independent review and Neil click-tests remain pending.
+
 Neil reports deleting #9017's Shipday job while LYNDRY still blocks edits. A read-only lookup confirmed the stored job 54025642 has no result for LYNDRY-DEV-9017-PICKUP. During Save, claim the dispatch plan, look up its exact reference, distinguish successful absence from outages, and atomically detach a missing job with the order edit. Preserve the old ID in history; do not auto-recreate a deleted job. Explicit Assign can start again. Existing pre-start in-house/unassigned jobs use the edit API and readback with the same ID, preserving assignment. Third-party or started deliveries remain blocked with a specific reason; do not assume editing Shipday forwards changes to Uber/DoorDash. Uncertain updates enter review. Migration 0125 wraps the existing order/payment/quote/concurrency guards. No live courier writes during verification.
+
 ## 2026-09-28: in-house assignment must not depend on third-party availability
+
 Neil hit a generic pre-request failure assigning LYNDRY to #9017. Read-only verification confirmed current payment checks pass, LYNDRY is active/on-shift, and no remote reference exists. The earlier failure did not reproduce, but the in-house path incorrectly depended on Uber/DoorDash availability. Skip that quote for in-house selection while retaining scheduled arrival, laundromat hours, card, identity and duplicate guards. Identify the failed check and safe HTTP status in pre-write errors; manual errors say Try Assign again instead of falsely promising automatic retries. No real driver request made during diagnosis or tests.
+
 ## 2026-09-28: lead the public quote with subscription pricing
+
 Neil requested the dynamic address quote headline use the subscription per-pound rate, clearly labeled Subscription, and the subscription card precede the one-time card. Presentation only; both saved calculations, fees, minimums and booking choices stay unchanged.
 
 Customer interaction validation: npm test passed all 1,595 tests. Browser verified customer scope, 120ms pointer transitions, 0ms keyboard transitions, desktop homepage and 390px pricing form without horizontal overflow. Visible address fields are 16px with approximately 54px height; submit control approximately 46px. Physical phone and independent review remain pending. No business forms submitted.
@@ -387,3 +581,9 @@ Validation: all 1,610 tests passed. New tests cover valid components, approximat
 Spec: remove the inner box around the quote weight number. Preserve a visible focus indicator on the complete weight control. No pricing or payment changes.
 
 Implemented with scoped CSS. Browser verified no inner outline or shadow, visible outer focus, and recalculation at 30 and 31 lb. Other development changes remain outside this commit. Independent review and Neil acceptance remain pending.
+
+Validation for order header actions: 31 focused tests pass; full suite 1669 pass and two preexisting partner portal wording failures. Desktop and mobile browser checks passed. Obsidian updated. No order mutations, commit, push or production release. Independent review pending.
+
+Delivery recovery validation: 27 focused passes; full suite 1679 pass with two existing partner portal wording failures. Migration 0139 applied only in development. Atomic completion and replay tested with rollback. Browser verified dialogs and safe refusal on 9019 address mismatch. Obsidian updated. No actual completion, charge, message, commit or production release. Independent review pending.
+
+20261002 validation: linked pickup and return IDs verified on order 9019; requested toolbar lines absent. Seventeen focused tests pass; full suite 1681 pass and two existing partner portal wording failures. Obsidian updated. No order mutations or production release.

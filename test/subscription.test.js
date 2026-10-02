@@ -457,7 +457,7 @@ test('AND NEITHER DOES A META DESCRIPTION', () => {
     const body = fs.readFileSync(path.join(__dirname, '..', ...bits), 'utf8');
     const where = bits.join('/');
 
-    const descriptions = [...body.matchAll(/description:\s*`([^`]*)`/g)].map((m) => m[1]);
+    const descriptions = [...body.matchAll(/description:\s*(?:config\.supabase\.isDevelopment\s*\?\s*`([^`]*)`\s*:\s*)?`([^`]*)`/g)].flatMap(m => [m[1], m[2]].filter(Boolean));
     assert.ok(descriptions.length, `${where}: no descriptions found - the shape has changed`);
 
     for (const text of descriptions) {
@@ -530,7 +530,9 @@ test('THE SUBSCRIPTION RATE IS THE BIG NUMBER, not the one-time rate', () => {
 
   // How it works: the big figure in the price card.
   const hiw = fs.readFileSync(path.join(__dirname, '..', 'public', 'pages', 'how-it-works.html'), 'utf8');
-  assert.match(hiw, /font-size:56px[^>]*>\{\{SUBSCRIPTION_PRICE_PER_LB\}\}/);
+  assert.match(hiw, /Choose your tier/);
+  assert.doesNotMatch(hiw, /{{(?:SUBSCRIPTION_PRICE_PER_LB|PRICE_PER_LB)}}/);
+  assert.match(hiw, /measured weight/);
 
   // Town pages.
   const towns = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'locations.js'), 'utf8');

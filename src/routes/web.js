@@ -211,7 +211,7 @@ const PAGES = [
     title: 'Home',
     fullTitle: 'Laundry Pickup & Delivery in Bergen County, NJ | LYNDRY',
     head: () => structured.tags([structured.localBusiness(), structured.service()]),
-    description: `Wash and fold pickup in ${site.serviceArea}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, ${site.minimumDisplay} minimum, next-day return. Order online, no app.`,
+    description: `Wash and fold pickup in ${site.serviceArea}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, ${site.minimumDisplay} minimum. Next-day return when available. Order online, no app.`,
   },
   {
     path: '/how-it-works',
@@ -235,7 +235,7 @@ const PAGES = [
           ],
         ]),
       ]),
-    description: `Order online, leave the bag at your door, get it back the ${site.turnaround}. Wash and fold pickup and delivery, weighed after collection. Nobody needs to be home.`,
+    description: `Order online, leave the bag at your door, get it back washed and folded. ${site.returnExpectation} Wash and fold pickup and delivery, weighed after collection. Nobody needs to be home.`,
   },
   {
     path: '/pricing',
@@ -304,7 +304,7 @@ const PAGES = [
           ],
           [
             'How does the price work?',
-            '{{PRICE_PER_LB}} a pound for a one-time pickup, weighed after we pick it up, or {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription with pickups {{SUBSCRIPTION_FREQUENCIES}}. A subscription is a rate, not a membership: nothing to join and no minimum number of pickups. There is no delivery fee. Nothing is charged when you book. Before your first pickup we text you a secure link to save a card. Saving it takes nothing. Your laundry is weighed after we collect it, and that is the moment your card is charged. We text you the weight and the total at the same time, so you are told the figure every time. A typical bag is {{BAG_WEIGHT}}, which comes to about {{ESTIMATE_RANGE}}. There is a {{MINIMUM}} minimum on a paid order and no maximum: send as much as you have in one pickup.',
+            'Choose a subscription or one-time tier and enter your address and estimated bag weight to compare complete prices. Pickup, return and processing are included in weight-based quotes. The displayed average per pound is an estimate: your final total recalculates from measured weight using the saved pricing terms and minimum. Orders can include up to 50 lb. A subscription has no joining fee or minimum number of pickups, and you pay for each pickup. Review the price, minimum and any temporary card hold before confirming.',
           ],
           [
             'What bags can I put it in?',
@@ -312,7 +312,7 @@ const PAGES = [
           ],
           [
             'How long does it take?',
-            'Back to you the {{TURNAROUND}}. Picked up one day, returned the next.',
+            '{{RETURN_EXPECTATION}}',
           ],
           [
             'What if I need to cancel?',
@@ -748,7 +748,7 @@ router.get('/p/:orderId', async (req, res, next) => {
 // worse half of the pair.
 const BERGEN_DESCRIPTION =
   'Laundry picked up tomorrow in Bergen County. Leave the bag at your door ' +
-  'and it comes back the next day washed, dried and folded.';
+  'and we return it washed, dried and folded. Most orders return next day when available.';
 
 // ---------------------------------------------------------------------------
 // /for-laundromats/<token> - the pitch we SEND a laundromat owner.
@@ -907,12 +907,13 @@ router.get('/bergen/sent', (req, res) => {
 router.get('/quote', async (req, res) => {
   if (config.courier.model !== 'DYNAMIC') return res.redirect(302, '/pricing');
 
+  // Look up the building only. Keep the unit separately for pickup details.
   // Pricing submits separate address fields; existing quote links keep working.
   const part = (key, limit) => typeof req.query[key] === 'string'
     ? req.query[key].trim().slice(0, limit) : '';
   let street = part('street', 120);
   let address = street
-    ? [street, part('unit', 60), part('town', 80), (config.googleAddress?.enabled ? part('state', 2) : '') || 'NJ', part('zip', 5)].filter(Boolean).join(', ')
+    ? [street, part('town', 80), (config.googleAddress?.enabled ? part('state', 2) : '') || 'NJ', part('zip', 5)].filter(Boolean).join(', ')
     : part('address', 200);
 
   // The honeypot, same as every other public form: anything that fills it gets
@@ -932,7 +933,7 @@ router.get('/quote', async (req, res) => {
       if (!validatedPlace) result.error = 'not_found';
       else {
         street = validatedPlace.street;
-        address = [street,part('unit',60),validatedPlace.town,'NJ',validatedPlace.zip].filter(Boolean).join(', ');
+        address = [street,validatedPlace.town,'NJ',validatedPlace.zip].filter(Boolean).join(', ');
       }
     } catch (error) { result.error = 'unavailable'; }
   }
@@ -940,7 +941,7 @@ router.get('/quote', async (req, res) => {
     try {
       const place = validatedPlace || await geocode.lookupOnce(address);
       if (!place) throw Error('We could not locate this address. Check the street, town, and ZIP.');
-      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:validatedPlace?.town || part('town',80),postal_code:validatedPlace?.zip || part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME'}, {publicPreview:true,addressEstimate});
+      const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:validatedPlace?.town || part('town',80),postal_code:validatedPlace?.zip || part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME',estimated_weight_lb:part('estimated_weight_lb',6)||30}, {publicPreview:true,addressEstimate});
       result.quote = {ok:true,dynamic:true,indicative:!pickupDate && !pickupTime,...preview};
     } catch (err) {
       if (/No eligible laundromat/i.test(err.message)) result.error = 'unavailable_area';
@@ -963,7 +964,8 @@ router.get('/quote', async (req, res) => {
       fullTitle: `What Laundry Pickup Costs at Your Address | ${site.name}`,
       description: `See wash and fold pricing for your address and pickup schedule, including the fees and minimum total.`,
       path: '/quote',
-      body: readPageBody('quote.html'),
+      body: result.quote?.ok && require('../core/weight-based-pricing').isSnapshot(result.quote.categories?.ONE_TIME)
+        ? '{{QUOTE_RESULT}}' : readPageBody('quote.html'),
       tracking: true,
       extra: {
         QUOTE_FORM: address && !isBot ? '' : readPageBody('quote-form.html').replace('{{ADDRESS_VALUE}}', quoteResult.escapeHtml(address)),
@@ -1291,6 +1293,12 @@ router.get('/llms.txt', (req, res) => {
     '',
     '## What it costs',
     '',
+    ...(config.supabase.isDevelopment ? [
+      '- Enter your address, select subscription or one-time pickup, and estimate your bag weight',
+      '- Quotes include pickup, return and payment processing, with a monetary minimum',
+      '- The displayed average per pound is an estimate; the total recalculates at measured weight under your saved quote terms',
+      '- New weight-based quotes accept orders up to 50 lb',
+    ] : [
     `- ${site.pricePerLb} per pound for a one-time pickup, weighed after pickup`,
     `- ${site.subscriptionPricePerLb} per pound on a subscription, with pickups ${site.subscriptionFrequencies}`,
     `- ${tokens.MINIMUM} minimum on a paid order`,
@@ -1298,14 +1306,15 @@ router.get('/llms.txt', (req, res) => {
     `- A typical bag is ${site.typicalBagWeight}, which comes to about ${site.estimateRange}`,
     '- No delivery fee',
     '- No membership. A subscription is a lower rate, not a club: nothing to join, no joining fee, no minimum number of pickups',
+    ]),
     '',
     '## How it works',
     '',
-    `- Back to you the ${site.turnaround}`,
+    `- ${site.returnExpectation}`,
     '- There is no app to download',
     '- You do not need to be home. Leave the bag where you tell us to leave it, and that is where it comes back',
     '- Wash, dry and fold only. No dry cleaning, pressing or alterations',
-    '- Nothing is charged when you book. Your laundry is weighed and that is when the card is charged',
+    '- Review the temporary card hold before confirming. Final billing follows weighing and your saved quote terms',
     '',
     '## How to book',
     '',

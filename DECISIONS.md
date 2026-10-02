@@ -1,3 +1,80 @@
+## 20261001 Customer pricing base restored for new quotes
+
+Neil explicitly confirmed that the customer pricing base must drive customer quotes and destination comparisons. This supersedes the actual wholesale pricing basis for new development quotes. Keep three distinct rates with identical labels on edit and profile: Laundromat walk-in rate, Our laundromat cost per lb, and Customer pricing base per lb. Walk-in is reference only. Our laundromat cost remains the supplier payment and actual profit basis. Customer pricing base replaces only the washing input to the inclusive customer formula. Keep delivery, processing, tier targets, the 18 lb minimum and 50 lb maximum. If the base is blank, explicitly disclose the existing fallback to our laundromat cost. The target is a pricing margin on the selected base; actual contribution may differ.
+
+Version the new pricing basis in the policy and saved quote. Existing accepted snapshots retain their old calculation even if a historical snapshot contains a customer base field. Freeze both rates for new orders. Update application and atomic database billing consistently, preserve payment and dispatch behavior, and test quoting, minimums, ranking, measured-weight billing, real cost reporting and legacy snapshots. Activate only development. Update Obsidian. Independent review and Neil acceptance remain pending.
+
+## 20261001 Home hero follows the new receipt reference
+
+Neil requested the attached four line hero and two action layout, replacing his earlier three line heading and giant price button decision. Keep the brand typography, green bubbles and offset lavender receipt. Book a pickup is primary and Check my price is a prominent secondary action. The example is visible on phones after the actions, with readable order progress rather than unlabelled dots.
+
+The reference artwork is visual direction, not an instruction to restore old prices or guaranteed turnaround. The card explicitly labels an illustrative 30 lb subscription total of $40.86, with a rounded average of about $1.36 per lb, using the current development formula. A regression checks the illustration against frozen example costs. It is not a price promise for every address. Pickup, return and processing say Included; next day return remains conditional. No order identifiers, customer data or new offers are invented. Development only.
+
+## 20261001 Eighteen pound minimum and thirty pound starting quote
+
+Neil explicitly replaced the fixed $28 minimum with an 18 lb minimum for new development quotes. Calculate each destination and tier minimum from its existing inclusive cost formula at 18 lb, save that dollar amount in the quote, and charge that minimum for smaller bags. Keep the displayed minimum order rate equal to that total divided by 18 below the allowance. Above 18 lb, calculate from actual weight. Keep the 50 lb maximum, existing category targets, cost inputs and payment flow. Existing accepted snapshots keep their saved minima and bills.
+
+Default new estimates to 30 lb while preserving an explicitly selected weight. Show subscription and one time rates at both ends of the slider: up to 18 lb and at 50 lb. Apply the minimum to public quote, booking, saved review and final billing through the shared snapshot calculation. Admin pricing settings edit minimum weight instead of a universal dollar floor for this policy. The page keeps the customer brand, one heading, compact weight controls, aligned tier cards and visible full totals. This supersedes the $28 instruction below. Development only. Update Obsidian, regression tests, database parity checks and desktop and mobile browser verification.
+
+Implementation verified on 20261001: migration 0137 is active only in development. Minimum prices are frozen at 18 lb for new quotes; earlier accepted snapshots retain their minima. Public comparison and confirmed destination minima are separately tested. New estimates start at 30 lb, endpoint labels show both tiers, and weight controls and minimum boundaries work. Twenty one focused regressions pass; npm test reports 1,659 pass and two preexisting unrelated partner profile wording failures. JavaScript and database totals matched across 1,944 cases. Physical phone checks, Grok code review and Neil booking click testing remain pending. Obsidian Development Updates, Pricing and Promotions, Decisions and Log updated. No commit, push or production release.
+
+Fresh Impeccable finish review returned ship for the quote page refinement, with no material visual fixes. This is separate from Grok code review and production readiness. Existing design tokens remain authoritative. Lower mobile review used a full page capture with a known right edge crop, supported by a valid upper viewport capture and measured balanced gutters. A physical phone check remains pending. Wholesale booking labels use only their own tier; the public comparison remains subscription and one time.
+
+## 20261001 Minimum order rate display
+
+Neil explicitly requested that the per pound headline remain fixed below the weight covered by the monetary minimum. Keep the configured $28 minimum. Derive the included weight independently for each tier from the existing rounded pricing calculation, conservatively to hundredths of a pound and capped at 50 lb. Below that weight, show minimum divided by included weight as a Minimum order rate, alongside the full minimum total and included allowance. Above it, show the calculated total divided by selected weight. Do not call the capped figure the actual average for a smaller bag.
+
+Apply the same presentation to public quotes, booking plan selection and quote review. Preliminary comparisons use their eligible destination price schedule; accepted quote review uses the saved destination and cost terms. If the minimum does not cover even one pound, show the actual estimate without inventing an allowance. Preserve billing totals, cost targets, payments, routing and accepted snapshots. This supersedes the earlier instruction to display actual average per pound below the minimum. Development only. Update Obsidian and verify minimum boundaries and slider interaction.
+
+## 20261001 Weight based inclusive pricing in development
+
+Neil explicitly requested implementation of the weight based workbook model. This supersedes the customer base rate and separate fee model for NEW development quotes only. Existing accepted snapshots retain their calculation. Use actual laundromat wholesale cost, both quoted courier legs, payment processing and configurable other costs. Targets are subscription 10%, one time 20% and wholesale 5%. The inclusive monetary minimum is $28 and the maximum order weight is 50 lb. Round totals upward and verify the target against rounded processing costs. Account for the existing hold plus balance settlement when estimating processing; do not change the card flow.
+
+Customers choose estimated weight from 1 to 50 lb. Show subscription first, an inclusive estimated total and the effective average per pound, with delivery and processing included. Recalculate from measured weight using frozen costs and policy, not the estimate's displayed average rate. The minimum can produce a higher margin for small bags. Do not advertise $2 as a universal ceiling. Compare eligible destinations at the chosen weight. No partner costs or internal targets in public calculator data. Discounts cannot undercut the new model's minimum or modeled target; explicit waivers retain their existing behavior.
+
+Update quoting, booking, consent, confirmation, saved order displays, actual weight billing and database weighing together. Retain order access, payment, dispatch and no card safeguards. Verify integer and fractional weights, all tiers, minima, estimated versus actual weight, rounding, legacy snapshots and destination selection. Development only. No production activation or merge. Independent review and Neil click testing remain pending.
+
+Implementation and validation on 20261001: Development policy WEIGHT_BASED_MARGIN_V1 is active through migration 0136. The quote and booking use inclusive tier estimates, and measured weight billing uses frozen cost terms. Fixed or minimum holds reserve two fixed processing fees; minimums and rounding can exceed the target. Application and database totals matched across 1,944 cases. Nine new pricing regression tests pass. Full suite: 1,648 pass and two preexisting laundromat profile wording failures. Desktop, mobile, keyboard, minimum, maximum and invalid weight browser checks passed. No payment or dispatch was submitted. Public pricing explanations and order summaries were aligned. Obsidian Development Updates, Pricing and Promotions, Decisions, Index and Log were updated.
+
+Only the new development migration was applied. Historical migration ledger inconsistencies were not replayed or repaired in this change. No implementation commit, push or production release. Independent review and Neil's final click test remain pending.
+
+
+## 20261001 Resolve weight holds and request return dispatch
+
+Neil explicitly authorized connecting issue resolution to laundromat hold release and automatic return dispatch. For an identified weight issue, administrator resolution releases the recorded hold, marks completed laundry ready, closes the issue and attempts the existing guarded return request. Already resolved issues offer recovery. Failed release or readiness prevents closure. Payment, assignment and duplicate dispatch checks remain enforced. Uncertain remote writes still require review rather than another driver request.
+
+All 1640 tests pass, including five resolution regression tests. Development order 9020 is RELEASED and READY. Its existing return trip was verified against the saved reference, driver and both endpoints and is reported delivered by Shipday. A stale local dispatch review from the earlier failed verification was reconciled without a remote write or marking the customer order delivered. Local development only. Not committed, pushed or shipped. Independent review and Neil click testing remain pending.
+
+Source: Neil's request and repository, test and development database verification on 20261001.
+
+## 20261001 Laundromat escalation contact correction
+
+Neil corrected the weight hold call button to use the business contact number and the label Call this number, without a personal name. Updated the development configuration and shared board and order detail button, including Spanish wording. This supersedes the earlier personal contact instruction. No hold or release behavior changes. Local development only, not committed or pushed.
+
+Source: Neil's browser annotation on 20261001.
+
+## 20261001 Visible laundromat weight holds
+
+Added red mismatch notifications to the laundry board and order detail, displaying incoming and outgoing weights only after a return hold. Replaced normal return actions with a direct Call Neil button and instructions to double check bags and scale readings and retain the laundry until LYNDRY resolves the hold. English and Spanish are supported. The private escalation number is configured for authenticated portal alerts and is not added to public pages. This is Neil's explicit exception for private portal escalation. Existing tolerance and release rules remain unchanged.
+
+All 1635 tests pass. Browser inspection confirmed the held order and direct telephone destination. No call was placed. Local development only, not committed or pushed. Independent review and physical phone click testing remain pending. Source: Neil's screenshots and request on 20261001.
+
+## 20261001 Conditional next day website wording
+
+Neil requested that customer website language stop promising next day returns. Shared wording now says: Most wash and fold orders return next day when available. Updated the homepage, booking copy, shared footer, FAQ, how it works, landing pages, service area pages and search descriptions. Operational turnaround values and scheduling rules are unchanged.
+
+All 1629 tests pass. Local development only, not yet committed or pushed. Independent review and final click testing remain pending. Source: Neil's request and development verification in this conversation on 20261001.
+
+## 20261001 Revised transportation fee calculation
+
+Neil explicitly approved transportation divided by one minus category margin, rounded to the nearest cent. This supersedes the previous transportation formula that included percentage and fixed processing costs. Laundry rate calculation is unchanged. Operational allocation is the saved policy percentage, currently 25%, of the adjusted fee total. Service allocation is $1.99 and delivery is the remainder. The allocations are not added again. Low totals cap allocations to prevent negative delivery.
+
+New quote snapshots carry TRANSPORT_MARGIN_V2. Existing accepted snapshots retain their original prices and old fee allocation. The inclusive $15 minimum, final weight billing and category selection remain. Actual processing costs still appear in cost reporting, so the fee target is before transportation processing costs and does not guarantee net profit.
+
+For $13.98 transportation, subscription fees are $15.53 with delivery $9.66, operational $3.88 and service $1.99. One time fees are $17.48 with delivery $11.12, operational $4.37 and service $1.99. Wholesale fees are $14.72 at a 5% target. All 1629 tests pass including billing settlement, rounding, legacy snapshots and low fee cases. Browser confirmed both public quote examples. Development implementation only, not yet committed or pushed. Independent review and final click testing remain pending.
+
+Source: Neil's exact formulas in this conversation on 20261001 and development verification.
+
 ## 20260930 Independent laundromat customer pricing base
 
 Neil approved a third laundromat rate in admin. Wholesale remains the rate the laundromat charges LYNDRY and continues to drive partner payables and actual washing cost reporting. Retail remains the walk in reference. Customer pricing base is separately editable and drives new customer quotes before the existing category margin and processing calculation.
@@ -870,3 +947,7 @@ Neil replaced the courier PIN and LYNDRY bag-label/count model for the new devel
 Neil assigned implementation: Ready to return requests a real Shipday return trip from the laundromat to the customer, assigned to the single active/on-shift in-house driver. Existing ready simulated records offer Request return driver. Never book a third-party courier here. Require completed verified intake, readiness, and settled/waived payment. Preserve shop scope and administrator audit identity. Claims, stable references, saved remote IDs and readback prevent duplicate requests; uncertain mutations require review.
 
 Ready rows show order, weight, driver/contact, collection status and pickup-location ETA, refreshed every 30 seconds. Do not substitute customer-arrival ETA. Original incoming delivery photo remains available on collection detail. Confirm picked up requires fresh matching Shipday order, endpoint and assigned-driver evidence of pickup, then atomically stamps collection and moves READY to OUT_FOR_DELIVERY. Replays are harmless. No customer information enters the portal. This supersedes the earlier simulated-return-only limitation for explicit development in-house requests. Production and third-party dispatch remain disabled. Independent review and Neil click-test pending.
+
+## 20261001 Admin delivery recovery
+
+Neil authorized recovery actions at the top of an order. For development orders out for delivery, an admin may reconcile a verified Shipday return with proof or manually record completed delivery with photo, attestation and reason. Require paid or waived payment; transaction locks the order and checks current evidence. Recovery records the current confirmation time and audit reason, does not invent an earlier delivery time, and does not charge or resend messages. Existing edit and cancellation guards remain. This supersedes reliance on the legacy driver task list for admin completion of Shipday orders.

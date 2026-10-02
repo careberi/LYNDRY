@@ -107,7 +107,7 @@ function howItWorks() {
         <span class="icon-tile icon-tile-52">${icon('package-check', '26')}</span>
         <h3 style="font-family:var(--font-display);font-weight:800;font-size:20px;margin:18px 0 8px;">Get it back</h3>
         <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
-          Washed, folded and back at the same spot the ${escapeHtml(site.turnaround)}.
+          ${escapeHtml(site.returnExpectation)} Returned washed and folded to the same spot.
           We text a photo when it is down.
         </p>
       </div>
@@ -119,6 +119,18 @@ function howItWorks() {
 }
 
 function priceBlock() {
+  if (config.supabase.isDevelopment) return `
+  <section class="dotfield">
+    <div class="container section" style="max-width:900px;">
+      <p class="eyebrow eyebrow-brand">Pricing</p>
+      <h2 class="display-3">Your bag. Your tier. One inclusive price.</h2>
+      <p>Enter your address and estimate your bag weight to compare subscription and one-time pickup.
+      Your quote includes pickup, return and payment processing, with a monetary minimum.</p>
+      <p>New weight-based quotes accept up to 50 lb. The average per pound is an estimate.
+      Your final total recalculates at measured weight using your saved quote terms.</p>
+      <a class="btn btn-primary" href="/pricing">Check my price</a>
+    </div>
+  </section>`;
   return `
   <section class="dotfield">
     <div class="container section" style="max-width:900px;">
@@ -193,9 +205,10 @@ router.get(HUB_PATH, async (req, res) => {
     <h1 class="display-2" style="margin-bottom:14px;">Laundry pickup in ${COUNTY}</h1>
     <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:50ch;margin:0;">
       Wash and fold pickup and delivery across ${COUNTY}. Text to book.
-      ${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription,
-      ${escapeHtml(site.pricePerLb)} a pound one-time, ${escapeHtml(MINIMUM)}
-      minimum either way. Next day back at the door.
+      ${config.supabase.isDevelopment
+        ? 'Compare subscription and one-time pricing for your address and estimated bag weight. Pickup, return and processing are included.'
+        : `${escapeHtml(site.subscriptionPricePerLb)} a pound on a subscription, ${escapeHtml(site.pricePerLb)} a pound one-time, ${escapeHtml(MINIMUM)} minimum either way.`}
+      ${escapeHtml(site.returnExpectation)}
     </p>
   </div>
 </section>
@@ -227,7 +240,9 @@ ${cta(null)}`;
       renderPage({
         title: `Laundry Pickup in ${COUNTY}, NJ`,
         fullTitle: `Laundry Pickup in ${COUNTY}, NJ | ${site.name}`,
-        description: `Wash and fold laundry pickup across all 70 ${COUNTY} towns. ${site.subscriptionPricePerLb} a pound on a subscription, ${site.pricePerLb} one-time, ${MINIMUM} minimum, next-day return. Text to book, no app.`,
+        description: config.supabase.isDevelopment
+          ? `Wash and fold pickup across ${COUNTY}. Compare inclusive subscription and one-time quotes for your address and bag weight.`
+          : `Wash and fold laundry pickup across all 70 ${COUNTY} towns. ${site.subscriptionPricePerLb} a pound on a subscription, ${site.pricePerLb} one-time, ${MINIMUM} minimum, next-day return. Text to book, no app.`,
         path: HUB_PATH,
         body,
         head: jsonLd(schema({ path: HUB_PATH, areaServed: null })),
@@ -263,12 +278,13 @@ router.get('/:slug', async (req, res, next) => {
       a:
         `Yes. ${town.name} is inside our service area and is picked up on the same ` +
         `terms as the rest of ${COUNTY}: any day you choose, no fixed route day, and ` +
-        `your laundry back the ${site.turnaround}.`,
+        `${site.returnExpectation}`,
     },
     {
       q: `How much is wash and fold in ${town.name}?`,
-      a:
-        `${site.subscriptionPricePerLb} a pound on a subscription, with pickups ` +
+      a: config.supabase.isDevelopment
+        ? 'Enter your address and estimated bag weight to compare subscription and one-time quotes. Pickup, return and processing are included. Your quote shows the minimum and an average per pound. Your total recalculates at measured weight under the saved terms, up to 50 lb.'
+        : `${site.subscriptionPricePerLb} a pound on a subscription, with pickups ` +
         `${site.subscriptionFrequencies}, or ${site.pricePerLb} a pound for a one-time ` +
         `pickup. A ${MINIMUM} minimum per pickup applies either way. We weigh ` +
         `your laundry after we pick it up and charge your card once, after we weigh it. ` +
@@ -353,7 +369,9 @@ ${cta(town)}
       renderPage({
         title: `Laundry Pickup in ${town.name}, NJ`,
         fullTitle: `Laundry Pickup in ${town.name}, NJ | ${site.name}`,
-        description: `Wash and fold pickup in ${town.name}, ${COUNTY}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, ${MINIMUM} minimum, next-day return. Text ${site.name} to book, no app.`,
+        description: config.supabase.isDevelopment
+          ? `Wash and fold pickup in ${town.name}, ${COUNTY}. Compare inclusive subscription and one-time quotes for your address and bag weight.`
+          : `Wash and fold pickup in ${town.name}, ${COUNTY}. ${site.subscriptionPricePerLb}/lb on a subscription, ${site.pricePerLb}/lb one-time, ${MINIMUM} minimum, next-day return. Text ${site.name} to book, no app.`,
         path,
         body,
         head: jsonLd([...schema({ path, areaServed: town.name }), faqSchema]),

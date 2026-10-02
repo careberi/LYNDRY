@@ -50,6 +50,7 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
     if (!checked.ok) throw Error(checked.detail || checked.say || 'This pickup cannot be booked.');
   }
   const current = policyOverride || await policy();
+  const estimatedWeightLb = current.pricingMethod === require('./weight-based-pricing').METHOD ? require('./weight-based-pricing').estimatedWeight(form.estimated_weight_lb??30) : undefined;
   const category = customer.pricing_category === 'WHOLESALE' ? 'WHOLESALE' : form.plan === 'SUBSCRIPTION' ? 'SUBSCRIPTION' : 'ONE_TIME';
   const [home, shops, hours, loads, planned] = await Promise.all([publicPreview ? geo.locate(customer) : geo.lookupOnce(geo.addressLine(customer)),partners.list({type:'LAUNDROMAT'}).then(rows=>rows.filter(p=>p.status==='ACTIVE')),partners.hoursForAll(),partners.loadByPartner(),partners.plannedByPartner(addressEstimate ? [] : [date])]);
   if (!home) throw Error('The pickup address could not be located. Check the street and ZIP.');
@@ -62,9 +63,10 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
     if (shop.lat == null || shop.lng == null)continue;
     if(!addressEstimate&&!scheduleFits(shop,hours.get(shop.id)||[],date,time)){timingRejected=true;continue;}
     const onFloor=loads.get(shop.id)||{}, reserved=planned.get(shop.id)||{};
-    const used=(onFloor.pounds||0)+(reserved.pounds||0)+((onFloor.unweighed||0)+(reserved.unweighed||0))*current.referenceWeightLb;
+    const planningWeight=estimatedWeightLb!=null?50:current.referenceWeightLb;
+    const used=(onFloor.pounds||0)+(reserved.pounds||0)+((onFloor.unweighed||0)+(reserved.unweighed||0))*planningWeight;
     const cap = partners.capacityOf(shop,{pounds:used});
-    if (cap.remaining != null && cap.remaining < current.referenceWeightLb) continue;
+    if (cap.remaining != null && cap.remaining < (estimatedWeightLb!=null?50:current.referenceWeightLb)) continue;
     const miles = geo.milesBetween(home,{lat:Number(shop.lat),lng:Number(shop.lng)});
     if (!Number.isFinite(miles) || miles > 15) continue;
     const verified = await courierAvailability.verifyRoundTrip(shipday, {
@@ -81,16 +83,22 @@ async function previewQuote(customer, form, { publicPreview = false, addressEsti
       ...verified});
   }
   if(!candidates.length&&timingRejected)throw Error('No eligible laundromat is available for this pickup: arrival, washing turnaround and next-day collection must fit opening hours. Choose an earlier pickup or another day.');
-  const categories = Object.fromEntries(['ONE_TIME','SUBSCRIPTION','WHOLESALE'].map(key => [key,dynamic.quoteCandidates(candidates,{policy:current,category:key})]));
+  const categories = Object.fromEntries(['ONE_TIME','SUBSCRIPTION','WHOLESALE'].map(key => [key,dynamic.quoteCandidates(candidates,{policy:current,category:key,estimatedWeightLb})]));
+  // Public schedules contain prices only; never disclose partners or their costs.
+  if(estimatedWeightLb!=null) for(const key of economics.CATEGORIES) {
+    const totalAtWeight = weight => dynamic.quoteCandidates(candidates, {policy:current, category:key, estimatedWeightLb:weight}).estimatedTotalCents;
+    categories[key].weightTotalsCents=Array.from({length:50},(_,i)=>totalAtWeight(i+1));
+    categories[key].minimumIncludedWeightLb=require('./weight-based-pricing').minimumIncludedWeight(categories[key], {totalAtWeight});
+  }
   const expiresAt = categories[category].expiresAt;
   return {pickup_date:date,pickup_time:time,address:address(customer),snapshot:categories[category],categories,expires_at:expiresAt};
 }
-async function estimateAddress(customer) {
+async function estimateAddress(customer,estimatedWeightLb=30) {
   guard();
   const geo = require('./geocode');
   const place = await geo.lookupOnce(geo.addressLine(customer));
   if (!place) throw Error('The pickup address could not be located.');
-  return previewQuote({...customer,lat:place.lat,lng:place.lng},{},{publicPreview:true,addressEstimate:true});
+  return previewQuote({...customer,lat:place.lat,lng:place.lng},{estimated_weight_lb:estimatedWeightLb},{publicPreview:true,addressEstimate:true});
 }
 async function createQuote(customer, form) {
   const {categories, ...quote} = await previewQuote(customer,form);
@@ -136,8 +144,9 @@ function report(order) {
   if (!order.pricing_snapshot || !order.weight_lb || order.payment_status!=='PAID') return null;
   const s=order.pricing_snapshot;
   const washingCents=Math.ceil(Number(order.weight_lb)*s.wholesaleCentsPerLb);
-  const processingCents=Math.round(order.price_cents*s.policy.processingBps/10000)+s.policy.processingFixedCents;
-  return {revenueCents:order.price_cents,washingCents,courierCents:s.pickupCents+s.returnCents,processingCents,
-    ...economics.contribution({revenueCents:order.price_cents,washingCents,courierCents:s.pickupCents+s.returnCents,processingCents})};
+  const processingCents=require('./weight-based-pricing').isSnapshot(s)?require('./weight-based-pricing').processingCents(order.price_cents,s):Math.round(order.price_cents*s.policy.processingBps/10000)+s.policy.processingFixedCents;
+  const otherCostCents=require('./weight-based-pricing').isSnapshot(s)?(s.policy.otherCostCents||0)+Math.ceil(Number(order.weight_lb)*(s.policy.otherCostPerLbCents||0)):0;
+  return {otherCostCents,revenueCents:order.price_cents,washingCents,courierCents:s.pickupCents+s.returnCents,processingCents,
+    ...economics.contribution({otherCostCents,revenueCents:order.price_cents,washingCents,courierCents:s.pickupCents+s.returnCents,processingCents})};
 }
 module.exports={enabled,guard,data,address,policy,scheduleFits,previewQuote,estimateAddress,createQuote,read,approve,validateQuote,evaluateWeight,report};

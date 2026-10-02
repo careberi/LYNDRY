@@ -73,11 +73,13 @@ test('it fits Stripe\'s 1200-character limit, or every card link would fail', ()
   assert.ok(billing.consentText().length <= 1200, `${billing.consentText().length} characters`);
 });
 
-test('every card screen says the door', () => {
+test('card screens disclose the weighing point or the saved quote terms', () => {
   const account = READ('src', 'routes', 'account.js');
   assert.ok(/charge it after we weigh your laundry at your door/.test(account), 'the wizard card step');
   assert.ok(!/charge it once/.test(account), 'the wizard says once, and a total over the hold is two charges');
-  assert.ok(/weighed your laundry at your door/.test(account), 'the unfinished-checkout card');
+  assert.match(account, /Your confirmed quote sets your pricing and minimum/);
+  assert.match(account, /totals recalculate after weighing/);
+  assert.match(account, /temporary card hold is shown before/);
 
   const setup = READ('src', 'web', 'account-setup.js');
   assert.ok(/You are charged after we weigh your\s+laundry at your door/.test(setup), 'the card settings form');
@@ -91,9 +93,10 @@ test('every card screen says the door', () => {
   assert.ok(!/charge it once/.test(pay), 'the done page says once');
 });
 
-test('the card screens name the subscription rate beside the one-time one', () => {
+test('legacy card screens name both rates while quote checkout uses saved pricing', () => {
   const account = READ('src', 'routes', 'account.js');
-  assert.ok((account.match(/\{\{SUBSCRIPTION_PRICE_PER_LB\}\}/g) || []).length >= 2, 'the card step and the resume card');
+  assert.ok(account.includes('{{SUBSCRIPTION_PRICE_PER_LB}}'), 'legacy card step retains both rates');
+  assert.match(account, /Your saved quote and inclusive minimum apply/);
 
   const web = READ('src', 'routes', 'web.js');
   const block = web.slice(web.indexOf('function signupCardBlock'), web.indexOf('function signupCardBlock') + 1400);

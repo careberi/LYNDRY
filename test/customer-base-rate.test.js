@@ -40,5 +40,5 @@ test('invalid customer bases are rejected by admin and quote arithmetic',async()
 });
 test('laundromat admin form distinguishes cost, retail and customer base',()=>{
  const html=require('../src/web/partners-page').partnerFormBody({partner:{id:'a',name:'Test',type:'LAUNDROMAT',wholesale_per_lb_cents:70,retail_per_lb_cents:175,customer_base_per_lb_cents:100}});
- assert.match(html,/name="customer_base_per_lb"/);assert.match(html,/Customer pricing base rate, per lb/);assert.match(html,/Their invoice still uses the wholesale rate/);
+ assert.match(html,/name="customer_base_per_lb"/);assert.match(html,/Customer pricing base per lb/);assert.match(html,/Supplier payments still use our cost/);
 });

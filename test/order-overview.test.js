@@ -15,3 +15,11 @@ test('archived proposals are not shown; saved pricing remains permission control
  assert.doesNotMatch(orderOverview({...args,canMoney:false}),/\$|Order pricing/);
  assert.ok(prices({...saved,minimumTotalCents:10000},'Minimum').includes('$100.00'));
 });
+
+test('pickup and return IDs come from separate linked trips, not the order number',()=>{
+ const html=orderOverview({order:{order_number:9019},customer:{},deliveryPlans:[{leg:'TO_CUSTOMER',shipday_order_id:'222'},{leg:'TO_PARTNER',shipday_order_id:'111'}]});
+ assert.match(html,/<dt>Shipday pickup ID<\/dt><dd>111<\/dd>/);
+ assert.match(html,/<dt>Shipday return ID<\/dt><dd>222<\/dd>/);
+ const missing=orderOverview({order:{order_number:9019},customer:{}});
+ assert.equal((missing.match(/Not linked yet/g)||[]).length,2);
+});

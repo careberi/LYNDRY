@@ -261,8 +261,7 @@ function footer(signedIn = false) {
         <div style="max-width:32ch;">
           <div style="margin-bottom:22px;">${logo('footer')}</div>
           <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:var(--paper-300);">
-            Wash, dry and fold. Picked up from your door and back the
-            ${site.turnaround}, ordered online in about a minute.
+            ${site.returnExpectation} Order pickup from your door online in about a minute.
           </p>
           <!-- NO SERVICE AREA HERE ANY MORE. Neil, 26 September: "we are not
                just in northern NJ anymore, our distance depends on our

@@ -10,7 +10,7 @@ const quote = (category='ONE_TIME', overrides={}) => dynamic.quoteCandidates([{.
 const orderFor = q => ({id:'test-order',status:'AT_PARTNER',pricing_snapshot:q,price_per_lb_cents:q.rateCentsPerLb,minimum_cents:q.minimumTotalCents,weight_lb:11,bag_count:1,payment_status:'UNPAID'});
 
 test('new categories include processing, keep a $15 floor, and recover delivery once',()=>{
- for(const [category,rate,fee] of [['ONE_TIME',91,1853],['SUBSCRIPTION',81,1640],['WHOLESALE',77,1551]]){
+ for(const [category,rate,fee] of [['ONE_TIME',91,1748],['SUBSCRIPTION',81,1553],['WHOLESALE',77,1472]]){
   const q=quote(category);assert.equal(q.rateCentsPerLb,rate);assert.equal(q.operationalFeeCents,fee);assert.equal(q.minimumTotalCents,1500);
   assert.equal(q.estimated30LbCents,rate*30+fee);assert.equal(q.estimated40LbCents,rate*40+fee);
   assert.equal(pricing.priceOn(orderFor(q),11).beforeDiscount,rate*11+fee);
@@ -40,9 +40,9 @@ test('quotes, billing, weight assessment and holds agree at fractional weights a
   assert.equal(holds.amount(q,{mode:'MAXIMUM'}),economics.quotedTotal({...q,weightLb:50}));
  }
 });
-test('quote and booking show the combined fee and preserve old fee labels',()=>{
+test('booking itemizes fees and preserves old fee labels',()=>{
  const q=quote();const html=require('../src/web/booking-price').review({snapshot:q},'');
- assert.match(html,/Delivery \+ fees/);assert.match(html,/\$15\.00/);assert.match(html,/\$18\.53/);assert.doesNotMatch(html,/Operational fee/);
+ assert.match(html,/Delivery/);assert.match(html,/\$15\.00/);assert.match(html,/\$11\.12/);assert.match(html,/Operational fee/);assert.doesNotMatch(html,/Estimated total|30–40 lb/);
  assert.equal(require('../src/web/pricing-label')({}),'Operational fee');
 });
 test('van and laundromat settlement charge the complete new quote, not pounds alone',async t=>{
@@ -54,19 +54,19 @@ test('van and laundromat settlement charge the complete new quote, not pounds al
  t.mock.method(promotions,'discountFor',async()=>null);
  t.mock.method(billing,'settleTotal',async(o,c,options)=>{charges.push(options?.totalCents??o.price_cents);return {ok:true};});
  t.mock.method(db,'from',()=>{let patch={};const chain={update(v){patch=v;updates.push(v);return this;},eq(){return this;},is(){return this;},select(){return this;},maybeSingle:async()=>({data:{...order,...patch}}),then(resolve){resolve({error:null});}};return chain;});
- const van=await fulfilment.loadVan(order);assert.equal(van.priceCents,2854);
+ const van=await fulfilment.loadVan(order);assert.equal(van.priceCents,2749);
  const settled=await fulfilment.settleWeight(order,{chosenLb:11});assert.equal(settled.ok,true);
- assert.deepEqual(charges,[2854,2854]);assert.ok(updates.every(p=>p.price_cents===2854));
+ assert.deepEqual(charges,[2749,2749]);assert.ok(updates.every(p=>p.price_cents===2749));
 });
 test('settlement message explains delivery and processing instead of claiming pounds alone equal the bill',()=>{
  const q=quote();const parts=pricing.priceOn(orderFor(q),11);
  const text=require('../src/core/fulfilment').pricedSentence({opening:'Your laundry weighed 11 lb',byWeight:parts.byWeight,floor:1500,surcharge:0,total:parts.beforeDiscount,perPound:'$0.91 a pound',quotedParts:parts});
- assert.match(text,/\$18\.53 delivery and fees/);assert.match(text,/\$28\.54/);assert.match(text,/Processing is included/);
+ assert.match(text,/\$17\.48 delivery and fees/);assert.match(text,/\$27\.49/);assert.match(text,/Processing is included/);
 });
 
 test('promotions cannot lower new paid orders below $15, while legacy discounts remain unchanged',()=>{
  const order=orderFor(quote());
- assert.equal(pricing.allowedDiscount(order,2854,2000),1354);
+ assert.equal(pricing.allowedDiscount(order,2749,2000),1249);
  assert.equal(pricing.allowedDiscount(order,1500,500),0);
- assert.equal(pricing.allowedDiscount({...order,pricing_snapshot:{}},2854,5000),5000);
+ assert.equal(pricing.allowedDiscount({...order,pricing_snapshot:{}},2749,5000),5000);
 });

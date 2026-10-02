@@ -1851,7 +1851,9 @@ function confirmationMessage(
   // and this message sits at 454 against the 459 that three segments hold.
   const perPound = subscription.perPound(order.price_per_lb_cents || config.pricing.perPoundCents);
 
-  const money = order.pricing_snapshot
+  const money = require('./weight-based-pricing').isSnapshot(order.pricing_snapshot)
+    ? ' '+require('./weight-based-pricing').summary(order.pricing_snapshot)
+    : order.pricing_snapshot
     ? ` Quoted price: ${perPound} plus ${billing.money(order.pricing_snapshot.operationalFeeCents)} ${require('../web/pricing-label')(order.pricing_snapshot).toLowerCase()}; ${billing.money(order.pricing_snapshot.minimumTotalCents)} inclusive minimum. Final weight determines the total.`
     : freeOrder
     ? freeUpToLb

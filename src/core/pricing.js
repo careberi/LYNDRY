@@ -62,6 +62,12 @@ function priceOn(order, weightLb) {
 
   if (!Number.isFinite(weight) || weight < 0) return null;
 
+  const snapshot=order?.pricing_snapshot, model=require('./weight-based-pricing');
+  if(model.isSnapshot(snapshot)) {
+    const total=model.total(snapshot,weight), raw=model.total(snapshot,weight,{applyMinimum:false});
+    return {weightBased:true,weightLb:weight,rate:total/weight,floor:snapshot.minimumTotalCents,surcharge:surchargeFor(order),
+      byWeight:total,atMinimum:raw<snapshot.minimumTotalCents,operationalFee:0,beforeDiscount:total+surchargeFor(order)};
+  }
   const rate = rateFor(order);
   const floor = floorFor(order);
   const surcharge = surchargeFor(order);
@@ -84,7 +90,13 @@ function priceOn(order, weightLb) {
 
 // New paid quotes retain their $15 floor even when a promotion applies.
 // Authorized waivers remain a separate payment decision; old promotions keep their terms.
-function allowedDiscount(order, beforeDiscount, requestedCents) {
+function allowedDiscount(order, beforeDiscount, requestedCents, measuredWeightLb) {
+  if(require('./weight-based-pricing').isSnapshot(order?.pricing_snapshot)) {
+    const weight=Number(measuredWeightLb??order.billable_weight_lb??order.partner_weight_lb??order.weight_lb);
+    if(!Number.isFinite(weight)||weight<=0) return 0;
+    const floor=require('./weight-based-pricing').total(order.pricing_snapshot,weight);
+    return Math.min(Math.max(0,requestedCents),Math.max(0,beforeDiscount-floor));
+  }
   if (order?.pricing_snapshot?.pricingMethod !== 'COST_PLUS_MARGIN_15') return requestedCents;
   const floor = floorFor(order);
   return Math.min(Math.max(0, requestedCents), Math.max(0, beforeDiscount - floor));

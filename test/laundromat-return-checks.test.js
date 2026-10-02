@@ -65,3 +65,20 @@ test('intake forwards only optional reference and measured weight, never submitt
  const bad=await service.act({partner:'shop',staff:{id:'staff'},number:'9019',action:'intake',weight:'32',shopReference:'x'.repeat(65)});
  assert.equal(bad.ok,false);assert.equal(calls.length,1);
 });
+
+
+test('held board and detail explain the mismatch and suppress normal actions in both languages',()=>{
+ const held={...wash,washCompletedAt:'now',returnCheckStatus:'HELD',heldIntakeWeight:33,heldReturnWeight:25,officeReview:true};
+ for(const lang of ['en','es']) {
+  const board=page.board({...ctx,lang,orders:[held]});
+  const detail=page.detail({...ctx,lang,order:held});
+  for(const html of [board,detail]) {
+   assert.match(html,/shop-weight-hold/);assert.match(html,/33 lb/);assert.match(html,/25 lb/);
+   assert.match(html,lang==='en'?/Weights don.t match/:/Los pesos no coinciden/);
+  }
+  assert.doesNotMatch(board,/Weigh for return|Pesar para devolver/);
+  assert.doesNotMatch(detail,/action="[^"]+\/(ready|collect|request-return)"/);
+ }
+ const cleared=page.board({...ctx,orders:[{...held,returnCheckStatus:'RELEASED',officeReview:false}]});
+ assert.doesNotMatch(cleared,/Weights don.t match/);
+});

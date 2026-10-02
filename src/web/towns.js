@@ -43,7 +43,7 @@ const TOWNS = [
     lead:
       'Allendale is houses with driveways, and that suits this service: the bag goes ' +
       'out by the door and the driver walks up for it. Nobody waits in. You get it ' +
-      'back washed and folded the next day, in the same spot you left it.',
+      'back washed and folded the next day when available, in the same spot you left it.',
   },
   {
     name: 'Alpine',
@@ -105,7 +105,7 @@ const TOWNS = [
     angle: 'single-family',
     lead:
       'In Cresskill the usual arrangement is a bag by the front door before work and ' +
-      'clean laundry in the same place the next day. You are not booking a visit, you ' +
+      'clean laundry in the same place the next day when available. You are not booking a visit, you ' +
       'are booking a day. Nobody has to be in for either end of it.',
   },
   {
@@ -133,7 +133,7 @@ const TOWNS = [
     lead:
       'Traffic in East Rutherford depends entirely on what is on, which is exactly why ' +
       'we give a window rather than a time. Your bag does not care when the van gets ' +
-      'there as long as it is out. It comes back the next day.',
+      'there as long as it is out. It comes back the next day when available.',
   },
   {
     name: 'Edgewater',
@@ -151,7 +151,7 @@ const TOWNS = [
     lead:
       `Elmwood Park is next door to where the van is based in ${BASE}, so it is one of ` +
       'the easiest places in the county for us to reach on short notice. Houses and ' +
-      'apartments both. Leave the bag out and it is back the next day.',
+      'apartments both. Leave the bag out and it is back the next day when available.',
   },
   {
     name: 'Emerson',
@@ -250,7 +250,7 @@ const TOWNS = [
     lead:
       'Harrington Park is small and almost entirely houses, which makes it about as ' +
       'simple as this gets: a bag by the door on the day you chose. It comes back the ' +
-      'next day, folded, in the same spot.',
+      'next day when available, folded, in the same spot.',
   },
   {
     name: 'Hasbrouck Heights',
@@ -286,7 +286,7 @@ const TOWNS = [
     lead:
       'Ho-Ho-Kus is small, close to the base and almost all houses, so it is a quick ' +
       'stop for the van and an easy one for you. Bag by the door on the day you picked. ' +
-      'Back the next day.',
+      'Back the next day when available.',
   },
   {
     name: 'Leonia',
@@ -313,7 +313,7 @@ const TOWNS = [
     lead:
       'Lodi has a lot of two- and three-family houses, so the unit or floor is worth ' +
       'writing down once. After that the driver knows exactly which door. Bag out in the ' +
-      'morning, clean laundry back the next day.',
+      'morning, clean laundry back the next day when available.',
   },
   {
     name: 'Lyndhurst',
@@ -367,7 +367,7 @@ const TOWNS = [
     lead:
       'Moonachie is small and mostly given over to business, but the houses here are ' +
       'served exactly like the rest of the county. Pick a day. Leave the bag out. It ' +
-      'comes back the next day, folded.',
+      'comes back the next day when available, folded.',
   },
   {
     name: 'New Milford',
@@ -393,7 +393,7 @@ const TOWNS = [
     angle: 'small, northern',
     lead:
       'Northvale is a small borough near the state line and is covered on the same terms ' +
-      'as everywhere else: same price, same next-day return, no surcharge for being at ' +
+      'as everywhere else: same price, same next-day return when available, no surcharge for being at ' +
       'the edge of the map.',
   },
   {
@@ -421,7 +421,7 @@ const TOWNS = [
     lead:
       'Old Tappan is larger lots and longer driveways, so nobody expects you to meet the ' +
       'van at the curb. Leave the bag where you said. It is picked up and returned to the ' +
-      'same place the next day.',
+      'same place the next day when available.',
   },
   {
     name: 'Oradell',
@@ -448,7 +448,7 @@ const TOWNS = [
     lead:
       'Paramus traffic is what it is, and it is the reason we quote a window rather than ' +
       'a time. It changes nothing about your end: the bag goes out in the morning and ' +
-      'comes back the next day. There is no fixed route day here.',
+      'comes back the next day when available. There is no fixed route day here.',
   },
   {
     name: 'Park Ridge',
@@ -456,7 +456,7 @@ const TOWNS = [
     angle: 'small, single-family',
     lead:
       'Park Ridge is a compact borough of mostly houses, and pickups here are the plain ' +
-      'version of this: a bag by the door, gone by the evening, back the next day washed ' +
+      'version of this: a bag by the door, gone by the evening, back the next day when available washed ' +
       'and folded.',
   },
   {
@@ -465,7 +465,7 @@ const TOWNS = [
     angle: 'northern, single-family',
     lead:
       'Ramsey is up at the northern end of the county and is covered on the same terms as ' +
-      'anywhere else we go. Same price, same next-day turnaround, and no extra for the ' +
+      'anywhere else we go. Same price, same next-day turnaround when available, and no extra for the ' +
       'distance from the base.',
   },
   {
@@ -511,7 +511,7 @@ const TOWNS = [
     lead:
       'River Vale is residential and low-density, which is the easy case for a doorstep ' +
       'service. Nobody needs to be home at either end. The bag goes out, and clean ' +
-      'laundry lands in the same spot the next day.',
+      'laundry lands in the same spot the next day when available.',
   },
   {
     name: 'Rochelle Park',
@@ -529,7 +529,7 @@ const TOWNS = [
     short: true,
     lead:
       'Rockleigh is the smallest borough in the county, and it is served on exactly the ' +
-      'same terms as the largest. Same price, same next-day return, same doorstep pickup.',
+      'same terms as the largest. Same price, same next-day return when available, same doorstep pickup.',
   },
   {
     name: 'Rutherford',
@@ -565,7 +565,7 @@ const TOWNS = [
     short: true,
     lead:
       'South Hackensack is one of the smallest municipalities in the county, and the ' +
-      'coverage here is identical to everywhere else: doorstep pickup, next-day return, ' +
+      'coverage here is identical to everywhere else: doorstep pickup, next-day return when available, ' +
       'nothing to join.',
   },
   {
@@ -593,7 +593,7 @@ const TOWNS = [
     short: true,
     lead:
       'Teterboro has very few homes in it, but the ones that are here are served the same ' +
-      'as the rest of the county. Same price, same next-day return, same doorstep pickup.',
+      'as the rest of the county. Same price, same next-day return when available, same doorstep pickup.',
   },
   {
     name: 'Upper Saddle River',
@@ -638,7 +638,7 @@ const TOWNS = [
     lead:
       'Westwood has houses and apartments together, and both are picked up at the door. ' +
       'If yours is a unit, the number goes on your address once and stays there. Bag out ' +
-      'in the morning, back the next day.',
+      'in the morning, back the next day when available.',
   },
   {
     name: 'Woodcliff Lake',

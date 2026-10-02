@@ -277,6 +277,7 @@ const site = Object.freeze({
   typicalBagWeight: '15 to 18 lb',
 
   turnaround: 'next day',
+  returnExpectation: 'Most wash and fold orders return next day when available.',
 
   // ---------------------------------------------------------------------
   // THE SATISFACTION GUARANTEE. Neil's name for it.
@@ -375,6 +376,7 @@ const tokens = Object.freeze({
   ESTIMATE_RANGE: site.estimateRange,
   BAG_WEIGHT: site.typicalBagWeight,
   TURNAROUND: site.turnaround,
+  RETURN_EXPECTATION: site.returnExpectation,
   LEGAL_UPDATED: site.legalUpdated,
   BASE_URL: config.baseUrl,
 });

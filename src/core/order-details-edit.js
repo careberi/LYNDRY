@@ -22,7 +22,7 @@ async function save(order,body,actor){
  const customer={...require('./order-address').customerFor({...order,preferences:change.preferences},order.customers)};
  // Preserve wholesale classification; changing this order does not create a subscription.
  if(order.pricing_snapshot?.category==='WHOLESALE')customer.pricing_category='WHOLESALE';
- const quote=await checkout.previewQuote(customer,{...change,plan:change.service},{publicPreview:true,partnerId:order.intended_partner_id,policyOverride:order.pricing_snapshot?.policy});
+ const quote=await checkout.previewQuote(customer,{...change,plan:change.service,estimated_weight_lb:order.pricing_snapshot?.estimatedWeightLb},{publicPreview:true,partnerId:order.intended_partner_id,policyOverride:order.pricing_snapshot?.policy});
  await require('./pickup-edit-sync').saveWithSync({order,change,quote,actor,expected,customer});
 }
 module.exports={prepare,save,expectedFor};

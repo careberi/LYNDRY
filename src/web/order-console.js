@@ -203,7 +203,7 @@ function chargeRows(events, order, { money }) {
   const asc = dedupe(
     [...(events || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   );
-  const rate = order.price_per_lb_cents != null ? order.price_per_lb_cents : null;
+  const rate = require('../core/weight-based-pricing').isSnapshot(order.pricing_snapshot)?null:order.price_per_lb_cents != null ? order.price_per_lb_cents : null;
   const rows = [];
 
   // PRICE events carry the money; the WEIGHT event a second before carries the
@@ -840,7 +840,7 @@ function orderConsoleBody({
   // table existed, which is why paidTable() draws nothing without them rather
   // than inventing Card $0.
   paymentRows = [],
-  overviewHtml = '', dispatchHtml = '', shipdayWorkspace = false, cancellationHtml = '',
+  overviewHtml = '', dispatchHtml = '', shipdayWorkspace = false, cancellationHtml = '', editHtml = '',
 }) {
   const n = order.order_number;
   const c = customer || {};
@@ -853,6 +853,10 @@ function orderConsoleBody({
   const actions = actionsFor(order, { tasks, can, exception, labels });
   if(shipdayWorkspace)actions.also=actions.also.filter(action=>!['cancel','driver'].includes(action.key));
 
+  const deliveryAction=shipdayWorkspace&&can.act&&order.status==='OUT_FOR_DELIVERY'&&actions.primary.find(a=>a.key==='task'&&a.task.key==='delivered'&&!a.task.blockedBy);
+  const deliveryHtml=deliveryAction?'<p>Confirm the laundry has reached the customer. Upload a photo taken at delivery. This records completion and runs the existing billing and customer notification steps.</p>'+taskForm(order,deliveryAction.task,can):'';
+  if(deliveryAction)actions.primary=actions.primary.filter(a=>a!==deliveryAction);
+  const headerActions=shipdayWorkspace?require('./order-header-actions').render({order,can,editHtml,cancellationHtml,deliveryHtml}):'';
   const address = [c.address_line1, c.address_line2, c.city ? `${c.city} ${c.postal_code || ''}`.trim() : c.postal_code].filter(Boolean).join(', ');
   const title = can.customers ? c.name || 'Unknown' : address || `Order #${n}`;
   const window = order.pickup_window_start ? booking.arrivalWindow(order) : '';
@@ -896,8 +900,8 @@ function orderConsoleBody({
 
   return `<div class="console">
   <div class="crumb"><a href="/ops">Orders</a> / ${n}</div>
-  <div class="title-row"><h1>${escapeHtml(title)}</h1>${shipdayWorkspace&&cancellationHtml?'<button type="button" class="cbtn danger" commandfor="cancel-pickup-dialog" command="show-modal">Cancel pickup</button>':''}<span class="id">#${n}</span> ${chips(order, exception)}</div>
-  ${shipdayWorkspace&&cancellationHtml?'<dialog id="cancel-pickup-dialog" aria-label="Cancel pickup" style="max-width:640px;width:calc(100% - 40px);max-height:85vh;overflow:auto;border:1px solid #ccd5e5;border-radius:12px;padding:20px;"><form method="dialog"><button type="submit" class="cbtn">Close</button></form>'+cancellationHtml+'</dialog>':''}
+  <div class="title-row"><h1>${escapeHtml(title)}</h1><span class="id">#${n}</span> ${chips(order, exception)}</div>
+  ${headerActions}
 
   ${banner || ''}
   ${dispatchHtml ? '<section class="pos-next-action" aria-label="Dispatch and next action"><h2>Dispatch and next action</h2>'+dispatchHtml+'</section>' : ''}

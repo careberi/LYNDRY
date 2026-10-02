@@ -311,14 +311,16 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
       <div class="pt-two">
         ${field({
           name: 'wholesale_per_lb',
-          label: 'What they charge us, per lb',
+          label: 'Our laundromat cost per lb',
+          hint: 'What the laundromat charges LYNDRY. Used for supplier payments and actual profit calculations.',
           value: p.wholesale_per_lb_cents == null ? '' : (p.wholesale_per_lb_cents / 100).toFixed(2),
           type: 'number',
           attrs: 'step="0.01" min="0" placeholder="1.10"',
         })}
         ${field({
           name: 'retail_per_lb',
-          label: 'What they charge walk-ins, per lb',
+          label: 'Laundromat walk-in rate',
+          hint: 'What they charge their own walk-in customers, per lb. Reference only; does not set our quotes.',
           value: p.retail_per_lb_cents == null ? '' : (p.retail_per_lb_cents / 100).toFixed(2),
           type: 'number',
           attrs: 'step="0.01" min="0" placeholder="1.75"',
@@ -327,11 +329,11 @@ function partnerFormBody({ partner = null, hours = [], problem = null }) {
 
       ${field({
         name: 'customer_base_per_lb',
-        label: 'Customer pricing base rate, per lb',
+        label: 'Customer pricing base per lb',
         value: p.customer_base_per_lb_cents == null ? '' : (p.customer_base_per_lb_cents / 100).toFixed(2),
         type: 'number',
         attrs: 'step="0.01" min="0.01" placeholder="1.00"',
-        hint: 'Used for new customer quotes and laundromat selection before category margin and processing. Blank uses what they charge us. Their invoice still uses the wholesale rate.',
+        hint: 'Starting laundry rate for new customer quotes and laundromat comparisons, before tier margin, delivery and processing. Blank uses our laundromat cost. Supplier payments still use our cost. A base below our cost can reduce actual profit.',
       })}
 
       ${field({
@@ -590,6 +592,48 @@ function theirScaleAlone(p, weighed) {
 </div>`;
 }
 
+// The courier profile puts working details first; secondary history stays available on demand.
+function compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPortal}) {
+  const row=(label,value)=>'<tr><th scope="row">'+escapeHtml(label)+'</th><td>'+value+'</td></tr>';
+  const text=value=>escapeHtml(String(value));
+  const facts=[row('Address',addressOf(p)?text(addressOf(p)):'Not recorded')];
+  if(p.contact_name)facts.push(row('Contact',text(p.contact_name)));
+  if(p.phone)facts.push(row('Phone',text(format.displayPhone(p.phone))));
+  if(p.email)facts.push(row('Email',text(p.email)));
+  if(p.type==='LAUNDROMAT') {
+    facts.push(row('Hours',hours.length?text(partners.describeHours(hours)):'Not set. Unavailable for routing.'),
+      row('Our laundromat cost per lb',p.wholesale_per_lb_cents==null?'Not agreed':text(money(p.wholesale_per_lb_cents))+'/lb'),
+      row('Customer pricing base per lb',p.customer_base_per_lb_cents==null?'Uses our laundromat cost':text(money(p.customer_base_per_lb_cents))+'/lb'),
+      row('Laundromat walk-in rate',p.retail_per_lb_cents==null?'Not recorded':text(money(p.retail_per_lb_cents))+'/lb'),
+      row('Laundry here',loadLine(load)));
+  }
+  const settings=p.type==='LAUNDROMAT' ? '<details class="partner-secondary"><summary>Operating details</summary><table class="partner-facts"><tbody>'+
+    row('Daily capacity',p.daily_capacity_lb?text(p.daily_capacity_lb)+' lb':'Not set')+
+    row('Turnaround',p.turnaround_minutes==null?'Not set':text(Math.round(p.turnaround_minutes/60))+' hours')+
+    row('Drop-off cutoff',p.dropoff_cutoff?text(String(p.dropoff_cutoff).slice(0,5)):'Closing time')+
+    (p.hours?row('Hours note',text(p.hours)):'')+'</tbody></table></details>':'';
+  const memberRows=(staff||[]).map(person=>{
+    const off=person.status!=='ACTIVE',owner=person.role==='OWNER';
+    const action='/ops/partners/'+escapeHtml(p.id)+'/staff/'+escapeHtml(person.id);
+    return '<tr><td>'+text(person.name||'')+(off?' <span class="hint">Disabled</span>':'')+'</td><td>'+text(format.displayPhone(person.phone))+'</td><td>'+(owner?'Owner':'Attendant')+'</td><td class="partner-staff-actions">'+
+      '<form method="post" action="'+action+'"><input type="hidden" name="role" value="'+(owner?'ATTENDANT':'OWNER')+'"><button class="btn btn-sm" type="submit">'+(owner?'Make attendant':'Make owner')+'</button></form>'+
+      '<form method="post" action="'+action+'"><input type="hidden" name="status" value="'+(off?'ACTIVE':'DISABLED')+'"><button class="btn btn-sm" type="submit">'+(off?'Switch on':'Switch off')+'</button></form></td></tr>';
+  }).join('');
+  const portal=p.type==='LAUNDROMAT'?'<section class="partner-panel"><h2>Portal access</h2>'+
+    (p.slug?'<p class="partner-portal-link"><a href="/shop/'+escapeHtml(p.slug)+'">/shop/'+text(p.slug)+'</a></p>':'<p>No portal address. Edit and save this profile to create one.</p>')+
+    ((staff||[]).length?'<div class="pt-scroll"><table class="pt-hist"><thead><tr><th>Name</th><th>Mobile</th><th>Role</th><th>Actions</th></tr></thead><tbody>'+memberRows+'</tbody></table></div>':'<p class="hint">No staff added.</p>')+
+    '<details class="partner-secondary"><summary>Add staff</summary><form class="partner-add-staff" method="post" action="/ops/partners/'+escapeHtml(p.id)+'/staff">'+
+    field({name:'name',id:'sn',label:'Name',value:'',attrs:'required maxlength="80"'})+
+    field({name:'phone',label:'Mobile',value:'',type:'tel',attrs:'required inputmode="tel" autocomplete="off"'})+
+    '<label class="field"><span class="field-label">Role</span><select class="select" name="role"><option value="OWNER">Owner</option><option value="ATTENDANT">Attendant</option></select></label><button class="btn btn-ink" type="submit">Add staff</button></form><p class="hint">Staff sign in with a texted code. Adding staff sends no text.</p></details></section>':'';
+  return '<div class="partner-profile"><a class="partner-back" href="/ops/partners">All laundromats</a><header class="partner-heading"><div><h1>'+text(p.name)+'</h1>'+statusBadge(p.status)+'</div><div class="partner-heading-actions">'+
+    (canOpenPortal?'<a class="btn btn-primary" href="/ops/partners/'+escapeHtml(p.id)+'/portal">Open portal as admin</a>':'')+
+    '<a class="btn btn-outline" href="/ops/partners/'+escapeHtml(p.id)+'/edit">Edit</a></div></header>'+
+    (notice?'<p role="status" class="ops-note ops-note--good">'+text(notice)+'</p>':'')+
+    '<div class="partner-profile-grid"><section class="partner-panel"><h2>Details</h2><table class="partner-facts"><tbody>'+facts.join('')+'</tbody></table>'+settings+
+    (p.notes?'<details class="partner-secondary"><summary>Notes</summary><p class="partner-notes">'+text(p.notes)+'</p></details>':'')+'</section>'+portal+'</div>'+
+    (p.type==='LAUNDROMAT'?'<details class="partner-secondary partner-history"><summary>Weight history</summary>'+theirScaleAlone(p,weighed)+'</details>':'')+'</div>';
+}
 function partnerDetailBody({
   partner,
   history,
@@ -612,6 +656,7 @@ function partnerDetailBody({
 } = {}) {
   const p = partner;
   const laundromat = p.type === 'LAUNDROMAT';
+  if(courierModel)return compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPortal});
 
   const fact = (label, value) => `
     <div style="display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
@@ -716,18 +761,18 @@ ${
           ) +
           (p.hours ? fact('Note', escapeHtml(p.hours)) : '') +
           fact(
-            'They charge us',
+            'Our laundromat cost per lb',
             p.wholesale_per_lb_cents == null
               ? '<span style="color:var(--ink-500);">not agreed</span>'
               : `<strong>${escapeHtml(money(p.wholesale_per_lb_cents))}</strong> / lb`
           ) +
           fact(
-            'They charge walk-ins',
+            'Laundromat walk-in rate',
             p.retail_per_lb_cents == null ? '&mdash;' : `${escapeHtml(money(p.retail_per_lb_cents))} / lb`
           ) +
-          fact('Customer pricing base', p.customer_base_per_lb_cents == null
-            ? 'Uses wholesale rate'
-            : `${escapeHtml(money(p.customer_base_per_lb_cents))} / lb before category margin and processing`) +
+          fact('Customer pricing base per lb', p.customer_base_per_lb_cents == null
+            ? 'Uses our laundromat cost'
+            : `${escapeHtml(money(p.customer_base_per_lb_cents))} / lb`) +
           fact('Daily capacity', p.daily_capacity_lb ? `${p.daily_capacity_lb} lb` : '&mdash;') +
           fact(
             'Turnaround',

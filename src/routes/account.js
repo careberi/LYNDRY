@@ -172,7 +172,7 @@ function phoneStep({ error = '', next = '/account', phone = '' } = {}) {
       If you already have an account, we will text you a secure sign-in code.
     </p>
     <p style="font-size:16px;line-height:1.6;color:var(--ink-700);max-width:44ch;margin:14px 0 0;">
-      ${require('../core/dev-checkout').enabled ? 'Your address and pickup time determine your price. Review the rate, fees and minimum total before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum, back the '+escapeHtml(site.turnaround)+'.'}
+      ${require('../core/dev-checkout').enabled ? 'Your address, tier and bag weight determine your price. Review your inclusive estimate and minimum before booking.' : escapeHtml(site.pricePerLb)+' a pound one-time, '+escapeHtml(site.subscriptionPricePerLb)+' a pound on a subscription. $'+(config.pricing.minimumCents/100).toFixed(0)+' minimum. '+escapeHtml(site.returnExpectation)}
     </p>
   </div>
 </section>
@@ -764,7 +764,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
 
     const { data: past } = await db
       .from('orders')
-      .select('order_number, status, pickup_date, collected_at, delivered_at, weight_lb, billable_weight_lb, price_cents, subscription_id, price_per_lb_cents')
+      .select('order_number, status, pickup_date, collected_at, delivered_at, weight_lb, billable_weight_lb, price_cents, subscription_id, price_per_lb_cents, pricing_snapshot')
       .eq('customer_id', customer.id)
       .in('status', ['DELIVERED', 'CANCELED'])
       .order('pickup_date', { ascending: false })
@@ -858,7 +858,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
           }`
         : '<span style="color:var(--ink-500);">Weighed after pickup</span>',
       `${escapeHtml(whenLineMdy(o))}<br>
-       <span style="color:var(--ink-500);">Back the ${escapeHtml(site.turnaround)}</span>`,
+       <span style="color:var(--ink-500);">${escapeHtml(site.returnExpectation)}</span>`,
     ]);
 
     // --- past ---------------------------------------------------------------
@@ -885,7 +885,7 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
         // their own history every time they changed it.
         subscription.isSubscriptionOrder(o)
           ? `Subscription<br><span style="font-family:var(--font-mono);font-size:12px;color:var(--ink-500);">${escapeHtml(
-              subscription.rate(o.price_per_lb_cents || subscription.subscriptionCents())
+              require('../core/weight-based-pricing').isSnapshot(o.pricing_snapshot)?'Weight-based pricing':subscription.rate(o.price_per_lb_cents || subscription.subscriptionCents())
             )}</span>`
           : '<span style="color:var(--ink-500);">One-time</span>',
         day(o.collected_at),
@@ -927,9 +927,9 @@ router.get('/account', auth.requireCustomer, async (req, res, next) => {
     </h2>
     <p style="font-size:16px;line-height:1.55;color:var(--ink-700);margin:0 0 18px;">
       We have kept everything you chose. A payment method is required to confirm
-      the pickup: {{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} on a
-      subscription, {{MINIMUM}} minimum, and nothing is charged until we have
-      weighed your laundry at your door.
+      the pickup. Your confirmed quote sets your pricing and minimum. Weight-based
+      totals recalculate after weighing. Any temporary card hold is shown before
+      you confirm.
     </p>
     <form method="post" action="/account/card" style="margin:0;">
       <button type="submit" class="btn btn-primary btn-lg">
@@ -1039,7 +1039,7 @@ function settingsPage({ title, blurb, form, error = '' }) {
 
 <section class="container booking-content">
   ${error ? banner(escapeHtml(error)) : ''}
-  <div class="card card-xl" style="padding:30px;">${form}</div>
+  <div class="${step === 'repeat' ? 'booking-plan-shell' : 'card card-xl'}"${step === 'repeat' ? '' : ' style="padding:30px;"'}>${form}</div>
   <p style="margin:22px 0 0;"><a href="/account">Back to your account</a></p>
 </section>`;
 }
@@ -1423,7 +1423,9 @@ function orderConfirmedPage({ customer, order, others, free }) {
 
   // THE PRICE, SAID THE WAY THE TEXT SAYS IT. A free order with a ceiling names
   // the ceiling, because nobody has seen the laundry yet.
-  const price = order.pricing_snapshot
+  const price = require('../core/weight-based-pricing').isSnapshot(order.pricing_snapshot)
+    ? require('../core/weight-based-pricing').summary(order.pricing_snapshot)
+    : order.pricing_snapshot
     ? `${billing.money(order.pricing_snapshot.rateCentsPerLb)}/lb + ${billing.money(order.pricing_snapshot.operationalFeeCents)} ${require('../web/pricing-label')(order.pricing_snapshot).toLowerCase()} per order; ${billing.money(order.pricing_snapshot.minimumTotalCents)} minimum total, including the fee`
     : free.freeOrder
     ? free.freeUpToLb
@@ -1469,7 +1471,7 @@ function orderConfirmedPage({ customer, order, others, free }) {
   <div class="card card-xl card-sunken" style="padding:26px 30px;margin-top:18px;">
     ${row('Charged today', '$0.00')}
     ${card ? row('Card on file', escapeHtml(card)) : ''}
-    ${order.pricing_snapshot ? [
+    ${require('../core/weight-based-pricing').isSnapshot(order.pricing_snapshot) ? row('Your saved pricing',escapeHtml(price)) : order.pricing_snapshot ? [
       row('Wash, dry &amp; fold', billing.money(order.pricing_snapshot.rateCentsPerLb)+'/lb'),
       row(require('../web/pricing-label')(order.pricing_snapshot) + ' · once per order', billing.money(order.pricing_snapshot.operationalFeeCents)),
       row('Minimum total · includes the fee', billing.money(order.pricing_snapshot.minimumTotalCents))
@@ -1881,7 +1883,7 @@ function bookingStep(customer, given) {
 
 // Everything the wizard has been told so far, in the order it was asked for.
 const ANSWERS = [
-  'dev_quote_id', 'address_confirmed', 'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
+  'estimated_weight_lb', 'dev_quote_id', 'address_confirmed', 'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
   'water_temp', 'fabric_softener', 'name', 'address_line1', 'address_line2',
   'city', 'postal_code', 'spot', 'access_notes',
 ];
@@ -1905,7 +1907,7 @@ const ANSWERS = [
 // so the browser would meet it with a "confirm form resubmission" page.
 const ASKED_ON = {
   wash: ['water_temp', 'fabric_softener'],
-  repeat: ['plan', 'cadence'],
+  repeat: ['plan', 'cadence', 'estimated_weight_lb'],
   when: ['pickup_date', 'pickup_time', 'weekdays', 'plan'],
   address: ['name', 'address_line1', 'address_line2', 'city', 'postal_code',
             'spot', 'access_notes'],
@@ -1996,7 +1998,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
   // needs; the step's own name says where you are and cannot go wrong.
   let estimate = null;
   if (step === 'repeat' && require('../core/dev-checkout').enabled) {
-    try { estimate = await require('../core/dev-checkout').estimateAddress(customer); }
+    try { estimate = await require('../core/dev-checkout').estimateAddress(customer,given.estimated_weight_lb??30); }
     catch (_) { estimate = { unavailable: true }; }
   }
   const labels = { wash: 'wash preferences', repeat: 'your option', when: 'when', address: 'where' };
@@ -2005,7 +2007,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
 
   const heads = {
     wash: ['How would you like it washed?', 'We save this and use it on every pickup. Change it any time by text.'],
-    repeat: ['One-Time or Subscription?', 'Choose what works for you. You can change or cancel your subscription anytime.'],
+    repeat: ['Choose your pickup plan.', 'Choose what works for you. You can change or cancel your subscription anytime.'],
     when: regular
       ? ['Which day?', 'Choose one pickup day for your subscription.']
       : ['Schedule your pickup', 'Any day. There are no fixed route days.'],
@@ -2057,7 +2059,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
 
 <section class="container booking-content">
   ${error ? banner(escapeHtml(error)) : ''}
-  <div class="card card-xl" style="padding:30px;">${form}</div>
+  <div class="${step === 'repeat' ? 'booking-plan-shell' : 'card card-xl'}"${step === 'repeat' ? '' : ' style="padding:30px;"'}>${form}</div>
   <p style="margin:22px 0 0;">${backControl(step, guest, customer)}</p>
 </section>`;
 }
@@ -2189,7 +2191,7 @@ function cardStep({ customer, intent }) {
       A payment method is required to confirm your pickup.
     </p>
     <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0 0 20px;">
-      ${intent.dev_quote_id ? 'Your quoted per-pound rate, fees, and inclusive minimum apply. Payment is collected after weighing. If your quote expires before card setup finishes, request a new quote.' : '{{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on file and charge it after we weigh your laundry at your door.'}
+      ${intent.dev_quote_id ? 'Your saved quote and inclusive minimum apply. Weight-based estimates recalculate at measured weight. Payment is collected after weighing. If your quote expires before card setup finishes, request a new quote.' : '{{PRICE_PER_LB}} a pound one-time, {{SUBSCRIPTION_PRICE_PER_LB}} a pound on a subscription, {{MINIMUM}} minimum. Nothing is charged now. We keep this on file and charge it after we weigh your laundry at your door.'}
     </p>
 
     <form method="post" action="/account/card" style="margin:0;">
@@ -2255,27 +2257,25 @@ function cardStep({ customer, intent }) {
 // completable is one that cannot be completed on a bad connection.
 // ---------------------------------------------------------------------------
 function planChoice({ value, title, price, blurb, checked, children = '' }) {
-  return `
-          <label class="check" style="align-items:flex-start;">
+  return `<div class="card card-xl booking-plan-option">
+          <label class="check booking-plan-choice">
             <input type="radio" name="plan" value="${value}"${checked ? ' checked' : ''}>
             <span class="check-box check-box-round">{{ICON_CHECK}}</span>
-            <span style="flex:1;min-width:0;">
-              <span style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;">
-                <span style="font-size:16px;font-weight:600;color:var(--ink-900);">${escapeHtml(title)}</span>
-                <span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--ink-900);">${escapeHtml(price || '')}</span>
-              </span>
-              <span style="display:block;font-size:14px;color:var(--ink-500);margin-top:2px;">${escapeHtml(blurb)}</span>
+            <span class="booking-plan-copy">
+              <span class="booking-plan-title">${escapeHtml(title)}${price ? ` <span>${escapeHtml(price)}</span>` : ''}</span>
+              <span class="booking-plan-description">${escapeHtml(blurb)}</span>
             </span>
-          </label>${children}`;
+          </label>${children}</div>`;
 }
 
 function repeatForm(given, estimate) {
   const estimateView = require('../web/booking-price');
+  const weightModel=require('../core/weight-based-pricing').isSnapshot(estimate?.snapshot);
   const planEstimate = category => estimate && !estimate.unavailable
     ? estimateView.planEstimate(estimate.categories[estimate.snapshot?.category === 'WHOLESALE' ? 'WHOLESALE' : category]) : '';
   const estimateNote = estimate ? '<p class="field-hint">' + (estimate.unavailable
     ? 'An address estimate is unavailable. Choose a pickup date and time to try again.'
-    : 'Preliminary estimates for your address. Pickup and return availability has been checked. We check again after you choose a pickup date and time.') + '</p>' : '';
+    : 'Pricing for your address. Pickup and return availability has been checked. We check again after you choose a pickup date and time.') + '</p>' : '';
   const chosen = String(given.plan || '');
   // HOW OFTEN, ASKED ON THE SAME SCREEN AS THE PLAN IT BELONGS TO.
   //
@@ -2288,11 +2288,11 @@ function repeatForm(given, estimate) {
   // The labels come from subscription.FREQUENCIES so the website, the AI and
   // the ops screens all name the three the same way.
   const frequencies = `
-          <span class="stack" style="display:block;margin:4px 0 0 34px;padding-left:16px;border-left:2px solid var(--ink-100);">
-            <span class="eyebrow" style="display:block;margin-bottom:10px;">How often?</span>
+          <fieldset class="booking-frequency">
+            <legend>How often?</legend><div class="booking-frequency-options">
             ${subscription.FREQUENCIES.map(
               (f) => `
-            <label class="check" style="margin-bottom:10px;">
+            <label class="check booking-frequency-choice">
               <input type="radio" name="cadence" value="${f.cadence}"${
                 given.cadence === f.cadence ? ' checked' : ''
               }>
@@ -2302,27 +2302,19 @@ function repeatForm(given, estimate) {
               )}</span>
             </label>`
             ).join('')}
-            <span class="field-hint" style="display:block;">Every month means every 4 weeks, on the same weekday.</span>
-          </span>`;
+            </div><p class="field-hint">Every month means every 4 weeks, on the same weekday.</p>
+          </fieldset>`;
 
   return `
-    <form method="post" action="/account/book" id="wizard">
+    <form method="post" action="/account/book" id="wizard"${weightModel?' data-weight-pricing':''}>
       <input type="hidden" name="step" value="repeat">
+      ${weightModel?require('../web/weight-pricing').slider(estimate.snapshot.estimatedWeightLb,estimate.snapshot.category==='WHOLESALE'?{WHOLESALE:estimate.categories.WHOLESALE}:estimate.categories):''}
       ${carried(given, 'repeat')}
       ${estimateNote}
 
       <fieldset style="border:0;padding:0;margin:0;">
         <legend class="field-label" style="padding:0;">Choose your option</legend>
-        <div style="display:flex;flex-direction:column;gap:18px;margin-top:12px;">
-          ${planChoice({
-            value: subscription.PLANS.ONE_TIME,
-            title: 'One-Time Pickup',
-            price: '',
-            blurb: 'Book whenever you need us.',
-            checked: chosen === subscription.PLANS.ONE_TIME,
-            children: planEstimate('ONE_TIME'),
-          })}
-
+        <div class="booking-plan-options">
           ${planChoice({
             value: subscription.PLANS.SUBSCRIPTION,
             title: 'Subscription',
@@ -2331,13 +2323,22 @@ function repeatForm(given, estimate) {
             checked: chosen === subscription.PLANS.SUBSCRIPTION,
             children: planEstimate('SUBSCRIPTION') + frequencies,
           })}
+
+          ${planChoice({
+            value: subscription.PLANS.ONE_TIME,
+            title: 'One-Time Pickup',
+            price: '',
+            blurb: 'Book whenever you need us.',
+            checked: chosen === subscription.PLANS.ONE_TIME,
+            children: planEstimate('ONE_TIME'),
+          })}
         </div>
       </fieldset>
 
       <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:26px;">
         Continue {{ICON_ARROW}}
       </button>
-    </form>`;
+    </form>${weightModel?require('../web/weight-pricing').script():''}`;
 }
 
 // ---------------------------------------------------------------------------

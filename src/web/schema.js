@@ -79,7 +79,7 @@ function localBusiness({ path = '/', town = null } = {}) {
     // Business Profile and the Facebook page are the same company.
     sameAs: [GOOGLE_PROFILE, FACEBOOK_PAGE],
     hasMap: GOOGLE_PROFILE,
-    priceRange: `${site.pricePerLb}/lb`,
+    ...(config.supabase.isDevelopment ? {} : { priceRange: `${site.pricePerLb}/lb` }),
     areaServed: area(town),
     address: { '@type': 'PostalAddress', addressRegion: 'NJ', addressCountry: 'US' },
     // TWO WAYS IN, AND THEY DO DIFFERENT JOBS. One number is texted and is how
@@ -118,7 +118,12 @@ function service({ town = null } = {}) {
     // was not the same LYNDRY. It credits the one above by id instead.
     provider: { '@id': BUSINESS_ID },
     areaServed: area(town),
-    offers: {
+    offers: config.supabase.isDevelopment ? {
+      '@type': 'Offer',
+      priceCurrency: 'USD',
+      url: `${config.baseUrl}/pricing`,
+      description: 'Pricing depends on your address, tier and measured bag weight. Review your quote before booking.',
+    } : {
       '@type': 'Offer',
       priceCurrency: 'USD',
       price: (config.pricing.perPoundCents / 100).toFixed(2),

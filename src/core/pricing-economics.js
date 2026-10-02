@@ -4,6 +4,7 @@
 // Other operating expenses are excluded; this is not net profit.
 const CATEGORIES = Object.freeze(['ONE_TIME', 'SUBSCRIPTION', 'WHOLESALE']);
 const SCALE = 10000n;
+const weightPricing = require('./weight-based-pricing');
 
 function integer(value, name, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
@@ -38,6 +39,7 @@ function validatePolicy(policy, category) {
   integer(policy.operationalFeeBps, 'Operational fee percentage', 0, 10000);
   if (marginBps + processingBps >= 10000) throw new RangeError('Target plus processing must be below 100%');
   if (weightUnits(policy.referenceWeightLb) < 1000n) throw new RangeError('Reference weight must be at least one pound');
+  if(policy.pricingMethod===weightPricing.METHOD && policy.minimumWeightLb!=null) integer(policy.minimumWeightLb,'Minimum weight',1,50);
   return { marginBps, keepBps: 10000 - marginBps - processingBps };
 }
 
@@ -55,7 +57,9 @@ function requiredTotal({ weightLb, wholesaleCentsPerLb, pickupCents, returnCents
   return cents(ceiling(costs * SCALE, BigInt(keepBps)));
 }
 
-function quotedTotal({ weightLb, rateCentsPerLb, operationalFeeCents, minimumTotalCents }) {
+function quotedTotal(input) {
+  if (weightPricing.isSnapshot(input)) return weightPricing.total(input,input.weightLb);
+  const { weightLb, rateCentsPerLb, operationalFeeCents, minimumTotalCents } = input;
   integer(rateCentsPerLb, 'Customer rate', 1);
   integer(operationalFeeCents, 'Operational fee');
   integer(minimumTotalCents, 'Minimum total');
@@ -71,17 +75,42 @@ function preview(input) {
   integer(pickupCents, 'Pickup cost');
   integer(returnCents, 'Return cost');
   const courierCents = cents(BigInt(pickupCents) + BigInt(returnCents));
+  if (policy.pricingMethod === weightPricing.METHOD) {
+    const estimatedWeightLb=weightPricing.estimatedWeight(input.estimatedWeightLb??30);
+    const prices={pricingMethod:policy.pricingMethod,policy,category,wholesaleCentsPerLb:input.wholesaleCentsPerLb,
+      pickupCents,returnCents,minimumTotalCents:policy.minimumTotalCents,operationalFeeCents:0,estimatedWeightLb};
+    if (policy.laundryPricingBasis != null) {
+      if (policy.laundryPricingBasis !== weightPricing.CUSTOMER_BASE) throw new RangeError('Unknown laundry pricing basis');
+      prices.laundryPricingBasis = weightPricing.CUSTOMER_BASE;
+      prices.customerBaseCentsPerLb = integer(input.customerBaseCentsPerLb ?? input.wholesaleCentsPerLb, 'Customer pricing base', 1);
+    }
+    if(policy.minimumWeightLb != null) {
+      prices.minimumWeightLb=policy.minimumWeightLb;
+      // Freeze the dollar price of the minimum weight for database billing and
+      // accepted quotes. Changing today's minimum never rewrites old orders.
+      prices.minimumTotalCents=0;
+      prices.minimumTotalCents=weightPricing.total(prices,prices.minimumWeightLb,{applyMinimum:false});
+    }
+    const estimatedTotalCents=weightPricing.total(prices,estimatedWeightLb);
+    return {...prices,rateCentsPerLb:Math.ceil(estimatedTotalCents/estimatedWeightLb),targetMarginBps:marginBps,
+      referenceWeightLb:estimatedWeightLb,courierCents,estimatedTotalCents,
+      requiredReferenceTotalCents:weightPricing.total(prices,estimatedWeightLb,{applyMinimum:false}),
+      estimatedReferenceTotalCents:estimatedTotalCents,
+      estimated30LbCents:weightPricing.total(prices,30),estimated40LbCents:weightPricing.total(prices,40)};
+  }
   if (policy.pricingMethod === 'COST_PLUS_MARGIN_15') {
     integer(input.wholesaleCentsPerLb, 'Wholesale rate', 1);
     const customerBaseCentsPerLb = integer(input.customerBaseCentsPerLb ?? input.wholesaleCentsPerLb, 'Customer pricing base rate', 1);
     // Keep the saved fee field for compatibility with atomic database billing.
     // In this version it represents the complete delivery and fees amount.
-    // Processing is included in both components, never added again at payment.
+    // Laundry includes processing; transport fees use only the category margin.
+    // Processing remains a business cost and is never surcharged at payment.
     const prices = {
       pricingMethod: policy.pricingMethod,
       customerBaseCentsPerLb,
+      feeCalculation: 'TRANSPORT_MARGIN_V2',
       rateCentsPerLb: cents(ceiling(BigInt(customerBaseCentsPerLb) * SCALE, BigInt(keepBps))),
-      operationalFeeCents: cents(ceiling((BigInt(courierCents) + BigInt(policy.processingFixedCents)) * SCALE, BigInt(keepBps))),
+      operationalFeeCents: cents((BigInt(courierCents) * SCALE + BigInt(10000 - marginBps) / 2n) / BigInt(10000 - marginBps)),
       minimumTotalCents: 1500,
     };
     return { ...prices, category, targetMarginBps: marginBps, referenceWeightLb: policy.referenceWeightLb,
@@ -106,25 +135,25 @@ function preview(input) {
 }
 
 // Cost values must come from completed-order records. Missing costs are not zero.
-function contribution({ revenueCents, washingCents, courierCents, processingCents }) {
-  for (const [name, value] of Object.entries({ revenueCents, washingCents, courierCents, processingCents })) integer(value, name);
-  const contributionCents = revenueCents - washingCents - courierCents - processingCents;
+function contribution({ revenueCents, washingCents, courierCents, processingCents, otherCostCents = 0 }) {
+  for (const [name, value] of Object.entries({ revenueCents, washingCents, courierCents, processingCents, otherCostCents })) integer(value, name);
+  const contributionCents = revenueCents - washingCents - courierCents - processingCents - otherCostCents;
   if (!Number.isSafeInteger(contributionCents)) throw new RangeError('Contribution exceeds safe range');
   return { contributionCents, contributionPercent: revenueCents === 0 ? null : contributionCents / revenueCents * 100 };
 }
 
 // Eligibility is evaluated by the caller for the requested date. This function
 // deliberately receives one shared policy/category, never candidate-specific weights.
-function compareCandidates(candidates, { policy, category }) {
+function compareCandidates(candidates, { policy, category, estimatedWeightLb }) {
   validatePolicy(policy, category);
   const seen = new Set();
   const priced = candidates.map(candidate => {
     if (!candidate.id || seen.has(candidate.id)) throw new RangeError('Candidate IDs must be unique');
     seen.add(candidate.id);
-    return { id: candidate.id, ...preview({ ...candidate, policy, category }) };
+    return { id: candidate.id, ...preview({ ...candidate, policy, category, estimatedWeightLb }) };
   });
   // Reject incomplete prices instead of claiming a cheapest result from partial data.
   return priced.sort((a, b) => a.estimatedReferenceTotalCents - b.estimatedReferenceTotalCents || String(a.id).localeCompare(String(b.id)));
 }
 
-module.exports = { CATEGORIES, validatePolicy, requiredTotal, quotedTotal, preview, contribution, compareCandidates };
+module.exports = { washingCostCents, CATEGORIES, validatePolicy, requiredTotal, quotedTotal, preview, contribution, compareCandidates };

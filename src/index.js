@@ -118,6 +118,7 @@ app.use(
   })
 );
 app.use(express.urlencoded({ extended: true }));
+app.use('/js', express.static(path.join(__dirname, '..', 'public', 'js'), { maxAge: 0 }));
 
 // Stylesheets. Only public/css is served — public/pages holds page templates
 // with {{TOKEN}} holes in them, which must never be reachable directly.

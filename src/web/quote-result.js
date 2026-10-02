@@ -210,6 +210,7 @@ function render({ quote, address, error, fields, interest }) {
 module.exports = { render, escapeHtml };
 
 function dynamicPriced(quote,address) {
+  if(require('../core/weight-based-pricing').isSnapshot(quote.categories.ONE_TIME)) return require('./weight-pricing').publicQuote(quote,address);
   const one=quote.categories.ONE_TIME;
   const subscription=quote.categories.SUBSCRIPTION;
   const plan=(name,p)=>`<div class="card card-xl quote-plan"><h3>${name}</h3><dl>
@@ -220,7 +221,7 @@ function dynamicPriced(quote,address) {
     <p class="eyebrow quote-eyebrow">Subscription wash, dry &amp; fold</p>
     <h2 class="display-3 quote-rate-heading">${money(subscription.rateCentsPerLb)} per pound</h2>
     <p class="quote-address">${escapeHtml(address)}</p>
-    ${quote.indicative ? '<p class="quote-address">Preliminary estimate for your address. Pickup date and time may change availability and pricing.</p>' : ''}
+    ${quote.indicative ? '<p class="quote-address">Pricing for your address. Pickup date and time may change availability and pricing.</p>' : ''}
     ${plan('Subscription pickup',subscription)}${plan('One-time pickup',one)}
     <p class="quote-address">${one.pricingMethod === 'COST_PLUS_MARGIN_15' ? 'Delivery, operational and service fees apply once per order. Payment processing is included; there is no additional processing charge.' : 'No separate pickup or delivery charge. The operational fee is included in the minimum total.'}</p>
     <p class="quote-address">Final weight determines your bill. Review and confirm your price when booking. Each subscription pickup receives its own quote.</p>

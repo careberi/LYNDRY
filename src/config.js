@@ -240,6 +240,7 @@ const config = Object.freeze({
 
   // Where handoff_to_human reaches Neil. His personal number, never published.
   supportPhone: process.env.SUPPORT_PHONE || '',
+  shopEscalationPhone: process.env.SHOP_ESCALATION_PHONE || '',
 
   // NUMBERS THAT CAN ALWAYS BOOK, whatever the service is doing.
   //

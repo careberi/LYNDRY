@@ -13,6 +13,7 @@ function fixture(){
   '../config':{config:{env:'development',supabase:{isProduction:false,isDevelopment:true},shipday:{apiKey:'test'}}},
   '../providers/couriers/shipday':{createClient:()=>shipdayClient},
   './public-courier-availability':require('../src/core/public-courier-availability'),
+  './weight-based-pricing':require('../src/core/weight-based-pricing'),
   './pricing-economics':economics,'./dynamic-order-pricing':dynamic,
   './shipday-dispatch':require('../src/core/shipday-dispatch'),
   './pickup-timing':require('../src/core/pickup-timing'),
@@ -88,7 +89,8 @@ test('price review shows the minimum and weight limit without a maximum charge',
  const html=view.review({id:'test',snapshot:p},'');
  assert.match(html,/50 lb per order/);assert.doesNotMatch(html,/Maximum at|maximum charge|booking-maximum|\$87.00/);assert.doesNotMatch(html,/name="spending_limit"|Set your spending limit|type="checkbox"/);assert.match(html,/name="price_consent" value="yes"/);
  assert.match(view.review({id:'test',snapshot:{...p,minimumTotalCents:10000}},''),/\$100.00/);
- assert.match(view.planEstimate(p),/\$54.00–\$70.50/);
+ assert.doesNotMatch(view.planEstimate(p),/Estimated total|30–40 lb|\$54.00|\$70.50/);
+ assert.match(view.planEstimate(p),/Minimum total: \$22.14/);
 });
 test('overweight dev order stops before price updates or charges',async()=>{
  const f=fixture();await assert.rejects(f.service.evaluateWeight({},50.01),/limited to 50 lb/);assert.equal(f.writes(),0);

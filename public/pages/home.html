@@ -102,117 +102,51 @@
 
     <div class="hero-row">
 
-      <div class="hero-copy" data-parallax="0.14">
-        <!-- Written in sentence case; the .eyebrow class uppercases it. That is
-             the design system's rule - uppercase lives in the Space Mono label
-             treatment, never in the copy itself.
-
-             THE SERVICE AREA IS A LINK, AND THAT IS THE ONE ADDITION TO THE
-             HANDOFF'S HERO. The line it replaced carried the only route from
-             this page into the seventy town pages, and dropping it would have
-             quietly cost them their entry point. It is a token rather than a
-             typed county because what we cover depends on who does the driving
-             - see the service area note in CLAUDE.md. -->
-        <!-- THREE LINES, BROKEN WHERE NEIL BROKE THEM, at every width. The
-             <br>s are deliberate: this is a stack of three claims rather than a
-             sentence that happens to wrap, so letting it reflow would turn it
-             into something else on a phone. What that costs is that the longest
-             line, "pickup & delivery", now sets the type size - see the cqi
-             rule in lyndry.css, which is measured against it.
-
-             IT IS ALSO THE H1, which the old brand line could not be: "Text us.
-             We got your laundry." held no word anybody types into a search box,
-             so a small keyword line underneath carried the H1 instead. These
-             three lines are the search itself, so the two jobs are one element
-             again and that extra line is gone.
-
-             THERE IS NO EYEBROW ABOVE IT ANY MORE. It named the service area,
-             and Neil took it off on 26 September: "we are not just in northern
-             NJ anymore, our distance depends on our laundromat partners". A
-             fixed place-name in the loudest position on the site is a claim
-             that goes stale every time a partner is added.
-
-             That link was also the home page's route into the seventy town
-             pages. They are still reachable from Contact, from each other and
-             from the sitemap, which is what Google walks. -->
-        <h1 class="display-1 hero-stack"><span>Laundry</span><span>wash &amp; fold</span><span>pickup &amp; delivery</span></h1>
-
-        <p style="font-size:19px;line-height:1.5;color:var(--ink-800);max-width:42ch;margin:0 0 34px;">
-          Leave a bag at your door. We wash, dry and fold it and bring it back
-          the {{TURNAROUND}}.
-        </p>
-
-        <!-- ONE WAY IN, AND IT IS THE SIZE OF THE THREE IT REPLACED.
-             Neil, 26 September: make it a giant button that takes over where
-             the call and email buttons are.
-
-             The Call and Email tiles that sat here are gone with them, and so
-             is the line under them that read "same order, whichever way you
-             book" - there is one way now, so it had stopped being true. Both
-             are still reachable from Contact in the nav and from the footer.
-
-             There is no text box here either: texting is strictly outbound, so
-             an sms: link would point at a number that answers nobody. -->
+      <div class="hero-copy">
+        <h1 class="display-1 hero-stack"><span>Laundry</span><span>wash &amp; fold</span><span>pickup &amp;</span><span>delivery</span></h1>
+        <p class="hero-description">Leave a bag at your door. We wash, dry and fold it. {{RETURN_EXPECTATION}}</p>
         <div class="hero-actions">
-          <a href="/pricing" class="hero-cta">
-            <span>Check my price</span>
-            {{ICON_ARROW}}
-          </a>
-          <p class="hero-booking-note">See your estimate before you book. <a href="/account/login?next=%2Faccount%2Fbook">Book a pickup</a></p>
+          <a href="/account/login?next=%2Faccount%2Fbook" class="hero-cta hero-cta--primary"><span>Book a pickup</span>{{ICON_ARROW}}</a>
+          <a href="/pricing" class="hero-cta hero-cta--secondary">{{ICON_CARD}}<span>Check my price</span></a>
         </div>
-
       </div>
 
-      <!-- A MOCK PICKUP, IN PLACE OF THE PHONE THREAD THAT USED TO SIT HERE.
-           The thread showed a customer booking by text, which is not something
-           the product does any more.
-
-           Decoration, so it is hidden from screen readers exactly as the phone
-           mock was - everything it says is said properly in the copy beside it.
-
-           NO ORDER NUMBER IN THE HEADER. The handoff had "Order LY-4471"; a
-           number in our real format would be read as a real order by anybody
-           who has one, and an invented format is noise. Neil took the
-           placeholder out on sight, so the header carries the label alone. -->
-      <div class="pickup-wrap" data-parallax="-0.09" aria-hidden="true">
+      <!-- An illustrative subscription receipt, not a quote for this visitor.
+           See home-hero.test.js for the frozen example's calculation. -->
+      <aside class="pickup-wrap" aria-label="Example laundry order">
         <div class="pickup-card">
-          <div class="pickup-card__head">
-            <span>Example pickup</span>
-          </div>
-
+          <div class="pickup-card__head"><span>How an order looks</span><span>Example</span></div>
           <div class="pickup-card__body">
             <div class="pickup-when">
-              <span class="pickup-when__icon">{{ICON_TRUCK}}</span>
+              <span class="pickup-when__icon" aria-hidden="true">{{ICON_TRUCK}}</span>
               <div>
-                <div class="pickup-when__day">Your chosen time</div>
-                <div class="pickup-when__window">Choose your day when booking</div>
+                <h2 class="pickup-when__day">Collected this morning</h2>
+                <p class="pickup-when__window">Next day return when available.</p>
               </div>
             </div>
-
             <dl class="pickup-rows">
               <div><dt>Pickup</dt><dd>Outside your door</dd></div>
-              <div><dt>Service</dt><dd>Wash, dry &amp; fold</dd></div>
-              <div><dt>Back</dt><dd>{{TURNAROUND}}, same spot</dd></div>
+              <div><dt>Bag weight</dt><dd>30 lb</dd></div>
+              <div><dt>Average rate</dt><dd>About $1.36 / lb</dd></div>
+              <div><dt>Pickup, return<br>&amp; processing</dt><dd>Included</dd></div>
+              <div class="pickup-total"><dt>Example total</dt><dd>$40.86</dd></div>
             </dl>
-
-            <div class="pickup-rail">
-              <span class="pickup-step pickup-step--done"><i></i>Booked</span>
-              <span class="pickup-step pickup-step--now"><i></i>Collected</span>
-              <span class="pickup-step"><i></i>Washing</span>
-              <span class="pickup-step"><i></i>On its way</span>
-              <span class="pickup-step"><i></i>Delivered</span>
-            </div>
+            <p class="pickup-example-note">Subscription example. Your price depends on your address, tier and bag weight.</p>
+            <ol class="pickup-rail" aria-label="Example order progress">
+              <li class="pickup-step pickup-step--done"><span class="pickup-step__icon" aria-hidden="true">{{ICON_CHECK}}</span><span>Booked</span></li>
+              <li class="pickup-step pickup-step--now" aria-current="step"><span class="pickup-step__icon" aria-hidden="true">{{ICON_TRUCK}}</span><span>Collected</span></li>
+              <li class="pickup-step"><span class="pickup-step__icon" aria-hidden="true">{{ICON_DROPLETS}}</span><span>Washing</span></li>
+              <li class="pickup-step"><span class="pickup-step__icon" aria-hidden="true">{{ICON_SHIRT}}</span><span>Ready</span></li>
+              <li class="pickup-step"><span class="pickup-step__icon" aria-hidden="true">{{ICON_PACKAGE_CHECK}}</span><span>Delivered</span></li>
+            </ol>
           </div>
         </div>
-
         {{HERO_OFFER}}
-      </div>
-
+      </aside>
     </div>
 
-    <!-- Service facts pinned to the bottom of the hero. -->
     <div class="fact-rail">
-      <span>{{TURNAROUND}} turnaround</span>
+      <span>{{TURNAROUND}} return when available</span>
       <span>Pickup &amp; delivery</span>
       <span>Houses and apartments</span>
     </div>
@@ -264,7 +198,7 @@
       </div>
       <h3 style="font-family:var(--font-display);font-weight:800;font-size:26px;margin:0 0 10px;">Get it back</h3>
       <p style="font-size:15px;line-height:1.55;color:var(--ink-700);margin:0;">
-        Your laundry comes back washed, dried and folded the {{TURNAROUND}}. We will text you when it arrives, with a delivery photo.
+        {{RETURN_EXPECTATION}} We will text you when it arrives, with a delivery photo.
       </p>
     </div>
 

@@ -340,7 +340,7 @@ function planCell(order) {
   return (
     `<span style="font-weight:600;">Subscription</span>` +
     `<span style="display:block;font-family:var(--font-mono);font-size:12px;color:var(--ink-500);">` +
-    `${escapeHtml(subscription.rate(order.price_per_lb_cents || subscription.subscriptionCents()))}</span>`
+    `${escapeHtml(require('../core/weight-based-pricing').isSnapshot(order.pricing_snapshot)?'Weight-based pricing':subscription.rate(order.price_per_lb_cents || subscription.subscriptionCents()))}</span>`
   );
 }
 
@@ -1696,6 +1696,7 @@ function refuse(req, res) {
 // below takes both.
 const may = (permission) => roles.requirePermission(permission, refuse);
 require('./spending-routes').registerAdmin(router, { guard, may, adminPage });
+require('./order-recovery').register(router,{guard,may,upload});
 require('./shipday-routes').registerAdmin(router, { guard, may, adminPage });
 require('./shipday-assignments').registerAdmin(router, { guard, may, adminPage });
 router.post('/ops/orders/:id/sync-shipday',guard,may('orders.override'),require('./spending-routes').sameOrigin,async(req,res,next)=>{
@@ -1768,7 +1769,7 @@ const ORDER_FIELDS =
   // order page would quietly call every subscriber's pickup a one-off and
   // show the wrong rate beside it. Same trap as every other field in this
   // list, and the money is on this one.
-  'subscription_id, price_per_lb_cents, ' +
+  'subscription_id, price_per_lb_cents, pricing_snapshot, ' +
   // WHO DRIVES EACH LEG. Unselected, both read as undefined, and
   // `carriers.carrierFor()` answers undefined with the DEFAULT - so a leg Neil
   // had taken in house rendered as "a courier" on the one screen he uses to
@@ -3031,7 +3032,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           // A held weight is money that is deliberately stuck. Without these
           // two the page cannot tell a settled order from one waiting on a
           // decision, and the card that offers the decision never appears.
-          'weight_held_at, weight_settled_at, billable_weight_lb'
+          'weight_held_at, weight_settled_at, billable_weight_lb, partner_bill_lb'
       )
       .eq(byNumber ? 'order_number' : 'id', wanted)
       .maybeSingle();
@@ -3250,8 +3251,22 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           })
         : '';
 
+    const orderPaymentRows = await payments.forOrder(order.id).catch(err => {
+      console.error('Could not read order payments: '+err.message); return null;
+    });
+    let courierCostRows = [];
+    if (shipdayWorkspace && showMoney) {
+      const result = await db.from('courier_deliveries').select('leg,delivery_id,fee_cents').eq('order_id',order.id);
+      if (!result.error) courierCostRows = result.data || [];
+    }
     let overviewHtml = '';
     const deliverySync = shipdayWorkspace ? await require('../core/shipday-order-sync-runtime').rows(order.id) : [];
+    let deliveryPlans=[];
+    if(shipdayWorkspace){
+      const result=await db.from('shipday_dispatch_plans').select('leg,shipday_order_id').eq('order_id',order.id);
+      if(result.error)throw result.error;
+      deliveryPlans=result.data||[];
+    }
     if (shipdayWorkspace) {
       const destinationId = order.partner_id || order.intended_partner_id;
       const destination = destinationId ? await partners.find(destinationId) : null;
@@ -3260,9 +3275,9 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
         try { revised = await require('../core/order-partner-price').preview({...order,customers:c},destinationId); }
         catch (err) { priceProblem = 'Cannot refresh this destination estimate: '+err.message; }
       }
-      overviewHtml = require('../web/order-overview').orderOverview({order,customer:c,shop:destination,quote:revised,problem:priceProblem,deliverySync,
+      overviewHtml = require('../web/order-overview').orderOverview({order,customer:c,shop:destination,quote:revised,problem:priceProblem,deliverySync,deliveryPlans,paymentRows:orderPaymentRows,courierRows:courierCostRows,
         canMoney:showMoney,canCustomer:can.customers,selector:can.override && stillRunning ? laundromatCard(order,true,laundromats) : ''});
-      if(can.override&&order.status==='REQUESTED')overviewHtml=require('../web/order-details-edit').editor(order,c)+overviewHtml;
+
     }
     let dispatchHtml = '';
     if(shipdayWorkspace && order.status==='REQUESTED') {
@@ -3282,6 +3297,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     }
     const body = orderConsoleBody({
       shipdayWorkspace,
+      editHtml:shipdayWorkspace&&can.override&&order.status==='REQUESTED'&&!order.partner_id&&order.payment_status!=='PAID'?require('../web/order-details-edit').editor(order,c).replace('<details ', '<details open '):'',
       cancellationHtml:shipdayWorkspace && can.override && orders.isCancellable(order.status)?cancelCard(order,can.override,true):'',
       overviewHtml,
       dispatchHtml,
@@ -3305,10 +3321,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       // HOW IT WAS ACTUALLY PAID. Caught rather than awaited into a failure:
       // an order page that will not load because the ledger is unreachable is
       // worse than one without the split on it.
-      paymentRows: await payments.forOrder(order.id).catch((err) => {
-        console.error(`Could not read the payments on ${order.id}: ${err.message}`);
-        return [];
-      }),
+      paymentRows: orderPaymentRows || [],
     });
 
     // eslint-disable-next-line no-unused-vars
@@ -3534,7 +3547,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
           ${
             showMoney
               ? detail('Plan', subscription.planLabel(order)) +
-                detail('Rate', money(order.price_per_lb_cents) + ' / lb') +
+                detail('Rate', require('../core/weight-based-pricing').isSnapshot(order.pricing_snapshot)?'Average recalculates at measured weight':money(order.price_per_lb_cents) + ' / lb') +
                 detail('Price', `<strong>${money(order.price_cents)}</strong>`) +
                 detail(
                   'Payment',
@@ -8805,19 +8818,20 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
                      style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;border-top:2px solid var(--ink-900);padding-top:18px;margin:0;">
                  <input class="input" type="text" name="resolution" maxlength="200"
                         aria-label="Resolution notes" placeholder="Resolution notes" style="flex:1;min-width:240px;">
-                 <button type="submit" class="btn btn-primary">Mark resolved</button>
+                 <button type="submit" class="btn btn-primary">${config.supabase.isDevelopment && require('../core/weight-issue-resolution').orderNumbers(i).length ? 'Resolve weight hold and dispatch' : 'Mark resolved'}</button>
                </form>`
             : `<p style="font-size:13px;color:var(--ink-500);margin:14px 0 0;">
                  Resolved ${escapeHtml(dateTime(i.resolved_at))}${
                    i.ops_users ? ` by ${escapeHtml(i.ops_users.name)}` : ''
                  }${i.resolution ? `: ${escapeHtml(i.resolution)}` : ''}
-               </p>`
+               </p>${config.supabase.isDevelopment && require('../core/weight-issue-resolution').orderNumbers(i).length ? `<form method="post" action="/ops/issues/${i.id}/resolve"><button class="btn btn-outline">Complete release / retry return dispatch</button></form>` : ''}`
         }
       </div>`;
     };
 
     const body = `
       <h1>Issues</h1>
+      ${typeof req.query.notice==='string'?'<p role="status" class="ops-note">'+escapeHtml(req.query.notice.slice(0,500))+'</p>':''}
       ${dayStrip}
 
       ${
@@ -8868,6 +8882,19 @@ router.get('/ops/issues', guard, withIssues, may('issues.manage'), async (req, r
 router.post('/ops/issues/:id/resolve', guard, may('issues.manage'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return notFoundPage(res, 'That is not an issue id.');
+
+    if (config.supabase.isDevelopment) {
+      const {data:issue,error}=await db.from('issues').select('*').eq('id',req.params.id).maybeSingle();
+      if(error)throw error;
+      if(issue && require('../core/weight-issue-resolution').orderNumbers(issue).length) {
+        try {
+          const outcome=await require('../core/weight-issue-resolution-runtime')(issue,req.opsUser,(req.body||{}).resolution);
+          const failed=outcome.results.filter(r=>!r.ok);
+          const notice=failed.length?'Weight hold released; return dispatch needs attention. '+failed.map(r=>'#'+r.number+': '+r.reason).join(' '):'Weight hold resolved. Return dispatch requested or already arranged.';
+          return res.redirect(303,'/ops/issues?notice='+encodeURIComponent(notice));
+        } catch(error) { return res.redirect(303,'/ops/issues?notice='+encodeURIComponent(error.message)); }
+      }
+    }
 
     const closed = await issues.resolve(
       req.params.id,

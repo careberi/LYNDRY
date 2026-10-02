@@ -114,6 +114,9 @@ function perPoundOf(order) {
 // cosmetic: with a promotion still to come off, "that is" is honest and "the
 // total is" is not, because a lower number follows in the next clause.
 function pricedSentence({ opening, byWeight, floor, surcharge, total, perPound, quotedParts = null, verb = 'that is' }) {
+  if (quotedParts?.weightBased) {
+    return `${opening}. Your total recalculated at this weight is ${money(total)}, including pickup, return and processing, with a ${money(quotedParts.floor)} minimum${surcharge>0?` plus ${money(surcharge)} for selected wash options`:''}.`;
+  }
   if (quotedParts) {
     return `${opening}. At ${perPound}, plus ${money(quotedParts.operationalFee)} delivery and fees, with a ${money(quotedParts.floor)} minimum${surcharge > 0 ? ` and ${money(surcharge)} wash options` : ''}, ${verb} ${money(total)}. Processing is included.`;
   }
@@ -508,7 +511,7 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
   // The terms stored on the order, never today's terms. Changing the price or
   // the minimum must not re-price work that was already quoted.
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
-  const quotedParts = order.pricing_snapshot?.pricingMethod === 'COST_PLUS_MARGIN_15' ? pricing.priceOn(order, weight) : null;
+  const quotedParts = ['COST_PLUS_MARGIN_15','WEIGHT_BASED_MARGIN_V1'].includes(order.pricing_snapshot?.pricingMethod) ? pricing.priceOn(order, weight) : null;
   const byWeight = quotedParts ? quotedParts.byWeight : Math.round(weight * rate);
 
   // THE MINIMUM IS PART OF THE PRICE, not just part of the charging.
@@ -709,7 +712,9 @@ async function recordWeight(order, weightLb, photo, { by = {}, photoOnBags = fal
       kind: 'PRICE',
       summary: minimumApplied
         ? `Priced ${money(priceCents)}, the minimum`
-        : `Priced ${money(priceCents)} at ${money(rate)} a pound`,
+        : quotedParts?.weightBased
+          ? `Priced ${money(priceCents)} for ${weight} lb, including pickup, return and processing`
+          : `Priced ${money(priceCents)} at ${money(rate)} a pound`,
       was: order.price_cents == null ? null : money(order.price_cents),
       became: money(priceCents),
       by,
@@ -1408,7 +1413,7 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
   // changing the price must not re-price work already quoted.
   const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
   const floor = order.minimum_cents != null ? order.minimum_cents : order.deposit_cents || 0;
-  const quotedParts = order.pricing_snapshot?.pricingMethod === 'COST_PLUS_MARGIN_15' ? pricing.priceOn(order, billable) : null;
+  const quotedParts = ['COST_PLUS_MARGIN_15','WEIGHT_BASED_MARGIN_V1'].includes(order.pricing_snapshot?.pricingMethod) ? pricing.priceOn(order, billable) : null;
   const byWeight = quotedParts ? quotedParts.byWeight : Math.round(billable * rate);
 
   // PAID WASH OPTIONS SIT ON TOP OF THE MINIMUM, NOT INSIDE IT.
@@ -1435,7 +1440,7 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
       return null;
     });
 
-  const discountCents = pricing.allowedDiscount(order, beforeDiscount, deal ? deal.cents : 0);
+  const discountCents = pricing.allowedDiscount(order, beforeDiscount, deal ? deal.cents : 0, billable);
   const priceCents = Math.max(0, beforeDiscount - discountCents);
 
   const { data: settled, error } = await db
@@ -1780,7 +1785,7 @@ async function loadVan(order, { by = {} } = {}) {
   const floor = order.minimum_cents != null ? order.minimum_cents : 0;
   const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
 
-  const quotedParts = order.pricing_snapshot?.pricingMethod === 'COST_PLUS_MARGIN_15' ? pricing.priceOn(order, weight) : null;
+  const quotedParts = ['COST_PLUS_MARGIN_15','WEIGHT_BASED_MARGIN_V1'].includes(order.pricing_snapshot?.pricingMethod) ? pricing.priceOn(order, weight) : null;
   const byWeight = quotedParts ? quotedParts.byWeight : Math.round(weight * rate);
   // Paid wash options sit on top of the minimum, not inside it - the same order
   // settleWeight() has always used, because the minimum is what a small load is
@@ -1794,7 +1799,7 @@ async function loadVan(order, { by = {} } = {}) {
       })
     : null;
 
-  const discountCents = pricing.allowedDiscount(order, beforeDiscount, deal ? deal.cents : 0);
+  const discountCents = pricing.allowedDiscount(order, beforeDiscount, deal ? deal.cents : 0, weight);
   const priceCents = Math.max(0, beforeDiscount - discountCents);
 
   // --- The card, before anything is written --------------------------------
