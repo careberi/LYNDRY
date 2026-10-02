@@ -317,6 +317,7 @@ async function sendAndLog(
     direction: 'OUTBOUND',
     body: text,
     provider_message_id: providerMessageId,
+    ...(!sendFailed && (sms.isFake || isFictional(to)) ? {delivery_status:'simulated'} : {}),
     sent_by: sentBy || null,
     // What kind of message this was. Null is honest for everything that has
     // not been classified - see migration 0065. Only 'AI' earns a follow-up.

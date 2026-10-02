@@ -52,11 +52,12 @@ function estimate(observation,now) {
 }
 
 function nextMessage(order,plan,state,observation,now=Date.now()) {
+  if(!order.customers?.default_payment_method_id || order.delivery_notifications_suppressed) return null;
   if(!observation || !Number.isFinite(Date.parse(observation.observedAt)) || now<Date.parse(observation.observedAt) || now-Date.parse(observation.observedAt)>120000 || observation.rank===0 || (state.rank===3 && observation.rank<3)) return null;
   const pickup=plan.leg==='TO_PARTNER',rank=Math.max(state.rank,observation.rank);
   const prefix=`LYNDRY #${order.order_number}: `;
   if(rank>state.rank) {
-    const text=pickup ? {1:'Your driver is on the way to pick up your laundry.',2:'Your pickup driver should arrive soon.',3:'Your laundry has been collected.'}[rank]
+    const text=pickup ? {1:'Your driver is on the way to pick up your laundry. Please have your bag ready at your pickup spot.',2:'Your pickup driver should arrive soon. Please have your bag ready at your pickup spot.',3:"Your laundry has been collected. Most wash and fold orders return next day when available. We will let you know when yours is on the way back."}[rank]
       : {1:'Your clean laundry is out for delivery.',2:'Your clean laundry is out for delivery. Your driver should arrive soon.',3:'Your laundry has been delivered.'}[rank];
     return {key:`milestone-${rank}`,rank,body:prefix+text+(rank<3?estimate(observation,now):'')};
   }

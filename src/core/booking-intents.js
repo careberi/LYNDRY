@@ -133,6 +133,7 @@ async function openFor(customerId) {
 // question it was asking.
 async function save(customer, { pickupDate, pickupTime, notes, cadence, weekdays, devQuoteId = null } = {}) {
   if (!customer || !customer.id) return null;
+  if (require('./dev-checkout').enabled && !devQuoteId) throw Error('An accepted price quote is required before saving a development booking.');
 
   const row = {
     dev_quote_id: devQuoteId,

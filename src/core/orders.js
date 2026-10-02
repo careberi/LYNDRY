@@ -233,6 +233,7 @@ async function create({
   placedVia,
   placedBy,
 }) {
+  if (config.supabase?.isDevelopment && !devQuoteId) throw Error('An accepted price quote is required before creating a development order.');
   const { data, error } = await db
     .from('orders')
     .insert({

@@ -9193,27 +9193,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
 // What the carrier did with a message we sent. This is the only place a
 // blocked or filtered text admits to itself — the send looked fine at the time,
 // and the bad news arrives later on a separate webhook.
-function deliveryNote(m) {
-  if (m.direction !== 'OUTBOUND') return '';
-
-  const failed = m.delivery_status && /fail|undeliver|reject|expired/i.test(m.delivery_status);
-
-  if (failed || m.delivery_error) {
-    return `<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">
-              Not delivered${m.delivery_error ? `: ${escapeHtml(m.delivery_error)}` : ''}
-            </span>`;
-  }
-
-  if (m.delivery_status === 'delivered') {
-    return `<span style="font-size:12px;color:var(--ink-500);">Delivered</span>`;
-  }
-
-  // No receipt yet. Not the same as delivered, and saying so matters when
-  // someone is asking why a customer never replied.
-  return `<span style="font-size:12px;color:var(--ink-400);">Sent${
-    m.delivery_status ? ` &middot; ${escapeHtml(m.delivery_status)}` : ''
-  }</span>`;
-}
+const deliveryNote = require('../web/message-delivery-note');
 
 require('./message-photos').register(router,{db,guard,may});
 
