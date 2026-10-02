@@ -41,7 +41,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
       const courier = legs.find(p => p.order_id === order.id && p.leg === leg && p.delivery_id &&
         !['canceled','cancelled','failed'].includes(String(p.status).toLowerCase()));
       const assigned = plan?.state === 'ASSIGNED' && Boolean(plan.shipday_order_id);
-      if(stage==='INCOMING' && live?.assignmentVerified!==true)return null;
+      if(stage==='INCOMING' && live?.assignmentVerified!==true && live?.ok!==true)return null;
       return {
         // Only anonymous operational fields leave this service for a template.
         number: order.order_number,

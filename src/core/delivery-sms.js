@@ -6,8 +6,8 @@ const collected = new Set(['PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED']);
 const failed = new Set(['CANCELED','CANCELLED','INCOMPLETE','FAILED_DELIVERY']);
 const {legacyNJReturn,matchesAddress}=require('./delivery-address');
 
-async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
-  if (!order.customers?.default_payment_method_id || order.status === 'CANCELED' ||
+async function observe({provider,tracking,order,shop,plan,now=Date.now,forCompletion=false}) {
+  if ((!forCompletion && (order.delivery_notifications_suppressed || !order.customers?.default_payment_method_id)) || order.status === 'CANCELED' ||
       !plan || plan.simulation || !plan.shipday_order_id || !plan.external_reference ||
       !['TO_PARTNER','TO_CUSTOMER'].includes(plan.leg)) return null;
   const pickup = plan.leg === 'TO_PARTNER';
@@ -22,6 +22,7 @@ async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
   if(failed.has(status) || remote.orderStatus?.incomplete || remote.activityLog?.failedDeliveryTime) return null;
   if(!['NOT_ASSIGNED','NOT_ACCEPTED','NOT_STARTED_YET','STARTED',...collected].includes(status)) return null;
   if(plan.mode === 'IN_HOUSE' && (!remote.assignedCarrier?.id || String(remote.assignedCarrier.id) !== String(plan.driver_id))) return null;
+  if(forCompletion && (plan.mode!=='IN_HOUSE' || remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState))return null;
   if(plan.mode === 'THIRD_PARTY' || remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState) {
     const live = await provider.status(plan.shipday_order_id);
     if(!live?.courier?.name || !['STARTED','ASSIGNED','pickup_complete','delivered'].includes(live.status)) return null;

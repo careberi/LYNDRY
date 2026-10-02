@@ -16,15 +16,15 @@ test('unverified, wrong trip, stale evidence and missing proof fail closed',asyn
  for(const patch of [{terminal:false},{remoteId:'999'},{observedAt:'invalid'},{observedAt:new Date(0).toISOString()},{deliveryPhotos:[]}]){const f=fixture();Object.assign(f.seen,patch);await assert.rejects(f.recover(1,'sync',{},{}));assert.equal(f.calls.length,0);}
 });
 test('simulation cannot impersonate real Shipday completion',async()=>{const f=fixture();f.plan.simulation=true;await assert.rejects(f.recover(1,'sync',{},{}));});
-test('manual completion needs reason, attestation and photo',async()=>{
+test('manual completion needs reason and attestation without a photo',async()=>{
  const good={reason:'Confirmed with customer',confirmed:'yes',file:{buffer:Buffer.from('photo')}};
- for(const key of ['reason','confirmed','file']){const f=fixture(),input={...good};delete input[key];await assert.rejects(f.recover(1,'deliver',input,{}));assert.equal(f.calls.length,0);}
- const f=fixture();await f.recover(1,'deliver',good,{});assert.equal(f.calls[1].source,'MANUAL');
+ for(const key of ['reason','confirmed']){const f=fixture(),input={...good};delete input[key];await assert.rejects(f.recover(1,'deliver',input,{}));assert.equal(f.calls.length,0);}
+ const f=fixture();await f.recover(1,'deliver',good,{});assert.equal(f.calls[0].source,'MANUAL');assert.equal(f.calls[0].path,null);
 });
 test('notes do not complete orders and invalid commands fail',async()=>{const f=fixture();await f.recover(1,'note',{reason:'Internal note'},{});assert.equal(f.order.status,'OUT_FOR_DELIVERY');assert.deepEqual(f.calls,['note']);await assert.rejects(f.recover(1,'arbitrary-status',{},{}));});
 test('admin recovery controls do not depend on legacy driver tasks',()=>{
  const {render}=require('../src/web/order-header-actions');
  const html=render({order:{order_number:1,dev_quote_id:'q',status:'OUT_FOR_DELIVERY'},can:{override:true}});
- for(const s of ['Sync with Shipday','Add internal note','Manage delivery','recovery/deliver','name="confirmed"','name="photo"'])assert.ok(html.includes(s));
+ for(const s of ['Sync with Shipday','Add internal note','Manage delivery','recovery/deliver','name="confirmed"'])assert.ok(html.includes(s));
  assert.doesNotMatch(render({order:{dev_quote_id:'q'},can:{act:true}}),/recovery\//);
 });
