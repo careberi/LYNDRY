@@ -8978,7 +8978,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
   try {
     const { data, error } = await db
       .from('messages')
-      .select('phone, direction, body, created_at, delivery_status, customers(id, name, status)')
+      .select('phone, direction, body, created_at, delivery_status, provider_message_id, customers(id, name, status)')
       .order('created_at', { ascending: false })
       .limit(THREAD_SCAN_LIMIT);
 
@@ -9070,7 +9070,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
         `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">${escapeHtml(formatPhone(t.phone))}</a>`,
         `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">${who}</a>${stopped}${muted}`,
         `<div style="font-size:14px;color:var(--ink-700);max-width:46ch;">
-           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Received' : 'Sent'}</span>
+           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Received' : deliveryNote(t.last)}</span>
            ${escapeHtml(preview)}${t.last.body && t.last.body.length > 90 ? '&hellip;' : ''}
          </div>`,
         `<span style="white-space:nowrap;">${escapeHtml(timeAgo(t.last.created_at))}</span>`,
@@ -9253,7 +9253,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         // sent ourselves from a text to a customer. An unselected column reads
         // as undefined, which here would make EVERY outbound row look like an
         // alert - the eighth time that trap would have bitten in this codebase.
-        .select('id, direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone, media_path')
+        .select('id, direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone, media_path, provider_message_id')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
       // THE WHOLE ROW, NOT SIX COLUMNS. nudges.gapsFor() asks the same

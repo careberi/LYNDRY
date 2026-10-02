@@ -39,3 +39,5 @@ test('fake sends are persisted as simulated instead of claiming a carrier receip
  db.from=()=>({select(){return this;},eq(){return this;},gt(){return this;},maybeSingle:async()=>({data:{status:'ACTIVE'}}),limit:async()=>({data:[]}),insert:async row=>{logged=row;return {error:null};}});
  try {const result=await notify.sendAndLog('+12015550198','QA receipt',customer.id);assert.equal(result.simulated,true);assert.equal(logged.delivery_status,'simulated');} finally {db.from=old;}
 });
+
+test('historical fictional sends and both actual conversation query surfaces identify simulation',()=>{const note=require('../src/web/message-delivery-note');assert.match(note({direction:'OUTBOUND',phone:'+12015550199'}),/Simulated/);const admin=fs.readFileSync(require.resolve('../src/routes/admin'),'utf8');assert.match(admin,/select\('phone, direction, body, created_at, delivery_status, provider_message_id/);assert.match(admin,/media_path, provider_message_id/);assert.ok(admin.includes('deliveryNote(t.last)'));});
