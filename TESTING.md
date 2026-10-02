@@ -1,5 +1,11 @@
 # Testing the AI over text
 
+## Latest result: 2026-10-02 booked-order walkthrough
+
+QA #9025 reached DELIVERED/PAID through verified Shipday proof and explicit POS sync. Delivered text and test photo were simulated and visible; repeat sync preserved payment, messages, original trips and completion count. The walkthrough completed with failures and recovery, not a clean golden-path PASS. Address mismatch was fixed and pushed in 2cb7d08. Missing quote/old-price SMS, unconditional turnaround, payment wording, stale return REVIEW and sync warnings, simulation labels and billable-weight display remain open.
+
+See [full execution report](docs/testing/2026-10-02-order-flow.md) for addressed work, failure causes, results and remaining live variants. Final isolated npm test: 1738 passed, zero failed; focused lifecycle assertions: 95 passed, zero failed. The integrated run used 2cb7d08 plus preserved uncommitted development work. No third-party dispatch or live SMS. Main unchanged; independent review, pilot and production approval remain pending.
+
 You do not need a working phone number to test the whole thing. There is a
 simulator that builds the exact webhook Telnyx would send, posts it to your
 running server, and prints the conversation back.
