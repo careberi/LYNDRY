@@ -4,8 +4,7 @@
 // copy vendor names, links, locations, driver instructions or arbitrary text.
 const collected = new Set(['PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED']);
 const failed = new Set(['CANCELED','CANCELLED','INCOMPLETE','FAILED_DELIVERY']);
-const clean = x => String(x || '').toLowerCase().replace(/\b(usa|united states)\b/g,'').replace(/[^a-z0-9]/g,'');
-const address = x => [x.address_line1,x.address_line2,x.city,x.state,x.postal_code].filter(Boolean).join(', ');
+const {legacyNJReturn,matchesAddress}=require('./delivery-address');
 
 async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
   if (!order.customers?.default_payment_method_id || order.status === 'CANCELED' ||
@@ -17,8 +16,8 @@ async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
   const rows = await provider.findOrders(plan.external_reference);
   const remote = rows?.[0];
   if(rows?.length !== 1 || String(remote.orderId) !== String(plan.shipday_order_id) ||
-      remote.orderNumber !== plan.external_reference || clean(remote.restaurant?.address) !== clean(address(from)) ||
-      clean(remote.customer?.address) !== clean(address(to))) return null;
+      remote.orderNumber !== plan.external_reference || !matchesAddress(remote.restaurant?.address,from,legacyNJReturn(plan)) ||
+      !matchesAddress(remote.customer?.address,to,legacyNJReturn(plan))) return null;
   const status = remote.orderStatus?.orderState;
   if(failed.has(status) || remote.orderStatus?.incomplete || remote.activityLog?.failedDeliveryTime) return null;
   if(!['NOT_ASSIGNED','NOT_ACCEPTED','NOT_STARTED_YET','STARTED',...collected].includes(status)) return null;

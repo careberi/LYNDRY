@@ -1,10 +1,11 @@
 'use strict';
-const {normalize,address,COLLECTED}=require('./partner-delivery-gate');
+const {normalize,COLLECTED}=require('./partner-delivery-gate');
+const {legacyNJReturn,matchesAddress}=require('./delivery-address');
 const {phone}=require('../providers/couriers/shipday-tracking');
 function matches(remote,plan,shop,customer) {
   return String(remote?.orderId)===String(plan.shipday_order_id) && remote.orderNumber===plan.external_reference &&
-    normalize(remote.restaurant?.name)===normalize(shop.name) && normalize(remote.restaurant?.address)===normalize(address(shop)) &&
-    normalize(remote.customer?.name)===normalize(customer.name) && normalize(remote.customer?.address)===normalize(address(customer));
+    normalize(remote.restaurant?.name)===normalize(shop.name) && matchesAddress(remote.restaurant?.address,shop,legacyNJReturn(plan)) &&
+    normalize(remote.customer?.name)===normalize(customer.name) && matchesAddress(remote.customer?.address,customer,legacyNJReturn(plan));
 }
 async function verifyReturn({provider,order,shop,customer,plan,telemetry=false,now=Date.now}) {
   if(!plan || plan.leg!=='TO_CUSTOMER' || plan.simulation || !/^[1-9]\d*$/.test(String(plan.shipday_order_id)) || !plan.external_reference) return {ok:false,reason:'return_unassigned'};
@@ -72,7 +73,7 @@ function createRequester({store,provider,load,enabled,now=Date.now}) {
       else {
         context=await load(orderId,partnerId);refusal=eligibility(context);if(refusal)throw Error(refusal);
         const {order,shop,customer}=context;
-        const endpoint=(row,contact,notes)=>({name:row.name,line1:row.address_line1,line2:row.address_line2,city:row.city,state:row.state||'NJ',postalCode:row.postal_code,phone:contact,notes});
+        const endpoint=(row,contact,notes)=>({name:row.name,line1:row.address_line1,line2:row.address_line2,city:row.city,state:row.state,postalCode:row.postal_code,phone:contact,notes});
         mutation=true;
         // Requested delivery is a 30-minute service target; tracking ETA stays separate.
         const pickupAt=now();

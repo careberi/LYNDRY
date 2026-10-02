@@ -1,9 +1,8 @@
 'use strict';
 const {phone} = require('../providers/couriers/shipday-tracking');
 const COLLECTED = new Set(['PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED']);
-const normalize = value => String(value || '').toLowerCase().replace(/\b(usa|united states)\b/g,'').replace(/[^a-z0-9]/g,'');
+const {normalize,address}=require('./delivery-address');
 const destination = shop => Object.fromEntries(['name','address_line1','address_line2','city','state','postal_code'].map(k=>[k,shop[k]??null]));
-const address = shop => [shop.address_line1,shop.address_line2,shop.city,shop.state,shop.postal_code].filter(Boolean).join(', ');
 async function verify({provider,order,shop,plan,now=Date.now,telemetry=false}) {
   if (!plan || plan.leg !== 'TO_PARTNER' || plan.simulation || !/^[1-9]\d*$/.test(String(plan.shipday_order_id))) return {ok:false,reason:'delivery_unverified'};
   const ref=plan.external_reference || `LYNDRY-DEV-${order.order_number}-PICKUP`;

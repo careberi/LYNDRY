@@ -1,3 +1,11 @@
+## 20261002 Approved Shipday address verification repair
+
+Neil approved the bounded design and requested commit and push to development, without merging main. New returns preserve the saved state rather than inventing NJ. Existing non-simulated in-house numeric LYNDRY development RETURN references accept only the exact historical NJ addition when the saved state is blank. Shared formatting and matching serve portal return verification and customer delivery observation. Explicit states, other address fields, linked identity, unique remote result and driver checks remain strict. Pickup verification stays strict. No payment, reminder, routing, customer-copy or duplicate-dispatch changes.
+
+Implementation: src/core/delivery-address.js, partner-delivery-gate.js, partner-return.js and delivery-sms.js; test/delivery-address-verification.test.js. Three reproductions failed before implementation; seven regression cases and 43 focused tests passed. Fresh full npm test on the development working tree with external network blocked: 1738 passed, zero failed. Other uncommitted work was preserved and excluded from this scoped commit.
+
+The original QA return passed read-only verification with the same linked trip and LYNDRY driver. The normal worker recorded a simulated out-for-delivery message. Browser pickup confirmation succeeded, the shop board recorded the handoff, and POS showed OUT_FOR_DELIVERY with the shop audit event. Shop completion is handoff to the driver, not final customer delivery. No replacement trip, reassignment, real SMS or payment action. Final delivery and photo verification, independent review and Neil acceptance remain pending. Development only; main is unchanged.
+
 ## 20261002 Shipday IDs and compact toolbar
 
 Show stored Shipday pickup and return IDs separately in order details. Missing associations say Not linked yet. Remove visible explanatory lines under disabled Update order and Cancel order; preserve their eligibility and tooltip explanations. Presentation only, no order or Shipday mutations. Update Obsidian and verify rendering.
