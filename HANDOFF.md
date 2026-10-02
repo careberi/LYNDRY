@@ -381,3 +381,9 @@ Validation: npm test passed all 1,599 tests, including four new redirect regress
 Validation: all 1,603 tests passed, including persistent age, tampering, legacy expiry and rejection after login elsewhere. No real sessions or login codes changed during testing. Independent review and two device click test remain pending.
 
 Validation: all 1,610 tests passed. New tests cover valid components, approximate and unconfirmed addresses, missing keys, provider failure and client key separation. Live Google calls and real widget interaction remain unverified because no project or credentials exist. Google Cloud setup is at identity verification. Feature defaults off; independent review pending.
+
+## 20261001 Weight input focus
+
+Spec: remove the inner box around the quote weight number. Preserve a visible focus indicator on the complete weight control. No pricing or payment changes.
+
+Implemented with scoped CSS. Browser verified no inner outline or shadow, visible outer focus, and recalculation at 30 and 31 lb. Other development changes remain outside this commit. Independent review and Neil acceptance remain pending.

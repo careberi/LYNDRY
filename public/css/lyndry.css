@@ -2230,3 +2230,7 @@ body.ly-pop-locked { overflow: hidden; }
     transform: none !important;
   }
 }
+
+/* Keep number entry visually part of the single weight control. */
+.customer-site .weight-number input:is(:focus, :focus-visible) { outline: none; box-shadow: none; }
+.weight-stepper:has(.weight-number input:focus-visible) { outline: 3px solid var(--suds-700); outline-offset: 4px; }
