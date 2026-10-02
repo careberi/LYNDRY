@@ -1,6 +1,6 @@
 # Order flow fix retest, 2026-10-02
 
-Status: implemented, tested and prepared for development publication. Main remains unchanged. Independent Grok review and pilot acceptance are not claimed.
+Status: implemented, tested and published to development. Main remains unchanged. Independent Grok review and pilot acceptance are not claimed.
 
 ## Addressed
 
@@ -44,3 +44,5 @@ f114823: historical simulation list and thread labels.
 ## Execution rulings
 
 User assigned inline implementation and explicitly waived approval pauses; publish only development, never main. Use isolated native worktree to preserve unrelated dirty work. Use Windows equivalents for shell only skill scripts. Update two stale assertions to already existing UI. Operational evidence is independent of messaging suppression and rank; manual silent completion is preserved. Carry only the exact related manual migration dependency. Use memory fixtures instead of real new dispatch for repeatable browser lifecycle retest. Apply only targeted tested development migration, not the general pending migration set. Refresh the schema cache after migration. Preserve historical accepted prices and message bodies.
+
+Publication verified: development reached 2336a19; main retained eeb9cd99f3953f5dbe8b9aba10816dc452091c50. Post push actual conversation reload retained all Simulated labels; another browser completion replay retained one event and one proof save. Isolated worktree is clean; original dirty checkout remains untouched. Knowledge notes updated; own memory test server stopped. Candidate POS remains on port 3003 with workers paused and provider writes disabled for inspection.
