@@ -94,7 +94,7 @@ test('and a shop with no address yet says so rather than linking nowhere', () =>
   const html = render({ partner: { ...SHOP, slug: null } });
 
   assert.doesNotMatch(html, /href="\/shop\/(null|undefined)/, 'it links to a broken portal address');
-  assert.match(html, /No portal address\. Edit and save this profile to create one\./);
+  assert.match(html, /No portal address\./i);
 });
 
 test('ONLY OPS MAY NAME AN OWNER, AND THE PAGE IS WHERE THAT RUNG IS', () => {

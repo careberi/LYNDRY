@@ -9041,7 +9041,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
   try {
     const { data, error } = await db
       .from('messages')
-      .select('phone, direction, body, created_at, delivery_status, customers(id, name, status)')
+      .select('phone, direction, body, created_at, delivery_status, provider_message_id, customers(id, name, status)')
       .order('created_at', { ascending: false })
       .limit(THREAD_SCAN_LIMIT);
 
@@ -9133,7 +9133,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
         `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">${escapeHtml(formatPhone(t.phone))}</a>`,
         `<a href="/ops/messages/${encodeURIComponent(t.phone.replace(/\D/g, ''))}">${who}</a>${stopped}${muted}`,
         `<div style="font-size:14px;color:var(--ink-700);max-width:46ch;">
-           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Received' : 'Sent'}</span>
+           <span class="eyebrow" style="margin:0 6px 0 0;">${t.last.direction === 'INBOUND' ? 'Received' : deliveryNote(t.last)}</span>
            ${escapeHtml(preview)}${t.last.body && t.last.body.length > 90 ? '&hellip;' : ''}
          </div>`,
         `<span style="white-space:nowrap;">${escapeHtml(timeAgo(t.last.created_at))}</span>`,
@@ -9256,27 +9256,7 @@ router.get('/ops/messages', guard, withIssues, may('messages.view'), async (req,
 // What the carrier did with a message we sent. This is the only place a
 // blocked or filtered text admits to itself — the send looked fine at the time,
 // and the bad news arrives later on a separate webhook.
-function deliveryNote(m) {
-  if (m.direction !== 'OUTBOUND') return '';
-
-  const failed = m.delivery_status && /fail|undeliver|reject|expired/i.test(m.delivery_status);
-
-  if (failed || m.delivery_error) {
-    return `<span class="badge" style="background:var(--stain-500);color:var(--paper-050);">
-              Not delivered${m.delivery_error ? `: ${escapeHtml(m.delivery_error)}` : ''}
-            </span>`;
-  }
-
-  if (m.delivery_status === 'delivered') {
-    return `<span style="font-size:12px;color:var(--ink-500);">Delivered</span>`;
-  }
-
-  // No receipt yet. Not the same as delivered, and saying so matters when
-  // someone is asking why a customer never replied.
-  return `<span style="font-size:12px;color:var(--ink-400);">Sent${
-    m.delivery_status ? ` &middot; ${escapeHtml(m.delivery_status)}` : ''
-  }</span>`;
-}
+const deliveryNote = require('../web/message-delivery-note');
 
 require('./message-photos').register(router,{db,guard,may});
 require('./order-photos').register(router,{guard,may});
@@ -9337,7 +9317,7 @@ router.get('/ops/messages/:phone', guard, withIssues, may('messages.view'), asyn
         // sent ourselves from a text to a customer. An unselected column reads
         // as undefined, which here would make EVERY outbound row look like an
         // alert - the eighth time that trap would have bitten in this codebase.
-        .select('id, direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone, media_path')
+        .select('id, direction, body, created_at, delivery_status, delivery_error, customer_id, kind, phone, media_path, provider_message_id')
         .eq('phone', phone)
         .order('created_at', { ascending: true }),
       // THE WHOLE ROW, NOT SIX COLUMNS. nudges.gapsFor() asks the same

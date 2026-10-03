@@ -417,6 +417,7 @@ const server = app.listen(config.port, () => {
   require('./core/shipday-order-sync-runtime').start();
   require('./core/shipday-cancellation-runtime').start();
   require('./core/delivery-sms-runtime').start();
+  require('./core/delivery-completion-runtime').start();
 });
 
 // When the host wants to stop or redeploy us it sends SIGTERM. Finish the

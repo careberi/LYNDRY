@@ -1,3 +1,9 @@
+# 20261002 Complete development publication
+
+Neil explicitly requested committing every pending development change and pushing to dev, never main. Commit b6ac765 captures all 112 pending files, including booking and pricing, customer pages, order layout and photos, pickup observation, migration records and tests. The current merge retains the six newer origin/dev commits through b2b0b68, including verified delivery completion and the data refresh record. Overlaps preserve delivery completion checks, manual delivery attestation, both sets of notes and current portal behavior.
+
+Validation: fresh merged npm test passed 1838 tests with external network blocked; zero failures. Credential pattern scan found no matches in the 112 pending files. This publication does not apply migrations or perform customer, courier, payment or messaging actions. Existing migration filenames and checksums are retained. Earlier uncommitted notes are historical; this entry records their publication scope. Independent review and remaining Neil acceptance remain pending. Main is unchanged.
+
 # Current change: photos on the POS order page
 
 Neil requests viewing the bags at intake or laundromat drop off and at customer delivery directly on the order detail screen. Show verified proof from each linked Shipday leg in separately labelled thumbnail groups with full size links. Use existing employee order and customer permissions, exact stored job and reference identity and both addresses, and the existing bounded private image proxy. Missing and unavailable photos need truthful states. Do not confuse a signature or a customer pickup image with delivery proof. Preserve statuses, intake, payment, messaging and dispatch. Development only; tests, browser verification and required Obsidian notes to follow.
@@ -41,6 +47,24 @@ Local browser verification reached scheduled price review with the same bag read
 ## 20261002 Shipday is the only customer delivery price source
 
 Neil explicitly requires fresh address based Shipday API quotes for public pricing, booking pricing, plan comparisons and POS repricing. Choose the lowest valid supported third party offer separately for pickup and return, subject to pickup and arrival eligibility. Never use configured in house labour, fuel, mileage, static bands or simulated prices as a substitute. A missing, expired or failed API quote withholds pricing and blocks booking. Recheck both directions at booking; changed fees require a new customer price review. Reject unused historical in house quotes. Keep existing accepted orders and payments unchanged until an explicit correction, and keep pricing source separate from driver assignment. Quoting must never dispatch a driver. This supersedes the in house pricing decision and the earlier higher courier fee policy. Development only; main is unchanged.
+
+## 20261002 Development data refresh
+
+Neil requested clearing development laundromat, customer and order data, followed by a selective import of production customer and order history. He explicitly included saved card references and existing payment links.
+
+Completed in the development database only. Imported 78 customers, 35 orders, 1161 customer messages, 45 payment links and 29 payment history rows. Twenty customers have saved card references. No raw card numbers were copied. Customer contact details and wash preferences were retained. Original order numbers, dates, weights and recorded amounts were retained. Three open production orders became CANCELED in development with the original status recorded in notes. Customer pricing categories were mapped to the development schema. Automatic conversations and follow ups were paused for all imported customers, and delivery notifications were suppressed for imported orders. Recurring schedules, laundromat assignments and active dispatch records were not imported. Existing payment references and links still refer to production Stripe objects.
+
+Production was accessed through a read only transaction. No production writes, Stripe actions or message sends were performed. Each selected imported field and all record counts were checked before committing the development transaction. The development order sequence was preserved. Recovery copies remain local and are excluded from Git. Admin access and development settings were preserved.
+
+This commit records the completed data operation only. No application code or customer records are included. Fresh tests on the development branch: 1718 passed, zero failed, using placeholder service credentials. Independent review and Neil click testing remain pending. Publication is to dev only, never main.
+
+## 20261002 Order flow defects fixed and retested
+
+Neil assigned automatic implementation and development publication. Commits 85f9cc9, f114823 and 23b95be address the scoped quote and message, intake, verified completion, original return metadata, billable weight and terminal presentation defects. Fresh isolated npm test: 1718 passed, zero failed. Four agent review findings fixed with failing regressions first. Migration 0142 activated only in development. Actual original QA return reconciled to COMPLETED without changing order, payment, messages, proof or trip ID; replay harmless. Playwright actual POS and memory only full lifecycle retest passed. See docs/testing/2026-10-02-order-flow-fix-retest.md. Preserve historical old message text and saved prices. Main unchanged. Grok review, physical and hosted variants and controlled production pilot remain unclaimed.
+
+## 20261002 Order flow fixes assigned for automatic execution
+
+Neil explicitly assigns implementation of the dated QA defects, followed by development push and browser retest without additional approval gates. Spec: docs/superpowers/specs/2026-10-02-order-flow-fixes-design.md. Plan: docs/superpowers/plans/2026-10-02-order-flow-fixes.md. Preserve historical prices and payment timing. New development bookings require accepted quotes; customer updates must describe conditional turnaround and simulated sends honestly. Restore verified portal intake visibility and exact proof based automatic final completion with replay protection. No third party driver requests or real texts. Main untouched. Implementation is not independent Grok review or pilot approval.
 
 ## 20261002 Finished booked order walkthrough and open defects
 

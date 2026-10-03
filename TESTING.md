@@ -1,6 +1,11 @@
 # LYNDRY testing tracker and launch readiness
 
-## Latest result: 2026-10-02 booked-order walkthrough
+## Latest result: 2026-10-02 scoped fixes and retest
+
+Fresh clean candidate npm test: 1718 passed, zero failed. Scoped defects are fixed; actual development POS and memory only lifecycle browser retests pass. Migration 0142 active only in development; original QA return metadata completes with no duplicate effects. See [fix retest report](docs/testing/2026-10-02-order-flow-fix-retest.md) for failure causes, evidence, commits and remaining physical, hosted and independent review limits. Historical pricing and message bodies remain frozen. Main untouched.
+
+
+## Previous result: 2026-10-02 booked-order walkthrough
 
 QA #9025 reached DELIVERED/PAID through verified Shipday proof and explicit POS sync. Delivered text and test photo were simulated and visible; repeat sync preserved payment, messages, original trips and completion count. The walkthrough completed with failures and recovery, not a clean golden-path PASS. Address mismatch was fixed and pushed in 2cb7d08. Missing quote/old-price SMS, unconditional turnaround, payment wording, stale return REVIEW and sync warnings, simulation labels and billable-weight display remain open.
 

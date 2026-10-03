@@ -1419,6 +1419,7 @@ async function bookPickup(
 ) {
   // Every rule lives in checkSlot, so the thing the AI is told and the thing
   // that writes the order can never disagree about what is possible.
+  if (config.supabase?.isDevelopment && !devQuoteId) return {ok:false,reason:'quote_required',detail:'Choose and accept a current price quote before booking.'};
   const checked = await checkSlot(customer, { pickupDate, pickupTime, fromSchedule, exactTime: Boolean(devQuoteId) });
   if (!checked.ok) return checked;
 
@@ -1858,6 +1859,7 @@ function confirmationMessage(
   // and this message sits at 454 against the 459 that three segments hold.
   const perPound = subscription.perPound(order.price_per_lb_cents || config.pricing.perPoundCents);
 
+  const quotedPayment = order.pricing_snapshot ? (card && heldCents ? ` We hold ${billing.money(heldCents)} on your ${card} to confirm.` : '') + ` We text you the final total and charge your saved card after the laundromat weighs your laundry.` : '';
   const money = require('./weight-based-pricing').isSnapshot(order.pricing_snapshot)
     ? ' '+require('./weight-based-pricing').summary(order.pricing_snapshot)
     : order.pricing_snapshot
@@ -1915,8 +1917,8 @@ function confirmationMessage(
   const bag = ` Put it in any bag, even a trash bag - it comes back in a fresh plastic bag, and we return anything reusable.`;
 
   return (
-    `${lead} pickup ${whenLine(order)}${address}. ${handover}${washLine}${money}${bag} ` +
-    `Back with you the ${site.turnaround}.`
+    `${lead} pickup ${whenLine(order)}${address}. ${handover}${washLine}${money}${quotedPayment}${bag} ` +
+    `Most wash and fold orders return next day when available. We'll let you know when yours is on the way back.`
   );
 }
 // Same rule. "No problem at all" answers somebody who asked to move it; on

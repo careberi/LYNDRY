@@ -6,9 +6,8 @@ const collected = new Set(['PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED']);
 const failed = new Set(['CANCELED','CANCELLED','INCOMPLETE','FAILED_DELIVERY']);
 const {legacyNJReturn,matchesAddress}=require('./delivery-address');
 
-
-async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
-  if (order.delivery_notifications_suppressed || !order.customers?.default_payment_method_id || order.status === 'CANCELED' ||
+async function observe({provider,tracking,order,shop,plan,now=Date.now,forCompletion=false}) {
+  if ((!forCompletion && (order.delivery_notifications_suppressed || !order.customers?.default_payment_method_id)) || order.status === 'CANCELED' ||
       !plan || plan.simulation || !plan.shipday_order_id || !plan.external_reference ||
       !['TO_PARTNER','TO_CUSTOMER'].includes(plan.leg)) return null;
   const pickup = plan.leg === 'TO_PARTNER';
@@ -23,6 +22,7 @@ async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
   if(failed.has(status) || remote.orderStatus?.incomplete || remote.activityLog?.failedDeliveryTime) return null;
   if(!['NOT_ASSIGNED','NOT_ACCEPTED','NOT_STARTED_YET','STARTED',...collected].includes(status)) return null;
   if(plan.mode === 'IN_HOUSE' && (!remote.assignedCarrier?.id || String(remote.assignedCarrier.id) !== String(plan.driver_id))) return null;
+  if(forCompletion && (plan.mode!=='IN_HOUSE' || remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState))return null;
   if(plan.mode === 'THIRD_PARTY' || remote.thirdPartyAssignedAnytime || remote.thirdPartyTrackingLink || remote.dOrderState) {
     const live = await provider.status(plan.shipday_order_id);
     if(!live?.courier?.name || !['STARTED','ASSIGNED','pickup_complete','delivered'].includes(live.status)) return null;
@@ -53,11 +53,12 @@ function estimate(observation,now) {
 }
 
 function nextMessage(order,plan,state,observation,now=Date.now()) {
+  if(!order.customers?.default_payment_method_id || order.delivery_notifications_suppressed) return null;
   if(!observation || !Number.isFinite(Date.parse(observation.observedAt)) || now<Date.parse(observation.observedAt) || now-Date.parse(observation.observedAt)>120000 || observation.rank===0 || (state.rank===3 && observation.rank<3)) return null;
   const pickup=plan.leg==='TO_PARTNER',rank=Math.max(state.rank,observation.rank);
   const prefix=`LYNDRY #${order.order_number}: `;
   if(rank>state.rank) {
-    const text=pickup ? {1:'Your driver is on the way to pick up your laundry.',2:'Your pickup driver should arrive soon.',3:'Your laundry has been collected.'}[rank]
+    const text=pickup ? {1:'Your driver is on the way to pick up your laundry. Please have your bag ready at your pickup spot.',2:'Your pickup driver should arrive soon. Please have your bag ready at your pickup spot.',3:"Your laundry has been collected. Most wash and fold orders return next day when available. We will let you know when yours is on the way back."}[rank]
       : {1:'Your clean laundry is out for delivery.',2:'Your clean laundry is out for delivery. Your driver should arrive soon.',3:'Your laundry has been delivered.'}[rank];
     return {key:`milestone-${rank}`,rank,body:prefix+text+(rank<3?estimate(observation,now):'')};
   }
