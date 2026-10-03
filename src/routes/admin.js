@@ -1890,7 +1890,7 @@ const ORDER_FIELDS =
   // a number that has opted out - a control that renders and then refuses is
   // worse than no control.
   'customers(id, name, phone, status, address_line1, address_line2, city, postal_code, preferences, ' +
-  'stripe_customer_id, default_payment_method_id, card_brand, card_last4, wholesale_rate_cents)';
+  'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
@@ -3241,7 +3241,18 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     if (showMoney && order.weight_lb != null && !order.weight_settled_at &&
         !['PAID', 'WAIVED'].includes(order.payment_status) &&
         labels.filter(l => l.leg === 'PICKUP').every(l => l.weight_lb != null)) {
-      consoleOrder.pickupQuote = await fulfilment.pickupQuote({ ...order, customers: c }).catch(() => ({ unavailable: true }));
+      try {
+        // Keep the optional wholesale column out of the shared board query:
+        // code may deploy before its migration. An unavailable preview must
+        // not take the order page down or guess that the customer is retail.
+        const { data: buyer, error: buyerError } = await db.from('customers')
+          .select('id, wholesale_rate_cents').eq('id', order.customer_id).single();
+        if (buyerError) throw buyerError;
+        if (!buyer) throw new Error('Customer pricing unavailable.');
+        consoleOrder.pickupQuote = await fulfilment.pickupQuote({ ...order, customers: buyer });
+      } catch (_) {
+        consoleOrder.pickupQuote = { unavailable: true };
+      }
     }
     const askedView = String(req.query.log || '').trim();
     const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
@@ -4316,7 +4327,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       // screen can say.
       .select(
         'id, order_number, status, pickup_date, pickup_time, ' +
-          'pickup_window_start, pickup_window_end, weight_lb, price_cents, payment_status, ' +
+          'pickup_window_start, pickup_window_end, weight_lb, price_cents, payment_status, van_confirmed_at, ' +
           'customers(stripe_customer_id, default_payment_method_id)'
       )
       .eq('customer_id', person.id)
