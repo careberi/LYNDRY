@@ -1,4 +1,23 @@
-# Current change: quote and booking use one customer pricing basis
+# Current change: laundromat portal URL and staff text link
+
+Neil assigned implementation on 3 October. Show the full shareable laundromat
+portal URL on the partner profile, including imported shops missing a slug.
+Create a missing slug automatically and preserve every existing portal address.
+Add Text portal link next to each active owner or attendant. The explicit button
+sends only to that person's saved mobile number at that laundromat, through the
+existing SMS sender and development prefix. Keep phone-code sign-in, roles,
+opt-out handling and send logging. Adding staff or viewing a page sends no SMS.
+Report refused, simulated and failed sends honestly. No pricing, payment, order,
+driver or automatic messaging changes. Commit and publish to development only.
+Independent review and Neil acceptance remain pending.
+
+Validation: all 1861 tests pass with placeholder service credentials and external
+network blocked. New coverage exercises the guarded POS profile and POST, the
+saved recipient, inactive/wrong-shop staff, send outcomes and concurrent slug
+creation. Browser preview verified the full URL and adjacent staff-row button.
+No real staff message was sent during verification.
+
+# Previous change: quote and booking use one customer pricing basis
 
 Neil confirmed the public address quote is correct and assigned implementation,
 commit and push. Booking must use the same address-only pickup and return API

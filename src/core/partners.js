@@ -383,7 +383,8 @@ async function ensureSlug(partner) {
 
   if (!slug) return null;
 
-  const { error } = await db.from('partners').update({ slug }).eq('id', partner.id).is('slug', null);
+  const { data, error } = await db.from('partners').update({ slug }).eq('id', partner.id)
+    .is('slug', null).select('slug').maybeSingle();
   if (error) {
     // Best effort, like the geocode beside it. A partner with no URL yet is a
     // partner somebody can still work with; a failed save here must not be
@@ -392,7 +393,11 @@ async function ensureSlug(partner) {
     return null;
   }
 
-  return slug;
+  if (data?.slug) return data.slug;
+  // Another profile view may have filled it first. Only share a persisted URL.
+  const saved = await db.from('partners').select('slug').eq('id', partner.id).maybeSingle();
+  if (saved.error) throw saved.error;
+  return saved.data?.slug || null;
 }
 
 async function create(form) {

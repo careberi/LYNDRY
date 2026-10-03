@@ -3,6 +3,7 @@
 const { escapeHtml } = require('./layout');
 const partners = require('../core/partners');
 const format = require('../core/format');
+const portalLinks = require('../core/partner-portal-links');
 
 // ---------------------------------------------------------------------------
 // The partner directory: /ops/partners
@@ -450,10 +451,16 @@ function loadLine(load) {
 // all - `partnerStaff.addAttendant()` has no argument for one - because an owner
 // minting another owner is what the two ladders exist to prevent. This is the rung
 // between them and it belongs here.
-function staffCard(p, staff, canOpenPortal = false) {
+function portalTextAction(p, person, canManagePortal) {
+  if (!canManagePortal || !p.slug || p.status !== 'ACTIVE' || person.status !== 'ACTIVE') return '';
+  return `<form method="post" action="/ops/partners/${escapeHtml(p.id)}/staff/${escapeHtml(person.id)}/portal-link" style="display:inline;">
+    <button class="btn btn-sm" type="submit">Text portal link</button></form>`;
+}
+
+function staffCard(p, staff, canOpenPortal = false, canManagePortal = false) {
   if (p.type !== 'LAUNDROMAT') return '';
 
-  const url = p.slug ? `/shop/${escapeHtml(p.slug)}` : null;
+  const url = portalLinks.urlFor(p);
 
   const rows = (staff || [])
     .map((person) => {
@@ -475,6 +482,7 @@ function staffCard(p, staff, canOpenPortal = false) {
             <input type="hidden" name="status" value="${off ? 'ACTIVE' : 'DISABLED'}">
             <button class="btn btn-sm" type="submit">${off ? 'Switch on' : 'Switch off'}</button>
           </form>
+          ${portalTextAction(p, person, canManagePortal)}
         </td>
       </tr>`;
     })
@@ -492,12 +500,11 @@ function staffCard(p, staff, canOpenPortal = false) {
     url
       ? `<p style="font-size:15px;line-height:1.6;color:var(--ink-700);margin:0 0 18px;">
            Their own address is
-           <a href="${url}" style="font-family:var(--font-mono);">${url}</a> &mdash; it names the
+           <a href="${escapeHtml(url)}" style="font-family:var(--font-mono);overflow-wrap:anywhere;">${escapeHtml(url)}</a> &mdash; it names the
            shop and is not a credential. Everybody below signs in there with a code we text them.
          </p>`
       : `<p style="font-size:15px;line-height:1.6;color:var(--stain-500);margin:0 0 18px;">
-           This laundromat has no portal address yet. It is made from the name, so press Edit and
-           save to give it one.
+           This laundromat has no portal address yet. We could not create it. Refresh this page to try again.
          </p>`
   }
 
@@ -593,7 +600,7 @@ function theirScaleAlone(p, weighed) {
 }
 
 // The courier profile puts working details first; secondary history stays available on demand.
-function compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPortal}) {
+function compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPortal,canManagePortal}) {
   const row=(label,value)=>'<tr><th scope="row">'+escapeHtml(label)+'</th><td>'+value+'</td></tr>';
   const text=value=>escapeHtml(String(value));
   const facts=[row('Address',addressOf(p)?text(addressOf(p)):'Not recorded')];
@@ -617,10 +624,11 @@ function compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPo
     const action='/ops/partners/'+escapeHtml(p.id)+'/staff/'+escapeHtml(person.id);
     return '<tr><td>'+text(person.name||'')+(off?' <span class="hint">Disabled</span>':'')+'</td><td>'+text(format.displayPhone(person.phone))+'</td><td>'+(owner?'Owner':'Attendant')+'</td><td class="partner-staff-actions">'+
       '<form method="post" action="'+action+'"><input type="hidden" name="role" value="'+(owner?'ATTENDANT':'OWNER')+'"><button class="btn btn-sm" type="submit">'+(owner?'Make attendant':'Make owner')+'</button></form>'+
-      '<form method="post" action="'+action+'"><input type="hidden" name="status" value="'+(off?'ACTIVE':'DISABLED')+'"><button class="btn btn-sm" type="submit">'+(off?'Switch on':'Switch off')+'</button></form></td></tr>';
+      '<form method="post" action="'+action+'"><input type="hidden" name="status" value="'+(off?'ACTIVE':'DISABLED')+'"><button class="btn btn-sm" type="submit">'+(off?'Switch on':'Switch off')+'</button></form>'+portalTextAction(p,person,canManagePortal)+'</td></tr>';
   }).join('');
+  const portalUrl = portalLinks.urlFor(p);
   const portal=p.type==='LAUNDROMAT'?'<section class="partner-panel"><h2>Portal access</h2>'+
-    (p.slug?'<p class="partner-portal-link"><a href="/shop/'+escapeHtml(p.slug)+'">/shop/'+text(p.slug)+'</a></p>':'<p>No portal address. Edit and save this profile to create one.</p>')+
+    (portalUrl?'<p class="partner-portal-link" style="overflow-wrap:anywhere;"><a href="'+escapeHtml(portalUrl)+'">'+text(portalUrl)+'</a></p>':'<p>No portal address. We could not create it. Refresh this page to try again.</p>')+
     ((staff||[]).length?'<div class="pt-scroll"><table class="pt-hist"><thead><tr><th>Name</th><th>Mobile</th><th>Role</th><th>Actions</th></tr></thead><tbody>'+memberRows+'</tbody></table></div>':'<p class="hint">No staff added.</p>')+
     '<details class="partner-secondary"><summary>Add staff</summary><form class="partner-add-staff" method="post" action="/ops/partners/'+escapeHtml(p.id)+'/staff">'+
     field({name:'name',id:'sn',label:'Name',value:'',attrs:'required maxlength="80"'})+
@@ -653,10 +661,11 @@ function partnerDetailBody({
   weighed = null,
   courierModel = false,
   canOpenPortal = false,
+  canManagePortal = false,
 } = {}) {
   const p = partner;
   const laundromat = p.type === 'LAUNDROMAT';
-  if(courierModel)return compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPortal});
+  if(courierModel)return compactPartnerBody({partner:p,hours,load,staff,weighed,notice,canOpenPortal,canManagePortal});
 
   const fact = (label, value) => `
     <div style="display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--ink-100);">
@@ -790,7 +799,7 @@ ${
     ${p.notes ? `<p style="margin:18px 0 0;font-size:15px;line-height:1.6;color:var(--ink-700);white-space:pre-wrap;">${escapeHtml(p.notes)}</p>` : ''}
   </div>
 
-  <div class="pos-partner-staff">${staffCard(p, staff, canOpenPortal)}</div>
+  <div class="pos-partner-staff">${staffCard(p, staff, canOpenPortal, canManagePortal)}</div>
 
   ${
     // THEIR SCALE AGAINST OURS IS A VAN QUESTION AND CANNOT BE ASKED UNDER A

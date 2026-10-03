@@ -68,6 +68,7 @@ const { partnerListBody, partnerFormBody, partnerDetailBody } = require('../web/
 const { scheduledBody } = require('../web/scheduled-page');
 const { couriersBody } = require('../web/couriers-board');
 const partnerStaff = require('../core/partner-staff');
+const partnerPortalLinks = require('../core/partner-portal-links');
 const extraBag = require('../core/extra-bag');
 const courierLegs = require('../core/courier-legs');
 const couriers = require('../providers/couriers');
@@ -10824,6 +10825,27 @@ router.post('/ops/partners/:id/staff', guard, may('partners.manage'), async (req
 // able to add anybody, and Neil is not in a shop's staff list in the ordinary
 // case - if he has added himself to look at the portal he must be able to take
 // himself back out.
+router.post('/ops/partners/:id/staff/:userId/portal-link', guard, may('partners.manage'), async (req, res, next) => {
+  try {
+    if (!UUID.test(req.params.id) || !UUID.test(req.params.userId)) return next();
+    // Resolve both the number and URL from saved records, never form fields.
+    const result = await partnerPortalLinks.send({ partnerId: req.params.id, userId: req.params.userId,
+      sentBy: req.opsUser?.isMachine ? null : req.opsUser?.id });
+    const why = {
+      unavailable_shop: 'This laundromat is not active.',
+      unavailable_staff: 'This person does not have active access to this laundromat.',
+      bad_phone: 'This person needs a valid saved mobile number.',
+      missing_url: 'The portal address could not be created. No text was sent.',
+      opted_out: 'Text not sent: this number has opted out or its text status could not be checked.',
+      duplicate: 'This portal link was already texted recently. No duplicate was sent.',
+    };
+    const note = result.sent
+      ? (result.simulated ? 'Simulated only. No real text was sent.' : `Portal link sent to ${formatPhone(result.phone)}.`)
+      : (why[result.refused] || 'Could not confirm the text was sent. Check Messages before trying again.');
+    return res.redirect(303, `/ops/partners/${req.params.id}?note=${encodeURIComponent(note)}`);
+  } catch (err) { return next(err); }
+});
+
 router.post('/ops/partners/:id/staff/:userId', guard, may('partners.manage'), async (req, res, next) => {
   try {
     if (!UUID.test(req.params.id)) return next();
@@ -11692,7 +11714,7 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
     // this handler - which is exactly what happened to the enquiries page.
     if (!UUID.test(req.params.id)) return next();
 
-    const partner = await partners.find(req.params.id);
+    const partner = await partnerPortalLinks.prepare(await partners.find(req.params.id));
     if (!partner) return notFoundPage(res, 'No partner with that id.');
 
     // THE VAN COMPARISON AND THE COURIER SUMMARY ARE TWO QUERIES AND ONLY ONE IS
@@ -11737,6 +11759,7 @@ router.get('/ops/partners/:id', guard, withIssues, may('partners.view'), async (
           weighed,
           courierModel,
           canOpenPortal: require('../core/dev-checkout').enabled && roles.can(req.opsUser, 'partners.portal'),
+          canManagePortal: roles.can(req.opsUser, 'partners.manage'),
           notice: req.query.note ? String(req.query.note).slice(0, 200) : null,
         }),
         user: req.opsUser,
