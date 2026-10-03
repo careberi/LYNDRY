@@ -1878,7 +1878,7 @@ const ORDER_FIELDS =
   // order page would quietly call every subscriber's pickup a one-off and
   // show the wrong rate beside it. Same trap as every other field in this
   // list, and the money is on this one.
-  'subscription_id, price_per_lb_cents, ' +
+  'subscription_id, price_per_lb_cents, minimum_cents, surcharge_cents, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
   // which is the half the driver actually needs.
@@ -1890,7 +1890,7 @@ const ORDER_FIELDS =
   // a number that has opted out - a control that renders and then refuses is
   // worse than no control.
   'customers(id, name, phone, status, address_line1, address_line2, city, postal_code, preferences, ' +
-  'stripe_customer_id, default_payment_method_id, card_brand, card_last4)';
+  'stripe_customer_id, default_payment_method_id, card_brand, card_last4, wholesale_rate_cents)';
 
 router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
@@ -2110,7 +2110,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         // APPLIED ONLY. A promotion that is merely expected has not come off
         // anything yet, and showing it in a column headed Promotion says it
         // has. Neil's rule: do not show it as if it is applied.
-        ...(showMoney ? [planCell(o), promoCell(o), money(o.price_cents), paymentBadge(o)] : []),
+        ...(showMoney ? [planCell(o), promoCell(o), pickupPriceCell(o, { money }), paymentBadge(o)] : []),
       ];
     };
 

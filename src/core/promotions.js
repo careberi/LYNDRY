@@ -743,13 +743,14 @@ async function discountFor(customer, order, priceCents) {
 
   // FIRST_ORDER means their first DELIVERED order. Counting every order would
   // let somebody book three, have them all discounted, and cancel two.
-  const { count: delivered } = await db
+  const { count: delivered, error: deliveredError } = await db
     .from('orders')
     .select('id', { count: 'exact', head: true })
     .eq('customer_id', customer.id)
     .eq('status', 'DELIVERED')
     .neq('id', order.id);
 
+  if (deliveredError) throw deliveredError;
   const usable = usableOn(held, { order, delivered, priceCents, customer });
   if (!usable.length) return null;
 
