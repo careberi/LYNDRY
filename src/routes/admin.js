@@ -3043,6 +3043,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // down and sent.
 const SMS_MAX_CHARS = 1600;
 
+async function pickupQuoteForConsole(order) {
+  try {
+    // The detail read projects the customer relation, not order.customer_id.
+    // Keep the optional wholesale column out of the shared board query:
+    // code may deploy before its migration. A failed preview must not take
+    // the page down or guess that the customer is retail.
+    const customerId = order.customers && order.customers.id;
+    if (!customerId) throw new Error('Customer pricing unavailable.');
+    const { data: buyer, error: buyerError } = await db.from('customers')
+      .select('id, wholesale_rate_cents').eq('id', customerId).single();
+    if (buyerError) throw buyerError;
+    if (!buyer) throw new Error('Customer pricing unavailable.');
+    return await fulfilment.pickupQuote({ ...order, customers: buyer });
+  } catch (_) {
+    return { unavailable: true };
+  }
+}
+
 router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
     // Accepts either form: the UUID, or the number a person would actually
@@ -3241,18 +3259,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     if (showMoney && order.weight_lb != null && !order.weight_settled_at &&
         !['PAID', 'WAIVED'].includes(order.payment_status) &&
         labels.filter(l => l.leg === 'PICKUP').every(l => l.weight_lb != null)) {
-      try {
-        // Keep the optional wholesale column out of the shared board query:
-        // code may deploy before its migration. An unavailable preview must
-        // not take the order page down or guess that the customer is retail.
-        const { data: buyer, error: buyerError } = await db.from('customers')
-          .select('id, wholesale_rate_cents').eq('id', order.customer_id).single();
-        if (buyerError) throw buyerError;
-        if (!buyer) throw new Error('Customer pricing unavailable.');
-        consoleOrder.pickupQuote = await fulfilment.pickupQuote({ ...order, customers: buyer });
-      } catch (_) {
-        consoleOrder.pickupQuote = { unavailable: true };
-      }
+      consoleOrder.pickupQuote = await pickupQuoteForConsole(order);
     }
     const askedView = String(req.query.log || '').trim();
     const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
@@ -12270,4 +12277,4 @@ function notFoundPage(res, message) {
 // opsNote is exported for the same reason statusBadge and labelState are: the
 // rule it carries is worth pinning, and the only way to pin "a notice writes no
 // colour into its own markup" is to call it and look at what comes back.
-module.exports = { router, statusBadge, labelState, opsNote };
+module.exports = { router, statusBadge, labelState, opsNote, pickupQuoteForConsole };

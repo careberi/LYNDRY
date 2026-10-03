@@ -4,6 +4,29 @@ const assert=require('node:assert/strict');
 const promotions=require('../src/core/promotions');
 const fulfilment=require('../src/core/fulfilment');
 const consolePage=require('../src/web/order-console');
+const {pickupQuoteForConsole}=require('../src/routes/admin');
+test('console preview uses the customer relation supplied by the order read',async t=>{
+  const db=require('../src/db');
+  t.mock.method(db,'from',table=>{
+    assert.equal(table,'customers');
+    const q={select(){return q;},eq(field,id){assert.equal(field,'id');assert.equal(id,'customer-from-relation');return q;},
+      async single(){return {data:{id:'customer-from-relation',wholesale_rate_cents:null},error:null};}};
+    return q;
+  });
+  t.mock.method(promotions,'discountFor',async()=>({cents:2500,promotion:{id:'p',name:'50% off'}}));
+  const q=await pickupQuoteForConsole({id:'o',weight_lb:25,price_per_lb_cents:200,minimum_cents:2500,
+    customers:{id:'customer-from-relation'}});
+  assert.equal(q.priceCents,2500);
+});
+test('missing wholesale schema makes only the console preview unavailable',async t=>{
+  const db=require('../src/db');
+  t.mock.method(db,'from',()=>{
+    const q={select(){return q;},eq(){return q;},async single(){return {data:null,error:new Error('column absent')};}};
+    return q;
+  });
+  t.mock.method(promotions,'discountFor',async()=>assert.fail('unknown eligibility must not be quoted'));
+  assert.deepEqual(await pickupQuoteForConsole({customers:{id:'c'}}),{unavailable:true});
+});
 test('the board distinguishes uncharged gross prices from settled prices',()=>{
   const money=c=>`$${(c/100).toFixed(2)}`;
   assert.match(consolePage.pickupPriceCell({price_cents:5000,payment_status:'UNPAID'},{money}),/Before discounts.*not charged/);
