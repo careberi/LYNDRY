@@ -1,3 +1,13 @@
+## 20261002 Development data refresh
+
+Neil requested clearing development laundromat, customer and order data, followed by a selective import of production customer and order history. He explicitly included saved card references and existing payment links.
+
+Completed in the development database only. Imported 78 customers, 35 orders, 1161 customer messages, 45 payment links and 29 payment history rows. Twenty customers have saved card references. No raw card numbers were copied. Customer contact details and wash preferences were retained. Original order numbers, dates, weights and recorded amounts were retained. Three open production orders became CANCELED in development with the original status recorded in notes. Customer pricing categories were mapped to the development schema. Automatic conversations and follow ups were paused for all imported customers, and delivery notifications were suppressed for imported orders. Recurring schedules, laundromat assignments and active dispatch records were not imported. Existing payment references and links still refer to production Stripe objects.
+
+Production was accessed through a read only transaction. No production writes, Stripe actions or message sends were performed. Each selected imported field and all record counts were checked before committing the development transaction. The development order sequence was preserved. Recovery copies remain local and are excluded from Git. Admin access and development settings were preserved.
+
+This commit records the completed data operation only. No application code or customer records are included. Fresh tests on the development branch: 1718 passed, zero failed, using placeholder service credentials. Independent review and Neil click testing remain pending. Publication is to dev only, never main.
+
 ## 20261002 Order flow defects fixed and retested
 
 Neil assigned automatic implementation and development publication. Commits 85f9cc9, f114823 and 23b95be address the scoped quote and message, intake, verified completion, original return metadata, billable weight and terminal presentation defects. Fresh isolated npm test: 1718 passed, zero failed. Four agent review findings fixed with failing regressions first. Migration 0142 activated only in development. Actual original QA return reconciled to COMPLETED without changing order, payment, messages, proof or trip ID; replay harmless. Playwright actual POS and memory only full lifecycle retest passed. See docs/testing/2026-10-02-order-flow-fix-retest.md. Preserve historical old message text and saved prices. Main unchanged. Grok review, physical and hosted variants and controlled production pilot remain unclaimed.
