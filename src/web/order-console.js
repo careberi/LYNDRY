@@ -314,7 +314,10 @@ function chargeRows(events, order, { money }) {
     const corrected = rows.find((r) => r.what === 'Weigh-in corrected');
     if (corrected && !corrected.note) corrected.note = 'no scale photo';
   }
-  return rows.map((r) => ({ ...r, amount: r.cents != null ? money(r.cents) : null }));
+  return rows.map((r) => ({ ...r,
+    note: !order.weight_settled_at && order.payment_status === 'UNPAID' && !r.paid && /^Weigh-in/.test(r.what)
+      ? [r.note, 'Estimate before discounts; not charged'].filter(Boolean).join(' · ') : r.note,
+    amount: r.cents != null ? money(r.cents) : null }));
 }
 
 // ---------------------------------------------------------------------------
@@ -783,6 +786,20 @@ function cashForm(order, split, { money, can }) {
   </form>`;
 }
 
+function pickupPriceCell(order, { money }) {
+  const amount = money(order.price_cents);
+  return order.price_cents != null && order.payment_status === 'UNPAID' && !order.van_confirmed_at
+    ? `${amount}<small style="display:block">Before discounts · not charged</small>` : amount;
+}
+
+function pickupQuoteBox(quote, { money }) {
+  if (!quote) return '';
+  if (quote.unavailable) return '<p class="flash problem">Could not check the discount. Do not charge until pricing is available.</p>';
+  return `<h2>Expected total — not charged</h2><p>${escapeHtml(money(quote.beforeDiscount))} before discounts` +
+    (quote.discountCents ? ` − ${escapeHtml(money(quote.discountCents))} (${escapeHtml(quote.deal.promotion.name)})` : '') +
+    ` = <b>${escapeHtml(money(quote.priceCents))}</b>. Finish Pickup charges the card after all bags are weighed.</p>`;
+}
+
 function chargeTable(rows, { money }) {
   if (!rows.length) return '';
   const rate = (r) => (r.rate == null ? '—' : (r.rate / 100).toFixed(2));
@@ -899,7 +916,7 @@ function orderConsoleBody({
   <div class="layout">
     <div>
       ${bagsTable(bags, order)}
-      ${can.money ? chargeTable(charge, { money }) : ''}
+      ${can.money ? pickupQuoteBox(order.pickupQuote, { money }) + chargeTable(charge, { money }) : ''}
       ${can.money ? holdLine(order, { money }) : ''}
       ${can.money ? paidTable(split, { money }) : ''}
       ${can.money ? cashForm(order, split, { money, can }) : ''}
@@ -916,6 +933,8 @@ function orderConsoleBody({
 }
 
 module.exports = {
+  pickupPriceCell,
+  pickupQuoteBox,
   orderConsoleBody,
   holdLine,
   paidTable,

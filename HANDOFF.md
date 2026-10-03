@@ -1,5 +1,17 @@
 # HANDOFF
 
+## Current change — show the discounted pickup total before charging
+
+Neil assigned implementation on 3 October after order 2090 displayed $50
+although its valid first-order grant makes the total $25. Show an expected,
+uncharged total on the order using the same calculation as Finish Pickup.
+Do not redeem a grant during preview. A failed discount lookup must stop the
+charge, not silently charge full price. Preserve the existing minimum,
+surcharges, card gates, and explicit Finish Pickup charge point. Label
+pre-settlement price rows as estimates before discounts, not completed charges.
+No customer messages are authorized for the live incident recovery.
+External review and Neil's click test remain outstanding.
+
 Issue: Audit-fix — collect door, hold page, select lists  
 Owner of the keyboard: Neil  
 Status: implemented locally; branch `fix/audit-hold-doors` cut from current main. Apply the patch, then click-test. Do not merge to main yet.

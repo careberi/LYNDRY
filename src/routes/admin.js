@@ -28,7 +28,7 @@ const reminders = require('../core/reminders');
 const { intakeTable } = require('../web/intake-table');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
-const { orderConsoleBody } = require('../web/order-console');
+const { orderConsoleBody, pickupPriceCell } = require('../web/order-console');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const {
@@ -3238,6 +3238,11 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       partnerName: order.partners ? order.partners.name : null,
       promotionName: order.promotions ? order.promotions.code || order.promotions.name : null,
     };
+    if (showMoney && order.weight_lb != null && !order.weight_settled_at &&
+        !['PAID', 'WAIVED'].includes(order.payment_status) &&
+        labels.filter(l => l.leg === 'PICKUP').every(l => l.weight_lb != null)) {
+      consoleOrder.pickupQuote = await fulfilment.pickupQuote({ ...order, customers: c }).catch(() => ({ unavailable: true }));
+    }
     const askedView = String(req.query.log || '').trim();
     const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
     const banner = req.query.problem
@@ -4667,7 +4672,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           o.pickup_window_start ? escapeHtml(booking.arrivalWindow(o)) : '—',
           statusBadge(o.status, o),
           o.weight_lb ? `${o.weight_lb} lb` : '—',
-          ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
+          ...(showMoney ? [pickupPriceCell(o, { money }), paymentBadge(o)] : []),
         ])
       )}`;
 
