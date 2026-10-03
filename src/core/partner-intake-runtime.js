@@ -20,6 +20,7 @@ const service = require('./partner-intake').createService({
     return require('./fulfilment').settleWeight(current, options);
   },
   enrollReturn: (order,{partner,actor}) => require('./partner-return-runtime').request(order.id,partner,actor),
+  refreshReturn: (order,{partner,actor}) => require('./partner-return-runtime').refresh(order.id,partner,actor),
   confirmCollection: args => require('./partner-return-runtime').confirmCollection(args),
 });
 module.exports = service;

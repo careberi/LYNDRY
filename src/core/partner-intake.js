@@ -13,7 +13,7 @@ function complete(intake) {
 }
 async function data(query) { const { data: value, error } = await query; if (error) throw error; return value; }
 
-function createService({ db, settleWeight, enrollReturn, confirmCollection, deliveryInfo, readDeliveryPhoto, checkDelivery = async()=>({ok:false,reason:'delivery_unverified'}) }) {
+function createService({ db, settleWeight, enrollReturn, refreshReturn, confirmCollection, deliveryInfo, readDeliveryPhoto, checkDelivery = async()=>({ok:false,reason:'delivery_unverified'}) }) {
   const scope = partner => `partner_id.eq.${partner},and(partner_id.is.null,intended_partner_id.eq.${partner})`;
   async function find(partner, number, includeCollected=false) {
     if (!validNumber(number)) return null;
@@ -60,7 +60,9 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
         assigned: live ? Boolean(live.driver) : Boolean(assigned || courier),
         canAccept: stage === 'INCOMING' && live?.ok === true,
         canCollect: stage === 'READY' && ['ASSIGNED','REVIEW','COMPLETED'].includes(plan?.state) && live?.canCollect === true,
-        returnNeedsRequest: stage === 'READY' && !courier && (!plan || (!['PROCESSING','REVIEW'].includes(plan.state) && (plan.simulation || ['PLANNED','BLOCKED'].includes(plan.state)))),
+        returnNeedsRequest: stage === 'READY' && !courier && (!plan || plan.simulation || ['PLANNED','BLOCKED'].includes(plan.state)),
+        returnNeedsReconcile: stage === 'READY' && !plan?.simulation && ['REVIEW','REQUESTED','ASSIGNED'].includes(plan?.state),
+        returnDispatchState: stage === 'READY' ? (plan?.simulation?'PLANNED':plan?.state||'PLANNED') : null,
         receivedVerified: Boolean(intake?.received_verified_at),
         intakeComplete: complete(intake),
         washCompletedAt: intake?.wash_completed_at || null,
@@ -134,15 +136,15 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
     if (!order) return { ok: false, reason: 'unavailable' };
     if (action === 'intake' && !validReference(shopReference)) return {ok:false,reason:'invalid_reference'};
     if (action === 'intake' && !validIntake(weight)) return { ok: false, reason: 'invalid_intake' };
-    if (!['intake','wash-complete','ready','request-return','collect'].includes(action)) return { ok: false, reason: 'unavailable' };
+    if (!['intake','wash-complete','ready','request-return','refresh-return','collect'].includes(action)) return { ok: false, reason: 'unavailable' };
     if (working.has(order.id)) return { ok: false, reason: 'busy' };
     working.add(order.id);
     try {
       if(action==='collect')return confirmCollection ? await confirmCollection({order,partner,staff}) : {ok:false,reason:'unavailable'};
-      if(action==='request-return') {
+      if(action==='request-return'||action==='refresh-return') {
         if(order.status!=='READY')return {ok:false,reason:'unavailable'};
-        const requested=await enrollReturn(order,{partner,actor:staff.name}).catch(()=>null);
-        return requested?.ok ? {ok:true,notice:'return_requested'} : {ok:false,reason:'return_pending'};
+        const requested=await (action==='refresh-return'?refreshReturn:enrollReturn)(order,{partner,actor:staff.name}).catch(()=>null);
+        return requested?.ok ? {ok:true,notice:requested.manual?'return_manual':'return_requested'} : {ok:false,reason:'return_pending'};
       }
       if(action==='intake'){
         const verified=await checkDelivery(order,partner);
@@ -171,7 +173,7 @@ function createService({ db, settleWeight, enrollReturn, confirmCollection, deli
       if (action === 'ready') {
         // Readiness survives a failed request; the board exposes a safe retry.
         const requested=await enrollReturn(order,{partner,actor:staff.name}).catch(()=>null);
-        return {ok:true,notice:requested?.ok?'return_requested':'return_pending'};
+        return {ok:true,notice:requested?.ok?(requested.manual?'return_manual':'return_requested'):'return_pending'};
       }
       return { ok: true, notice: action };
     } finally { working.delete(order.id); }

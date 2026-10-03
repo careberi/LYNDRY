@@ -1085,3 +1085,15 @@ Disable the separate new order staff alert in development. Customer booking
 confirmations retain their existing order customer recipient. This supersedes
 the historical admin new order notification rule for development only. It does
 not add a recipient allowlist or change production notifications.
+# 2026-10-03: real return requests from laundromat readiness in development
+
+Neil requested working return dispatch after laundromat outtake. Development
+identity, rather than NODE_ENV, enables this on Railway. The existing automatic
+dispatch switch selects third-party requests; when paused, the laundromat request
+waits visibly for an admin to choose an in-house or third-party driver. Real
+requests replace simulated returns only through an explicit order action. Both
+portals show the shared request state. Requests are not assignments or physical
+collection. Reconcile uncertain results using the same remote reference and do
+not create duplicate deliveries. Preserve payment, weight and destination checks
+and the saved courier budget. This supersedes the earlier simulation-only return
+and in-house-only portal restrictions for development; main is unchanged.

@@ -21,6 +21,7 @@ const store={
   async save(row,patch,event){const saved=await result(db.from('shipday_dispatch_plans').update({...patch,version:row.version+1,updated_at:new Date().toISOString(),history:row.problem===patch.problem&&event.event==='BLOCKED'?(row.history||[]):[...(row.history||[]),event]}).eq('id',row.id).eq('version',row.version).select('*').maybeSingle());if(!saved)throw Error('Assignment changed');return saved;},
 };
 async function validate(plan){
+  if(plan.leg==='TO_CUSTOMER')return {ok:false,reason:'Use the order’s Return delivery controls for a real return request.'};
   if(!simulation || !plan.simulation)return {ok:false,reason:'Live Shipday dispatch is not enabled.'};
   const order=await result(db.from('orders').select('*,customers(*)').eq('id',plan.order_id).single());
   if(plan.leg==='TO_PARTNER' && order.status!=='REQUESTED')return {ok:false,reason:'Pickup is no longer awaiting collection. Resolve any handover manually.'};
@@ -54,6 +55,7 @@ async function validate(plan){
 const dispatcher=createDispatcher({store,provider,validate});
 async function settings(){return result(db.from('shipday_dispatch_settings').select('*').eq('id',true).single());}
 async function enroll(order,leg='TO_PARTNER'){
+  if(leg==='TO_CUSTOMER')throw Error('Use the order’s Return delivery controls. Simulated returns are retired.');
   const time=require('./booking').normaliseTime(order.pickup_time);
   const at=leg==='TO_PARTNER'?dispatchInstant(order.pickup_date,time):new Date().toISOString();
   if(!at)throw Error('A valid, unambiguous customer-selected pickup time is required.');
@@ -73,9 +75,9 @@ async function tick(){
   busy=true;
   try{
     const setting=await settings();if(!setting.enabled)return;
-    const orders=await result(db.from('orders').select('id,pickup_date,pickup_time,status,created_at,dev_quote_id').gte('created_at',setting.starts_at).in('status',['REQUESTED','READY']));
+    const orders=await result(db.from('orders').select('id,pickup_date,pickup_time,status,created_at,dev_quote_id').gte('created_at',setting.starts_at).in('status',['REQUESTED']));
     for(const order of orders){if(order.status==='REQUESTED'&&require('./shipday-booking-runtime').eligible(order,setting))continue;if(order.status==='REQUESTED'&&!dispatchInstant(order.pickup_date,require('./booking').normaliseTime(order.pickup_time)))continue;await enroll(order,order.status==='READY'?'TO_CUSTOMER':'TO_PARTNER');}
-    const due=await result(db.from('shipday_dispatch_plans').select('id').eq('simulation',true).in('state',['PLANNED','BLOCKED']).lte('dispatch_at',new Date().toISOString()).order('dispatch_at').limit(50));
+    const due=await result(db.from('shipday_dispatch_plans').select('id').eq('leg','TO_PARTNER').eq('simulation',true).in('state',['PLANNED','BLOCKED']).lte('dispatch_at',new Date().toISOString()).order('dispatch_at').limit(50));
     for(const plan of due)await dispatcher.run(plan.id);
   }finally{busy=false;}
 }

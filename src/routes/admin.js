@@ -2009,7 +2009,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         escapeHtml(booking.requestedPickupLabel(o) || 'Time not selected'),
 
         observedPickup(o) ? '<span class="badge">Picked up</span>' : statusBadge(o.status, o),
-        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id),o), require('../web/pickup-dispatch').returnSummary(returnPlans.get(o.id))]:[]),
+        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id),o), require('../web/pickup-dispatch').returnSummary(returnPlans.get(o.id),o)]:[]),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
 
@@ -3295,12 +3295,12 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       dispatchHtml=require('../web/pickup-dispatch').card(pickupPlan,{order,drivers:pickupDrivers,canAssign:can.override,enabled:pickupRuntime.enabled,driverProblem,eligibilityProblem});
     }
     if (shipdayWorkspace && can.override && order.status === 'READY') {
-      const dispatchRuntime = require('../core/shipday-dispatch-runtime');
+      const dispatchRuntime = require('../core/partner-return-runtime');
       const [returnPlan, dispatchDrivers] = await Promise.all([
-        dispatchRuntime.result(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg','TO_CUSTOMER').maybeSingle()).catch(()=>null),
+        require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg','TO_CUSTOMER').maybeSingle()).catch(()=>null),
         dispatchRuntime.provider.drivers().catch(()=>[]),
       ]);
-      dispatchHtml = require('./shipday-assignments').returnDispatchCard({order,plan:returnPlan,drivers:dispatchDrivers,simulation:dispatchRuntime.simulation});
+      dispatchHtml = require('./shipday-assignments').returnDispatchCard({order,plan:returnPlan,drivers:dispatchDrivers,enabled:dispatchRuntime.enabled});
     }
     let photosHtml = '';
     if(shipdayWorkspace && can.customers) {

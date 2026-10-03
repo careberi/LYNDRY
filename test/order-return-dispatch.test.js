@@ -11,37 +11,36 @@ test('ready orders offer third-party and active in-house return dispatch',()=>{
       {id:'active',name:'Active Driver',isActive:true,isOnShift:true},
       {id:'offline',name:'Offline Driver',isActive:true,isOnShift:false},
     ],
-    simulation:true,
+    enabled:true,
   });
   assert.match(html,/Dispatch third-party driver/);
   assert.match(html,/Dispatch in-house driver/);
   assert.match(html,/Active Driver/);
   assert.doesNotMatch(html,/Offline Driver/);
-  assert.match(html,/no real driver is requested/i);
+  assert.match(html,/requests a real driver/i);
 });
 
 test('return dispatch is hidden before ready and locked after assignment',()=>{
-  assert.equal(returnDispatchCard({order:{status:'AT_PARTNER'},simulation:true}),'');
-  const html=returnDispatchCard({order:{order_number:9006,status:'READY'},plan:{state:'ASSIGNED',assigned_name:'Dan Reyes'},simulation:true});
+  assert.equal(returnDispatchCard({order:{status:'AT_PARTNER'},enabled:true}),'');
+  const html=returnDispatchCard({order:{order_number:9006,status:'READY'},plan:{state:'ASSIGNED',assigned_name:'Dan Reyes'},enabled:true});
   assert.match(html,/Driver assigned/);
   assert.match(html,/Dan Reyes/);
-  assert.doesNotMatch(html,/<form/);
+  assert.doesNotMatch(html,/\/dispatch-return/);assert.match(html,/\/refresh-return/);
 });
 
 test('live return dispatch remains disabled until Shipday activation',()=>{
-  const html=returnDispatchCard({order:{order_number:9006,status:'READY'},simulation:false});
+  const html=returnDispatchCard({order:{order_number:9006,status:'READY'},enabled:false});
   assert.match(html,/Live dispatch is disabled/);
   assert.doesNotMatch(html,/<form/);
 });
 
 async function fixture(order,{drivers=[],plan={id:'plan-1',state:'PLANNED'},runResult={ok:true}}={}){
   const calls={enroll:[],run:[]};
-  const database={from(){return {select(){return this;},eq(){return this;},maybeSingle(){return Promise.resolve(order);}};}};
+  const database={from(){return {select(){return this;},eq(){return this;},maybeSingle(){return Promise.resolve({data:order});}};}};
   const service={
-    result:async query=>await query,
+    enabled:true,
     provider:{drivers:async()=>drivers},
-    enroll:async(...args)=>{calls.enroll.push(args);return [plan];},
-    run:async(...args)=>{calls.run.push(args);return runResult;},
+    request:async(...args)=>{calls.run.push(args);return runResult;},
   };
   const routes=[];
   const router={post(path,...handlers){routes.push({path,handlers});}};
@@ -64,13 +63,13 @@ async function fixture(order,{drivers=[],plan={id:'plan-1',state:'PLANNED'},runR
 }
 
 test('ready paid order dispatches its return through the existing assignment runtime',async()=>{
-  const order={id:'order-1',order_number:9006,status:'READY',payment_status:'PAID'};
+  const order={id:'order-1',order_number:9006,partner_id:'shop-1',status:'READY',payment_status:'PAID'};
   const f=await fixture(order);
   const response=await f.request();
   assert.equal(response.statusCode,303);
-  assert.match(response.location,/Third-party%20driver%20dispatched/);
-  assert.deepEqual(f.calls.enroll,[[order,'TO_CUSTOMER']]);
-  assert.deepEqual(f.calls.run,[['plan-1',{mode:'THIRD_PARTY',driverId:null},'staff:admin']]);
+  assert.match(response.location,/Return%20driver%20requested/);
+  assert.deepEqual(f.calls.enroll,[]);
+  assert.deepEqual(f.calls.run,[['order-1','shop-1','staff:admin',{mode:'THIRD_PARTY',driverId:null}]]);
 });
 
 test('return dispatch rejects unsafe status, payment, origin and in-house driver choices',async()=>{

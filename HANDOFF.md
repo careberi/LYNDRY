@@ -1,4 +1,32 @@
-# Current change: laundromat portal URL and staff text link
+# Current change: recover laundromat return dispatch
+
+Neil assigned implementation on 3 October. Readiness must remain saved when a
+driver request fails. On the hosted development site, use real return dispatch
+instead of the legacy simulated scheduler. When automatic dispatch is enabled,
+ready/request-return requests a third-party courier. In manual mode, record the
+request and show an actionable admin alert with in-house and third-party choices.
+Both portals must distinguish waiting for admin, requesting, awaiting driver,
+assigned and failed/review states. The laundromat can retry a confirmed failure
+and refresh an uncertain request without creating duplicate jobs or assignments.
+Clear stale error banners after recovery. Keep the order READY until verified
+physical collection, including third-party collection. Preserve payment, weight,
+shop/actor, destination and saved courier-budget checks. No pricing or SMS changes.
+An existing simulated plan is replaced only when that order is explicitly
+requested; do not automatically book historical simulated orders on deployment.
+Commit and push to development. Do not book actual drivers during verification.
+Independent review and Neil's click-test remain pending.
+
+Validation: all 1870 application tests pass with placeholder service credentials
+and external network blocked. Regression coverage includes hosted development
+identity, manual requests, automatic third-party requests, concurrent clicks,
+uncertain writes, recovery of an existing job, changed destinations and status
+read failures. Ten database handoff scenarios passed inside rolled-back fixture
+transactions. Migration 0145 is applied to development only. Browser previews
+confirmed the admin driver choices and the laundromat waiting/recovery state.
+Development's automatic dispatch setting is currently off; its one ready return
+is still an old simulation. No real driver or SMS was requested in verification.
+
+# Previous change: laundromat portal URL and staff text link
 
 Neil assigned implementation on 3 October. Show the full shareable laundromat
 portal URL on the partner profile, including imported shops missing a slug.

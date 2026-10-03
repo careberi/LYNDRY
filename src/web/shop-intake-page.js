@@ -18,6 +18,7 @@ const messages = {
   return_weight_required:['Enter a fresh full-order weight before requesting a return driver.','Ingrese un peso nuevo antes de solicitar al conductor.'],
   return_weight_held:['Return blocked. Keep this order here and contact LYNDRY for a weight review.','Devolucion bloqueada. Guarde el pedido y contacte a LYNDRY para revisar el peso.'],
   return_requested: ['Return driver requested. Track collection below.', 'Conductor solicitado. Consulte la recogida abajo.'],
+  return_manual: ['Laundry is ready. LYNDRY has your request and will arrange a return driver.', 'La ropa esta lista. LYNDRY recibio su solicitud y organizara la recogida.'],
   return_pending: ['Laundry is ready, but the driver request needs attention. Refresh or contact LYNDRY.', 'La ropa esta lista, pero la solicitud necesita atencion. Actualice o contacte a LYNDRY.'],
   return_not_collected: ['Pickup by the assigned return driver has not been confirmed yet. Refresh before confirming.', 'Aun no se confirma la recogida por el conductor asignado. Actualice antes de confirmar.'],
   collected: ['Pickup confirmed. This order is now in Completed orders.', 'Recogida confirmada. El pedido esta en Pedidos completados.'],
@@ -40,7 +41,7 @@ const say = (lang, en, es) => lang === 'es' ? es : en;
 const label = (lang, stage) => labels[stage][lang === 'es' ? 1 : 0];
 function shell(ctx, title, body) {
   const notice = ctx.order?.returnCheckStatus === 'HELD' ? 'return_weight_held' : ctx.order?.officeReview ? 'office_review' : ctx.notice;
-  const validNotice = notice === 'accept' ? false : notice === 'intake' ? ['WASH','READY'].includes(ctx.order?.stage) : notice === 'ready' ? ctx.order?.stage === 'READY' : true;
+  const validNotice = notice === 'return_pending' && ['PLANNED','REQUESTED','ASSIGNED','COMPLETED'].includes(ctx.order?.returnDispatchState) ? false : notice === 'accept' ? false : notice === 'intake' ? ['WASH','READY'].includes(ctx.order?.stage) : notice === 'ready' ? ctx.order?.stage === 'READY' : true;
   const message = validNotice ? messages[notice] : null;
   const adminNote = ctx.portalAdmin ? opsNote({label:say(ctx.lang,'Administrator access','Acceso de administrador'),
     title:e(ctx.portalAdmin.name)+' · '+e(ctx.shop.name),
@@ -48,7 +49,7 @@ function shell(ctx, title, body) {
     // The portal has no navigation back into POS, even for LYNDRY admins.
 }) : '';
   return page({ ...ctx, signedIn: true, active: '/shop', showProcessingGuide: false, title, body: `<div class="shop-intake">${body}</div>`+require('./shop-deadline-clock').script+require('./shop-return-weight').script,
-    notes: [adminNote, message ? opsNote({ tone: ['accept','intake','ready','return_requested','collected'].includes(notice) ? 'good' : 'bad', title: e(message[ctx.lang === 'es' ? 1 : 0]) }) : ''].filter(Boolean) });
+    notes: [adminNote, message ? opsNote({ tone: ['accept','intake','ready','return_requested','return_manual','collected'].includes(notice) ? 'good' : 'bad', title: e(message[ctx.lang === 'es' ? 1 : 0]) }) : ''].filter(Boolean) });
 }
 const {phone} = require('../providers/couriers/shipday-tracking');
 const statusNames = {
@@ -60,6 +61,7 @@ const statusNames = {
 };
 function deliveryStatus(o,lang) {
   if(o.stage==='READY' && o.canCollect)return say(lang,'Picked up · Confirm handoff','Recogido · Confirme entrega');
+  if(o.stage==='READY'&&['PLANNED','BLOCKED','REVIEW','REQUESTED','PROCESSING'].includes(o.returnDispatchState))return ({PLANNED:['Waiting for LYNDRY to arrange collection','Esperando que LYNDRY organice la recogida'],BLOCKED:['Driver request needs attention · retry or contact LYNDRY','Solicitud necesita atencion · reintente o contacte a LYNDRY'],REVIEW:['LYNDRY is reviewing the driver request','LYNDRY esta revisando la solicitud'],REQUESTED:['Driver requested · awaiting assignment','Conductor solicitado · esperando asignacion'],PROCESSING:['Requesting return driver','Solicitando conductor']})[o.returnDispatchState][lang==='es'?1:0];
   if(o.deliveryReason==='return_unassigned')return say(lang,'Awaiting return driver','Esperando conductor de vuelta');
   if(o.deliveryReason==='delivery_mismatch')return say(lang,'Delivery mismatch','Entrega no coincide');
   if(o.deliveryReason==='delivery_unverified')return say(lang,'Status unavailable','Estado no disponible');
@@ -193,10 +195,11 @@ function detail(ctx) {
       content+=`<p>${e(say(lang,'Wash complete. Confirm the return weight before requesting your driver.','Lavado completo. Confirme el peso antes de solicitar al conductor.'))}</p>${form('ready',weightField+button(say(lang,'Outtake','Salida'),Boolean(weightField)))}`;
     } else {
       content+=`<h2>${e(say(lang,'Return collection','Recogida de vuelta'))}</h2>${o.assigned?courier(o,lang):`<p>${e(say(lang,'No return driver is assigned yet. Keep this order at the laundromat.','Aun no hay conductor asignado. Guarde el pedido en la lavanderia.'))}</p>`}<p>${e(say(lang,'Pickup ETA','ETA de recogida'))}: <strong>${e(eta(o,lang))}</strong></p>`;
+      if(!o.assigned&&o.returnDispatchState)content+=`<p role="status">${e(deliveryStatus(o,lang))}</p>`;
       if(o.returnNeedsRequest)content+=form('request-return',button(say(lang,'Request return driver','Solicitar conductor')));
       else if(o.canCollect)content+=`<p>${e(say(lang,'Check the original delivery photo, then confirm the assigned driver collected this order.','Revise la foto original y confirme que el conductor asignado recogio este pedido.'))}</p>${pickupAction(o,ctx)}`;
       else content+=`<p>${e(say(lang,'Keep the bags here until the assigned driver collects them. Confirmation opens when pickup is verified.','Guarde las bolsas hasta que el conductor las recoja. La confirmacion se abre cuando se verifica la recogida.'))}</p><button class="btn btn-outline" disabled>${e(say(lang,'Awaiting confirmed pickup','Esperando recogida confirmada'))}</button>`;
-      content+=`<a class="btn btn-outline" href="/shop/orders/${o.number}?lang=${lang}">${e(say(lang,'Refresh collection status','Actualizar recogida'))}</a>`;
+      content+=o.returnNeedsReconcile?form('refresh-return',`<button class="btn btn-outline">${e(say(lang,'Refresh collection status','Actualizar recogida'))}</button>`):`<a class="btn btn-outline" href="/shop/orders/${o.number}?lang=${lang}">${e(say(lang,'Refresh collection status','Actualizar recogida'))}</a>`;
     }
   }
   const names=[['Intake','Registro'],['Washing','En lavado'],['Outtake','Salida']],index=o.stage==='INCOMING'?0:o.stage==='READY'?2:1;

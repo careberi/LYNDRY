@@ -36,9 +36,10 @@ function card(plan,{order,drivers=[],canAssign=false,enabled=false,driverProblem
     (problemFor(plan)?'<p role="status">'+e(problemFor(plan))+'</p>':'')+
     '</div>'+controls+'</section>';
 }
-function returnSummary(plan) {
-  if(!plan)return 'Not scheduled';
-  const name=plan.simulation?'Simulated dispatch':({PLANNED:'Scheduled',PROCESSING:'Requesting courier',BLOCKED:'Needs attention',REQUESTED:'Awaiting driver',ASSIGNED:'Driver assigned',REVIEW:'Needs review',COMPLETED:'Delivery complete',CANCELED:'Canceled'})[plan.state]||'Status unavailable';
-  return '<strong>'+e(name)+'</strong>'+(plan.assigned_name?'<br>'+e(plan.assigned_name):'')+(plan.problem?'<p role="status">'+e(plan.problem)+'</p>':'');
+function returnSummary(plan,order) {
+  if(!plan&&order?.status!=='READY')return 'Not scheduled';
+  if(!plan||plan.simulation||plan.state==='PLANNED')return '<strong role="status">Return driver needed</strong>'+(order?'<br><a href="/ops/orders/'+e(order.order_number)+'">Choose return driver</a>':'');
+  const name=({PROCESSING:'Requesting courier',BLOCKED:'Needs attention',REQUESTED:'Awaiting driver',ASSIGNED:'Driver assigned',REVIEW:'Needs review',COMPLETED:'Delivery complete',CANCELED:'Canceled'})[plan.state]||'Status unavailable';
+  return '<strong>'+e(name)+'</strong>'+(plan.assigned_name?'<br>'+e(plan.assigned_name):'')+(plan.problem?'<p role="status">'+e(plan.problem)+'</p>':'')+(['BLOCKED','REVIEW'].includes(plan.state)&&order?'<a href="/ops/orders/'+e(order.order_number)+'">Review return request</a>':'');
 }
 module.exports={label,summary,card,returnSummary};

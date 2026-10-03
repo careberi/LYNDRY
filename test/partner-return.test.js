@@ -9,8 +9,9 @@ function fixture(){
  const calls=[];let remote=null;
  const store={ensure:async()=>structuredClone(plan),claim:async row=>{if(row.version!==plan.version||row.state!==plan.state)return null;plan={...plan,state:'PROCESSING',version:plan.version+1};return structuredClone(plan);},save:async(row,patch)=>{assert.equal(row.version,plan.version);plan={...plan,...patch,version:plan.version+1};return structuredClone(plan);}};
  const provider={drivers:async()=>[{id:'9',name:'LYNDRY',isActive:true,isOnShift:true}],findOrders:async()=>remote?[structuredClone(remote)]:[],createOrder:async trip=>{calls.push(['create',trip]);remote={orderId:123,orderNumber:trip.externalId,restaurant:{name:context.shop.name,address:'1 Main St, Town, NJ, 07000'},customer:{name:context.customer.name,address:'2 Private St, Town, NJ, 07000'},orderStatus:{orderState:'NOT_ASSIGNED'}};return {id:'123'};},assignDriver:async(id,driver)=>{calls.push(['assign',id,driver]);remote.assignedCarrier={id:driver,name:'LYNDRY',phoneNumber:'+12015550186'};remote.orderStatus.orderState='NOT_ACCEPTED';return {ok:true};}};
- const request=createRequester({store,provider,load:async()=>context,enabled:true});
- return {context,calls,store,provider,request,get plan(){return plan;},get remote(){return remote;},set remote(value){remote=value;}};
+ const options={store,provider,load:async()=>context,enabled:true,settings:async()=>({enabled:false})};
+ const request=(...args)=>createRequester(options)(...args,{mode:'IN_HOUSE',driverId:'9'});
+ return {context,calls,store,provider,request,options,get plan(){return plan;},get remote(){return remote;},set remote(value){remote=value;}};
 }
 test('ready creates one real in-house return and repeated/concurrent requests do not book twice',async()=>{
  const f=fixture();await Promise.all([f.request('order','shop','admin'),f.request('order','shop','admin')]);
@@ -26,8 +27,88 @@ test('not-ready, unverified, unpaid, held and existing courier orders never requ
 });
 test('offline or ambiguous in-house drivers leave a retryable request without creating an order',async()=>{
  for(const drivers of [[],[{id:'1',isActive:true,isOnShift:true},{id:'2',isActive:true,isOnShift:true}]]){
-  const f=fixture();f.provider.drivers=async()=>drivers;assert.equal((await f.request('order','shop','admin')).ok,false);assert.equal(f.calls.length,0);assert.equal(f.plan.state,'BLOCKED');
+  const f=fixture();f.provider.drivers=async()=>drivers;assert.equal((await f.request('order','shop','admin')).ok,false);assert.equal(f.calls.length,0);assert.equal(f.plan.state,'BLOCKED');assert.equal(f.plan.mode,'IN_HOUSE');
  }
+});
+
+test('manual readiness records an admin request and removes the old simulated assignment without calling Shipday',async()=>{
+ const f=fixture();
+ for(let i=0;i<2;i++)assert.deepEqual(await createRequester(f.options)('order','shop','staff'),{ok:true,state:'PLANNED',manual:true});
+ assert.equal(f.calls.length,0);assert.equal(f.plan.state,'PLANNED');assert.equal(f.plan.simulation,false);
+ assert.equal(f.plan.shipday_order_id,null);assert.equal(f.plan.assigned_name,null);
+});
+
+test('automatic readiness requests a third-party courier once and distinguishes pending from assigned',async()=>{
+ const f=fixture();f.options.settings=async()=>({enabled:true});f.context.order.pricing_snapshot={returnCents:674};
+ let status={status:'REQUESTED',courier:null};
+ f.provider.assign=async(id,args)=>{assert.equal(args.maxFeeCents,674);await args.beforeAssign();f.calls.push(['third-party',id]);f.remote.thirdPartyAssignedAnytime=true;return {ok:true,...status};};
+ f.provider.status=async()=>status;
+ const request=createRequester(f.options);
+ assert.equal((await request('order','shop','staff')).state,'REQUESTED');
+ assert.equal((await request('order','shop','staff')).state,'REQUESTED');
+ assert.deepEqual(f.calls.map(c=>c[0]),['create','third-party']);assert.equal(f.plan.assigned_name,null);
+ status={status:'STARTED',courier:{name:'Courier driver'}};f.remote.orderStatus.orderState='STARTED';
+ assert.equal((await request('order','shop','staff')).state,'ASSIGNED');assert.equal(f.plan.assigned_name,'Courier driver');
+ f.remote.orderStatus.orderState='PICKED_UP';status={status:'pickup_complete',courier:{name:'Courier driver'}};
+ assert.equal((await verifyReturn({provider:f.provider,...f.context,plan:f.plan})).canCollect,true);
+});
+
+test('confirmed courier unavailability is retryable on the same job, while an uncertain request only reconciles',async()=>{
+ const f=fixture();f.options.settings=async()=>({enabled:true});f.context.order.pricing_snapshot={returnCents:674};
+ f.provider.assign=async()=>({ok:false});
+ const request=createRequester(f.options);
+ assert.equal((await request('order','shop','staff')).ok,false);assert.equal(f.plan.state,'BLOCKED');
+ const id=f.plan.shipday_order_id;
+ f.provider.assign=async(id,args)=>{await args.beforeAssign();f.calls.push(['third-party']);throw Error('timeout');};
+ assert.equal((await request('order','shop','staff')).ok,false);assert.equal(f.plan.state,'REVIEW');
+ f.provider.status=async()=>({status:'REQUESTED'});
+ assert.equal((await request('order','shop','staff')).state,'REQUESTED');assert.equal(f.plan.shipday_order_id,id);
+ assert.deepEqual(f.calls.map(c=>c[0]),['create','third-party']);
+});
+
+test('manual mode never reassigns an already requested courier, and third-party failures do not authorize collection',async()=>{
+ const f=fixture();f.options.settings=async()=>({enabled:true});f.context.order.pricing_snapshot={returnCents:674};
+ f.provider.assign=async(id,args)=>{await args.beforeAssign();return {ok:true,status:'REQUESTED'};};
+ f.provider.status=async()=>({status:'REQUESTED'});
+ await createRequester(f.options)('order','shop','staff');f.options.settings=async()=>({enabled:false});
+ assert.equal((await createRequester(f.options)('order','shop','staff',{mode:'IN_HOUSE',driverId:'9'})).ok,false);
+ f.remote.orderStatus.orderState='PICKED_UP';f.provider.status=async()=>({status:'canceled'});
+ assert.equal((await verifyReturn({provider:f.provider,...f.context,plan:f.plan})).canCollect,false);
+});
+
+test('read-only refresh cannot start a dispatch and a changed destination prevents assignment',async()=>{
+ const f=fixture();
+ assert.equal((await createRequester(f.options)('order','shop','staff',null,{observeOnly:true})).ok,false);assert.equal(f.calls.length,0);
+ f.options.settings=async()=>({enabled:true});f.context.order.pricing_snapshot={returnCents:674};
+ f.provider.assign=async(id,args)=>{f.context.customer.address_line1='Changed';await args.beforeAssign();f.calls.push(['unexpected']);};
+ assert.equal((await createRequester(f.options)('order','shop','staff')).ok,false);assert.deepEqual(f.calls.map(c=>c[0]),['create']);
+});
+
+test('a timed-out creation can recover the exact unassigned job and retry without creating a second delivery',async()=>{
+ const f=fixture();f.options.settings=async()=>({enabled:true});f.context.order.pricing_snapshot={returnCents:674};
+ const create=f.provider.createOrder;
+ f.provider.createOrder=async trip=>{await create(trip);throw Error('response lost');};
+ const request=createRequester(f.options);
+ assert.equal((await request('order','shop','staff')).ok,false);assert.equal(f.plan.state,'REVIEW');
+ await request('order','shop','staff',null,{observeOnly:true});assert.equal(f.plan.state,'BLOCKED');assert.equal(f.plan.shipday_order_id,'123');
+ f.provider.assign=async(id,args)=>{await args.beforeAssign();f.calls.push(['third-party']);return {ok:true,status:'REQUESTED'};};
+ assert.equal((await request('order','shop','staff')).state,'REQUESTED');assert.deepEqual(f.calls.map(c=>c[0]),['create','third-party']);
+});
+
+test('a rejected status read preserves the existing assignment marker and never enables another courier request',async()=>{
+ const f=fixture();await f.request('order','shop','admin');const marker=f.plan.assignment_requested_at;
+ f.provider.findOrders=async()=>{throw Object.assign(Error('unauthorized read'),{uncertain:false});};
+ await f.request('order','shop','admin');assert.equal(f.plan.state,'REVIEW');assert.equal(f.plan.assignment_requested_at,marker);
+ assert.deepEqual(f.calls.map(c=>c[0]),['create','assign']);
+});
+
+test('portal clears a recovered error, shows manual waiting and offers safe reconciliation in review',()=>{
+ const ctx={lang:'en',csrf:'test',shop:{name:'Laundry'},notice:'return_pending',order:{number:9,stage:'READY',intakeComplete:true,returnDispatchState:'PLANNED',returnNeedsRequest:true}};
+ let html=page.detail(ctx);assert.doesNotMatch(html,/Laundry is ready, but the driver request needs attention/);assert.match(html,/Waiting for LYNDRY to arrange collection/);
+ html=page.detail({...ctx,order:{...ctx.order,returnDispatchState:'REVIEW',returnNeedsRequest:false,returnNeedsReconcile:true}});
+ assert.match(html,/action="\/shop\/orders\/9\/refresh-return"/);assert.doesNotMatch(html,/action="\/shop\/orders\/9\/request-return"/);
+ const summary=require('../src/web/pickup-dispatch').returnSummary({state:'ASSIGNED',simulation:true,assigned_name:'Fake driver'},{order_number:9,status:'READY'});
+ assert.match(summary,/Choose return driver/);assert.doesNotMatch(summary,/Fake driver|Simulated dispatch/);
 });
 test('uncertain assignment is preserved for review and cannot be retried into a duplicate',async()=>{
  const f=fixture();f.provider.assignDriver=async()=>{f.calls.push(['uncertain']);throw Error('timeout');};

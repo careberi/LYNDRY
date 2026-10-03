@@ -15,8 +15,8 @@ async function deliveryInfo(order, partnerId, leg) {
     ]);
     if (shop.status!=='ACTIVE') return {ok:false,reason:'delivery_unverified'};
     // Includes destination, schedule and assignment so a changed order cannot reuse an old display.
-    const row = leg==='TO_CUSTOMER' ? await data(db.from('orders').select('customers(name,address_line1,address_line2,city,state,postal_code)').eq('id',order.id).eq('partner_id',partnerId).maybeSingle()) : null;
-    const customer=row?.customers;
+    const row = leg==='TO_CUSTOMER' ? await data(db.from('orders').select('preferences,customers(name,address_line1,address_line2,city,state,postal_code)').eq('id',order.id).eq('partner_id',partnerId).maybeSingle()) : null;
+    const customer=row?require('./order-address').customerFor(row,row.customers):null;
     const key = JSON.stringify([partnerId,order.id,order.pickup_date,order.pickup_time,leg,plan,destination(shop),customer]);
     const old = cache.get(key);
     if(old && Date.now()-old.at<30000)return old.promise;
