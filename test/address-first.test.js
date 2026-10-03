@@ -31,11 +31,12 @@ test('booking starts with saved-address confirmation and removes premature plan 
   const post=async data=>fetch(base+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)});
   const invalid=await post({step:'address',name:'Test',postal_code:'bad'});assert.equal(invalid.status,400);assert.equal(writes,0);
   html=await(await post({step:'address',name:'Test Customer',address_line1:'1 Test Street',city:'Lodi',postal_code:'07644',spot:'Front door'})).text();
-  assert.match(html,/Choose your pickup plan\./);assert.match(html,/name="address_confirmed" value="yes"/);assert.doesNotMatch(html,/\$2\.00|\$1\.80|Save 10%/);assert.equal(writes,1);
+  assert.match(html,/Schedule your pickup/);assert.match(html,/name="address_confirmed" value="yes"/);assert.doesNotMatch(html,/\$2\.00|\$1\.80|Save 10%/);assert.equal(writes,1);
   html=await(await post({step:'repeat',address_confirmed:'yes',plan:'ONE_TIME'})).text();
   assert.match(html,/Schedule your pickup/);
   assert.match(html,/Pickup times depend on the laundromats/);
-  assert.doesNotMatch(html,/<input[^>]*name="pickup_time"[^>]*\b(?:min|max)=/);
+  assert.match(html,/<select[^>]*name="pickup_time"/);
+  assert.doesNotMatch(html,/<input[^>]*name="pickup_time"[^>]*\bmax=/);
 
   html=await(await post({step:'repeat',back:'address',address_confirmed:'yes',plan:'ONE_TIME'})).text();assert.match(html,/Where should we pick up\?/);assert.equal(writes,1);
   // Old forms cannot skip the newly required first screen.
@@ -75,7 +76,7 @@ test('Fair Lawn signup uses the full address and handles coverage separately fro
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
  const form={step:'address',name:'Test Customer',address_line1:'16-50 Chandler Dr.',address_line2:'Unit 2',city:'Fair Lawn',postal_code:'07410',spot:'Front door'};
  const post=extra=>fetch('http://127.0.0.1:'+server.address().port+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({...form,...extra})});
- let response=await post({});assert.equal(response.status,200);assert.match(await response.text(),/Choose your pickup plan/);
+ let response=await post({});assert.equal(response.status,200);assert.match(await response.text(),/Schedule your pickup/);
  assert.equal(legacyCalls,0);assert.equal(writes,1);
  assert.deepEqual(checked[0],{address:{address_line1:'16-50 Chandler Dr.',address_line2:'Unit 2',city:'Fair Lawn',state:'NJ',postal_code:'07410'},options:{publicPreview:true,addressEstimate:true}});
  response=await post({postal_code:'10036'});assert.equal(response.status,400);assert.match(await response.text(),/serve New Jersey/);assert.equal(checked.length,1);
@@ -89,4 +90,24 @@ test('Fair Lawn signup uses the full address and handles coverage separately fro
   const html=await response.text();assert.match(html,expected);assert.doesNotMatch(html,/cannot pick up from 07410|only cover New Jersey/);
   assert.equal(writes,1);
  }
+});
+
+
+test('development booking asks schedule before plans and prices the submitted schedule',async t=>{
+ const customer={id:'test-customer',name:'Test',address_line1:'1 Test Street',city:'Lodi',postal_code:'07644',preferences:{water_temp:'cold',fabric_softener:'standard',special_instructions:'Front door'}};
+ const originals={preview:checkout.previewQuote,attach:auth.attachCustomer,opens:settings.opensOn,refresh:booking.refreshBookedOrders};
+ const previews=[];
+ checkout.previewQuote=async(_customer,form,options)=>{previews.push({form:{...form},options});return {categories:{ONE_TIME:{},SUBSCRIPTION:{}},snapshot:{}};};
+ auth.attachCustomer=async req=>{req.customer=customer;};settings.opensOn=async()=>null;booking.refreshBookedOrders=async()=>{};
+ t.after(()=>{checkout.previewQuote=originals.preview;auth.attachCustomer=originals.attach;settings.opensOn=originals.opens;booking.refreshBookedOrders=originals.refresh;});
+ const app=express();app.use(express.urlencoded({extended:false}));app.use(require('../src/routes/account').router);
+ const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
+ const base='http://127.0.0.1:'+server.address().port;
+ const post=extra=>fetch(base+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({address_confirmed:'yes',...extra})});
+ let response=await post({step:'entry'});let html=await response.text();assert.match(html,/Schedule your pickup/);assert.match(html,/Earliest available pickup/);assert.match(html,/>Pick up now</);assert.match(html,/>Schedule</);assert.match(html,/value="13:00"/);assert.doesNotMatch(html,/value="13:30"|value="13:15"|Allow at least/);assert.match(html,/check-box check-box-round/);assert.doesNotMatch(html,/Choose your option/);
+ response=await post({step:'when',pickup_date:'2030-01-01',pickup_time:'13:42'});html=await response.text();
+ assert.match(html,/Choose your pricing method/);assert.doesNotMatch(html,/value="MONTHLY"|every month/i);assert.match(html,/booking-pricing-content/);assert.equal(previews.at(-1).form.pickup_date,'2030-01-01');assert.equal(previews.at(-1).form.pickup_time,'13:42');
+ assert.equal(previews.at(-1).options.addressEstimate,undefined);assert.match(html,/name="pickup_date" value="2030-01-01"/);
+ response=await post({step:'repeat',back:'when',plan:'SUBSCRIPTION',cadence:'WEEKLY',pickup_date:'2030-01-01',pickup_time:'13:42'});
+ html=await response.text();assert.match(html,/type="date"/);assert.doesNotMatch(html,/name="weekday"/);
 });

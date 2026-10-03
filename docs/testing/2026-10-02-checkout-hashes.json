@@ -1,0 +1,2482 @@
+[
+  {
+    "path": "src/core/replacement-booking.js",
+    "sha256": "ee484c8b711d3980ee1b87b5eb4d39d9d3939ae5242abd6892ea37778a9c30d6"
+  },
+  {
+    "path": "src/core/shipday-cancellation-runtime.js",
+    "sha256": "4d53be43539ced84e0b3c09e4fe250defe44e9a60065821179734e5470f6c36e"
+  },
+  {
+    "path": "src/core/shipday-cancellation.js",
+    "sha256": "8236b146c48caff4bf1a33f5202964d55383853aab3f7c58fa0c5096a602827f"
+  },
+  {
+    "path": "supabase/migrations/0140_manual_delivery_without_photo.sql",
+    "sha256": "93d84ee2cb6de78209534cbefbebf39f3b97e4dd9a7faf9d1c2e57d99bf407a8"
+  },
+  {
+    "path": "test/account-booking-review.test.js",
+    "sha256": "e30a6eff157d8498bc16d98922eca51acd5742d91cc047aece4ddff471089d7d"
+  },
+  {
+    "path": "test/account-settings-render.test.js",
+    "sha256": "accf99bdf0b2de414f936a33a2ce9721cdd90112ffaf84fd11859a38ff64b686"
+  },
+  {
+    "path": "test/customer-softener-display.test.js",
+    "sha256": "953347ed4008de5a0634041a5e30de077d51b1d612f014fe925e8a8aced7f4de"
+  },
+  {
+    "path": "test/replacement-booking.test.js",
+    "sha256": "465b3683d381d385a7356a2238febadb748aa8dc60372c6b77394205130028eb"
+  },
+  {
+    "path": "test/shipday-cancellation.test.js",
+    "sha256": "09f31baaebd648f0cfdd189b971bdee27db176a685825d94ab2870e87200fa40"
+  },
+  {
+    "path": ".claude/launch.json",
+    "sha256": "9285a7107dbcda84100e10739cb8622267dad1e9f73fdb498a6f24e5e80341c6"
+  },
+  {
+    "path": ".env.example",
+    "sha256": "faaab1306658ebcfdd87f6dd31f5458a190ecb4b02850f5e2214fb58936f608e"
+  },
+  {
+    "path": ".gitignore",
+    "sha256": "faac33bc538b1e0f4ddde4fc7e048ab45fd9cf4853910ba3d6aa8f8898fa2065"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/design-record.md",
+    "sha256": "3d444af6b47cf5c23326d33e63d482b41b45602d7f64a9f1544fb4fcf9202303"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/hero-desktop.png",
+    "sha256": "1b46a3a638468e2bb2dd27e7128d516ba372d0f429abf96fe83680e2effb5540"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/hero-mobile-top.png",
+    "sha256": "eba381b5605d85aae81f09fc525dc93003ad092a6ddbdaad2fc0956d5cd6adf1"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/hero-mobile.png",
+    "sha256": "316aa386c798b49d445fed2a808e7e027d726dfdd882c645706b042c269d0536"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/hero-tablet.png",
+    "sha256": "3e8451f27c43da82cfccd9611218e8b441282f73fe4308d1eee0dba52ab57452"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/hero-user-2065.png",
+    "sha256": "96df611d35219d2f5c996b5d2ef6f2bc052c1da9849521d438105010ff327035"
+  },
+  {
+    "path": ".impeccable/review/home-hero-20261001/review.md",
+    "sha256": "2178b24cfbcea5fbcd4eea124bff6dd28df21ba3ad248de9c4ce0b7dc5f8301f"
+  },
+  {
+    "path": ".impeccable/review/quote-20261001/design-record.md",
+    "sha256": "b77f59f1ebdc050534f4d1bb8bcfdfe81b4f09f6f4073a986f52c9232ea2fb8c"
+  },
+  {
+    "path": ".impeccable/review/quote-20261001/quote-eighteen-desktop.png",
+    "sha256": "1a043242c2d000f871ce12e8babcb2d6c7bfd96472cc8f90834e0e42e49294de"
+  },
+  {
+    "path": ".impeccable/review/quote-20261001/quote-eighteen-mobile-lower.png",
+    "sha256": "fae5924db02f9c970cb855941a4fd4467dbfc65a7ad01bd4350b948685cab022"
+  },
+  {
+    "path": ".impeccable/review/quote-20261001/quote-eighteen-mobile-viewport.png",
+    "sha256": "8acd6a39fd6e176f13ba6e69ef3215941e57080913a9046474fe85320a3e10a3"
+  },
+  {
+    "path": ".impeccable/review/quote-20261001/quote-eighteen-mobile.png",
+    "sha256": "f68380e041fa04a7f4333fdefe0b19dbd077dcdabd4d203c312149f5213a8c6d"
+  },
+  {
+    "path": "AGENTS.md",
+    "sha256": "f788a3ffd5bbe403f61501b352dddb6e8752ea6858f51ae8157fd24cf8c43f78"
+  },
+  {
+    "path": "CLAUDE.md",
+    "sha256": "dd9f537ccdf671be190871632f9a2777acce73e86a91e85a2ba660576619da94"
+  },
+  {
+    "path": "DECISIONS.md",
+    "sha256": "ceb7aa8aa17de1d4170867e60830c0665cd09ba1308faf39f65c692f7f39d111"
+  },
+  {
+    "path": "GOOGLE_ADDRESS_SETUP.md",
+    "sha256": "8c7673f1e4b2494c5a0622e6662cd2f9bcb2be9e483078ac5e8b74a99a02170a"
+  },
+  {
+    "path": "HANDOFF.md",
+    "sha256": "0bf8a07cb73ac85b34a5c0c0149971591a5a8adad49d8d2c52617ecd00a9d343"
+  },
+  {
+    "path": "POS-REDESIGN.md",
+    "sha256": "3cace08601e66ef7a3a3e03510040df75a09b8a5b9705e13835d7ea796adc59d"
+  },
+  {
+    "path": "README.md",
+    "sha256": "c17805ba29bc6ff33e30249c120b773dc5ceeb6fe8a02c082f4bd1c9fd68061b"
+  },
+  {
+    "path": "REQUIREMENTS-CHANGELOG.txt",
+    "sha256": "4e877f45eec2ad07c501faf8634b301bda04e77df315b1ad1a857d38494fa014"
+  },
+  {
+    "path": "ROUTING.md",
+    "sha256": "f5e7c23ac6250dae80690368a533bb3f563121974838ece41da1df344115781f"
+  },
+  {
+    "path": "SHIPDAY-INTEGRATION.md",
+    "sha256": "f7d926c9af1ce386b1fe6d5deb3372869e5cd9be66d84d15213b02a9b33933d2"
+  },
+  {
+    "path": "SPENDING-APPROVALS.md",
+    "sha256": "a688fed67121fb4076ff7b4a7e92f20d7952aa253f0be99f511a3176d26031e6"
+  },
+  {
+    "path": "TASKS.md",
+    "sha256": "3f58a680a05219fc1c1922a79bfe9d432a7e92ea44910f771deb3250158bcaf3"
+  },
+  {
+    "path": "TESTING.md",
+    "sha256": "63d82f7a137baac7be0fa10c40651d5afe43870e60427493d758ac812df626be"
+  },
+  {
+    "path": "assets/logo-source-colour.png",
+    "sha256": "3e7b3ee07510138307810f264fc5e37281334fc1cfe7376da89beadb48837f45"
+  },
+  {
+    "path": "assets/logo-source-mono.png",
+    "sha256": "2265b0040abff33ef011c21bcc2bb2c2f0a7d7f265d0e34f371756d1cc7c61bf"
+  },
+  {
+    "path": "docs/cleanup/2026-09-26-audit.md",
+    "sha256": "9e8bf8f678c40de7b12a4343de82781fd12632fa57794fc93d5be653442e4be3"
+  },
+  {
+    "path": "eslint.audit.config.mjs",
+    "sha256": "d68a3ae0400b30ec7246f8048f7f21eeedd711b74e9c0718138a4ad4f100b36b"
+  },
+  {
+    "path": "package-lock.json",
+    "sha256": "5221ff6707593ee1b111a5389e6025cfdf511669f7a465dd251d4b26e079f43b"
+  },
+  {
+    "path": "package.json",
+    "sha256": "dca1fdfaf1e27518c0d7587fd5b2ee6134df0d79ec795b982643e47387b702b5"
+  },
+  {
+    "path": "public/css/ds/README.md",
+    "sha256": "ec4117ed2211c0762f13a0093bd058e58978cb44930d97c9d85c32a9d06542a6"
+  },
+  {
+    "path": "public/css/ds/styles.css",
+    "sha256": "fe313b57bc2952f0b2dde3584d0a2ec4cd3dd9169a5d3262401e620c33e8bbe4"
+  },
+  {
+    "path": "public/css/ds/tokens/base.css",
+    "sha256": "5f5178fbc4b85a23ac970241be573a72bb99d92a6ad7c4908baf5a547bd1cc72"
+  },
+  {
+    "path": "public/css/ds/tokens/colors.css",
+    "sha256": "579027c3ed902929d2a66e92794d8fe45e2a07c28e9b24aa6f68af151ce42877"
+  },
+  {
+    "path": "public/css/ds/tokens/effects.css",
+    "sha256": "44291249632bd20e6edd54348499ff1fa85cf91dce0f3140ed2c674161ade06e"
+  },
+  {
+    "path": "public/css/ds/tokens/fonts.css",
+    "sha256": "6dc793147d00eca048a5bda4104340474501c81a048561b2eec7704de56cc311"
+  },
+  {
+    "path": "public/css/ds/tokens/motion.css",
+    "sha256": "a0bfdd67ee3967947dc32bdcc9a8f2bd0e2a15c3461f9d33ecd2cae8e1386b1e"
+  },
+  {
+    "path": "public/css/ds/tokens/spacing.css",
+    "sha256": "94084f29d31423ba59361747ce9e21091f52ca8a2bd1ba69767f58a8a1604333"
+  },
+  {
+    "path": "public/css/ds/tokens/typography.css",
+    "sha256": "d28b0cc514fe795da819d6599c56620ac2921d60783c443c18ff7640b4768cb8"
+  },
+  {
+    "path": "public/css/icons.css",
+    "sha256": "2dcad91939de0bdd2179ce4a079e7ac53396bead4b550e45360e4ceccbfe53d3"
+  },
+  {
+    "path": "public/css/logo.png",
+    "sha256": "7616db76e3fd43828fb1debed499499cb981d4e4aa9796def5ba0dbc06857351"
+  },
+  {
+    "path": "public/css/lyndry.css",
+    "sha256": "50c083027679e4ef3204035912a36c7d015420cbe04c6abfca47cfc52afdf2c5"
+  },
+  {
+    "path": "public/css/ops.css",
+    "sha256": "7370b7d3696b3ec922ac91731a0303e37f2cfddd2f349b93aeed5250cb609a94"
+  },
+  {
+    "path": "public/css/vendor/jsqr.js",
+    "sha256": "7c05097cc8c439ddd3eac44bf382f4e12f77f5341f8e2487ae2d9f4008fd9cc0"
+  },
+  {
+    "path": "public/icons/app-icon-192.png",
+    "sha256": "2cf8b25487c598ffe54dfb663b3fae93633e048f43d3f9da14f6d55ad4c6f6ac"
+  },
+  {
+    "path": "public/icons/app-icon-512.png",
+    "sha256": "25c13421f6844b3ba5c54c51eceb16b505bff3f821bf0d4aa41408cb450215a7"
+  },
+  {
+    "path": "public/icons/apple-touch-icon.png",
+    "sha256": "ef312e0e568f65e833d7924612755a27fd7810209ebfaaa93d0e1e04fa370cd6"
+  },
+  {
+    "path": "public/icons/favicon-192.png",
+    "sha256": "0fb74af0d097305b4c39968f3572e3f11eb178caaaac9a40bcbe093f20ee4abf"
+  },
+  {
+    "path": "public/icons/favicon-48.png",
+    "sha256": "635e15b89538285b00ddc61bc4ec267b3b5b97f55ad8fa180597893886242090"
+  },
+  {
+    "path": "public/icons/favicon-512.png",
+    "sha256": "f1a26f31f840fe56a8390353d871b7139b4cb02b61dd4d82b6f512636689b664"
+  },
+  {
+    "path": "public/icons/favicon-96.png",
+    "sha256": "5fe858eb00627ff30bc0e435afe6cc0d121ad9af4b5eae70530d1f843b567f65"
+  },
+  {
+    "path": "public/icons/favicon.ico",
+    "sha256": "828ea0e31fc47d874939ec89736992b3d85863bb15e4b8d0df420fc0bb779190"
+  },
+  {
+    "path": "public/js/weight-pricing.js",
+    "sha256": "2ae6148bae9cc3e87c53c468c28d96bb314a2859fb78e7ef4b9a30268f5db3d2"
+  },
+  {
+    "path": "public/og/bergen.png",
+    "sha256": "d7a67f4371ba58e0e892e22e22205847a24cfd3bda19e07a0c699814d51d03d5"
+  },
+  {
+    "path": "public/og/lyndry-bergen.png",
+    "sha256": "0b06303e8a46691f763ea568b145b6984c5fedcb0f5df092f983024514c736cf"
+  },
+  {
+    "path": "public/pages/404.html",
+    "sha256": "96e2380f8f5fc3a89ccaefadccf1fb990cce3e49cc4096507112d72a7f95ace7"
+  },
+  {
+    "path": "public/pages/bergen-sent.html",
+    "sha256": "22af858397911f32282e6cdcfa07eebc48bca78170025f874ee233975bc28eb6"
+  },
+  {
+    "path": "public/pages/bergen.html",
+    "sha256": "8960c8945eed27034f242a4ee7eafba14e400a05f3900b804ad332b8f9c2c9b1"
+  },
+  {
+    "path": "public/pages/contact.html",
+    "sha256": "4739402110ef3d4fafba3ab5267d48e6b5c65e16f4d20307d5ac6313b139b76c"
+  },
+  {
+    "path": "public/pages/faq.html",
+    "sha256": "e5b4f501500b32ff6099b20ca61ce2ad02330a780248fa21b632051340ab9042"
+  },
+  {
+    "path": "public/pages/for-laundromats.html",
+    "sha256": "e61051ff7ba2b8957720b663432dc84aa8248b41d6d25a4bca98f2b7668c2875"
+  },
+  {
+    "path": "public/pages/home.html",
+    "sha256": "ca0f1d17487dd31b3d3b266ac43645246d16ff7b950aa4c312e227de52669208"
+  },
+  {
+    "path": "public/pages/how-it-works.html",
+    "sha256": "205c7c5e522162890e4d3ba0ff1bf071911c89a8d2b25a34fda70184027c6df1"
+  },
+  {
+    "path": "public/pages/partners-thanks.html",
+    "sha256": "d3010ecef0fac57c96f92be8091e1f2e62f94ec2b014f46d18f612ff150f862a"
+  },
+  {
+    "path": "public/pages/partners.html",
+    "sha256": "0d8844d879fb4b88dadf7143cac7df88413ee76cb10f81dbef301b3c1cd0200c"
+  },
+  {
+    "path": "public/pages/pricing.html",
+    "sha256": "2041c5eb4edc61967b8b24a6995e51ede4280db2e3a2888d9cef82028ea3ffce"
+  },
+  {
+    "path": "public/pages/privacy.html",
+    "sha256": "26332882490ce3052642f01d9330302baa89a19dae0a957a94b0bc9dc2dfeedd"
+  },
+  {
+    "path": "public/pages/quote-form.html",
+    "sha256": "aceffaf8e6642347de590bcdf7e92ae2744cd99118bfcb744df7bbbecc11f88d"
+  },
+  {
+    "path": "public/pages/quote.html",
+    "sha256": "d148972d849c5b64f2d4669779acad6e8fbfe35380aac5ec8f16b4bcd44b35d8"
+  },
+  {
+    "path": "public/pages/sms-terms.html",
+    "sha256": "99c2e77ae0bc1187561fc2d6024eb561646b7b55e132947d051deadc30c3d0ad"
+  },
+  {
+    "path": "public/pages/start-sent.html",
+    "sha256": "9b8c0afa7c62b43d9ce51210de5bbbb2249774b58f8473190adf9c29575e19ba"
+  },
+  {
+    "path": "public/pages/terms.html",
+    "sha256": "4ad99e4779f807e55575adf69fbe12578a76b742b946a1058dbed1885187f47b"
+  },
+  {
+    "path": "public/well-known/README.md",
+    "sha256": "f14d57117d5e75d888f2ce5d054adfca539d184fa60b570f869cbce3b20f5585"
+  },
+  {
+    "path": "public/well-known/apple-developer-merchantid-domain-association",
+    "sha256": "a6678f3e2431fabb9049ffa94b9c4ad2f767da2ffc28ce7baca6528c9e310a28"
+  },
+  {
+    "path": "railway.json",
+    "sha256": "d59870ffe5b16035628398d28b87a0ac7d5402555302d0822e310796dfbe3ed4"
+  },
+  {
+    "path": "scripts/assign-drivers.js",
+    "sha256": "7dbb28fba51504bd9f0af2dc0076ba424860cff4b52c7fe4b14e89dd4392a624"
+  },
+  {
+    "path": "scripts/backup.js",
+    "sha256": "fe10de3e1e818e471ec226944bb2a1d0d41b5ed5e9cd01e899feb5db72190755"
+  },
+  {
+    "path": "scripts/book-francisco.js",
+    "sha256": "1fffe7db8ec9dc751d4bba0eb263ae205d4f5e67bef4cfa4a472688dbaf88030"
+  },
+  {
+    "path": "scripts/check-leads.js",
+    "sha256": "3fb1e1011edf18d4575e2fde2ef6bae764949a4ff52d977abd95da8e87667e5e"
+  },
+  {
+    "path": "scripts/check-thread.js",
+    "sha256": "2f2c585f4777b9f5b86c080567ac705a757ed72ea51bf74a119b958b8a312c48"
+  },
+  {
+    "path": "scripts/cron-recurring.js",
+    "sha256": "89a47615f887f4dc9dce67bb0d29cb5f2147aa26f894c19756c5bfc55e1f2670"
+  },
+  {
+    "path": "scripts/demo.js",
+    "sha256": "6001c2187369fb5bed6d236f8be04ab511f8d723f0598bf48ea55cafdaf0f84a"
+  },
+  {
+    "path": "scripts/dev-setup.js",
+    "sha256": "480fc812cc9bee4bed8f0943681319f3752589f8c0c6e665137dcee8f3e07079"
+  },
+  {
+    "path": "scripts/make-icons.py",
+    "sha256": "70cfe61e4f78ff891ec1d520265a4726b64d797a01ffbdaec72f65aa4f93027e"
+  },
+  {
+    "path": "scripts/migrate.js",
+    "sha256": "b2cd02b7c528588f8a57ddc156077e3e2f31e6239f3af037cf9429caee3336fa"
+  },
+  {
+    "path": "scripts/ops-user.js",
+    "sha256": "e11aa24aace2b0d8e32970af38ba5a94e8f96a1271375a352e7a1aeebbc24950"
+  },
+  {
+    "path": "scripts/reset-order.js",
+    "sha256": "8cb5e8019303cc57985748fe4c59b2e033d6a6af9518dced1bb05300374e6050"
+  },
+  {
+    "path": "scripts/restore.js",
+    "sha256": "6bcb5375801a1a6d60f54fa2c727c40e186acd1e4ac177fd21964623e8adeab3"
+  },
+  {
+    "path": "scripts/seed-demo.js",
+    "sha256": "6f842744b32225c1e61eec4fce23f8512b10210945ca3c5a9306ced567ac459b"
+  },
+  {
+    "path": "scripts/seed-partners.js",
+    "sha256": "b4d992d95dbd6e80d16073c4436c6ac42ea36b81bd1a80ef3e59b47fb6e7febe"
+  },
+  {
+    "path": "scripts/seed-team.js",
+    "sha256": "7bf02ede46754c8ef65436effcdc7708b3e821e9c232397174baa0a20eda153b"
+  },
+  {
+    "path": "scripts/seed-week.js",
+    "sha256": "962b6dbcbc8122b34fd4407496c04674c64a6d590596f25157587ae3bdca1be2"
+  },
+  {
+    "path": "scripts/seed.js",
+    "sha256": "a878c55655932e5929c5bb5fd55add14f1f1dcd4cd0d757c6a7190963a6e6942"
+  },
+  {
+    "path": "scripts/shop-user.js",
+    "sha256": "14af8cb38e37cc4c7402272a3257a831de5308934456b469c50f141f3f5f987d"
+  },
+  {
+    "path": "scripts/show-prompt.js",
+    "sha256": "24b9bd87fc71c55838b24502d24b1657fa26f54ebca3da8547e5ae8088c49ce3"
+  },
+  {
+    "path": "scripts/simulate-driver.js",
+    "sha256": "ae178f42888ec242cbd629b640fcaf77e695348702cac23d4b3b825960c7adfa"
+  },
+  {
+    "path": "scripts/simulate-sms.js",
+    "sha256": "ddefcee9054243b5a9ec60dc1e58dfcd030c370e325f7d208210550829f27ee1"
+  },
+  {
+    "path": "scripts/test-both-models.js",
+    "sha256": "3968d9daf024bcffd6dd125be3a06385ba7ff48f2afd905b6f829307194957fb"
+  },
+  {
+    "path": "scripts/test-signature.js",
+    "sha256": "f9471ddb4d01ddb4b887d0efd6b8ecae2180a7aea8afce18d52b12479eefdb77"
+  },
+  {
+    "path": "src/config.js",
+    "sha256": "432014772035ed94608dae8dfb52ba0d3d566beff557eb97b764052201ca3a4a"
+  },
+  {
+    "path": "src/core/actions.js",
+    "sha256": "ebde80489e34cde8a808f85fdf2ffe5068cc8441e10a62cc7236ee4c4d83e251"
+  },
+  {
+    "path": "src/core/ad-attribution.js",
+    "sha256": "2dfdc4d08eb44f9e305816c7773ca65c11a7881340d2752acd9b16c5b626b6d4"
+  },
+  {
+    "path": "src/core/ad-conversions.js",
+    "sha256": "aceb5de087b9dd3c803d25737f9ea6cf4357dbbec6dcd3e3a696e9ff333225a8"
+  },
+  {
+    "path": "src/core/admin-auth.js",
+    "sha256": "9f15c5b48f889b57695d9e6f09ffabd491d2b9b06f111c4f4299bde9f9846462"
+  },
+  {
+    "path": "src/core/ai-pause.js",
+    "sha256": "b9b84f9a1ca5afdef1ce58489a18356890e47fa8cba89c8b3306c39112720622"
+  },
+  {
+    "path": "src/core/bags.js",
+    "sha256": "5c85f0ca9bef544545a03b9a4a99ebd6b4467beb65ee5e749b203c2e7d7562a4"
+  },
+  {
+    "path": "src/core/billing.js",
+    "sha256": "360a91a045781daf114501856731e94da6f9481adc5ea284806ba11e7a0994ff"
+  },
+  {
+    "path": "src/core/booking-intents.js",
+    "sha256": "f2d33e77f0468ae9805578cdc9a4d921d3e985aa911eb1f90d0e18dfc147a894"
+  },
+  {
+    "path": "src/core/booking.js",
+    "sha256": "ad0760970941e293a0996b817851047f296a5a7ad7f3f869d5ed3847fa4aee8a"
+  },
+  {
+    "path": "src/core/brain.js",
+    "sha256": "14ee7511f0be69a356176f9dfe8b4c69df6fe7dd8ed53dd8fbf35cebf3bcc232"
+  },
+  {
+    "path": "src/core/burst.js",
+    "sha256": "11162912dfdf002fafc861ad0fe144c00ca7558ca54ade6a0542584cdb8188f0"
+  },
+  {
+    "path": "src/core/card-chase.js",
+    "sha256": "1124a5a33cb43dea44b70e89a9fbfcf908d36139cf60d6db0fef4957a85b0ed9"
+  },
+  {
+    "path": "src/core/card-hold-policy.js",
+    "sha256": "6b4dba110c79a4c3afcaee82a656aabe1405d5218d76f7629ba90e94b31b87f0"
+  },
+  {
+    "path": "src/core/card-saved.js",
+    "sha256": "706ee5259af8254d3022b54180acbb99fe86010943a2667d1c670aa61e60eac1"
+  },
+  {
+    "path": "src/core/carriers.js",
+    "sha256": "17956c8776285e70217a75eac581f4be09eae01f977166a365a54f0307bd63d5"
+  },
+  {
+    "path": "src/core/clips.js",
+    "sha256": "a29daa33959f6c74692b8517889fc08cc31ecbc434ca2ea2eeee598a8c000a1d"
+  },
+  {
+    "path": "src/core/code-sender.js",
+    "sha256": "1102383565818ce90e41f1ee598923c5bb56207332c7388c527340f4a5cd08b2"
+  },
+  {
+    "path": "src/core/compliance.js",
+    "sha256": "fd245937c97d5a5cb571ee9a56c7eb3a70c1274a3ee0dc9149c2e15165af38d5"
+  },
+  {
+    "path": "src/core/courier-legs.js",
+    "sha256": "217b6088321a5bdba227b5aa6cd9f3901cac937bec6867bc7ca3c9478faae0d5"
+  },
+  {
+    "path": "src/core/courier-quote-check.js",
+    "sha256": "69bfe3eb507017cb8ab9246f188e5f9e8fe7640a59a1726d367c259ec68fd893"
+  },
+  {
+    "path": "src/core/customer-auth.js",
+    "sha256": "da635d7979af6e6eb2f706d3e4495131f09bdd555c73795e9581e1dbaf612977"
+  },
+  {
+    "path": "src/core/delivery-photo-worker.js",
+    "sha256": "f009d46cc91a547d64f514793131deffe58794da403082ca5298e264c207ac97"
+  },
+  {
+    "path": "src/core/delivery-photo.js",
+    "sha256": "77e74e12408174d47c00d2f6e3baa17a01e65d5654113fe12b62672c21f9337d"
+  },
+  {
+    "path": "src/core/delivery-sms-runtime.js",
+    "sha256": "96cfbd89ce408d0c935689a91a00ebf954216b455496fc96017147747d3542b4"
+  },
+  {
+    "path": "src/core/delivery-sms-worker.js",
+    "sha256": "7ec6e06b46827abad100f325251ca78927f114dcbc31c38cbb23bc5f52007a44"
+  },
+  {
+    "path": "src/core/delivery-sms.js",
+    "sha256": "f7b77bfc037129b74872f167269148ddb53d944c780be6b26ee1007a30947b6b"
+  },
+  {
+    "path": "src/core/dev-checkout.js",
+    "sha256": "3b2d274554987403dd2f4c06a763cd830b27dee0377c466fbecec177d855493f"
+  },
+  {
+    "path": "src/core/dev-journey.js",
+    "sha256": "0df86963c6a975267132b73b51c657a29f9a1e2c1475a5b366711c9a1c57f086"
+  },
+  {
+    "path": "src/core/dispatch.js",
+    "sha256": "454ad90cd3262839f87132b879f72b2599c764ae41839e9cd12e93a2d067a9bd"
+  },
+  {
+    "path": "src/core/drivers.js",
+    "sha256": "f07a0e734e4642d9dad4c12ea754d5258713376623cc4af0e1f36013eed6d71a"
+  },
+  {
+    "path": "src/core/dynamic-order-pricing.js",
+    "sha256": "2634c44ed7b290cb0dd9fe81d720c2cb52a019271b5023b792d6470721809aa9"
+  },
+  {
+    "path": "src/core/extra-bag.js",
+    "sha256": "9992bc26c56b5d3d000c5aa5b51afe02c59acb11e5aeaa298cf80f242b7bb66a"
+  },
+  {
+    "path": "src/core/followups.js",
+    "sha256": "e1bf1c5b05406151c236d24656392d069582fb1abbe89ad18672079cf6be36f7"
+  },
+  {
+    "path": "src/core/format.js",
+    "sha256": "eb49a3aa45fa20af71ff60522c5fdc74b11e6c37a6062a552b006b844dec4a5d"
+  },
+  {
+    "path": "src/core/fulfilment.js",
+    "sha256": "cf13786ad485cc5ca938f1405eb29533b2a32dc6903a8f049b25c22651b983a7"
+  },
+  {
+    "path": "src/core/geocode.js",
+    "sha256": "bf54c4aabea47d17f1f7e62faaee9a5fa091827a9df5f28b2545afff9f569b4c"
+  },
+  {
+    "path": "src/core/google-address.js",
+    "sha256": "8179a7ed9c8b928565656660a1a734811c1a2bf44c9df773cf39a8d0c5048113"
+  },
+  {
+    "path": "src/core/intake.js",
+    "sha256": "5dcd4bad2a1014052eea776394a8f868269ba4f261bad0f631972424dd1b9bb9"
+  },
+  {
+    "path": "src/core/issues.js",
+    "sha256": "5c3d13d1cfb9d4166a7ddbdf2fefa0d05a980f687d2b7a968ad2e7a217d6ae49"
+  },
+  {
+    "path": "src/core/label-pdf.js",
+    "sha256": "ca08cee4b54135e80503c8fb2f78ba2d07837d2a3299b397ca99cef722c368dc"
+  },
+  {
+    "path": "src/core/laundromat-countdown.js",
+    "sha256": "8b25b978d06c23d7b239ed178d6d45a3b2538b21aac1c6aea6b1f9f78a28a9e3"
+  },
+  {
+    "path": "src/core/lead-outreach.js",
+    "sha256": "59450f5ce9335ffb5bc50a5ac454a88874751baffcd74f8e75686bde66d5347f"
+  },
+  {
+    "path": "src/core/leads.js",
+    "sha256": "923df786a04a43348a7271a0bb4430396934fd0086c2e5da564edc8b5c98d744"
+  },
+  {
+    "path": "src/core/loadout.js",
+    "sha256": "8ed555dc732596b2c488236d968af0505bb0a6d389f1231e106e08defd365f28"
+  },
+  {
+    "path": "src/core/lyn.js",
+    "sha256": "872cfa249ae17f2417ed33a603378c319d6cc318542fa1c3395b9c279ba1bbf8"
+  },
+  {
+    "path": "src/core/message-view.js",
+    "sha256": "77f2a3571014b297e39709cfb79f5b407e871e981a446fce3d6683c2771b1701"
+  },
+  {
+    "path": "src/core/nightly.js",
+    "sha256": "dad6e7cd4547ff9b23d37fb2245aeffd958ff6f3711effd8488b7aafb6a9ffe6"
+  },
+  {
+    "path": "src/core/notify.js",
+    "sha256": "0ca76049448840a4d910fa8e9e9d992a33e56dcf8d44951808078248ce8ef196"
+  },
+  {
+    "path": "src/core/onboarding.js",
+    "sha256": "f4f2b30f8962d1f7619099fb50d66e6423ad46fcd7dcc3923c9e203f8a459d3d"
+  },
+  {
+    "path": "src/core/order-address.js",
+    "sha256": "b784db9bd812d855183c4d763e340cb0257a3862d92866f53e5f5243f7dd7b81"
+  },
+  {
+    "path": "src/core/order-alerts.js",
+    "sha256": "235706a7d15a434edf590a08c828f99cbd06b19fdfe2ec2613a0f7c9d4f5d94e"
+  },
+  {
+    "path": "src/core/order-details-edit.js",
+    "sha256": "319995979520bcf00844e0167a22badad901e79316a21b667d9755189a3d40eb"
+  },
+  {
+    "path": "src/core/order-events.js",
+    "sha256": "1ef3809942470c48e5d8d27567540f58761bee112a30a49265d0bfb4483aa3f4"
+  },
+  {
+    "path": "src/core/order-partner-price.js",
+    "sha256": "25c95c645981a36e04b428d5464f9ea1cb024f3858479b5abee9f5828b4950bf"
+  },
+  {
+    "path": "src/core/order-recovery-runtime.js",
+    "sha256": "694bab1e75c5ccc1daf4ee36abf309db91b101273a7c761b56af40d30f8d39cc"
+  },
+  {
+    "path": "src/core/order-recovery.js",
+    "sha256": "d9802ea2ee1c33c7b01d4e7b76d82da47fc5a803c5e08d106a1022cffe053b63"
+  },
+  {
+    "path": "src/core/orders.js",
+    "sha256": "0bc25c5ffcd0d6f0baa347cf54eb5605cfc575d874560e1c2d6af3252c751e2d"
+  },
+  {
+    "path": "src/core/partner-auth.js",
+    "sha256": "f8f3ac5c92ca5574e13015b29da24eb3081cf8fbd7f25387d0d5051ea78bba73"
+  },
+  {
+    "path": "src/core/partner-delivery-board-runtime.js",
+    "sha256": "cfed75595c269ded7440caca0593e56b87f8135bcd365c8b6baafe3abf67fd24"
+  },
+  {
+    "path": "src/core/partner-delivery-gate-runtime.js",
+    "sha256": "a80a5fbad36a0de8473bf1ae201855631c4d9add63f9bf9da46e27f2e9bca6da"
+  },
+  {
+    "path": "src/core/partner-delivery-gate.js",
+    "sha256": "fa169ee6353b6a631e89bdd4d5cd678f9fef1cb14d594d89dac04ad25491aeb3"
+  },
+  {
+    "path": "src/core/partner-intake-runtime.js",
+    "sha256": "dcb65410e51a830876143f6225b241b6b70d7e05c52e09ba0939a69de2553e31"
+  },
+  {
+    "path": "src/core/partner-intake.js",
+    "sha256": "c9f7e9086c782dc238174c1de24d7483ca5180ed94924af3e2985c5529ad0446"
+  },
+  {
+    "path": "src/core/partner-return-runtime.js",
+    "sha256": "028a08422637c5beda0d2139983b32188c2b993c97ee2c28f11f7026c3d40f88"
+  },
+  {
+    "path": "src/core/partner-return.js",
+    "sha256": "08285a21deab3dcab6d26326bae9e9d9ed77c23a04dea501fbfe451de0d557ff"
+  },
+  {
+    "path": "src/core/partner-staff.js",
+    "sha256": "ae905abfe0f47dfb823013a632b52b5c1d273f6bb4d131c668f70ce79fc90169"
+  },
+  {
+    "path": "src/core/partner-weighin.js",
+    "sha256": "29b9b3a7efe1ef6e87d936be5aec9c2c179841f6fd0fa3c8984bc0ca0c544d88"
+  },
+  {
+    "path": "src/core/partners.js",
+    "sha256": "4bf854cc026b527dc89de680e897f3023771b63c78f5898a1003a5a5a7009896"
+  },
+  {
+    "path": "src/core/paused-alerts.js",
+    "sha256": "1ab314d681a7eeedeb9ed5e10be798be14b80613d9b3b1f533025a44fec607ab"
+  },
+  {
+    "path": "src/core/payment-chase.js",
+    "sha256": "363afd737fbb4b208bbdcc2f2f1b274caac7a6609dc7960a09db426f7cda83de"
+  },
+  {
+    "path": "src/core/payments.js",
+    "sha256": "261d91ba7451a73ff697de37a2781c220e4f6fadb671d32d722dc01a30c40709"
+  },
+  {
+    "path": "src/core/phone.js",
+    "sha256": "12416dc858cd9f4c8c2294df293cb40c95ada9c5284d844c3eef14f89ae8d6f2"
+  },
+  {
+    "path": "src/core/pickup-edit-sync.js",
+    "sha256": "78237135e8c7a8def796866f34a01bdde3b0a87491086752f9ca46517349cfb8"
+  },
+  {
+    "path": "src/core/pickup-timing.js",
+    "sha256": "a4f458f11fe33f4551b44e6158f037e82e73862bf9e3548aa9196961729a9fe7"
+  },
+  {
+    "path": "src/core/pitch-link.js",
+    "sha256": "61792e89c3c9f15511dd8cef8aceda8c0e884f09cc7d944c400744172dbdf917"
+  },
+  {
+    "path": "src/core/pricing-economics.js",
+    "sha256": "03cf2c2750f79601e6f5245e4ee12367586ddd72b96d61b1f947e00903b29d3e"
+  },
+  {
+    "path": "src/core/pricing.js",
+    "sha256": "31bbb5afb21dbf5736bedcbe1523a47db889fd80564636f2324e35bcce08046c"
+  },
+  {
+    "path": "src/core/promocodes.js",
+    "sha256": "e1573c8943b391764a9b59b2b4f4b9ef15fb9c358b907c4f63663305cd5df5f0"
+  },
+  {
+    "path": "src/core/promotions.js",
+    "sha256": "a6c714d85b5860c187b676bddfaa4176cd3cd3e06e1d43417275e26c3ae0c7ed"
+  },
+  {
+    "path": "src/core/public-courier-availability.js",
+    "sha256": "eb8af0efb1e44822851b98f8fd2530cd0d082c9406d8b26933b82b6c1829ec05"
+  },
+  {
+    "path": "src/core/quote.js",
+    "sha256": "4059488c8a5e82352c2ce7ea27f59edc2461e45448bec9fc967f950cc7928888"
+  },
+  {
+    "path": "src/core/reactions.js",
+    "sha256": "e2d7e88104112b991213f218bfe56ec1e3ad816ef143086a23bb453c8fdcabf7"
+  },
+  {
+    "path": "src/core/recurring.js",
+    "sha256": "31ed9c397c428d642cdf06990004949343f6c15876dbb1254cfedfd24f07b04a"
+  },
+  {
+    "path": "src/core/reminders.js",
+    "sha256": "2dd6e8313e9a8ee96bd3f727889201a6da003aa9e0063d2aa8f85e1a225658b5"
+  },
+  {
+    "path": "src/core/reports.js",
+    "sha256": "012bc5e85f08e68cc56d10dc24fcc09c858361046cf38724f8e9dcd43c91ccfe"
+  },
+  {
+    "path": "src/core/roles.js",
+    "sha256": "8807912a476c13d7ead00dd89c5ac53e5787aa9852d184803ee08ae6edbce522"
+  },
+  {
+    "path": "src/core/run.js",
+    "sha256": "f78823a728362efeb230d2663120beb07aa01dd94a4527a65f467d255f8e2799"
+  },
+  {
+    "path": "src/core/scheduler.js",
+    "sha256": "74cd1bd6d67071a4d4ae7f46123ef5d047ae5259f49cec676bf4b3fe795ef47b"
+  },
+  {
+    "path": "src/core/serviceable.js",
+    "sha256": "6004fb29f8ea89cdaf5ffc5eee9509a6eef72831a3133739e334b637cda98955"
+  },
+  {
+    "path": "src/core/settings.js",
+    "sha256": "1d74f9ef81273be6df779bf9255ae64c8e2711cd6fa97aa2401a6541376b8a02"
+  },
+  {
+    "path": "src/core/shipday-booking-dispatch.js",
+    "sha256": "600215bd8b1c5ff6704e629121ee44de0cbe66b788a070b2cb506bda4f4f6d23"
+  },
+  {
+    "path": "src/core/shipday-booking-runtime.js",
+    "sha256": "47ee066e047b91926aa1533c8aff2846ef074f2e6fa3203b721c5f91dbc0158d"
+  },
+  {
+    "path": "src/core/shipday-dispatch-runtime.js",
+    "sha256": "4be734981b58a6d2caa5086dc76b6fa4dba6f36572d2d86e81079c23e73cb176"
+  },
+  {
+    "path": "src/core/shipday-dispatch.js",
+    "sha256": "2f087269f28c568d1d5728af2dc18e983aa2e44635882334099187d658479ec8"
+  },
+  {
+    "path": "src/core/shipday-order-sync-runtime.js",
+    "sha256": "b9e469b6754101d535e1f5556c1668decc329dbf9ed08a01df9ea80922f9c8c6"
+  },
+  {
+    "path": "src/core/shipday-order-sync.js",
+    "sha256": "629aad2c0c77abcc34cae808d5919e9e9baa863ff5c6a313032a85687f21c57f"
+  },
+  {
+    "path": "src/core/show-up-holds.js",
+    "sha256": "bc2e48a7b2475dfd3bfff525daf499c202cd78d2ec3d311d556118fc7096d73e"
+  },
+  {
+    "path": "src/core/signup-card.js",
+    "sha256": "e5d94f10c022bd7e5d6f947c7c0ce4f8381609cef0e2d2782f91e94dcee7fb41"
+  },
+  {
+    "path": "src/core/site-popup.js",
+    "sha256": "69f475c1362f404c2df27864a12d6b8863334c417510a5025521c66cd36489ee"
+  },
+  {
+    "path": "src/core/spending-controls.js",
+    "sha256": "1732913b14d48485b0964fb23269c0cf606478d6df95664213c890bf159c0d47"
+  },
+  {
+    "path": "src/core/spot-photo.js",
+    "sha256": "4dac0165d02749db557329dfb0fe4a513692cee513b81784a1c1d748d87dd650"
+  },
+  {
+    "path": "src/core/subscription-offer.js",
+    "sha256": "819a548cef836224c14ef4bdd6c9f9cd1ad2657bbb07ae26fa25150ca0c52e89"
+  },
+  {
+    "path": "src/core/subscription.js",
+    "sha256": "cad69180ec56615ee7ab23bd7c004bf2afd9f483d37ea5605c9406af508a38f6"
+  },
+  {
+    "path": "src/core/tags.js",
+    "sha256": "3896e68e4df02955cecffe361e89566a9477309a7bb8749b6d38681b04e7a1b7"
+  },
+  {
+    "path": "src/core/throttle.js",
+    "sha256": "6cd87011e8fef30d0d4055fe8a2ac199b8cdceed83f5623374692d1006553142"
+  },
+  {
+    "path": "src/core/wash-ask.js",
+    "sha256": "799fabaf38e70c2ca958bdeb94f2e94f19da448ff895bf4a7269a5d3f75e9fbf"
+  },
+  {
+    "path": "src/core/wash.js",
+    "sha256": "dc4acbbdca869f47e37a4c664f584c3bc289271c432070441bbbf6cb9ff10c90"
+  },
+  {
+    "path": "src/core/weight-based-pricing.js",
+    "sha256": "4bdac5b824f82d27b3f4918ac6d37970afb8b28ebc7ac23837ce521ee62955b8"
+  },
+  {
+    "path": "src/core/weight-issue-resolution-runtime.js",
+    "sha256": "e54cae456ebce2fd851c0ddbbed8cd7de1df1db0670245e923badca120cdf599"
+  },
+  {
+    "path": "src/core/weight-issue-resolution.js",
+    "sha256": "6d065e7b13dcbba25d2050cbfb4ff63ca9340b1ff92a0b1f9b79ff19da0c5400"
+  },
+  {
+    "path": "src/core/weight.js",
+    "sha256": "090d5c4d6c617e0335146300ce560dfae0cd6828088820f8d94d3418847f0528"
+  },
+  {
+    "path": "src/db.js",
+    "sha256": "a65d8c8feec0c743e3e1679fd41a5cf010029667b020835533cb08146790464f"
+  },
+  {
+    "path": "src/index.js",
+    "sha256": "96334f1d08c51cfc7831ef6d8c0022b20fc299cea2d93d87a875f7350ae1d89a"
+  },
+  {
+    "path": "src/providers/couriers/fake.js",
+    "sha256": "8e852d25a4037d21986a1313f1ce8c2f5737c5b243b3c1df32e5b185f12ab451"
+  },
+  {
+    "path": "src/providers/couriers/index.js",
+    "sha256": "c511288a9307944d181ba3a3705bff7310c2ca035c5e6939491d45536bf78d7d"
+  },
+  {
+    "path": "src/providers/couriers/shipday-contact.js",
+    "sha256": "b0fdab8ebd185164490da4dfd3f24dc5a5026ec7463ca88b4904e8cadd1aa7e6"
+  },
+  {
+    "path": "src/providers/couriers/shipday-proof.js",
+    "sha256": "e8c23af691e72e23e76144532f2ca9f0715597baa57d8046d23f258a24656343"
+  },
+  {
+    "path": "src/providers/couriers/shipday-tracking.js",
+    "sha256": "6dac54854acdfbcec63003b043fa4d984fb7e34abe7b0448ccf80fc9c4ca9cf7"
+  },
+  {
+    "path": "src/providers/couriers/shipday.js",
+    "sha256": "6f4d1ad3897104000fd6e6bf5f8eb339b5e56296dd8828a6ae1328fb815a211f"
+  },
+  {
+    "path": "src/providers/couriers/uber.js",
+    "sha256": "7bfbc4045dabf09280c638490d87221246343a0c518206b8df9df215b3c7a5ee"
+  },
+  {
+    "path": "src/providers/payments/index.js",
+    "sha256": "aa0099221f0503600f318c5e299c800b1cdf6d71fd6b5c26baae210ed8413495"
+  },
+  {
+    "path": "src/providers/payments/stripe.js",
+    "sha256": "4dee229befff63b1ddc4e96303fb5370760603d51c1373a6f32d293aa6ffd054"
+  },
+  {
+    "path": "src/providers/sms/fake.js",
+    "sha256": "63e5020e6809deeed1c571559dafc232f45c0916c17f53eddb46c4ad2a47d23f"
+  },
+  {
+    "path": "src/providers/sms/index.js",
+    "sha256": "aae0006d4baedb609b0d4b06200323fb1a323069a2c9a5fc6ce61cf023d26572"
+  },
+  {
+    "path": "src/providers/sms/telnyx.js",
+    "sha256": "47643cd967a51ba20c825e068724adcfe01fffd39c3474b52dbcb875efe78466"
+  },
+  {
+    "path": "src/routes/account.js",
+    "sha256": "6825d83901052f2ef40ebfcf64c5cb006a0947085d104e5de1d0c01e10495743"
+  },
+  {
+    "path": "src/routes/admin.js",
+    "sha256": "899f976c4c39b771aad8a319b6fe0b0f05fc5f26c1f60a4ab61e62ff2dfc594b"
+  },
+  {
+    "path": "src/routes/bag.js",
+    "sha256": "f265621572768c3a0b81084e0bd87d8d6ddacae9ab76d394586686629582be93"
+  },
+  {
+    "path": "src/routes/customer-pricing.js",
+    "sha256": "98016957a1936ca69d7068f95f49c708c3351b64cba0b3fc11fdce86bc2c2d51"
+  },
+  {
+    "path": "src/routes/dev-journey-routes.js",
+    "sha256": "773ace42140a40b68338dc4c0e29e0c8a60cba6943c7d88fbd3c6740c83816b0"
+  },
+  {
+    "path": "src/routes/laundromat-checks.js",
+    "sha256": "d3e57e53383c896c3829e4aecb38d359a0c946f4130d945bee47d9fcaa7c10ad"
+  },
+  {
+    "path": "src/routes/locations.js",
+    "sha256": "186186f13d635efb7102b0624d463889d4ca31964fbcd559b5ea3ed8cce1a391"
+  },
+  {
+    "path": "src/routes/message-photos.js",
+    "sha256": "a444062bc8454c29d9bde7d4f784f688bf0464752069bdeb706a7ef4ae04dc96"
+  },
+  {
+    "path": "src/routes/ops.js",
+    "sha256": "af03b784117e974a817180862e06404db51cd45c535379d3a1d424c6df802cbc"
+  },
+  {
+    "path": "src/routes/order-recovery.js",
+    "sha256": "17eee77685097f1856085feafc68c2a41787c1b49bf5762dea5d2a8c1ffe493e"
+  },
+  {
+    "path": "src/routes/payments.js",
+    "sha256": "c57bbe2fc00ecbf44a0372d55b9a80720f4eaaf5cefcb5cc869c551fbd948374"
+  },
+  {
+    "path": "src/routes/pricing-settings.js",
+    "sha256": "0d486215a6199c42dbaf82ade2c354b162abe92eb2658faae97ace4ebb7da605"
+  },
+  {
+    "path": "src/routes/shipday-assignments.js",
+    "sha256": "9c04db23c379c71f2e3221d970a76911cc0d40760e201d23e747b23254900a25"
+  },
+  {
+    "path": "src/routes/shipday-routes.js",
+    "sha256": "d100ec2515d1b51564c44907cdfcbbb8b899d0dff826b24cf1679e4e3fd9d7e4"
+  },
+  {
+    "path": "src/routes/shop-admin-portal.js",
+    "sha256": "0d1f741cfe3621d8ba29db6474d4fce90bc34bb98c299b3b1cc561f504b473b5"
+  },
+  {
+    "path": "src/routes/shop-intake-routes.js",
+    "sha256": "71ec7df8d54e974c3cedf9b26614e61ebcbd40027b059a1c533ddd09ee5dd947"
+  },
+  {
+    "path": "src/routes/shop.js",
+    "sha256": "c36662255e4f65977c5b858a8b2fbba2b64d252f88d0e8ace1d1248539ef969f"
+  },
+  {
+    "path": "src/routes/sms.js",
+    "sha256": "ffe6115cba2084cbd917859b1bc87e75f084248e329237aa0a47dcb801ce05ad"
+  },
+  {
+    "path": "src/routes/spending-routes.js",
+    "sha256": "60e80b28c0df30e52b5d6f4babdd027c032a550871620d4dd5e3cac437a3dd92"
+  },
+  {
+    "path": "src/routes/web.js",
+    "sha256": "87d5fd0b7b1bb1db4f1726d1d3bf79f5bd5de460b967f30ad6d625fbe59a63e7"
+  },
+  {
+    "path": "src/web/account-setup.js",
+    "sha256": "f845fc20b931772e815419e82051dbb50f2b2c37767a4c6550270ff8695f66d6"
+  },
+  {
+    "path": "src/web/assets.js",
+    "sha256": "3fe0f99d3df3ca77c2f866cafd048c20a5fc0db97cecb019bf75eed973b424f7"
+  },
+  {
+    "path": "src/web/bergen.js",
+    "sha256": "99a98f0037f467ce112d6221dd421a7751103b8d6273db6cb47fb2cc1da9b92c"
+  },
+  {
+    "path": "src/web/booking-price.js",
+    "sha256": "c6e13f80ac45c08dea2ded53c54851ad3082b4d0f3dc46bd695c52a6bd1b0a5f"
+  },
+  {
+    "path": "src/web/booking-progress.js",
+    "sha256": "019837693fa7d86ad80c47146ddc5ee329f194253f992a0dfcaccd701f640d2f"
+  },
+  {
+    "path": "src/web/checkouts-page.js",
+    "sha256": "cd68b4809c86fe0028d4a2669f8719d4a9fd347e134231d6688339004fafd1fc"
+  },
+  {
+    "path": "src/web/clips-page.js",
+    "sha256": "47987db8b4bdb05801affe66b165f4f86f8780d8eb4c1962e5d76fc855f06242"
+  },
+  {
+    "path": "src/web/contact-photo.jpg",
+    "sha256": "99d965f6a3cc823fea4ba09344889588cf53c01c026c106ee2db2d1e91bd939f"
+  },
+  {
+    "path": "src/web/couriers-board.js",
+    "sha256": "0cd0b65119d5f07f99619cad6d18bc88d4786dd65fda55c696199e53e87a29ba"
+  },
+  {
+    "path": "src/web/customer-copy.js",
+    "sha256": "6e793688241b18be24837051f0c4a6db283d8ad06a9e041ac47846aef8acd708"
+  },
+  {
+    "path": "src/web/customer-texting.js",
+    "sha256": "55a2863f40e585cee689f6e7e705172ceaebedb78b32d252bb5e91ef0ab934a6"
+  },
+  {
+    "path": "src/web/google-address.js",
+    "sha256": "85eb34bf915422434302e4581a1a8241c9455f3de5b144b82b1f86075a7cee47"
+  },
+  {
+    "path": "src/web/intake-table.js",
+    "sha256": "6b03a0e4841ea109ce8e6779ace1c2da7d00375ce1fc27167e7e0865e83351fd"
+  },
+  {
+    "path": "src/web/journey.js",
+    "sha256": "f513e912051ee2b35cc8d811036180cc6ff75dac7144b964cd2c07f83b6eaab1"
+  },
+  {
+    "path": "src/web/labels.js",
+    "sha256": "bbe9b14c0eea32c42759d482fadffef011b90040c5f883b0fb50c27e4afdf194"
+  },
+  {
+    "path": "src/web/laundromat-es.js",
+    "sha256": "fec11416965a937c1e00929951db40904778ca5db6debff0727961f97b99a487"
+  },
+  {
+    "path": "src/web/layout.js",
+    "sha256": "324b9a24ab95fc8953d0367a11e6a0cfe138e5ded396504f1ce680119430d1f0"
+  },
+  {
+    "path": "src/web/loadout-page.js",
+    "sha256": "8b6e93b4dc6ae2d25d49fb69def8782f124dee6df2b8bd072f8bfc705dd3daa7"
+  },
+  {
+    "path": "src/web/message-attachment.js",
+    "sha256": "ee64479f16eaed7d0cd3c37e86485f487ab423ee441d1a684b316a5b35ad91e2"
+  },
+  {
+    "path": "src/web/ops-shell.js",
+    "sha256": "51b67433e9c80dfab3358b866daa1a7e1bc45172b4301cfd7385fd07a6d40237"
+  },
+  {
+    "path": "src/web/order-console.js",
+    "sha256": "cae64a3302965f72ba393e7c5c67fb0171aee728484416594b2a5317ac9820f3"
+  },
+  {
+    "path": "src/web/order-details-edit.js",
+    "sha256": "02ca6105816b1f5f43bd11ecf03c7512d02fcd31f3e1c6a199df81dbcf275f10"
+  },
+  {
+    "path": "src/web/order-economics.js",
+    "sha256": "7bef7a3ccb4cf8b3fdb2ef7c6800354f2d179233d161cc4cc7d06d3fbdf423bb"
+  },
+  {
+    "path": "src/web/order-header-actions.js",
+    "sha256": "0035a0eb6a30df320003d51826ae8c98c8aa7f85cb6cdd2edadf7ab6d0bc8d55"
+  },
+  {
+    "path": "src/web/order-overview.js",
+    "sha256": "ee05d51a6b876f636c11c0bc4943ac3e9a6ab012b9201e30092bf38ed1d6fd36"
+  },
+  {
+    "path": "src/web/partners-page.js",
+    "sha256": "c1d089f0c67aa554f8c0537099925c0f65f4df125419e65f64e0bb9d57f6ee56"
+  },
+  {
+    "path": "src/web/pickup-dispatch.js",
+    "sha256": "20c912f7a5ede2561836e0e845902e06a8de7cc531949b9b1117c4344f244b44"
+  },
+  {
+    "path": "src/web/popup.js",
+    "sha256": "53985d0c154c73899545c6192ccc94049eae3d4a811b361121ed04cfa32765e2"
+  },
+  {
+    "path": "src/web/pos-host.js",
+    "sha256": "adda1fc2207c2acc77a764a8addc5749f030d2b61dabfd9587ebc959e2595447"
+  },
+  {
+    "path": "src/web/pos-layout.js",
+    "sha256": "0daa84677cdc36c2b1b2413c9b45214059e53003482a3691d1bc6f4cf287391b"
+  },
+  {
+    "path": "src/web/pos-usability.js",
+    "sha256": "d7f6d210f6338ec8d612768314a95edb4e4b50b5ebb7f506a4c20664038a5fe2"
+  },
+  {
+    "path": "src/web/prelaunch-page.js",
+    "sha256": "40ecccd56a7887250b60898c526ff1c31a0da9093a4778973027ac60af09cfc4"
+  },
+  {
+    "path": "src/web/pricing-label.js",
+    "sha256": "fee22e7f1b0eb4fba5e4cc214e4294c31a80d8d5bf146bbd624b856357a0598d"
+  },
+  {
+    "path": "src/web/process.js",
+    "sha256": "580de9e11bc623d38e548aea5b205d0e521e667910433e070b3a7cd38747afb4"
+  },
+  {
+    "path": "src/web/processing-guide.js",
+    "sha256": "751ce0796c678faeb3036487da7f7de224df2af5627528b3a82afc293b56f65d"
+  },
+  {
+    "path": "src/web/quote-fee-breakdown.js",
+    "sha256": "408798350240401448c1e5c4667a3517f82f2d18e7d79c0d8d703b173a6af3cb"
+  },
+  {
+    "path": "src/web/quote-result.js",
+    "sha256": "b9b26f31f0aeed991c64227bcee423ec023a6fbb115f394bdbb09746771591ca"
+  },
+  {
+    "path": "src/web/reports-page.js",
+    "sha256": "fceefe039f32ffa4f41c6e347f87ae6768fb69b3079534847e34669073bee9ad"
+  },
+  {
+    "path": "src/web/retired-pos-pages.js",
+    "sha256": "e16937d97fe436b1212e9c49bacfe7a0aefe525e65b4ce46b56a50e87b106553"
+  },
+  {
+    "path": "src/web/route-planner.js",
+    "sha256": "6d4747f9535905f12ef860f5e25ab18e48892c87044e7e634f22a2788b0c7d67"
+  },
+  {
+    "path": "src/web/routing-board.js",
+    "sha256": "a3203d09e9c27a5abe55692edc7f304ce26fd8b217c7551d38a0e8e1e0d6a195"
+  },
+  {
+    "path": "src/web/run-economics.js",
+    "sha256": "52cae3ff1a3e7e5a7715c32ef044f3dab8caff7e926b8c6d38b2c3704a882b29"
+  },
+  {
+    "path": "src/web/run-page.js",
+    "sha256": "a7a82e0cbf9e322ddd91e176d5a8260c3295bb54c73d13fa32dc87bf857f1361"
+  },
+  {
+    "path": "src/web/scanner.js",
+    "sha256": "ecc6245672bfef55592b0a19c18432746a7a770af1eef89e01fbf49643a780de"
+  },
+  {
+    "path": "src/web/scheduled-page.js",
+    "sha256": "3d6334ca9f199653f0efae94a7da3c64dcad467843641781dc4dd2467e2740f9"
+  },
+  {
+    "path": "src/web/schema.js",
+    "sha256": "4da9dc5444150f657846e8ef3463fb3c1a6bf5461061874c819584cd04f71dc8"
+  },
+  {
+    "path": "src/web/shop-board-refresh.js",
+    "sha256": "2c4246cc00c54e404450eab462e607885506b11a7cb36d3c6f1e0f9b73b335fe"
+  },
+  {
+    "path": "src/web/shop-deadline-clock.js",
+    "sha256": "dcec954a7747a06fda20514d07673db411bb95d8cbe427b06485e8385fc999ef"
+  },
+  {
+    "path": "src/web/shop-intake-page.js",
+    "sha256": "3b0c45d3fef69154aab007c95d9aeb97d9e2dcd5dd0f9f5db31662757cd779da"
+  },
+  {
+    "path": "src/web/shop-page.js",
+    "sha256": "f1cf38a3b0454ce42127f2ce6c1f9bd9bda33185da12bdcae494a83ecb8a77e6"
+  },
+  {
+    "path": "src/web/shop-return-weight.js",
+    "sha256": "195b831954f84946d58f0a57008d088359b16648308fe0878e749b99aabc81f4"
+  },
+  {
+    "path": "src/web/sign-in-tap.js",
+    "sha256": "32c2b38a4fe1cd30ac8736bb7ffbc9236e2063cf7947b9d90889f3d6efbc3387"
+  },
+  {
+    "path": "src/web/site.js",
+    "sha256": "90b505b61af03869e6df584da60aa48f1651a7c005042fa5dc31f9ae83f68572"
+  },
+  {
+    "path": "src/web/spending-page.js",
+    "sha256": "bb778f3c6b754680e303fef4d9eec1a76fd0d8808fda267f02e76e3bd088bb27"
+  },
+  {
+    "path": "src/web/team-page.js",
+    "sha256": "f4a52a572153b99bb7023a745b9cd17e213c844d4ef72a91ea30b82c3058f5ea"
+  },
+  {
+    "path": "src/web/towns.js",
+    "sha256": "eea4281f796862538a4673e047abba93bebfa0ccf1a439a3e9d1cc1cb322dece"
+  },
+  {
+    "path": "src/web/vcard.js",
+    "sha256": "b5438726a856376b35884f51b2b5eb3bca91a702c78a25371869e227ac3977bf"
+  },
+  {
+    "path": "src/web/weight-pricing.js",
+    "sha256": "ae9dc798e345d0b1bb47d551c1b2e22056d6fdfb48c2268bc0087bce8f86e7f1"
+  },
+  {
+    "path": "supabase/migrations/0001_initial_schema.sql",
+    "sha256": "0363c7f3b8f873bfb333fa4ae112c8bfa84f527a70584ce1709ea74b5f31cc7f"
+  },
+  {
+    "path": "supabase/migrations/0002_weight_based_pricing.sql",
+    "sha256": "3f067a1442ba475f76a3c47e97fcc351c317a8522f5cc8f3095c824d1ba65e3f"
+  },
+  {
+    "path": "supabase/migrations/0003_record_sender_phone.sql",
+    "sha256": "3fe3fb37d6dc456219ff04df471330f419607c02c6c8e5b2878ead6a702cc10d"
+  },
+  {
+    "path": "supabase/migrations/0004_delivery_status.sql",
+    "sha256": "601e737fc5132959776ff3ddc09830988a6797cd361575f68cf2c726526f4ef1"
+  },
+  {
+    "path": "supabase/migrations/0005_delivery_photo_path.sql",
+    "sha256": "26337b52153446a2f2a4ab85f4def5352299a350c7fe02c2a034d56eb61e9cee"
+  },
+  {
+    "path": "supabase/migrations/0006_payments.sql",
+    "sha256": "5731e371e4ffbb22c30859e84d90ba5e19ae2603859d1d36d878a40ae297f528"
+  },
+  {
+    "path": "supabase/migrations/0007_partner_enquiries.sql",
+    "sha256": "b1e91a9f921c81f0f42db94d74469ac633df73715783108aca492ac144468312"
+  },
+  {
+    "path": "supabase/migrations/0008_ops_users.sql",
+    "sha256": "a0eab0a94f9b23b3f7e90a724515be47526f51b906b4c79d2cd7dd1372520568"
+  },
+  {
+    "path": "supabase/migrations/0009_ops_roles.sql",
+    "sha256": "d23390d67183e83c9588bc6b507fc8e84c662aa6b683032ad190206f48cc2a72"
+  },
+  {
+    "path": "supabase/migrations/0010_customer_login_codes.sql",
+    "sha256": "f7ae848a57242c71f90332dc284adeeb6230fb252e2e2c5a849d947c8fb82e1d"
+  },
+  {
+    "path": "supabase/migrations/0011_pickup_time.sql",
+    "sha256": "b4e79c839cad2c72e10f47838f6b8e8b6cd4abec0ca7e89d022020c0361193e0"
+  },
+  {
+    "path": "supabase/migrations/0012_consent_source.sql",
+    "sha256": "525bfde8bff2df60fc81cb15bd244d290a8506a535d4f6f54277deb88f866611"
+  },
+  {
+    "path": "supabase/migrations/0013_order_numbers.sql",
+    "sha256": "20e6f48b31cb419c3e21e21f408f8162953d408f3c2bdc25ef270e6bb6c0d235"
+  },
+  {
+    "path": "supabase/migrations/0014_partner_states.sql",
+    "sha256": "5ad3f92f4ebb2f334e84798ec8400955e9818b7df20e33c957567daa743b91da"
+  },
+  {
+    "path": "supabase/migrations/0015_pickup_windows.sql",
+    "sha256": "7b5956311df4615648340762629770422277dd83f9e8384efb6e6d8b4829d328"
+  },
+  {
+    "path": "supabase/migrations/0016_booking_deposit.sql",
+    "sha256": "346f8ba2e89ff156f6fbfe299ebf81263e9e9eda327a73e711d0b224c00c6960"
+  },
+  {
+    "path": "supabase/migrations/0017_order_minimum.sql",
+    "sha256": "f0c438842045b653f8dbccd6d87653f623579c7b0226645d47089af17714bb8b"
+  },
+  {
+    "path": "supabase/migrations/0018_issues.sql",
+    "sha256": "c937d0d605128c654cb5c3d4d98c43e5b28639e253c31206d907c715b468e909"
+  },
+  {
+    "path": "supabase/migrations/0019_recurring_pickups.sql",
+    "sha256": "e690d970e9f8bad14ce013267d1cd3fd557b2e955e43f2001b3ad7cfe97e8399"
+  },
+  {
+    "path": "supabase/migrations/0020_bag_labels.sql",
+    "sha256": "c5cefc079aa92aafa0e2f61ebbd879dd8a2250abf76e4b6f9fce26d580217fdc"
+  },
+  {
+    "path": "supabase/migrations/0021_weight_evidence.sql",
+    "sha256": "dea76a2878e0215154ef4f703a66f0fada3dbdc52eb4b9a03567354f3c415aa3"
+  },
+  {
+    "path": "supabase/migrations/0022_loadout.sql",
+    "sha256": "db64f4d2f269823c1e57a966943997cb5653fd982ac48bbfc37d7cdcae11587a"
+  },
+  {
+    "path": "supabase/migrations/0023_partners.sql",
+    "sha256": "324152a2f548b71fc2e93f4449bcc43e4db8239c2aae919a2db1069753e0a8d7"
+  },
+  {
+    "path": "supabase/migrations/0024_order_events.sql",
+    "sha256": "cb75825f518b4c08e3e97f0078d20232ce0972acef47b1ba808e1259aab08922"
+  },
+  {
+    "path": "supabase/migrations/0025_recurring_schedules.sql",
+    "sha256": "f337fabb63ae0c9b90cb431e65dac5c88cda98cdb0d65038b180635cb6aac958"
+  },
+  {
+    "path": "supabase/migrations/0026_partner_hours.sql",
+    "sha256": "a1b63a54ca8c52768ea58963827499c45db2654408f5d52e91f577636c279dcb"
+  },
+  {
+    "path": "supabase/migrations/0027_driver_bases.sql",
+    "sha256": "8330b3326d8addfec8b5753a257a629b9e1824e53c0087dcde6cf8d41c67b84a"
+  },
+  {
+    "path": "supabase/migrations/0028_driver_event_kind.sql",
+    "sha256": "c169b3ebecc93a1d8c86ca5445103614475f47bb135801527e6f9c26e73d6355"
+  },
+  {
+    "path": "supabase/migrations/0029_arrived_at.sql",
+    "sha256": "4289e70886b889685870f1a200efd2dc650f072f5a317212d779b45c0cf8e067"
+  },
+  {
+    "path": "supabase/migrations/0030_admin_drives.sql",
+    "sha256": "93e3c0bff01b00fcb7ed6dd0d00b05ff0f86033ceedc6749e54e8fe25666a6bb"
+  },
+  {
+    "path": "supabase/migrations/0031_pickups_per_day.sql",
+    "sha256": "4de3e333211ec9e0e65c612b73edd187c8ec66c2dc81464b6e2cf0c938937033"
+  },
+  {
+    "path": "supabase/migrations/0032_bag_weights.sql",
+    "sha256": "e1354440b380f5539ffeb5678332f1fa2b5a61b3f97485c91596755d2e81b821"
+  },
+  {
+    "path": "supabase/migrations/0033_van_clips.sql",
+    "sha256": "4ec030f58a51acfa7aa251053c14b41b8f948690f92641c41e5595111032c06b"
+  },
+  {
+    "path": "supabase/migrations/0034_estimates_turnaround_capacity.sql",
+    "sha256": "50167f77cb323e82cfe9ede8776466b412d3bb2c1475817c6b88c48820d360dd"
+  },
+  {
+    "path": "supabase/migrations/0035_driver_wage.sql",
+    "sha256": "b3f6031185abb545d1538ea0e0224b06f60626c7792d960953ccc38984cf1dd8"
+  },
+  {
+    "path": "supabase/migrations/0036_partner_weight_per_bag.sql",
+    "sha256": "1df0dcf1865fe956fce7d05a292d5fd2eaa25976e3fc29c0a3f83f9786bc1dfc"
+  },
+  {
+    "path": "supabase/migrations/0037_driver_hours.sql",
+    "sha256": "2d19f2d564900d6d02bf932a950e6db9bf96c6100277a0f829db8a3c20c2d271"
+  },
+  {
+    "path": "supabase/migrations/0038_bag_legs.sql",
+    "sha256": "aed9cd1d858ac56859610823da074a9f0a9ec21051a8524e5265497cbc39dc6d"
+  },
+  {
+    "path": "supabase/migrations/0039_billable_weight.sql",
+    "sha256": "71c161af5f34b129a0fc2e30ae41573c93454ead0302ca8d65ff2ef35331d80e"
+  },
+  {
+    "path": "supabase/migrations/0040_prelaunch.sql",
+    "sha256": "a824cfdbff7de36fb421e384354447630e25ed02585d0e8b5eae8b5cacdbd1b3"
+  },
+  {
+    "path": "supabase/migrations/0041_bergen_signups.sql",
+    "sha256": "0acede5545df38c964380c862c62de834c60e864345916a47f3105c28eef2d56"
+  },
+  {
+    "path": "supabase/migrations/0042_bergen_consent.sql",
+    "sha256": "a0b44a1fe77ce297089891543de181e87a8794283f154d6c029a9cd8b2c72d10"
+  },
+  {
+    "path": "supabase/migrations/0043_order_tag.sql",
+    "sha256": "9cab71c4262b370acacf83fe181ab82f4126bb1f502c794cb526b4389335713f"
+  },
+  {
+    "path": "supabase/migrations/0044_bag_tags_and_surcharges.sql",
+    "sha256": "ad060657d6f065e1cb8f35343be8511a23f24b42519e0812c14c0201e25fc10f"
+  },
+  {
+    "path": "supabase/migrations/0045_ai_hold.sql",
+    "sha256": "b7fa6e0a9eefdfac46ebdaa1035ea45e6b8a89a1d289c92c6c88ff69f7829bb3"
+  },
+  {
+    "path": "supabase/migrations/0046_dismissed_leads.sql",
+    "sha256": "06ddf533022968d64ec30f072bcd27140636d6e9d791a29eef9e3ee7cc32d8d9"
+  },
+  {
+    "path": "supabase/migrations/0047_van_confirmed.sql",
+    "sha256": "ebee4a2bf7b2831366c7a454e4359235fb7a732fbc33a24e289fc877e8a3a5a3"
+  },
+  {
+    "path": "supabase/migrations/0048_intended_partner.sql",
+    "sha256": "0bc35e791948e72ed9070de2dc0236242a437ab504a2cb999374dec51b50f8e4"
+  },
+  {
+    "path": "supabase/migrations/0049_navigating.sql",
+    "sha256": "ea494761c2898b459b5925f975dce684594f528280a6e7d3cbc5d942bc4e422b"
+  },
+  {
+    "path": "supabase/migrations/0050_weight_reconciliation.sql",
+    "sha256": "b71eb1ca4f328ec98533d68db0faf11c4c8551585949160c65254d37dfe67d4c"
+  },
+  {
+    "path": "supabase/migrations/0051_sticker_state.sql",
+    "sha256": "3e0b01f52a5442687d75ac6e3b9f82893764087050bf945ca130566a5ad14774"
+  },
+  {
+    "path": "supabase/migrations/0052_bag_collected.sql",
+    "sha256": "53b17b826f33b3858eed26a0e9a444d9d578d14c970834471508fe2523e1b6a9"
+  },
+  {
+    "path": "supabase/migrations/0053_service_base.sql",
+    "sha256": "a2a754a9bab5be11c60a909462ab770e1f1ebc1573c856fa5e9a4c3e8a66287d"
+  },
+  {
+    "path": "supabase/migrations/0054_order_wash_preferences.sql",
+    "sha256": "2352bd0e6c7db2bf23ba7c14786c8574b92ec08d5780b776426e61ddbe2069c9"
+  },
+  {
+    "path": "supabase/migrations/0055_partner_billing_terms.sql",
+    "sha256": "01bb65731f5079ea096ce80b5748e31fd183f7ec301602584bd269032e141e26"
+  },
+  {
+    "path": "supabase/migrations/0056_clip_lifecycle.sql",
+    "sha256": "e7aaf1591802925ea2031fb72f5007e7b2b7ab6a42e033f3d4e7a738af67a4b1"
+  },
+  {
+    "path": "supabase/migrations/0057_doorstep_per_bag.sql",
+    "sha256": "f0e06f18034274d56f60ca35090457b4e4c4ec273f1cf08089e46d201130237d"
+  },
+  {
+    "path": "supabase/migrations/0058_return_check_release.sql",
+    "sha256": "6d908f404e7c388449bd06ffd87480a00a5ddec93cfb5af4d74f97aafc286411"
+  },
+  {
+    "path": "supabase/migrations/0059_opening_date.sql",
+    "sha256": "5dbaae62670f18442e0572070cb5df1344a085cba198f0bdf5125f6f4099e903"
+  },
+  {
+    "path": "supabase/migrations/0060_pending_pickup.sql",
+    "sha256": "73b7b1a76a9c6658bdf534b6744e3a8af4e21e40fa3461b240cec9dc3da3da0f"
+  },
+  {
+    "path": "supabase/migrations/0061_ai_pauses.sql",
+    "sha256": "f05ffb435d0d60cea151c4954b35c5e0496cae10dbda1670a2a70cdacef59de3"
+  },
+  {
+    "path": "supabase/migrations/0062_message_author.sql",
+    "sha256": "3476bd709163a7629531d76ce0ed86d6ce8a6466fe24d538892fc386d4b7e3af"
+  },
+  {
+    "path": "supabase/migrations/0063_pickup_reminder.sql",
+    "sha256": "ffd459818c6a238b4821b8360b591852ff5c8fabc4a93a61a3641b1a0545b1ba"
+  },
+  {
+    "path": "supabase/migrations/0064_nightly_pass.sql",
+    "sha256": "8f441ff34d552b5497bd55421453d251455976fe591b86738d12e11d8e67e8e0"
+  },
+  {
+    "path": "supabase/migrations/0065_message_kind.sql",
+    "sha256": "a96c0cb3cb8402b72b1806ff10172f540bd746e962b076bf0b8dead9bfc376fe"
+  },
+  {
+    "path": "supabase/migrations/0066_promotion_rules.sql",
+    "sha256": "1b194b37c95a068f2eee34c42e84d3a11124731862120b942da2d2e332a13bb3"
+  },
+  {
+    "path": "supabase/migrations/0067_follow_ups_switch.sql",
+    "sha256": "6566414588b01a7fca93aa128b6a38e3f3a641425e20508080b5bd90ed4e21d5"
+  },
+  {
+    "path": "supabase/migrations/0068_promotion_uses.sql",
+    "sha256": "c384f5262e64ec33828e450af669e5466f2544dd2657b38a8cc7454e2848db66"
+  },
+  {
+    "path": "supabase/migrations/0069_thread_follow_ups.sql",
+    "sha256": "41c0207d9ef058cf69f1b7180262dacceb6acd16f823d6e976ff8c5bb4276789"
+  },
+  {
+    "path": "supabase/migrations/0070_pause_default.sql",
+    "sha256": "f3f1ae555c68ff4ce5daeb68d2c43e93230a372adc2bdd4da9deddbb6704c6e6"
+  },
+  {
+    "path": "supabase/migrations/0071_one_device.sql",
+    "sha256": "0075249fc68bcec387b20357dee819681336b3cacc5c25b3be8f2df15713fe6b"
+  },
+  {
+    "path": "supabase/migrations/0072_facebook_leads.sql",
+    "sha256": "8d211e5961a37a6448291f1f18a7b5d1929518bfc1036e2a3113555937bf0f93"
+  },
+  {
+    "path": "supabase/migrations/0073_promotion_cap.sql",
+    "sha256": "c1e45bf2c7c9fb1a29022dcfd3e9fa8ee430d096004eb156bf34b304d13d4f3b"
+  },
+  {
+    "path": "supabase/migrations/0074_promotion_order_cap.sql",
+    "sha256": "1d6a19cf8504e1bfbd6168d64dac372e0ee7e289b9d7bf3f2803e1d73581c31d"
+  },
+  {
+    "path": "supabase/migrations/0075_lead_consent_recorded.sql",
+    "sha256": "f67c32137e8d260d7100a69d92de3b9ee1bb0cf9a27e3860245f98a93efcb2a2"
+  },
+  {
+    "path": "supabase/migrations/0076_opt_out_record.sql",
+    "sha256": "716cca058df121c6233801a2e015febacf6183eb56b5424b211fd337824c8b51"
+  },
+  {
+    "path": "supabase/migrations/0077_issue_paging.sql",
+    "sha256": "61da0473739b49faf9fc81d5512838c2056b48d9cb865e648edea1ff652d0687"
+  },
+  {
+    "path": "supabase/migrations/0078_promo_codes.sql",
+    "sha256": "4660150dc98d88c32152011025b1a64de383ad1e9e6d986f3fb75aaf702a04ba"
+  },
+  {
+    "path": "supabase/migrations/0079_setup_intents.sql",
+    "sha256": "193ecc07e70355fc567f939885d47bccf19f614edcde0c902e02e439aba9f66a"
+  },
+  {
+    "path": "supabase/migrations/0080_card_chase.sql",
+    "sha256": "72eff5a4bfb88bceb577eca22687756528185c362562f4d93605ec2bbe3701fa"
+  },
+  {
+    "path": "supabase/migrations/0081_web_order_consent_source.sql",
+    "sha256": "697020329e1b12024ce5768557d40694b59ac663f831a7c3a509c823414c939f"
+  },
+  {
+    "path": "supabase/migrations/0082_lead_outreach.sql",
+    "sha256": "82c118d1300348df596f2e71bd57ca5bde763695601a66099b178f643242e320"
+  },
+  {
+    "path": "supabase/migrations/0083_phone_orders.sql",
+    "sha256": "e7c4f23056e5a3299a99f9e5b507516d4a9fd48ac129d038f661f48e7bffdc6b"
+  },
+  {
+    "path": "supabase/migrations/0084_paused_thread_alerts.sql",
+    "sha256": "b8c7b4c245989c2d3541a846186b66fe7f1d17ba998624f8c186960c227fffb4"
+  },
+  {
+    "path": "supabase/migrations/0085_ad_click_ids.sql",
+    "sha256": "07a3cb17fafcbeae0bfe192de14fce6b651a67228eaa69aeccc38a095e16ed80"
+  },
+  {
+    "path": "supabase/migrations/0086_clear_paused_banner.sql",
+    "sha256": "7e89e19b77e3ee8baf448104a234fd825e3637cecc23ae591416076639d5e3e0"
+  },
+  {
+    "path": "supabase/migrations/0087_pinned_laundromat.sql",
+    "sha256": "59ba52e39ddc9dd8a2a9e893d7d531e7d3a2b7e94ff1aced066592d9a377456c"
+  },
+  {
+    "path": "supabase/migrations/0088_dropoff_rank.sql",
+    "sha256": "55875707a0941d76ab4b3ca5631016b854341267e0dc22dbf813be8744073936"
+  },
+  {
+    "path": "supabase/migrations/0089_website_popup.sql",
+    "sha256": "1ef0c6a77ce07316130c0c41c60d3ea616c0641229ab345db7b2f6fcbf1814c5"
+  },
+  {
+    "path": "supabase/migrations/0090_popup_consent_source.sql",
+    "sha256": "3530f4c9dde0b51c4118493f00455b752a648fc901c1e94ef2eee058d8446cd3"
+  },
+  {
+    "path": "supabase/migrations/0091_declined_payments.sql",
+    "sha256": "8810b3835006c97ed8fedc7aeb878ab441823480b96038c004eaceb52e4b57b7"
+  },
+  {
+    "path": "supabase/migrations/0092_schedule_door.sql",
+    "sha256": "8cd9ae12d4cdab852ded6e6597639397310143eda574b8ba6338cfe96ac090eb"
+  },
+  {
+    "path": "supabase/migrations/0093_booking_intents.sql",
+    "sha256": "75568931c434e82e862a7b41e65f15c4c0abde2b4c01d945034bc2379dc0fead"
+  },
+  {
+    "path": "supabase/migrations/0094_payments_ledger.sql",
+    "sha256": "dd92d5269f38020f20151629361bb0afdb866861c1f59c2561355de2843779c4"
+  },
+  {
+    "path": "supabase/migrations/0095_show_up_authorization.sql",
+    "sha256": "2c081fe5d9cfc7466b676e840344fbd62dc6bec43cfab05693ebd52f58573c6e"
+  },
+  {
+    "path": "supabase/migrations/0096_subscriptions.sql",
+    "sha256": "608e43db741f9129ea4d7022753963e39b2bfb702224f9f018417d2f9cd15c35"
+  },
+  {
+    "path": "supabase/migrations/0097_pickup_spot_photo.sql",
+    "sha256": "72208bf2fd56d293a29fdfbf7adadfc1cfabd05489f1269770139407a4e6936a"
+  },
+  {
+    "path": "supabase/migrations/0098_first_touch_source.sql",
+    "sha256": "f78d1960bab39361758cdaa2e2631b66cea393c21cfa191d084fd5e1f05302d8"
+  },
+  {
+    "path": "supabase/migrations/0099_asked_for.sql",
+    "sha256": "c2100ca3965d25c8cf16350a12fec9d403d1a42a62279cc880204a8436f71c2f"
+  },
+  {
+    "path": "supabase/migrations/0100_photo_buckets.sql",
+    "sha256": "753b36c97e1956f6797a52377735810a98c73da865880d8ae95f843ae9967260"
+  },
+  {
+    "path": "supabase/migrations/0101_partner_users.sql",
+    "sha256": "6e5e99fb3fad428b79204a20871e5e8b5fbb78db51bec609ded33c539ae0a3ad"
+  },
+  {
+    "path": "supabase/migrations/0102_partner_owner_and_slug.sql",
+    "sha256": "5c34d68df668a3dca16f16e1931a162c30c8f6bf41062b3a8c50886cc5077247"
+  },
+  {
+    "path": "supabase/migrations/0103_courier_deliveries.sql",
+    "sha256": "0a647642a94d2f5439f9ab2f07299ddf722a3026072978764a15bd8c533329ee"
+  },
+  {
+    "path": "supabase/migrations/0104_courier_event_kind.sql",
+    "sha256": "f629982fe3b4576cfb9b2f78bf4b6a0cc7bbf20b58f877eeccba8fa1b688bf26"
+  },
+  {
+    "path": "supabase/migrations/0105_delivery_fee_and_held_amount.sql",
+    "sha256": "b61b504b6fb8d62b105d2709d59088c2f1e04fb0399a7ac0e828d96dc185f004"
+  },
+  {
+    "path": "supabase/migrations/0106_leg_carrier.sql",
+    "sha256": "b975b468eae6bf16762c0eced43a070fda931d2bc197f3dff603127e21d2c792"
+  },
+  {
+    "path": "supabase/migrations/0107_drop_duplicate_hold_amount.sql",
+    "sha256": "aa19ac4ba6e7a6adf05f55315f06175827b7501714f0d894316634a191030a15"
+  },
+  {
+    "path": "supabase/migrations/0108_spending_approvals.sql",
+    "sha256": "e5c382e451777dd40971acdaeaecca597ef4dfea8fc9b17e2a39ebf73f3b0451"
+  },
+  {
+    "path": "supabase/migrations/0109_spending_terminal_guards.sql",
+    "sha256": "6e9ca24527504e197c52293e4e09c59a9ddc8435a7e186e084a6e6e1e2f0e282"
+  },
+  {
+    "path": "supabase/migrations/0110_shipday_dispatch.sql",
+    "sha256": "6535ae514279817f98d4e8059642ddec5f17cb3f67d404e097f50574398296dc"
+  },
+  {
+    "path": "supabase/migrations/0111_dynamic_checkout.sql",
+    "sha256": "60db0517cb628f9ce6f6ebecb942db6af652a4fe1e37aa718e94acd3b60cb3fe"
+  },
+  {
+    "path": "supabase/migrations/0112_dynamic_repricing.sql",
+    "sha256": "02e737a87bb41507c335ff5515b88d04d9bc1cc03773d9bbd29b09210374f710"
+  },
+  {
+    "path": "supabase/migrations/0113_pending_weight_approval.sql",
+    "sha256": "1567d233491b09e2ab899d2a588213f1c95de7981459033235d0a14496c24be5"
+  },
+  {
+    "path": "supabase/migrations/0114_partner_intake.sql",
+    "sha256": "0a7327bbbb3e2f07ca624405cc68558197a3e3ad4980593d5708178970543234"
+  },
+  {
+    "path": "supabase/migrations/0115_partner_intake_existing_ready.sql",
+    "sha256": "7adbce885f7865fc6ea7e44c91c60a01e651cc61f580e69346abaecfb4be8af8"
+  },
+  {
+    "path": "supabase/migrations/0116_admin_partner_intake.sql",
+    "sha256": "b3663dd1656cbf92b832ea747e307bd5aa75f0ec68aec6a41b7129c75f966bd8"
+  },
+  {
+    "path": "supabase/migrations/0117_partner_quote_revision.sql",
+    "sha256": "8f308399cfb168ca0c564cfeb4f59e8214c838944d95ebc9e9aa4c726787722e"
+  },
+  {
+    "path": "supabase/migrations/0118_shipday_order_sync.sql",
+    "sha256": "82526a9a30e1d06ac7c30407981b391fe471f4f4ff5352399ba84f24cffb0599"
+  },
+  {
+    "path": "supabase/migrations/0119_verified_partner_receipt.sql",
+    "sha256": "ccdb60fe98fba410b2a833c153a332db330f8f3ac2ba4ad68e1cc1e5305d8709"
+  },
+  {
+    "path": "supabase/migrations/0120_combined_partner_intake.sql",
+    "sha256": "7e20e7aa38659d558bf4c5ee85def652629caf63ed526a548b16ab9f711a350f"
+  },
+  {
+    "path": "supabase/migrations/0121_retire_spending_approvals.sql",
+    "sha256": "d75515972efddd43bc16433030448045ff4d68bc3ae59ea5818e56664906fb03"
+  },
+  {
+    "path": "supabase/migrations/0122_partner_return_collection.sql",
+    "sha256": "fc5797ca03df449973a2b7801a3d336907f576a204cc8a816845236721d64638"
+  },
+  {
+    "path": "supabase/migrations/0123_automatic_shipday_pickups.sql",
+    "sha256": "6d0fe79bbfab8797643d7272716b3d25ebd81cc63f2b4ff7ba2aeb0a6a621bae"
+  },
+  {
+    "path": "supabase/migrations/0123_service_area_interests.sql",
+    "sha256": "8531f195c4691ccb138ad948435fc2e1714d4536bf3b617dbc094f8995b8369d"
+  },
+  {
+    "path": "supabase/migrations/0124_edit_dev_pickup_details.sql",
+    "sha256": "af0930de0bb2111b19845a604b0f70d03d4facc4348def0f25b7698e6f49b832"
+  },
+  {
+    "path": "supabase/migrations/0125_reconcile_pickup_edit.sql",
+    "sha256": "c2f3dd2a508f208408ee9b51f9443b0e37e2830a10bd9b1bdeb3ebe33568fd16"
+  },
+  {
+    "path": "supabase/migrations/0126_delivery_sms.sql",
+    "sha256": "a3152ceef4950c832b3fb7d910826fe064c34961112ac7672cce36796226bbe4"
+  },
+  {
+    "path": "supabase/migrations/0127_laundromat_return_checks.sql",
+    "sha256": "67bc773708fc2b4d5b26f3df97aab95369b567ad1054fdc935f5f765bba88250"
+  },
+  {
+    "path": "supabase/migrations/0128_preserve_return_weight_holds.sql",
+    "sha256": "416db9ebb5a09878ac8d25c61fc11b959db096b7bb02f5aced071ce6c99a6175"
+  },
+  {
+    "path": "supabase/migrations/0129_partner_wash_completion.sql",
+    "sha256": "e1d9da34f3836eeea359a2ebcc2eb5cb0775c84487b9e29fe5f6869093a0e6ed"
+  },
+  {
+    "path": "supabase/migrations/0130_partner_wash_started.sql",
+    "sha256": "4852074c802b57569bdfb7ac9fc559da153251b1b376f8cf4b92258e15910c55"
+  },
+  {
+    "path": "supabase/migrations/0131_simplify_partner_washing.sql",
+    "sha256": "659f4953c05e60997090bda95f5977af92489878827283c844f3b265db95043e"
+  },
+  {
+    "path": "supabase/migrations/0132_manual_return_confirmation.sql",
+    "sha256": "1413909db0da79befee4cf7b60025abe4a359d10d51628c7f4b1ec90bac1eb43"
+  },
+  {
+    "path": "supabase/migrations/0133_customer_delivery_photos.sql",
+    "sha256": "43762d1d7655b82092f91487aa97dec0e28ce76bc7a1271ac90c054dde5cc80d"
+  },
+  {
+    "path": "supabase/migrations/0134_cost_plus_margin_pricing.sql",
+    "sha256": "8b45e3f1c9cb9504fc7c881883ad103c14f6a701c3d732bf97007de5c3ba23ed"
+  },
+  {
+    "path": "supabase/migrations/0135_partner_customer_base_rate.sql",
+    "sha256": "2e31fecb3dab80c357f650411a5936454cf8840b1d68f24be39ae2b2da44d147"
+  },
+  {
+    "path": "supabase/migrations/0136_weight_based_pricing.sql",
+    "sha256": "93c73209c9d19e4b57cc1c5f7e5182542c54fc5192e1445ad51c59bac62714dc"
+  },
+  {
+    "path": "supabase/migrations/0137_eighteen_pound_minimum.sql",
+    "sha256": "a243a08efe3672716d2713deb08117589101e960140df727aea58b371c78b924"
+  },
+  {
+    "path": "supabase/migrations/0138_customer_pricing_base.sql",
+    "sha256": "562b27bfaef7db89861a24e2c67f1ff3379f2021c799b1f7d10116f9351c1a9f"
+  },
+  {
+    "path": "supabase/migrations/0139_order_delivery_recovery.sql",
+    "sha256": "e94296f8db4a032b75030957bfad541eec4dd6d02d47ed74abe2de85dca41f01"
+  },
+  {
+    "path": "test/ad-attribution.test.js",
+    "sha256": "cc01f9780a63250f0305538a81d8ac7b8f2b74d25ab6dea21757c537edc1acf8"
+  },
+  {
+    "path": "test/ad-claims.test.js",
+    "sha256": "dfb2319286146adfc8a6ed2e2eb842b1f9b4768a2c5a1a47dfc64594dafcb421"
+  },
+  {
+    "path": "test/ad-conversions.test.js",
+    "sha256": "93689342a71f451a84489aa092543268eed689a7d9987dd0e138cbb84fa9f3f0"
+  },
+  {
+    "path": "test/address-first.test.js",
+    "sha256": "1827b6eae3e346ab08936b73e60e7ce2230fbcbca34e56676741ae501be07c9a"
+  },
+  {
+    "path": "test/admin-portal-access.test.js",
+    "sha256": "15ba3e695b55aae6d7fe8c31f04b1c7454cd408888196464b509eaec08182aa1"
+  },
+  {
+    "path": "test/admin-scope.test.js",
+    "sha256": "7912888a7c4dbe9cc9f946106b82de84cf0b83ad9627d2a22a5dff374ca38891"
+  },
+  {
+    "path": "test/assigned-incoming.test.js",
+    "sha256": "f5884b27a04d6b4bb18219d27b6fd846f9c538862976f8b1d6e5c42f9189adb4"
+  },
+  {
+    "path": "test/board-table.test.js",
+    "sha256": "f3e6c5581ed359b7c5c3e4193d94e39b8ee556330fab2ce873bef58e70fd5c51"
+  },
+  {
+    "path": "test/booking-flow-order.test.js",
+    "sha256": "a1c138ce3735226158177c003f5641367f6b16169fc9774a36f61c7310f6b371"
+  },
+  {
+    "path": "test/booking-intent.test.js",
+    "sha256": "f81599fdd6b34dac85afbb0b8a95469b5782052df7d92f1c5c818b65541cae96"
+  },
+  {
+    "path": "test/booking-progress.test.js",
+    "sha256": "e8824acbd964c4c137adfb861fbbb03a8a3ad79e7feedba27005e26c94313462"
+  },
+  {
+    "path": "test/card-at-signup.test.js",
+    "sha256": "e30ff6d0f0ad4c278eed2ab747e636eac8c82a565efccbc1c867dce256778c5f"
+  },
+  {
+    "path": "test/card-destination.test.js",
+    "sha256": "612a9436994572adf41a98976d3f3128a7acd37284d329968934f67299eabb8e"
+  },
+  {
+    "path": "test/card-hold-policy.test.js",
+    "sha256": "38f595c33a51b004cb81f8727c83832858c7e200d60119d4f0aed219213ca7f5"
+  },
+  {
+    "path": "test/card-link-only.test.js",
+    "sha256": "d060af600922b42233c8c0372a06e19398d16be262abc78b0329e2e2b15e8e35"
+  },
+  {
+    "path": "test/card-page-wording.test.js",
+    "sha256": "8efa71a81c3d9242bbe6d593a594fcc576453605d5fb60f0a0f2ab186653f071"
+  },
+  {
+    "path": "test/carriers.test.js",
+    "sha256": "6618da54c39cb27ddb3e4ee5a82807070e1c2b2d7fd4204b15e02128252bd859"
+  },
+  {
+    "path": "test/cash-recovery.test.js",
+    "sha256": "fe1c17e5a26f709cf71f4117c8864a8d8af9148f4426f59edb75a48680649cbf"
+  },
+  {
+    "path": "test/clip-inventory.test.js",
+    "sha256": "25a70bb9ffe7dd9acac7299a36faa58bf0919070eca93a3c605352c8f0c391c5"
+  },
+  {
+    "path": "test/clips-come-back.test.js",
+    "sha256": "13f572061089f99f57aa251cfb8a956cd119de328e26aaa1b97e78a6052727d0"
+  },
+  {
+    "path": "test/collectable.test.js",
+    "sha256": "f0e6b21fd0cbc5e822dd4fb2ac4794ba7d8bb32f1dfa570e25401865a9ee3620"
+  },
+  {
+    "path": "test/consent.test.js",
+    "sha256": "d3551b3f245295c3542f9ca5f4038ad2efdf4881619d43ea9ddc0b39631b06c8"
+  },
+  {
+    "path": "test/conversion-feed-auth.test.js",
+    "sha256": "6717e7ef5e869d0e5c82febb5e90a230476e3421dfdf245c331b13d8c74ff4c0"
+  },
+  {
+    "path": "test/cost-plus-pricing.test.js",
+    "sha256": "368ee54e7b83372cee2578d2fde029d61a2e8fcc364d609bb0a73532e04780e0"
+  },
+  {
+    "path": "test/courier-book-shape.test.js",
+    "sha256": "ba7823ac23f5df018158704b67e11039130d59b71adb7072e90d6567536f352a"
+  },
+  {
+    "path": "test/courier-choice.test.js",
+    "sha256": "d2a663f5cccba0aa2b01e20ed58f5f784f5ae3826517d0cb7a69b3f1d52d5c85"
+  },
+  {
+    "path": "test/courier-fee-is-real.test.js",
+    "sha256": "1a6dd136cfb5adda7f8955aa0554a5ba8f8c784a505423b9e9eb155fd7762e20"
+  },
+  {
+    "path": "test/couriers-board.test.js",
+    "sha256": "7fbe8546701c5560573813cb90de408c9abc3574142fde5c6301ac298c7f13e0"
+  },
+  {
+    "path": "test/custody-not-the-van.test.js",
+    "sha256": "0e9a56708fd91efd3e535dccbfa648a1b5e76d22313f6109184b5176e2fc2e7a"
+  },
+  {
+    "path": "test/customer-address-save.test.js",
+    "sha256": "38efc9c7c54906e2d50661e5ef3a01b5ca7d9219731bd3a1b90c93e3250e815c"
+  },
+  {
+    "path": "test/customer-base-rate.test.js",
+    "sha256": "5d738484809ac710776e8d38b8a2654bdfd135cd738792af1e3e163f08dbac87"
+  },
+  {
+    "path": "test/customer-base-weight-pricing.test.js",
+    "sha256": "4e487cbd7336efb1bd10fea1ef0d209c4e4f18da77f33f9a73380203a165f964"
+  },
+  {
+    "path": "test/customer-pricing.test.js",
+    "sha256": "62b620aa700fa68a9ce24fc38954f6f8204de6913c0b8f9b93f16aec6f00db0a"
+  },
+  {
+    "path": "test/customer-texting-ui.test.js",
+    "sha256": "84f253fbe17246aa1eb1123fa86dd9159235c1ac92ba44fad5e1af97a81b8c28"
+  },
+  {
+    "path": "test/customer-vendor-copy.test.js",
+    "sha256": "c4eaec84d7ce2e2cf3df68fb814b2bc798f7e0653daac28606d91471f817ce36"
+  },
+  {
+    "path": "test/delivery-photo.test.js",
+    "sha256": "bd45f2862687e23ed8615dfea41f36271f301e5e72eb51640bfcab2a580d2556"
+  },
+  {
+    "path": "test/delivery-sms-notify.test.js",
+    "sha256": "ca5730bd5a9646cee269ebaa40565142302bb13aec5d84f091c16ccbb1fefbbb"
+  },
+  {
+    "path": "test/delivery-sms.test.js",
+    "sha256": "984a3238df9ec4babbaa463aa731d5182c4dc2795b4c5e4d9f649c4875bf6b82"
+  },
+  {
+    "path": "test/dev-journey.test.js",
+    "sha256": "8ba874de314932a8e0ba52bea5eb9df4b520e6c269e97a49ab21d8dfc34cf6db"
+  },
+  {
+    "path": "test/dev-online-booking.test.js",
+    "sha256": "dc6c0e0a8bef1837aab077aec3fd4d83016551eabe35c8f1fed05be535c5aa4f"
+  },
+  {
+    "path": "test/display-format.test.js",
+    "sha256": "6fb07c44758cdf80de6312d6c53a8bec3d94676a4ae5cd87a28f1ad159ab5245"
+  },
+  {
+    "path": "test/door-charge.test.js",
+    "sha256": "acde82d9dbf1e8ffc9b8b459d81688bd9df78ffe98c6f6497d2a7fd5af9c3e31"
+  },
+  {
+    "path": "test/door-voice.test.js",
+    "sha256": "c51ddd4d65be672ba1dd1b84551ff4a12fc83942d4297f96ed289ba76cce3c52"
+  },
+  {
+    "path": "test/dropoff-groups.test.js",
+    "sha256": "6cd53737a9d7be6dd025dfaa0a4829da983d7758232007212b92dacf6b07267b"
+  },
+  {
+    "path": "test/dropoff-order.test.js",
+    "sha256": "dab8465611180474568444f6fb77b23917380e53c2c81213c5b19bd1035749bf"
+  },
+  {
+    "path": "test/due-on-date.test.js",
+    "sha256": "390573a96b4efe768471701ea6fe1542adff8e70a97f43ad464637896a83f7bc"
+  },
+  {
+    "path": "test/dynamic-order-pricing.test.js",
+    "sha256": "bcf33e469d4cd7b1e3fb50db95dd00d8e8ee6edc69a184064fd705060e88a49f"
+  },
+  {
+    "path": "test/eighteen-pound-minimum.test.js",
+    "sha256": "732c17dffe80fb5fa92a45e87a34648f8b2f98409171aaf1439d4abd118df5b9"
+  },
+  {
+    "path": "test/extra-bag.test.js",
+    "sha256": "a3ff8d9fd43be1661b2b184f48974875226bb7e6e05bd75e552aea462379db1d"
+  },
+  {
+    "path": "test/extra-pickup-on-plan.test.js",
+    "sha256": "a43791a239c455e203342796e1ead70b4831a6c249dee7c076c8b6a387145156"
+  },
+  {
+    "path": "test/first-message.test.js",
+    "sha256": "df28fb16f366acb593c5294c7108b2fd0d80f8d75f3690657e0af52c828e8e10"
+  },
+  {
+    "path": "test/followups.test.js",
+    "sha256": "750ed7cd27ecbd736f5fcd25d7a2f113c532950682a04103afb8502083a88566"
+  },
+  {
+    "path": "test/google-address.test.js",
+    "sha256": "1fc095213dc4dd8eecce6a616dbec31d3130001d93d1381158555e0ea91ee5f0"
+  },
+  {
+    "path": "test/google-tag.test.js",
+    "sha256": "c9be1b546dfa38a11b7859d677483b6ab80407ae4a565994863359ec101074ad"
+  },
+  {
+    "path": "test/guarantee.test.js",
+    "sha256": "c4309b1106a084f3d059218a6e41834cef5c904a8d04013041c0e5832de1ac72"
+  },
+  {
+    "path": "test/handoff-silence.test.js",
+    "sha256": "574d1aed3e9a5a628a1e73958ead78a4ef1559b9fc8a2065b2cc9973cfad3f56"
+  },
+  {
+    "path": "test/home-hero.test.js",
+    "sha256": "2e001260f7d0101578853238216dab45d8fde8a5463650fcc51aa5bee69c722b"
+  },
+  {
+    "path": "test/hosted-dev-pos.test.js",
+    "sha256": "2327d8a5322e9c69ef98e98ee06ca1804e7ecee2a81f0fbb12a16ed055f250c3"
+  },
+  {
+    "path": "test/intake.test.js",
+    "sha256": "b7868e7d76ecefb214f8807e07c6bcc967aedc0e89eab56c48fa65933a2fc93d"
+  },
+  {
+    "path": "test/laundromat-portal.test.js",
+    "sha256": "59b05085c0605508e92779a44e5383b3e9eb63b04eeb362616d8800d242db2a9"
+  },
+  {
+    "path": "test/laundromat-return-checks.test.js",
+    "sha256": "678d32e23e7c6dd0945fb7b52bebbdeb908c70dd93b79bcba2849a36c4d12f6d"
+  },
+  {
+    "path": "test/lead-outreach.test.js",
+    "sha256": "1527e6fb1adedc4c453b66ac7100411dc6476e0884425130b51d646ec6556eae"
+  },
+  {
+    "path": "test/lyn-identity.test.js",
+    "sha256": "eba3f4700880a465ed804c4dc2ef754110d9c594acb26badf29e522a66d60d90"
+  },
+  {
+    "path": "test/lyn-locked-rules.test.js",
+    "sha256": "f0dfc7bf87883b454c6ca73215048d530907d5051ed052bb1e1477ea44da0e4d"
+  },
+  {
+    "path": "test/message-view.test.js",
+    "sha256": "0dbec297cadcd4fdc98d383c8598851f908dd6a048c1da8655c2afbe500546c8"
+  },
+  {
+    "path": "test/minimum-rate-display.test.js",
+    "sha256": "0ec4f291f13f7e4855b151f260d02a5cdec31f388ba5b060644122e5d8427cd4"
+  },
+  {
+    "path": "test/minimum-sentence.test.js",
+    "sha256": "9ee0d70ca7aa8e6455a0f7d629232688f9aee6e744a1d944059f149d62113263"
+  },
+  {
+    "path": "test/no-automatic-offer.test.js",
+    "sha256": "3b7c036c7c0ddf7a2ec811d54767e2fd20fd1913759d2b5d9956d3950f1cc2eb"
+  },
+  {
+    "path": "test/no-backtick-in-template.test.js",
+    "sha256": "2568f589afdb241a86f5974f1fd3c6e44dc8f142de4d66066174bde8bb6ec77d"
+  },
+  {
+    "path": "test/no-control-characters.test.js",
+    "sha256": "a08dc28f0a026d6e008df161439abe3ff4ab0d590b857c8a000514b15196229a"
+  },
+  {
+    "path": "test/no-weight-limit.test.js",
+    "sha256": "e36bc5a9b9e75966815a53d82387077dd75886730ec9e3036633ca1c473fc9d9"
+  },
+  {
+    "path": "test/one-event-per-tap.test.js",
+    "sha256": "d7059861533de497f974ee3949b3813b70c2eb3e5e5bd006a139315282217c0e"
+  },
+  {
+    "path": "test/ops-notices.test.js",
+    "sha256": "bdc1850dc52632b48ed3047d0f75a89446c43b35c023532b3e47f28b7fcb1945"
+  },
+  {
+    "path": "test/ops-today.test.js",
+    "sha256": "e948cf66dc91de55122f208d595e297aa9636f2ae46fc71418d4720fc77f0246"
+  },
+  {
+    "path": "test/order-alert.test.js",
+    "sha256": "24234d4eabd2a54e28e25807de55ecc03070c0bc4edd4acd517e93d438575702"
+  },
+  {
+    "path": "test/order-console.test.js",
+    "sha256": "ac7e118cfee6c7b4db2f6b07ddc11e06b3427228c7d0631050cee87054b74cfc"
+  },
+  {
+    "path": "test/order-details-edit.test.js",
+    "sha256": "74075669b33f184ad71ec0d325ec43c45dfd37ad00d72728a9599b25ad092230"
+  },
+  {
+    "path": "test/order-economics.test.js",
+    "sha256": "b3d1f8c07f472cc6d6a2a955b9f6a742a756f84ecffa59a07a87e18dbd107669"
+  },
+  {
+    "path": "test/order-event-kinds.test.js",
+    "sha256": "9f3328e9a4f51da043acaaa76856780e93b3000fe670db0068174b77224f61bd"
+  },
+  {
+    "path": "test/order-header-layout.test.js",
+    "sha256": "cba02cc9803e299c643c023eb08066263fc2d6f83ae7a0a93e13c009b822971a"
+  },
+  {
+    "path": "test/order-overview.test.js",
+    "sha256": "2919071228447ea13c4ce53b8653f48bfdde76d5f38aba61220a62d8ba37aada"
+  },
+  {
+    "path": "test/order-page-skin.test.js",
+    "sha256": "697045fddb1b2103832c81a65d50fc42b591e09d135dd6255363bccc6a580c7f"
+  },
+  {
+    "path": "test/order-recovery.test.js",
+    "sha256": "53689ac937ac3d6222079628bb8bd5fd6786c5e733fb26541ba95e5c76ab2f17"
+  },
+  {
+    "path": "test/order-return-dispatch.test.js",
+    "sha256": "16f76e714d827be9736b7b4c95f13a9fa84cba2c610241be9c7bae73016ca630"
+  },
+  {
+    "path": "test/partner-delivery-gate.test.js",
+    "sha256": "84ad5455c03b149664842419dd6428fbf78e8e14b5e25b0b0d804af51dce759d"
+  },
+  {
+    "path": "test/partner-intake.test.js",
+    "sha256": "cee61fd7f5158ac47b700475a8b8fdf9b9c238b8e6e1268b41d4d4ea9ff901a3"
+  },
+  {
+    "path": "test/partner-portal-admin.test.js",
+    "sha256": "d61130f1dfae84c01c61ef89731df5e3dd17e4c5e72327b4567fc5dd476da328"
+  },
+  {
+    "path": "test/partner-return.test.js",
+    "sha256": "4bfcdc7c3fbc41f18cadc97fd8a869a7a29b392eb652ff4b44dcca595325b8c4"
+  },
+  {
+    "path": "test/partner-slug.test.js",
+    "sha256": "e25dabc757e3761ee9d13ccca2e2da71c683156342feb762c956220815d8a21a"
+  },
+  {
+    "path": "test/paused-alerts.test.js",
+    "sha256": "c285c40f173065e6cf6ccaabae3938b0ba3d13b37ce6037d17a88fef0457b459"
+  },
+  {
+    "path": "test/paused-banner.test.js",
+    "sha256": "ef76242b268b8a66c35c3131fbb9989493137aaa71ba65a5653961774d5b4db2"
+  },
+  {
+    "path": "test/payment-chase.test.js",
+    "sha256": "20988a1ba9739d3809030cd59c15fb6524ae8650a02ce0d1e9463d8a9e67ed5a"
+  },
+  {
+    "path": "test/payment-hold.test.js",
+    "sha256": "2384ba1fea9f0ea03b729b3c41272a559e19a4ccf7d28a7678dd8d6753a86566"
+  },
+  {
+    "path": "test/payment-methods.test.js",
+    "sha256": "a8e039b67eb42338143932c11a309d03904c226e1c413709c2cdb94464c73a27"
+  },
+  {
+    "path": "test/payments-off.test.js",
+    "sha256": "2b2e44088a7ed9869d89d6aed3051fa9feb08e4cc20c67a7c543839ceb1295b8"
+  },
+  {
+    "path": "test/pickup-assignment-route.test.js",
+    "sha256": "ac6562ba037a770f9f7a533b7e026ef7a564d555a1303cfe3cc3f10f4eca7f03"
+  },
+  {
+    "path": "test/pickup-edit-sync.test.js",
+    "sha256": "e55fe130a03e3e30cfe3b6dfdffc5069b10c466b576ce5cb32479d98c2d364b7"
+  },
+  {
+    "path": "test/pickup-leg.test.js",
+    "sha256": "1d44b7e35e09e470b5bfe02cb3f29770bff30a689699628d1be0df986d567281"
+  },
+  {
+    "path": "test/pickup-timing.test.js",
+    "sha256": "afa13862ba3052f5e64e7f9033c94d7257c66c78e6ff5755f89d670cb0550df9"
+  },
+  {
+    "path": "test/pitch-link.test.js",
+    "sha256": "b34ef9c124944e6af3b193e15fa494055ba142a4cfadcaf58f43d9de9e10726e"
+  },
+  {
+    "path": "test/pos-host.test.js",
+    "sha256": "2ed7c0f743ec7cd0b61c2da5d3ba5229e08c51ccd1769ef47edacb6a2b10b469"
+  },
+  {
+    "path": "test/pos-workflow-clarity.test.js",
+    "sha256": "51fa50d299c98b5d8ebb7af2e6fd1e214de053233f3bc487c6f32838ed2f74fc"
+  },
+  {
+    "path": "test/post-delivery-offer.test.js",
+    "sha256": "d60ec8118ac7ccf5c689b42601e0151bfb8c9c8430303562333fc1c8e5265356"
+  },
+  {
+    "path": "test/pricing-economics.test.js",
+    "sha256": "c39179c6483e13139a11736a4933449a48138ffafe50e154b29ce641e9996952"
+  },
+  {
+    "path": "test/processing-guide.test.js",
+    "sha256": "3cd82beaffad1b317afccde0fb901edd03d8386c944ebbac2a493e27170b5dff"
+  },
+  {
+    "path": "test/promocodes.test.js",
+    "sha256": "2d1ce357a5ffc7463da9ed38eb2ccbd9a005a0fd32fde40455390a75ed838ee4"
+  },
+  {
+    "path": "test/promotion-column.test.js",
+    "sha256": "d9b5d4a6325a3f30e1ebf350dbe280ceaeec5ae02b1adfe5998276a63a9e2531"
+  },
+  {
+    "path": "test/promotion-honour.test.js",
+    "sha256": "ce22e3621cb750bb38bbbb6766354a763ecb61c56eebbefa86aec83e2a20c627"
+  },
+  {
+    "path": "test/public-courier-availability.test.js",
+    "sha256": "aa8707d3d0a82c56346b8c9b9cdc9338252b84f7135bb6a157db93a9993b3f22"
+  },
+  {
+    "path": "test/public-dynamic-quote.test.js",
+    "sha256": "b8d6b0c52078487823a795fd0fe8062f65a40e215382d4e7fca5b650c3aee35b"
+  },
+  {
+    "path": "test/quote-address-unit.test.js",
+    "sha256": "90d8831a36c83f698a749ef2db8a048916da00a9fc7070af075f0f1606989877"
+  },
+  {
+    "path": "test/quote-fee-breakdown.test.js",
+    "sha256": "70e6b8b878891dd163527c3e4ae4c8e84b3151b534ce152b4b0140be4eaa029d"
+  },
+  {
+    "path": "test/quote-round-trip.test.js",
+    "sha256": "13b93200077935663886848944c928a315852abba30545d7818a2ab6e9a9b866"
+  },
+  {
+    "path": "test/reactions.test.js",
+    "sha256": "fb8c79a8081f5061c7247aa02393a6934602c80a9eb395813c942b51f23b14eb"
+  },
+  {
+    "path": "test/refresh-board.test.js",
+    "sha256": "3f3b038d9e016b189ca0dc1e7c28626385883cf3f36cb147897ddc5dfd51e5b5"
+  },
+  {
+    "path": "test/reinstate.test.js",
+    "sha256": "0f3c46025c7d4663e53dfc3ea059868ffe50d402dbb5ba7deaa0575dc51690a6"
+  },
+  {
+    "path": "test/reminder-collectable.test.js",
+    "sha256": "fe6acee2a82d8ae8ff7a535c5ffde8e55322437ea35d10bd2fd902bfd7258d25"
+  },
+  {
+    "path": "test/reply-delay.test.js",
+    "sha256": "357dff038df85d2ca5c751f09ac52403db529257a5ef7082c5f69a5b4751bd1f"
+  },
+  {
+    "path": "test/report-saved-quote-total.test.js",
+    "sha256": "4b84d2348605c1e4f59743671e849d9ba804e1c0e585ec4744fba12890997c50"
+  },
+  {
+    "path": "test/requested-pickup-time.test.js",
+    "sha256": "b9d4b7d16c55315e774f1da7a04dd94beea765de0f2d24c915f8e506b690291d"
+  },
+  {
+    "path": "test/retry-message.test.js",
+    "sha256": "d4db654ed1566d7cf15a2f37ce057b9054adcf31f29e5b36e9297a97d2456ebd"
+  },
+  {
+    "path": "test/retry-the-hold.test.js",
+    "sha256": "2288fcb4fc3ecc161a38478ceaae94550f0b27514516dcb8689a3fc1571cc248"
+  },
+  {
+    "path": "test/scan-return.test.js",
+    "sha256": "b96db865d58ae650edb6aa31fd7e98dec4ccae125e9b309253e353721f79e02c"
+  },
+  {
+    "path": "test/service-area.test.js",
+    "sha256": "afa19b4cb57272217ffc720931e1587368317cc0d76fb95536742fe9fd0af2e4"
+  },
+  {
+    "path": "test/settle-weight-fields.test.js",
+    "sha256": "a2225400a3567c66ebff98eb2595c37bc5743477c62e1101141cc95e0b47439c"
+  },
+  {
+    "path": "test/shipday-booking-dispatch.test.js",
+    "sha256": "a7f397b454f926b23db3e780eb187288691cd21e69c4bb425ec9b85b44bf0254"
+  },
+  {
+    "path": "test/shipday-booking-runtime.test.js",
+    "sha256": "c1574e6c964db8d81a25f4e68b997c255765f3cec324b30b8a7f2302dbe89728"
+  },
+  {
+    "path": "test/shipday-dispatch.test.js",
+    "sha256": "fa1a0ced5622cf52b41d856fc90065902109e4359238046b36df9006a65e0322"
+  },
+  {
+    "path": "test/shipday-order-sync.test.js",
+    "sha256": "5ac64e878809035da0031eff14e759ddd2a19fc954db073ecc3853dbfaa9530a"
+  },
+  {
+    "path": "test/shipday-page.test.js",
+    "sha256": "5738456995a143248f7106a5f6c236aa22a8c36f6ee625ec8e66fcacbceffed4"
+  },
+  {
+    "path": "test/shipday-proof.test.js",
+    "sha256": "279818e12a3199cea2d1d8704e6632cef2386dca2ca1a81d97c71a1350b83fe5"
+  },
+  {
+    "path": "test/shipday.test.js",
+    "sha256": "77e217a534951c79669d90089673ba80c4e03d6a4e970341bbd24059d827b13a"
+  },
+  {
+    "path": "test/shop-history.test.js",
+    "sha256": "399f1452c184b4911ab29169d9c739a078a82de5ea3af25f384d412ecd315bf2"
+  },
+  {
+    "path": "test/shop-persistent-session.test.js",
+    "sha256": "f0c30e26960a7ff315a38e01d3304cd6409427c8a3cf66c3b823631b8009264a"
+  },
+  {
+    "path": "test/show-up-hold.test.js",
+    "sha256": "5451ae2c8b8212deebcb4e77fe06d771e1f99d63e794cda4aab54dab02d87cf8"
+  },
+  {
+    "path": "test/sign-in-codes.test.js",
+    "sha256": "9511b2eb19dd3681dfff0b4ea514f3e9e69743086c945e8b37b3ac3cddeebebc"
+  },
+  {
+    "path": "test/silent-handoff.test.js",
+    "sha256": "692397acf2a0ca53bfec4c9a24d4cdca2af42f070a657c9d774c70baaf11b8d1"
+  },
+  {
+    "path": "test/sms-driver-choice.test.js",
+    "sha256": "e49d01c6b3f70c627e60891bb543a1c3c529a4bb868ccfed661c3e7ab6a2c20c"
+  },
+  {
+    "path": "test/spending-controls.test.js",
+    "sha256": "94fa0436d10c65e39998cb5f3c9c562a8ce11aeea1426d203abd73b776f3845f"
+  },
+  {
+    "path": "test/spot-photo.test.js",
+    "sha256": "dc27e6d4af9539b281d33fab0938c451f5a13dd08b6cb673f2ddde5b1fb0a456"
+  },
+  {
+    "path": "test/standing-pickup-keeps-the-plan.test.js",
+    "sha256": "3fecbfb15a85a61a3f0d580c197f2fec89d2c29c939edf72381e6f4028ff3ffc"
+  },
+  {
+    "path": "test/status-badge.test.js",
+    "sha256": "d5c19ccabd5b507b078e9dbaed09a575c6292e54bbc2783c19b9567797dcc0e1"
+  },
+  {
+    "path": "test/sticker-code.test.js",
+    "sha256": "e4d66c89b7c214bcc4bdb399e3bc831b1244da72636bd74d249bf70434de0133"
+  },
+  {
+    "path": "test/still-photo-scan.test.js",
+    "sha256": "56e17bd4dc8739e18543f6933002300fece244179a680b68a57f99317533ba14"
+  },
+  {
+    "path": "test/subscription-next-pickup.test.js",
+    "sha256": "0de6735427e1fb59cdadf9ae201d98790d4dea56aa8ef9745301603c4b5bc8b1"
+  },
+  {
+    "path": "test/subscription-rate-in-texts.test.js",
+    "sha256": "a5f3e6fe1f2be8397ad5a3788cd3e3de385aa106b161c060425ee3ebc6e7989d"
+  },
+  {
+    "path": "test/subscription.test.js",
+    "sha256": "12cdc550c1052dd563448da4ef42ee5aedfd6ba95d77ffb000caa3952c8dfef9"
+  },
+  {
+    "path": "test/tag-retirement.test.js",
+    "sha256": "fb6717043c9aa084a616d281b69e491a6a568ab859eadd8b75ac027dd4282da0"
+  },
+  {
+    "path": "test/team-shipday-ui.test.js",
+    "sha256": "9f489585ea5756c0b9cc33638f97f0ccfa65cae1f2d25023bc53d684739ca008"
+  },
+  {
+    "path": "test/telnyx-retry.test.js",
+    "sha256": "85c87f580529414b0b55d96815e577de55cb63dc9771a539031748861a07baf5"
+  },
+  {
+    "path": "test/three-stage.test.js",
+    "sha256": "a586ca65331f69b31b410b35a5d4b48665f40fa32e0c7a48b19b476133b4e4fa"
+  },
+  {
+    "path": "test/turnaround.test.js",
+    "sha256": "ce06bb170460cb1f8002f8f0f1326e719002e43f50aa7f0fa5ed18b5ca019b3b"
+  },
+  {
+    "path": "test/uber-response-shape.test.js",
+    "sha256": "3ade7950ec7d597e96478e3a029ebc82ee0d6a588db18f24cafbe45c1b9bf38b"
+  },
+  {
+    "path": "test/update-card-text.test.js",
+    "sha256": "15be7c1e5c6d745f52a51fd0c3311a927a13d08843e57a9b11889111ded2200b"
+  },
+  {
+    "path": "test/waived-texts.test.js",
+    "sha256": "b9a8711bcf4e4775bd6d473f949fdfda2a2391ebed323a51c5828b3b4cf2cf75"
+  },
+  {
+    "path": "test/wash-after-booking.test.js",
+    "sha256": "ec1de1dfc6a3d94062c9fe766f6c1e05455d43dc474af6524872018a88eb3888"
+  },
+  {
+    "path": "test/wash-completion.test.js",
+    "sha256": "9fffc75b45e5308c8a7fd55ee3c27c1dcbc2edc5007d712500d2c0a4a6ded415"
+  },
+  {
+    "path": "test/website-popup.test.js",
+    "sha256": "e441fb888d83e17f0f81a824b252bace535d5c11bf905d7063b6b509d7810c5a"
+  },
+  {
+    "path": "test/weekday.test.js",
+    "sha256": "31501d9bda47f91dccc3c1648cf56b391589c1e91dd16a6ee05b8a2ab12fd073"
+  },
+  {
+    "path": "test/weigh-in-charge.test.js",
+    "sha256": "c5ed99addd23809308e6e8215582d3a2af61c0b5b99feff99b5fe02a61f5038a"
+  },
+  {
+    "path": "test/weight-based-pricing.test.js",
+    "sha256": "145a7eaf47c750842ff700e800ebf778a8af93b833dda164b9a5a74bff95243c"
+  },
+  {
+    "path": "test/weight-issue-resolution.test.js",
+    "sha256": "f828cb69dd69103841a9e0dbb7f6d33be70bcad9201fd36c8f4de7086b3fbba1"
+  },
+  {
+    "path": "test/which-database.test.js",
+    "sha256": "d84cf6bc7a353ffbb2b18754fcd4466c748e4010eb5481ad7d7a6f76482c5a82"
+  },
+  {
+    "path": "test/windows-are-constraints.test.js",
+    "sha256": "05b1367b424b4d4b1ab438afab019eab708a8e070a740037a123ea36d694919e"
+  }
+]

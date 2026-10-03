@@ -21,7 +21,7 @@ async function reconcile({ provider, plan, order, customer, partner }) {
   const previousDuration = Date.parse(plan.trip_snapshot?.dropoffDeadlineAt) - Date.parse(plan.trip_snapshot?.pickupReadyAt);
   const duration = Number.isFinite(previousDuration) && previousDuration > 0 ? previousDuration : 3600000;
   const arrival = new Date(Date.parse(at) + duration).toISOString();
-  if (at.slice(0,10) !== arrival.slice(0,10)) throw Error('The requested schedule crosses Shipday’s UTC date boundary. Choose an earlier pickup time.');
+  // Keep both instants intact when an evening trip crosses midnight UTC.
   const addressOf = require('./courier-legs').addressOf;
   const trip = { ...(plan.trip_snapshot || {}), externalId: reference,
     from: addressOf(customer,{name:customer.name,phone:customer.phone,notes:order.preferences.dropoff_spot}),

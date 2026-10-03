@@ -1,5 +1,6 @@
 'use strict';
 
+const { config } = require('../config');
 const booking = require('./booking');
 const billing = require('./billing');
 const orders = require('./orders');
@@ -304,8 +305,9 @@ const FIELDS = [
     // BOTH RATES READ OFF subscription.js, never typed. Two copies of "$1.80"
     // is two rules, and the one that disagreed would be the one nobody noticed
     // until a card was charged.
-    text: (c) =>
-      `${greet(c)} Would you like this as a one-time pickup at ${subscription.oneTimeRate()}, ` +
+    text: (c) => config.supabase.isDevelopment
+      ? `${greet(c)} Would you like a one-time pickup or a ${subscription.CUSTOMER_WORD} pickup? Review your price before confirming at ${config.baseUrl || site.url || 'http://localhost:3000'}/account/book.`
+      : `${greet(c)} Would you like this as a one-time pickup at ${subscription.oneTimeRate()}, ` +
       `or a ${subscription.CUSTOMER_WORD} pickup at ${subscription.subscriptionRate()}?`,
   },
 

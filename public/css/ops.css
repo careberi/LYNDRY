@@ -2031,3 +2031,95 @@ body.shop-mobile { min-height:100dvh; }
 .order-quote-column .order-price-panel + .order-price-panel{margin-top:16px}
 .order-facts + details{margin-bottom:16px}
 @media(max-width:600px){.order-header-actions{display:grid;grid-template-columns:1fr}.order-action-unavailable{max-width:none}.order-header-actions button{min-height:44px}}
+
+/* Order workspace: keep related facts together and controls on a predictable grid.
+   Scoped to this screen so the pricing component and other POS pages keep their styling. */
+.pos-workspace .console.order-screen { max-width:1280px; margin-inline:auto; }
+.order-screen .title-row { gap:10px; margin-bottom:20px; align-items:center; }
+.order-screen .order-header-actions { gap:8px; align-items:start; margin-bottom:28px; }
+.order-screen .order-header-actions .cbtn { min-height:44px; padding:10px 16px; }
+.order-screen .order-action-unavailable { max-width:250px; }
+.order-screen .order-action-unavailable span { display:block; margin-top:8px; font-size:12px; line-height:1.5; }
+.order-screen .pos-next-action { margin:0 0 24px; }
+.order-screen .pos-next-action > h2 { font-size:16px; margin-bottom:12px; }
+.pos-app main.container .order-screen .pickup-dispatch-card { display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); gap:32px; padding:24px; margin:0; border:1px solid #dbe4f0; border-radius:14px; }
+.order-screen .pickup-dispatch-status { min-width:0; }
+.order-screen .pickup-dispatch-status .eyebrow { margin:0 0 10px; font-size:11px; letter-spacing:.08em; }
+.order-screen .pickup-dispatch-status h2 { font-size:20px; line-height:1.3; margin:0 0 12px; }
+.order-screen .pickup-dispatch-status p { font-size:14px; line-height:1.6; margin:12px 0 0; }
+.order-screen .pickup-dispatch-status [role=status] { padding:12px 14px; border-left:3px solid #d39b39; border-radius:4px; background:#fff9eb; color:#75531e; }
+.order-screen .pickup-assignment { min-width:0; border-left:1px solid #e4eaf1; padding-left:32px; }
+.order-screen .pickup-assignment h3 { font-size:15px; margin:0 0 16px; }
+.order-screen .pickup-assignment form { display:grid; grid-template-columns:1fr; gap:14px; margin:0; }
+.order-screen .pickup-assignment label { display:grid; gap:8px; font-size:13px; font-weight:600; line-height:1.5; min-width:0; }
+.order-screen .pickup-assignment select, .order-screen .pickup-assignment input:not([type=checkbox]) { display:block; box-sizing:border-box; width:100%; max-width:100%; min-width:0; min-height:44px; margin:0; padding:10px 12px; font:inherit; font-weight:400; background:#fff; border:1px solid #cbd5e1; border-radius:8px; }
+.order-screen .pickup-assignment label:has([type=checkbox]) { display:flex; align-items:flex-start; gap:10px; }
+.order-screen .pickup-assignment input[type=checkbox] { flex-shrink:0; margin-top:3px; }
+.order-screen .pickup-assignment p { margin:0; font-size:12px; line-height:1.6; color:#52647a; max-width:65ch; }
+.order-screen .pickup-assignment form + p { margin-top:12px; }
+.order-screen .pickup-assignment .btn { justify-self:start; min-height:44px; min-width:112px; }
+.order-screen .order-overview:has(> .order-overview-grid) { padding:0; background:transparent; border:0; margin:24px 0; }
+.order-screen .order-overview-grid { grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:24px; align-items:start; }
+.order-screen .order-overview-grid-single { grid-template-columns:1fr; }
+.order-screen .order-details-card, .order-screen .order-quote-column { min-width:0; padding:24px; border:1px solid #dbe4f0; border-radius:14px; background:#fff; }
+.pos-app main.container .order-screen .order-details-card > h2, .pos-app main.container .order-screen .order-quote-column .order-price-panel > h3 { font-size:18px!important; line-height:1.4; font-weight:650!important; margin:0 0 20px!important; }
+.order-screen .order-quote-column .order-price-panel { border:0; border-radius:0; padding:0; background:transparent; }
+.order-screen .order-quote-column .order-price-panel + .order-price-panel { padding-top:24px; margin-top:24px; border-top:1px solid #e4eaf1; }
+.order-screen .order-fact-group + .order-fact-group { margin-top:24px; }
+.order-screen .order-fact-group h3 { font-size:12px; font-weight:650; color:#52647a; margin:0 0 4px; }
+.order-screen .order-fact-group dl { margin:0; }
+.order-screen .order-overview-grid dl > div { display:grid; grid-template-columns:minmax(120px,.8fr) minmax(0,1.2fr); gap:16px; padding:12px 0; font-size:13px; line-height:1.6; align-items:start; }
+.order-screen .order-overview-grid dd { font-weight:500; text-align:left; }
+.order-screen .order-quote-column .order-price-panel dd { text-align:right; font-variant-numeric:tabular-nums; }
+
+
+.order-screen .order-quote-column > [role=alert] { margin:20px 0 12px; padding:12px 14px; font-size:13px; line-height:1.6; border:1px solid #eddfbd; border-radius:8px; background:#fffaf0; color:#75531e; }
+.order-screen .order-overview-grid .hint { margin:12px 0 0; line-height:1.6; }
+.order-screen .order-details-card > a { display:inline-flex; align-items:center; min-height:44px; font-size:13px; margin-top:8px; }
+.order-screen .order-details-card details { border-top:1px solid #e4eaf1; margin-top:20px; padding-top:8px; }
+.order-screen .order-details-card details form { display:grid; gap:12px; padding-block:12px; }
+.order-screen .order-details-card details select { width:100%; min-width:0; min-height:44px; }
+.order-screen :is(button, .btn, .cbtn, summary) { touch-action:manipulation; -webkit-tap-highlight-color:transparent; user-select:none; }
+.order-screen :is(button, select, input, textarea, summary, a):focus-visible { outline:3px solid #6487d7; outline-offset:3px; }
+.order-screen .order-action-dialog { max-height:85dvh; overscroll-behavior:contain; }
+@media (hover:hover) and (pointer:fine) {
+ .order-screen :is(.btn,.cbtn):not(:disabled) { transition:transform 120ms var(--ease-out, cubic-bezier(.23,1,.32,1)); }
+ .order-screen :is(.btn,.cbtn):not(:disabled):active { transform:scale(.98); }
+}
+@media (pointer:coarse) {
+ .order-screen :is(input,select,textarea) { font-size:16px; }
+ .order-screen :is(.btn,.cbtn):not(:disabled):active { opacity:.8; }
+}
+@media (max-width:1000px) {
+ .order-screen .order-overview-grid { grid-template-columns:1fr; }
+ .pos-app main.container .order-screen .pickup-dispatch-card { grid-template-columns:1fr; gap:24px; }
+ .order-screen .pickup-assignment { border-left:0; padding:24px 0 0; border-top:1px solid #e4eaf1; }
+}
+@media (max-width:600px) {
+ .order-screen .order-header-actions { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+ .order-screen .order-header-actions .cbtn { width:100%; padding-inline:10px; font-size:12px; }
+ .order-screen .order-action-unavailable { max-width:none; }
+ .pos-app main.container .order-screen .pickup-dispatch-card, .order-screen .order-details-card, .order-screen .order-quote-column { padding:20px; }
+ .order-screen .order-overview-grid { gap:16px; }
+ .order-screen .order-overview-grid dl > div { grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); gap:12px; }
+ .order-screen .pickup-assignment .btn { width:100%; }
+}
+@media (prefers-reduced-motion:reduce) {
+ .order-screen :is(.btn,.cbtn) { transition:none!important; transform:none!important; }
+}
+
+.order-screen .order-quote-column .quote-billing { grid-template-columns:1fr; gap:4px; }
+.order-screen .order-quote-column .quote-billing dd { text-align:left; font-weight:400; color:#52647a; }
+
+/* Order handoff evidence, scoped to the employee order detail page. */
+.order-photo-section { margin: 24px 0; }
+.order-photo-section > h2 { margin-bottom: 6px; }
+.order-photo-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 14px; }
+.order-photo-stage { min-width: 0; padding: 20px; border: 1px solid var(--ink-100, #dfe5ed); border-radius: 12px; background: var(--paper, #fff); }
+.order-photo-stage h3 { margin: 0 0 6px; }
+.order-photo-link { display: block; margin-top: 14px; overflow: hidden; border: 1px solid var(--ink-100, #dfe5ed); border-radius: 8px; text-decoration: none; }
+.order-photo-link img { display: block; width: 100%; height: 210px; object-fit: contain; background: #f3f5f8; }
+.order-photo-link > span { display: block; padding: 10px 12px; font-size: 13px; }
+.order-photo-link:focus-visible { outline: 3px solid #2164d8; outline-offset: 3px; }
+.order-photo-empty { padding: 22px 0; color: var(--ink-500, #64748b); }
+@media (max-width: 640px) { .order-photo-gallery { grid-template-columns: 1fr; } }

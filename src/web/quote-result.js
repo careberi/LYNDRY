@@ -182,6 +182,7 @@ function priced(quote, address) {
 // round. Everything that decides the answer has already happened.
 function render({ quote, address, error, fields, interest }) {
   if (error === 'not_found') return notFound(address);
+  if (error === 'unavailable_time') return shell('<p class="eyebrow">Pickup time unavailable</p><h2>We cannot offer this pickup time.</h2><p>Pickup, laundromat opening hours and next-day collection must fit the selected schedule. This does not mean your address is outside our service area.</p><p><a href="/account/book">Choose another pickup time</a></p>');
   if (error === 'unavailable_area') return serviceArea({ address, fields, interest });
   if (error) return unavailable();
   if (!quote) return '';

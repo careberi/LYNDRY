@@ -80,7 +80,7 @@ function fixture(options={}) {
     createOrder:async received=>{calls.push(['create',received]);remote={orderId:123,orderNumber:trip.externalId,restaurant:{address:'1 Home St, Fair Lawn, NJ, 07410'},customer:{address:'2 Shop St, Paterson, NJ, 07514'},activityLog:{expectedDeliveryDate:received.dropoffDeadlineAt.slice(0,10),expectedPickupTime:'20:00:00',expectedDeliveryTime:received.dropoffDeadlineAt.slice(11,19)},orderStatus:{orderState:'NOT_ASSIGNED'}};if(options.autoAssigned)remote.thirdPartyAssignedAnytime=true;if(options.createTimeout)throw Error('timeout');return {id:'123'};},
     assign:async(id,args)=>{calls.push(['estimate',id]);if(options.priceRefused)return {ok:false};if(options.estimateError)throw Error('quote unavailable');await args.beforeAssign();calls.push(['assign',id,args]);if(options.assignTimeout)throw Error('timeout');return {ok:true,status:'REQUESTED'};},
     status:async()=>{calls.push(['status']);if(options.statusError)throw Error('unavailable');return options.status||{status:'STARTED',courier:{name:'Alex'},trackingUrl:'https://example.com/track'};}};
-  const validate=async plan=>{checks++;return options.block || (options.changedAt&&checks>=options.changedAt)?{ok:false,reason:'Card or order no longer eligible'}:{ok:true,canAssign:options.canAssign!==false,trip:{...structuredClone(trip),dropoffDeadlineAt:plan.trip_snapshot?.dropoffDeadlineAt||trip.dropoffDeadlineAt},budgetCents:750,acceptEstimate:options.acceptEstimate};};
+  const validate=async plan=>{checks++;return options.block || (options.changedAt&&checks>=options.changedAt)?{ok:false,reason:'Card or order no longer eligible'}:{ok:true,canAssign:options.canAssign!==false,trip:{...structuredClone(trip),dropoffDeadlineAt:plan.trip_snapshot?.dropoffDeadlineAt||trip.dropoffDeadlineAt},budgetCents:750,inHouseArrivalAt:options.inHouseArrivalAt,acceptEstimate:options.acceptEstimate};};
   const dispatcher=createBookingDispatcher({store,provider,validate,now:()=>time});
   return {...dispatcher,row:()=>row,calls,advance:()=>{time+=61000;},patch:patch=>{row={...row,...patch};},options};
 }
@@ -134,4 +134,8 @@ test('unknown/failed status requires review; accepted request is not assignment 
 test('POS exposes awaiting/assigned/blocked statuses without falsely naming the courier as a driver',()=>{
  assert.equal(label({state:'REQUESTED'}),'Awaiting driver');assert.equal(label({state:'ASSIGNED'}),'Driver assigned');
  const html=card({state:'BLOCKED',dispatch_at:trip.pickupReadyAt,problem:'Card <required>'});assert.match(html,/4:00 PM/);assert.match(html,/Card &lt;required&gt;/);
+});
+
+test('configured LYNDRY arrival does not depend on third party quotes',async()=>{
+ const f=fixture({quoteError:true,inHouseArrivalAt:'2026-09-28T20:25:00Z'});await f.run('p',inhouse);assert.equal(f.row().state,'ASSIGNED');assert.equal(f.row().trip_snapshot.dropoffDeadlineAt,'2026-09-28T20:25:00Z');assert.equal(f.calls.filter(call=>call[0]==='assign').length,0);
 });

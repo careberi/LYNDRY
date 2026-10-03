@@ -19,3 +19,16 @@ test('widget off unless enabled and never embeds server key',()=>{
  const {script}=require('../src/web/google-address');assert.equal(script({enabled:false}),'');
  const html=script({enabled:true,browserKey:'public',serverKey:'secret'});assert.ok(html.includes('gmp-select'));assert.ok(!html.includes('secret'));
 });
+
+test('validation cannot silently truncate a hyphenated house number',async()=>{
+ const r=valid();r.address.addressComponents[0].componentName.text='16';r.address.addressComponents[1].componentName.text='Chandler Drive';
+ const fetchImpl=async()=>({ok:true,json:async()=>({result:r})});
+ assert.equal(await validate('16-50 Chandler Drive, Test Town, NJ 07001',{key:'test',fetchImpl}),null);
+ r.address.addressComponents[0].componentName.text='16-50';
+ assert.equal((await validate('16-50 Chandler Drive, Test Town, NJ 07001',{key:'test',fetchImpl})).street,'16-50 Chandler Drive');
+});
+test('autocomplete keeps the whole selected house number rather than truncated components',()=>{
+ const {streetFromComponents}=require('../src/core/address-street');
+ assert.equal(streetFromComponents('16','Chandler Drive','16-50 Chandler Drive, Test Town, NJ, USA'),'16-50 Chandler Drive');
+ assert.equal(streetFromComponents('16-50','Chandler Drive',''),'16-50 Chandler Drive');
+});

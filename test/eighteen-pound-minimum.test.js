@@ -58,7 +58,7 @@ test('minimum settings use weight, validate bounds and cannot silently restore t
 test('preliminary minimum follows the cheapest 18 lb candidate while saved billing keeps its destination',()=>{
  const dynamic=require('../src/core/dynamic-order-pricing'),view=require('../src/web/weight-pricing');
  const candidates=[{id:'near',wholesaleCentsPerLb:100,pickupCents:100,returnCents:100},
-  {id:'far',wholesaleCentsPerLb:40,pickupCents:800,returnCents:800}].map(c=>({...c,eligible:true,source:'SIMULATION',expiresAt:'2099-01-01'}));
+  {id:'far',wholesaleCentsPerLb:40,pickupCents:800,returnCents:800}].map(c=>({...c,eligible:true,source:'SHIPDAY',expiresAt:'2099-01-01'}));
  const at=weight=>dynamic.quoteCandidates(candidates,{policy,category:'SUBSCRIPTION',estimatedWeightLb:weight});
  const s=at(50),savedMinimum=s.minimumTotalCents;
  assert.equal(s.partnerId,'far');assert.equal(at(18).partnerId,'near');

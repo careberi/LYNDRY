@@ -103,3 +103,15 @@ test('scheduled assignment excludes early arrivals, unsupported couriers, fees a
  assert.equal(good.calls[0].url,'https://api.shipday.com/on-demand/availability');assert.equal(good.calls[0].parsed.pickUpTime,'2026-09-28T20:00:00.000Z');assert.equal(good.calls[1].parsed.estimateReference,'q');
  const changed=fixture([[offer]],{allowWrites:true});await assert.rejects(changed.client.assign(123,{maxFeeCents:750,pickupReadyAt:offer.pickupTime,beforeAssign:async()=>{throw Error('Payment changed');}}),/Payment changed/);assert.equal(changed.calls.length,1);
 });
+
+
+test('a courier timing rejection cannot silently raise the quote to the remaining courier',async()=>{
+ const f=fixture([[{name:'Uber',error:true,errorDescription:'pickup_ready_too_early, The pickup ready time cannot be in the past.'},{id:'1',name:'DoorDash',error:false,fee:7.50}]]);
+ const q=await f.client.quote({from:endpoint,to:endpoint,pickupReadyAt:'2030-01-01T12:00:00Z'});
+ assert.equal(q.ok,false);assert.equal(q.reason,'pickup_time_rejected');
+});
+test('assignment also refuses a timing rejection without requesting the more expensive courier',async()=>{
+ const f=fixture([[{name:'Uber',error:true,errorDescription:'pickup_ready_too_early'},{id:'1',name:'DoorDash',error:false,fee:7.50,pickupTime:'2030-01-01T12:00:00Z',deliveryTime:'2030-01-01T12:20:00Z'}]],{allowWrites:true});
+ const q=await f.client.assign(123,{maxFeeCents:750,pickupReadyAt:'2030-01-01T12:00:00Z',trip});
+ assert.equal(q.ok,false);assert.equal(q.reason,'pickup_time_rejected');assert.equal(f.calls.length,1);
+});

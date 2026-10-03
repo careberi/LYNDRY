@@ -42,7 +42,8 @@ function slider(weight = 30, categories = null) {
     <p id="weight-help" class="sr-only">Choose from 1 to 50 lb per order. Both tiers update as you adjust the weight.</p>
   </div>`;
 }
-function estimate(p, {heading = false} = {}) {
+function estimate(p, {heading = false, action = true, headingCategory = null} = {}) {
+  const displayCategory=headingCategory||p.category;
   const weight = p.estimatedWeightLb || 30, prices = schedule(p), total = Number.isInteger(weight) ? prices[weight-1] : model.total(p, weight);
   const minimumTotal = minimum(p);
   // Public comparison can choose among eligible destinations. A saved quote
@@ -53,23 +54,24 @@ function estimate(p, {heading = false} = {}) {
   const rate = atMinimum ? minimumTotal / included : total / weight;
   const caption = atMinimum ? `Minimum-order rate · up to ${included} lb` : `Average price at ${weight} lb`;
   return `<div class="weight-tier" data-weight-tier data-category="${e(p.category)}" data-weight-totals="${e(JSON.stringify(prices))}" data-minimum-total="${minimumTotal}" data-minimum-weight="${included}">
-    ${heading ? `<header class="weight-tier-heading"><h2>${names[p.category]}</h2><p>${p.category==='SUBSCRIPTION'?'Regular pickups. Change or cancel anytime.':'A pickup whenever you need it.'}</p></header>` : ''}
+    ${heading ? `<header class="weight-tier-heading"><h2>${names[displayCategory]}</h2><p>${displayCategory==='SUBSCRIPTION'?'Regular pickups. Change or cancel anytime.':'A pickup whenever you need it.'}</p></header>` : ''}
     <div class="weight-price-block"><p class="weight-rate"><strong data-quote-rate>${money(rate)}</strong><span>/ lb</span></p>
     <p class="weight-rate-caption" data-quote-rate-caption>${e(caption)}</p></div>
     <p class="weight-minimum"><strong>${money(minimumTotal)} minimum total</strong>${included>0?`<span>Includes up to ${included} lb</span>`:''}</p>
     <dl class="weight-total"><div><dt>Estimated total <span>for <span data-selected-weight>${e(weight)}</span> lb</span></dt><dd data-quote-total>${money(total)}</dd></div></dl>
-    ${heading ? `<a class="btn btn-full weight-book ${p.category==='SUBSCRIPTION'?'btn-primary':'btn-outline'}" data-weight-book href="/account/login?next=${encodeURIComponent('/account/book?estimated_weight_lb='+weight+'&plan='+p.category)}">Choose ${p.category==='SUBSCRIPTION'?'subscription':'one-time'}</a>` : '<p class="weight-included">Pickup, return and processing included.</p>'}
+    ${heading && action ? `<a class="btn btn-full weight-book ${p.category==='SUBSCRIPTION'?'btn-primary':'btn-outline'}" data-weight-book href="/account/login?next=${encodeURIComponent('/account/book?estimated_weight_lb='+weight+'&plan='+p.category)}">Choose ${p.category==='SUBSCRIPTION'?'subscription':'one-time'}</a>` : '<p class="weight-included">Pickup, return and processing included.</p>'}
     <p class="weight-floor">From ${money(prices[49]/50)}/lb at 50 lb</p>
   </div>`;
 }
 function publicQuote(quote, address) {
   const sub = quote.categories.SUBSCRIPTION, one = quote.categories.ONE_TIME;
   return `<section class="container weight-quote" data-weight-pricing>
-    <header class="weight-quote-heading"><h1>Your laundry. One price.</h1><p>Wash, dry &amp; fold. Pickup, return and processing included.</p></header>
+    <header class="weight-quote-heading"><h1>Compare pricing methods.</h1><p>Wash, dry &amp; fold. Pickup, return and processing included.</p></header>
     <div class="weight-address"><p>${e(address)}</p><a href="/pricing">Change address</a></div>
     ${slider(sub.estimatedWeightLb,quote.categories)}
-    <div class="weight-tier-grid"><section class="weight-plan">${estimate(sub,{heading:true})}</section><section class="weight-plan">${estimate(one,{heading:true})}</section></div>
-    <div class="weight-quote-notes"><p>Final weight determines your bill. Confirm your price and pickup time when booking.</p>
+    <div class="weight-tier-grid"><section class="weight-plan">${estimate(sub,{heading:true,action:false})}</section><section class="weight-plan">${estimate(one,{heading:true,action:false})}</section></div>
+    <a href="/account/login?next=%2Faccount%2Fbook" class="btn btn-primary btn-lg btn-full">Book a pickup</a>
+    <div class="weight-quote-notes"><p>These are preliminary estimates for your address. Choose your pricing method after entering your pickup details. Your final bill is based on the measured weight.</p>
     <details><summary>How the minimum and final price work</summary><div>
       <p>Your minimum covers the weight shown in each tier. The displayed rate stays the same for smaller bags; the minimum total still applies. Above that weight, the displayed rate is the average at your selected weight.</p>
       <p>These are estimates for your address. Pickup date, time and availability may change pricing. After pickup, we recalculate your total from the measured weight using your confirmed quote. Each subscription pickup gets its own quote.</p>

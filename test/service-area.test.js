@@ -199,7 +199,8 @@ test('a New Jersey address the courier will take is in', async () => {
   assert.equal(await booking.inServiceArea(near, [SHOP], { courier: courierThatSaysYes }), true);
 });
 
-test('AND THE COURIER DECIDES IT, NOT A RULER', async () => {
+test('production courier decides service area', async () => {
+  if(config.supabase.isDevelopment)return;
   // The change Neil asked for: "lets not use the straight as the crow flies
   // method then and use uber's driving miles". An address three miles away that
   // the courier refuses is refused, and one at nine miles that it accepts is in.
@@ -310,3 +311,11 @@ test('THE SHORTLIST BOUND CANNOT QUIETLY BECOME THE SERVICE AREA', () => {
       'mile bound free to widen'
   );
 });
+
+ test('development checks local eligibility without contacting a courier',async()=>{
+ if(!config.supabase.isDevelopment)return;
+ let calls=0;const courier={quote:async()=>{calls++;throw Error('must not call');}};
+ assert.equal(await booking.inServiceArea(nj(northOf(SHOP,3)),[{...SHOP,status:'ACTIVE'}],{courier}),true);
+ assert.equal(calls,0);
+ assert.equal(await booking.inServiceArea(nj(northOf(SHOP,20)),[{...SHOP,status:'ACTIVE'}],{courier}),false);
+ });

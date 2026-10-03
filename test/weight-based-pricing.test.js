@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const model=require('../src/core/weight-based-pricing'),economics=require('../src/core/pricing-economics'),dynamic=require('../src/core/dynamic-order-pricing'),pricing=require('../src/core/pricing');
 const policy={pricingMethod:model.METHOD,minimumTotalCents:2800,marginBps:{SUBSCRIPTION:1000,ONE_TIME:2000,WHOLESALE:500},processingBps:290,processingFixedCents:30,referenceWeightLb:33,operationalFeeBps:2500,otherCostCents:0,otherCostPerLbCents:0};
-const shop={id:'private-shop',eligible:true,wholesaleCentsPerLb:70,customerBaseCentsPerLb:100,pickupCents:699,returnCents:699,source:'SIMULATION',expiresAt:'2099-01-01'};
+const shop={id:'private-shop',eligible:true,wholesaleCentsPerLb:70,customerBaseCentsPerLb:100,pickupCents:699,returnCents:699,source:'SHIPDAY',expiresAt:'2099-01-01'};
 const quote=(category='SUBSCRIPTION',p=policy,weight=20)=>dynamic.quoteCandidates([shop],{policy:p,category,estimatedWeightLb:weight});
 test('all 1–50 lb tiers and fractional weights cover their targets after rounded processing',()=>{
  for(const category of economics.CATEGORIES) for(const cardHold of [undefined,{mode:'FIXED',fixedCents:2500},{mode:'MINIMUM'},{mode:'MAXIMUM'}]) for(const transport of [0,1398,9000]) {
@@ -70,15 +70,15 @@ test('booking retains the entered weight through plan selection, back navigation
  const express=require('express'),auth=require('../src/core/customer-auth'),checkout=require('../src/core/dev-checkout'),booking=require('../src/core/booking'),settings=require('../src/core/settings');
  const customer={id:'fixture',name:'Test',phone:'+12015550100',address_line1:'1 Test Street',city:'Lodi',postal_code:'07644',preferences:{water_temp:'cold',fabric_softener:'standard',special_instructions:'Front door'}};
  t.mock.method(auth,'attachCustomer',async req=>{req.customer=customer;});t.mock.method(settings,'opensOn',async()=>null);t.mock.method(booking,'hasPreferences',()=>true);
- t.mock.method(checkout,'estimateAddress',async(c,w)=>{const categories={SUBSCRIPTION:quote('SUBSCRIPTION',policy,Number(w)),ONE_TIME:quote('ONE_TIME',policy,Number(w))};return {snapshot:categories.ONE_TIME,categories};});
+ t.mock.method(checkout,'previewQuote',async(c,form)=>{const categories={SUBSCRIPTION:quote('SUBSCRIPTION',policy,Number(form.estimated_weight_lb)),ONE_TIME:quote('ONE_TIME',policy,Number(form.estimated_weight_lb))};return {snapshot:categories.ONE_TIME,categories};});
  const app=express();app.use(express.urlencoded({extended:false}));app.use(require('../src/routes/account').router);
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));t.after(()=>server.close());
  const base='http://127.0.0.1:'+server.address().port;
- let html=await(await fetch(base+'/account/book?address_confirmed=yes&estimated_weight_lb=37')).text();
+ let html=await(await fetch(base+'/account/book?address_confirmed=yes&pickup_date=2030-01-01&pickup_time=13%3A42&estimated_weight_lb=37')).text();
  assert.match(html,/data-weight-pricing/);assert.match(html,/name="estimated_weight_lb"[^>]*value="37"/);
  assert.match(html,/Average price at 37 lb/);assert.ok(html.indexOf('value="SUBSCRIPTION"')<html.indexOf('value="ONE_TIME"'));
  assert.equal((html.match(/name="estimated_weight_lb"/g)||[]).length,1);
- html=await(await fetch(base+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({step:'repeat',address_confirmed:'yes',estimated_weight_lb:'37',plan:'ONE_TIME'})})).text();
+ html=await(await fetch(base+'/account/book',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({step:'repeat',back:'when',address_confirmed:'yes',estimated_weight_lb:'37',plan:'ONE_TIME',pickup_date:'2030-01-01',pickup_time:'13:42'})})).text();
  assert.match(html,/name="estimated_weight_lb" value="37"/);assert.match(html,/Schedule your pickup/);
 });
 test('admin model settings validate the minimum and other cost allowances',()=>{
@@ -86,4 +86,9 @@ test('admin model settings validate the minimum and other cost allowances',()=>{
  const next=settings.updatedPolicy(policy,form,'test');assert.equal(next.minimumTotalCents,2800);assert.equal(next.otherCostCents,120);assert.equal(next.otherCostPerLbCents,5);
  assert.throws(()=>settings.updatedPolicy(policy,{...form,minimum_total:'-2'},'test'));
  assert.throws(()=>settings.updatedPolicy(policy,{...form,other_cost:'1.234'},'test'));
+});
+
+test('public quote offers one booking action and defers plan selection',()=>{
+ const html=require('../src/web/weight-pricing').publicQuote({categories:{ONE_TIME:quote('ONE_TIME',policy,30),SUBSCRIPTION:quote('SUBSCRIPTION',policy,30)},indicative:true},'1 Test Street');
+   assert.doesNotMatch(html,/Choose subscription|Choose one-time|pickup-quote-form|name="pickup_date"|name="pickup_time"/);assert.equal((html.match(/>Book a pickup</g)||[]).length,1);
 });

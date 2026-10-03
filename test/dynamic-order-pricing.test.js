@@ -5,7 +5,7 @@ const { quoteCandidates, assessWeight } = require('../src/core/dynamic-order-pri
 const policy = { marginBps: { ONE_TIME: 2000, SUBSCRIPTION: 1000, WHOLESALE: 500 },
   processingBps: 290, processingFixedCents: 30, operationalFeeBps: 2500, referenceWeightLb: 33 };
 const candidate = { id: 'one', eligible: true, wholesaleCentsPerLb: 100,
-  pickupCents: 899, returnCents: 899, source: 'SIMULATION', expiresAt: '2030-01-01T00:00:00Z' };
+  pickupCents: 899, returnCents: 899, source: 'SHIPDAY', expiresAt: '2030-01-01T00:00:00Z' };
 function quote(category = 'ONE_TIME') { return quoteCandidates([candidate], { policy, category }); }
 test('compares the whole customer total; cheaper washing can lose on courier costs', () => {
   const result = quoteCandidates([candidate, { ...candidate, id: 'two', wholesaleCentsPerLb: 90, pickupCents: 1500, returnCents: 1500 }], { policy, category: 'ONE_TIME' });
@@ -19,6 +19,7 @@ test('category targets change pricing and snapshots survive subsequent policy ed
   assert.equal(one.policy.marginBps.ONE_TIME, original); policy.marginBps.ONE_TIME = original;
 });
 test('unpriced or expired courier costs cannot silently win or disappear from comparison', () => {
+  for(const source of ['IN_HOUSE','SIMULATION',undefined])assert.throws(()=>quoteCandidates([{...candidate,source}],{policy,category:'ONE_TIME'}),/Shipday/);
   assert.throws(() => quoteCandidates([{ ...candidate, returnCents: null }], { policy, category: 'ONE_TIME' }));
   assert.throws(() => quoteCandidates([{ ...candidate, expiresAt: '2000-01-01' }], { policy, category: 'ONE_TIME' }));
 });

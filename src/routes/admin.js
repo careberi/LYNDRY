@@ -1819,7 +1819,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     if (error) throw error;
 
     const all = data || [];
-    const dispatchPlans = shipdayWorkspace && all.length ? await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('order_id,leg,state,assigned_name,problem,simulation').in('order_id',all.map(o=>o.id))) : [];
+    const dispatchPlans = shipdayWorkspace && all.length ? await require('../core/shipday-dispatch-runtime').result(db.from('shipday_dispatch_plans').select('order_id,leg,state,assigned_name,problem,simulation,provider_status,provider_checked_at').in('order_id',all.map(o=>o.id))) : [];
     const pickupPlans = new Map(dispatchPlans.filter(p=>p.leg==='TO_PARTNER').map(p=>[p.order_id,p]));
     const returnPlans = new Map(dispatchPlans.filter(p=>p.leg==='TO_CUSTOMER').map(p=>[p.order_id,p]));
     const now = today();
@@ -1876,9 +1876,12 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
     // "active". The old board had three buckets and AT_PARTNER matched none
     // of them, so a 45 lb order sat invisible at a laundromat. Every status
     // belongs to exactly one group below, which is what stops that recurring.
+    // Provider collection changes the board projection, not receipt, weights or billing.
+    const observedPickup = o => shipdayWorkspace && orders.AWAITING_COLLECTION.includes(o.status) &&
+      require('../core/pickup-observation').progress(pickupPlans.get(o.id)) === 'COLLECTED';
     const inGroup = {
-      collect: (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= now,
-      upcoming: (o) => orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date > now,
+      collect: (o) => !observedPickup(o) && orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date <= now,
+      upcoming: (o) => !observedPickup(o) && orders.AWAITING_COLLECTION.includes(o.status) && o.pickup_date > now,
       // COLLECTED IS NOT THE SAME AS LOADED, and the board used to say it was.
       // IN_PROCESS starts the moment the driver taps "I have the bags" - he is
       // still standing at the door with them, tagging, weighing and clipping.
@@ -1887,7 +1890,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       //
       // van_confirmed_at is the last doorstep task: the last bag actually in
       // the van. That is when it is on the van, and not before.
-      doorstep: (o) => o.status === 'IN_PROCESS' && !o.van_confirmed_at,
+      doorstep: (o) => observedPickup(o) || (o.status === 'IN_PROCESS' && !o.van_confirmed_at),
       van: (o) => o.status === 'IN_PROCESS' && Boolean(o.van_confirmed_at),
       partner: (o) => o.status === 'AT_PARTNER',
       ready: (o) => o.status === 'READY',
@@ -2004,8 +2007,8 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         // cell that reads as a rendering fault.
         escapeHtml(booking.requestedPickupLabel(o) || 'Time not selected'),
 
-        statusBadge(o.status, o),
-        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id)), require('../web/pickup-dispatch').returnSummary(returnPlans.get(o.id))]:[]),
+        observedPickup(o) ? '<span class="badge">Picked up</span>' : statusBadge(o.status, o),
+        ...(shipdayWorkspace?[require('../web/pickup-dispatch').summary(pickupPlans.get(o.id),o), require('../web/pickup-dispatch').returnSummary(returnPlans.get(o.id))]:[]),
         clock(o),
         o.weight_lb ? `${o.weight_lb} lb` : '—',
 
@@ -2239,7 +2242,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
       ${board('Ready', 'Ready for pickup at laundromat', g.ready)}
       ${board('Customer pickups', 'Awaiting pickup', g.collect)}
       ${board(
-        'At the door',
+        shipdayWorkspace ? 'Customer pickup' : 'At the door',
         'Pickup in progress',
         g.doorstep
       )}
@@ -3263,7 +3266,7 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
     const deliverySync = shipdayWorkspace ? await require('../core/shipday-order-sync-runtime').rows(order.id) : [];
     let deliveryPlans=[];
     if(shipdayWorkspace){
-      const result=await db.from('shipday_dispatch_plans').select('leg,shipday_order_id').eq('order_id',order.id);
+      const result=await db.from('shipday_dispatch_plans').select('leg,shipday_order_id,state').eq('order_id',order.id);
       if(result.error)throw result.error;
       deliveryPlans=result.data||[];
     }
@@ -3285,7 +3288,10 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       const pickupRuntime=require('../core/shipday-booking-runtime');
       let pickupDrivers=[],driverProblem='';
       if(can.override)try{pickupDrivers=await pickupRuntime.provider.drivers();}catch{driverProblem='Shipday driver list is unavailable. Reload to try again.';}
-      dispatchHtml=require('../web/pickup-dispatch').card(pickupPlan,{order,drivers:pickupDrivers,canAssign:can.override,enabled:pickupRuntime.enabled,driverProblem});
+      const eligibilityProblem = !c.default_payment_method_id ? 'Save a payment method before dispatch.'
+        : order.payment_status !== 'WAIVED' && !billing.holdIsFresh(order) ? 'A current payment authorization is required before dispatch.'
+        : !order.dev_quote_id || !['SHIPDAY','IN_HOUSE'].includes(order.pricing_snapshot?.source) ? 'A confirmed Shipday-backed quote and laundromat are required.' : '';
+      dispatchHtml=require('../web/pickup-dispatch').card(pickupPlan,{order,drivers:pickupDrivers,canAssign:can.override,enabled:pickupRuntime.enabled,driverProblem,eligibilityProblem});
     }
     if (shipdayWorkspace && can.override && order.status === 'READY') {
       const dispatchRuntime = require('../core/shipday-dispatch-runtime');
@@ -3295,7 +3301,13 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       ]);
       dispatchHtml = require('./shipday-assignments').returnDispatchCard({order,plan:returnPlan,drivers:dispatchDrivers,simulation:dispatchRuntime.simulation});
     }
+    let photosHtml = '';
+    if(shipdayWorkspace && can.customers) {
+      const groups = await require('../core/order-photos-runtime').gallery(order.order_number);
+      photosHtml = require('../web/order-photos').render(order.order_number,groups);
+    }
     const body = orderConsoleBody({
+      photosHtml,
       shipdayWorkspace,
       editHtml:shipdayWorkspace&&can.override&&order.status==='REQUESTED'&&!order.partner_id&&order.payment_status!=='PAID'?require('../web/order-details-edit').editor(order,c).replace('<details ', '<details open '):'',
       cancellationHtml:shipdayWorkspace && can.override && orders.isCancellable(order.status)?cancelCard(order,can.override,true):'',
@@ -4094,14 +4106,19 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
              value="${v('pickup_date')}" style="width:100%;margin-bottom:18px;">
 
       <label class="field-label" for="pickup_time">What time did they ask for?</label>
-      <input class="field" id="pickup_time" name="pickup_time" type="time"
+      <input class="field" id="pickup_time" name="pickup_time" type="time" ${require('../core/dev-checkout').enabled ? 'required' : ''}
              value="${v('pickup_time')}" style="width:100%;margin-bottom:6px;">
       <p style="font-size:13px;color:var(--ink-500);margin:0 0 18px;">
-        Optional. They get the window that covers whatever time they say, and
+        ${require('../core/dev-checkout').enabled
+          ? 'Choose an exact pickup time. We check laundromat availability before showing the price.'
+          : `Optional. They get the window that covers whatever time they say, and
         leaving it blank means the first window of the working day rather than
-        the crack of dawn. Windows: ${escapeHtml(booking.listWindows())}.
+        the crack of dawn. Windows: ${escapeHtml(booking.listWindows())}.`}
       </p>
 
+      ${require('../core/dev-checkout').enabled ? `<label class="field-label" for="estimated_weight_lb">Estimated bag weight (1 to 50 lb)</label>
+      <input class="field" id="estimated_weight_lb" name="estimated_weight_lb" type="number" min="1" max="50" step="1" required value="${escapeHtml(String(values.estimated_weight_lb ?? 30))}">
+      <p>One-time pickup. Review the inclusive price before booking. A saved card is required.</p>` : ''}
       <label class="field-label" for="notes">Anything they mentioned</label>
       <input class="field" id="notes" name="notes" type="text" maxlength="500"
              value="${v('notes')}" placeholder="two bags, one is bedding"
@@ -4125,7 +4142,7 @@ function phoneOrderForm({ customer, values = {}, problem = null }) {
         </span>
       </label>
 
-      <button class="btn btn-primary btn-lg" type="submit">Book pickup</button>
+      <button class="btn btn-primary btn-lg" type="submit">${require('../core/dev-checkout').enabled ? 'Review price' : 'Book pickup'}</button>
       <a class="btn btn-ghost btn-lg" href="/ops/customers/${customer.id}">Cancel</a>
     </form>`;
 }
@@ -4189,11 +4206,52 @@ router.post('/ops/customers/:id/order', guard, may('customers.view'), async (req
         })
       );
 
+    let devQuoteId = null;
+    const checkout = require('../core/dev-checkout');
+    if (checkout.enabled) {
+      if (req.get('origin') !== req.protocol + '://' + req.get('host')) {
+        return res.status(403).type('html').send('Open booking in the POS and try again.');
+      }
+      if (form.back) return reshow(null);
+      if (form.plan && form.plan !== 'ONE_TIME') return reshow('Use their existing subscription controls for a subscription pickup.');
+      try {
+        if (!form.dev_quote_id || form.price_consent !== 'yes') {
+          const quote = await checkout.createQuote(customer, { ...form, plan: 'ONE_TIME' });
+          const carried = ['pickup_date', 'pickup_time', 'estimated_weight_lb', 'notes', 'silent']
+            .filter(key => form[key] != null)
+            .map(key => `<input type="hidden" name="${key}" value="${escapeHtml(String(form[key]))}">`).join('');
+          const review = require('../web/booking-price').review(quote, carried)
+            .replaceAll('action="/account/book"', `action="/ops/customers/${customer.id}/order"`);
+          return res.type('html').send(adminPage({ terminal: true, title: 'Review pickup price',
+            active: '/ops/customers', body: review, user: req.opsUser }));
+        }
+        const candidate = await checkout.read(form.dev_quote_id, customer.id);
+        const expectedCategory = customer.pricing_category === 'WHOLESALE' ? 'WHOLESALE' : 'ONE_TIME';
+        if (candidate.snapshot.category !== expectedCategory) {
+          return reshow('Review a current one-time quote for this customer before booking.');
+        }
+        const approved = await checkout.approve(form.dev_quote_id, customer);
+        if (approved.order_id) {
+          const { data: previous, error } = await db.from('orders').select('order_number').eq('id', approved.order_id).single();
+          if (error) throw error;
+          return res.redirect(303, `/ops/orders/${previous.order_number}`);
+        }
+        if (!customer.default_payment_method_id) {
+          return reshow('Price reviewed, but no pickup has been booked. Save a card before booking, then review the current price again.');
+        }
+        devQuoteId = approved.id;
+      } catch (error) {
+        return reshow(require('../web/customer-copy').customerText(error.message,
+          'We could not verify the pickup price. Check the date and time or try again.'));
+      }
+    }
+
     // THE ONE DOOR. Every rule about whether this pickup can happen - the
     // closed sign, the opening date, the county, the wash preferences, the
     // windows, a day already booked - is inside here and is the same code the
     // AI and the website hit. Nothing above re-decides any of it.
     const result = await booking.bookPickup(customer, {
+      devQuoteId,
       pickupDate: String(form.pickup_date || ''),
       pickupTime: String(form.pickup_time || ''),
       notes: String(form.notes || '').trim().slice(0, 500) || null,
@@ -4557,6 +4615,22 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
         </div>
 
         <div class="card card-xl" style="padding:28px;">
+          ${sectionHeading('Wash', 'Preferences')}<table class="customer-details-table"><tbody>
+          ${detail('Temperature', escapeHtml(prefs.water_temp || 'COLD'))}
+          ${detail('Detergent', escapeHtml((prefs.detergent || 'STANDARD').replace(/_/g, ' ')))}
+          ${detail('Fabric softener', wash.isValid('fabric_softener', prefs.fabric_softener) ? wash.choiceFor('fabric_softener', prefs.fabric_softener).label : 'Not set')}
+          ${detail('Usual pickup', escapeHtml((prefs.default_pickup_method || 'LEAVE_OUTSIDE').replace(/_/g, ' ').toLowerCase()))}
+          ${
+            prefs.special_instructions
+              ? detail('Instructions', escapeHtml(prefs.special_instructions))
+              : ''
+          }
+        </tbody></table></div>
+
+      </div>
+
+      <div class="customer-recurring-section" style="margin-bottom:44px;">
+        <div class="card card-xl" style="padding:28px;">
           ${sectionHeading(
             'Recurring pickups',
             schedules.filter((sc) => sc.status === 'ACTIVE').length
@@ -4607,18 +4681,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           mayBook: roles.can(req.opsUser, 'orders.override'),
         })}
 
-        <div class="card card-xl" style="padding:28px;">
-          ${sectionHeading('Wash', 'Preferences')}<table class="customer-details-table"><tbody>
-          ${detail('Temperature', escapeHtml(prefs.water_temp || 'COLD'))}
-          ${detail('Detergent', escapeHtml((prefs.detergent || 'STANDARD').replace(/_/g, ' ')))}
-          ${detail('Fabric softener', prefs.fabric_softener ? 'yes' : 'no')}
-          ${detail('Usual pickup', escapeHtml((prefs.default_pickup_method || 'LEAVE_OUTSIDE').replace(/_/g, ' ').toLowerCase()))}
-          ${
-            prefs.special_instructions
-              ? detail('Instructions', escapeHtml(prefs.special_instructions))
-              : ''
-          }
-        </tbody></table></div>
+
 
       </div>
 
@@ -9216,6 +9279,7 @@ function deliveryNote(m) {
 }
 
 require('./message-photos').register(router,{db,guard,may});
+require('./order-photos').register(router,{guard,may});
 
 function bubble(m) {
   const inbound = m.direction === 'INBOUND';
@@ -11543,6 +11607,10 @@ router.get('/ops/partners/new', guard, withIssues, may('partners.manage'), (req,
 
 router.post('/ops/partners', guard, may('partners.manage'), async (req, res, next) => {
   try {
+    if ((req.body || {}).type === 'LAUNDROMAT') {
+      try { partners.hoursFromForm(null, req.body || {}); }
+      catch (error) { return res.redirect(303, `/ops/partners/new?problem=${encodeURIComponent(error.message)}`); }
+    }
     const result = await partners.create(req.body || {});
 
     if (!result.ok) {
@@ -11603,6 +11671,12 @@ router.post('/ops/partners/:id', guard, may('partners.manage'), async (req, res,
     // this handler - which is exactly what happened to the enquiries page.
     if (!UUID.test(req.params.id)) return next();
 
+    if ((req.body || {}).type === 'LAUNDROMAT') {
+      try { partners.hoursFromForm(req.params.id, req.body || {}); }
+      catch (error) {
+        return res.redirect(303, `/ops/partners/${req.params.id}/edit?problem=${encodeURIComponent(error.message)}`);
+      }
+    }
     const result = await partners.update(req.params.id, req.body || {});
 
     if (!result.ok) {

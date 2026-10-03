@@ -1,10 +1,12 @@
 'use strict';
+const {streetFromComponents}=require('../core/address-street');
 function script(settings = {}) {
   if (!settings.enabled) return '';
   // The browser key is public and must have HTTP referrer and API restrictions.
   const key=encodeURIComponent(settings.browserKey);
   return `<script>
   (function(){
+    var streetFromComponents=${streetFromComponents.toString()};
     var form=document.querySelector('.pricing-address-form, [data-customer-address]');
     if(!form)return;
     var street=form.querySelector('[name=street], [name=address_line1]'), town=form.querySelector('[name=town], [name=city]'), zip=form.querySelector('[name=zip], [name=postal_code]');
@@ -45,7 +47,8 @@ function script(settings = {}) {
             if(version!==sequence)return;
             var components=place.addressComponents||[];
             var value=function(type){var c=components.find(function(c){return c.types.includes(type);});return c ? c.longText : '';};
-            street.value=[value('street_number'),value('route')].filter(Boolean).join(' ');
+            var selectedText=event.placePrediction?.mainText?.text || event.placePrediction?.text?.text || widget.value || '';
+            street.value=streetFromComponents(value('street_number'),value('route'),selectedText);
             town.value=value('locality')||value('sublocality_level_1');
             zip.value=value('postal_code');
             var stateComponent=components.find(function(c){return c.types.includes('administrative_area_level_1');});

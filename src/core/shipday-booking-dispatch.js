@@ -27,12 +27,19 @@ function orderResult(remote) {
   if(status==='ALREADY_DELIVERED')return {status:'delivered',courier:remote.assignedCarrier};
   return null;
 }
+// This legacy hold happened before any Shipday write. Only an explicit staff
+// retry may reopen it; ambiguous requests and other review holds stay locked.
+function canRetryUtcBoundaryReview(plan) {
+  return Boolean(plan && plan.booking_dispatch && !plan.simulation && plan.leg === 'TO_PARTNER' &&
+    plan.state === 'REVIEW' && plan.problem === 'This pickup crosses the Shipday UTC scheduling boundary. Dispatch review is required.' &&
+    !plan.shipday_order_id && !plan.assignment_requested_at && !plan.trip_snapshot);
+}
 function createBookingDispatcher({store,provider,validate,now=Date.now}) {
   async function run(id,override=null,actor='booking-dispatch') {
     const before = await store.get(id);
     if (!before?.booking_dispatch || before.simulation || before.leg !== 'TO_PARTNER' ||
         (before.mode==='IN_HOUSE'&&!before.assignment_requested_at&&!override) ||
-        !['PLANNED','BLOCKED','REQUESTED','ASSIGNED'].includes(before.state)) return {ok:false,reason:'Not eligible for automatic pickup dispatch.'};
+        (!['PLANNED','BLOCKED','REQUESTED','ASSIGNED'].includes(before.state) && !(override && canRetryUtcBoundaryReview(before)))) return {ok:false,reason:'Not eligible for automatic pickup dispatch.'};
     if(override&&(!['THIRD_PARTY','IN_HOUSE'].includes(override.mode)||(override.mode==='IN_HOUSE'&&!/^\d+$/.test(String(override.driverId)))))return {ok:false,reason:'Choose a Shipday driver.'};
     if(override?.arrivalLocal&&override.mode!=='IN_HOUSE')return {ok:false,reason:'Manual arrival is only available for an in-house driver.'};
     if(override?.arrivalLocal&&before.shipday_order_id)return {ok:false,reason:'This Shipday job already has an arrival time. Edit its pickup details before changing that time.'};
@@ -69,11 +76,12 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
       return provider.status(plan.shipday_order_id);
     }
     try {
+      if(override && canRetryUtcBoundaryReview(before)) await save({problem:null},'UTC_BOUNDARY_RETRY');
       if(override) {
         const checked=await validate(plan);
-        if(!checked.ok||!checked.canAssign)return stop(before.state,checked.reason||'Payment checks must pass before assignment.');
+        if(!checked.ok||!checked.canAssign)return stop(canRetryUtcBoundaryReview(before)?'BLOCKED':before.state,checked.reason||'Payment checks must pass before assignment.');
         step = 'Shipday driver lookup';
-        if(override.mode==='IN_HOUSE'&&!(await provider.drivers()).some(d=>String(d.id)===String(override.driverId)&&d.isActive&&d.isOnShift))return stop(before.state,'The selected Shipday driver is inactive or offline.');
+        if(override.mode==='IN_HOUSE'&&!(await provider.drivers()).some(d=>String(d.id)===String(override.driverId)&&d.isActive&&d.isOnShift))return stop(canRetryUtcBoundaryReview(before)?'BLOCKED':before.state,'The selected Shipday driver is inactive or offline.');
         if(plan.shipday_order_id) {
           let remote=await remoteOrder();
           if(orderResult(remote))return recordAssignment(orderResult(remote));
@@ -133,6 +141,8 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
           if(override?.arrivalLocal) {
             try {arrival=timing.manualArrival(override.arrivalLocal,checked.trip.pickupReadyAt);}
             catch(error){return stop('BLOCKED',error.message);}
+          } else if(checked.inHouseArrivalAt) {
+            arrival=checked.inHouseArrivalAt;
           } else {
             step='in-house travel estimate';
             try {arrival=timing.inHouseArrival(await provider.quote(checked.trip),checked.trip.pickupReadyAt,checked.loadingBufferMinutes??10);}
@@ -142,7 +152,9 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
           if(checked.acceptEstimate&&!checked.acceptEstimate({deliveryTime:arrival}))return stop('BLOCKED','The estimated arrival does not fit laundromat hours, turnaround and next-day collection. Choose an earlier pickup or review the arrival time.');
           checked.trip.dropoffDeadlineAt=arrival;
         }
-        if(checked.trip.dropoffDeadlineAt.slice(0,10)!==checked.trip.pickupReadyAt.slice(0,10))return stop('REVIEW','This pickup crosses the Shipday UTC scheduling boundary. Dispatch review is required.');
+        // Shipday's dashboard sends the UTC delivery date and independent UTC
+        // clock times. An Eastern evening trip may cross midnight UTC; keep
+        // both instants intact and verify the saved schedule before assignment.
         await save({trip_snapshot:checked.trip,external_reference:checked.trip.externalId},override?.arrivalLocal?'PICKUP_PREPARED_MANUAL_ARRIVAL':'PICKUP_PREPARED');
         const beforeCreate=await validate(plan);
         if(!beforeCreate.ok||!sameTrip(beforeCreate.trip,plan.trip_snapshot))return stop('BLOCKED',beforeCreate.reason||'Booking changed before scheduling. Checking again shortly.');
@@ -206,4 +218,4 @@ function createBookingDispatcher({store,provider,validate,now=Date.now}) {
   }
   return {run};
 }
-module.exports={createBookingDispatcher,assignmentState,matches,orderResult};
+module.exports={createBookingDispatcher,assignmentState,matches,orderResult,canRetryUtcBoundaryReview};

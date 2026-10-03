@@ -2083,7 +2083,7 @@ body.ly-pop-locked { overflow: hidden; }
 
 /* Booking plan comparison shares the public quote cards and body typography. */
 .booking-plan-shell > form > .field-hint { margin: 0 0 24px; max-width: 60ch; }
-.booking-plan-options { display: grid; gap: 24px; margin-top: 12px; }
+.booking-plan-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; margin-top: 12px; }
 .booking-plan-option { min-width: 0; padding: 26px; }
 .booking-plan-option:has(.booking-plan-choice input:checked) { background: #f1f7ee; }
 .booking-plan-choice { align-items: flex-start; min-height: 48px; padding-block: 4px; touch-action: manipulation; }
@@ -2213,3 +2213,28 @@ body.ly-pop-locked { overflow: hidden; }
 /* Keep number entry visually part of the single weight control. */
 .customer-site .weight-number input:is(:focus, :focus-visible) { outline: none; box-shadow: none; }
 .weight-stepper:has(.weight-number input:focus-visible) { outline: 3px solid var(--suds-700); outline-offset: 4px; }
+
+@media (max-width: 700px) { .booking-plan-options { grid-template-columns: 1fr; } }
+
+/* Match the public comparison width; narrow screens retain readable cards. */
+.booking-heading:has(+ .booking-pricing-content) .container, .booking-pricing-content { max-width:960px; }
+@media (min-width:701px) { .booking-pricing-content .booking-plan-options { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+.booking-pricing-content .booking-frequency-options { grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+/* The booking comparison uses the public quote component unchanged. */
+.booking-pricing-content .booking-plan-options.weight-tier-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin:0 0 28px; }
+.booking-weight-option { display:flex; flex-direction:column; }
+.booking-weight-option > .weight-tier { flex:1; }
+.booking-weight-choice { min-height:48px; justify-content:center; margin-top:24px; padding:12px; border:2px solid var(--ink-900); border-radius:10px; font-weight:700; cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.booking-weight-choice:has(input:checked) { background:var(--suds-500); }
+.booking-weight-choice:has(input:focus-visible) { outline:3px solid var(--ink-900); outline-offset:4px; }
+.booking-weight-choice:active { background:var(--suds-100); }
+.booking-pricing-content .booking-frequency { margin:0 0 24px; }
+.booking-pricing-content .booking-frequency-options { grid-template-columns:repeat(2,minmax(0,1fr)); max-width:520px; }
+.booking-pricing-content .booking-plan-shell > form > .field-hint { margin:24px 0; max-width:72ch; }
+.booking-heading:has(+ .booking-pricing-content) .display-2 { font-size:clamp(32px,4.5vw,48px); }
+@media (max-width:640px) { .booking-pricing-content .booking-plan-options.weight-tier-grid { grid-template-columns:1fr; } }
+
+.booking-weight-option .booking-frequency { margin:24px 0 0; }
+.booking-weight-option .booking-weight-choice { margin-top:24px; }

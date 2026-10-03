@@ -1,0 +1,5 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');const{card}=require('../src/web/pickup-dispatch');
+test('new pickup assignment requires a deliberate driver choice',()=>{const html=card(null,{order:{order_number:1},canAssign:true,enabled:true});assert.match(html,/<option value=""[^>]*>Choose a driver/);assert.doesNotMatch(html,/<option value="THIRD_PARTY" selected/);});
+test('ineligible assignment shows its reason and disables Assign',()=>{const html=card(null,{order:{order_number:1},canAssign:true,enabled:true,eligibilityProblem:'Save a payment method before dispatch.'});assert.match(html,/Save a payment method before dispatch/);assert.match(html,/<button[^>]*disabled>Assign/);});
+test('existing confirmed in-house assignment stays selected but offline drivers remain disabled',()=>{const html=card({state:'ASSIGNED',mode:'IN_HOUSE',driver_id:'5',booking_dispatch:true},{order:{order_number:1},canAssign:true,enabled:true,drivers:[{id:'5',name:'LYNDRY',isActive:true,isOnShift:false}]});assert.match(html,/<option value="5" selected disabled/);});

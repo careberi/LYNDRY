@@ -451,9 +451,6 @@ router.post('/account/login/code', async (req, res, next) => {
     // Only when something is actually missing. A customer with an address and
     // wash preferences already lands on their own dashboard, where their
     // pickups are.
-    if (wanted === '/account' && setup.blocking(result.customer)) {
-      return res.redirect(303, '/account/book');
-    }
 
     return res.redirect(303, wanted);
   } catch (err) {
@@ -1039,7 +1036,7 @@ function settingsPage({ title, blurb, form, error = '' }) {
 
 <section class="container booking-content">
   ${error ? banner(escapeHtml(error)) : ''}
-  <div class="${step === 'repeat' ? 'booking-plan-shell' : 'card card-xl'}"${step === 'repeat' ? '' : ' style="padding:30px;"'}>${form}</div>
+  <div class="card card-xl" style="padding:30px;">${form}</div>
   <p style="margin:22px 0 0;"><a href="/account">Back to your account</a></p>
 </section>`;
 }
@@ -1643,7 +1640,9 @@ async function saveAddress(customer, form) {
     city,
     state: 'NJ',
     postal_code: postalCode,
-    ...(verifiedAddress ? { lat: verifiedAddress.lat, lng: verifiedAddress.lng, geocoded_at: new Date().toISOString(), geocode_failed: false } : {}),
+    ...(verifiedAddress ? { lat: verifiedAddress.lat, lng: verifiedAddress.lng, geocoded_at: new Date().toISOString(), geocode_failed: false } :
+      addressLine1 !== customer.address_line1 || city !== customer.city || postalCode !== customer.postal_code
+        ? {lat:null,lng:null,geocoded_at:null,geocode_failed:false} : {}),
     preferences,
   };
 
@@ -1785,7 +1784,9 @@ function withAnswers(customer, given) {
 //
 // A GUEST HAS NO ROW, so a guest walks all four, always, in the same order
 // every time.
-const ORDER = ['address', 'wash', 'repeat', 'when'];
+const ORDER = config.supabase.isDevelopment
+  ? ['address', 'wash', 'when', 'repeat']
+  : ['address', 'wash', 'repeat', 'when'];
 
 function alreadySaved(step, customer) {
   if (step === 'wash') return booking.hasPreferences(customer);
@@ -1828,6 +1829,7 @@ function subscribing(given) {
 }
 
 function unanswered(step, given) {
+  if (config.supabase.isDevelopment && given.plan === 'SUBSCRIPTION' && given.cadence === 'MONTHLY') return 'Choose every week or every 2 weeks.';
   if (step === 'repeat') {
     // NOTHING IS PRESELECTED, so nothing is chosen until they choose it.
     // Neil's rule: they cannot continue until they have picked one-time or a
@@ -1845,6 +1847,11 @@ function unanswered(step, given) {
   }
 
   if (step === 'when') {
+    if (config.supabase.isDevelopment) {
+      if (!given.pickup_date) return 'Please pick a day.';
+      if (!given.pickup_time) return 'Please pick a time.';
+      return null;
+    }
     if (subscribing(given) && !String(given.weekdays || '').trim()) {
       return 'Please choose one pickup day.';
     }
@@ -1869,6 +1876,11 @@ function bookingStep(customer, given) {
   // form is always irrelevant. `regular` is present on every submission from
   // that step, including "no", so an empty string is an answer and undefined
   // is "not asked yet".
+  if (config.supabase.isDevelopment) {
+    if (!given.pickup_date || !given.pickup_time) return 'when';
+    if (unanswered('repeat', given)) return 'repeat';
+    return 'book';
+  }
   if (given.plan === undefined) return 'repeat';
 
   const regular = subscribing(given);
@@ -1883,7 +1895,8 @@ function bookingStep(customer, given) {
 
 // Everything the wizard has been told so far, in the order it was asked for.
 const ANSWERS = [
-  'estimated_weight_lb', 'dev_quote_id', 'address_confirmed', 'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
+  'pickup_mode',
+  'alternative_partner_id', 'estimated_weight_lb', 'dev_quote_id', 'address_confirmed', 'pickup_date', 'pickup_time', 'notes', 'plan', 'cadence', 'weekdays',
   'water_temp', 'fabric_softener', 'name', 'address_line1', 'address_line2',
   'city', 'postal_code', 'spot', 'access_notes',
 ];
@@ -1908,7 +1921,7 @@ const ANSWERS = [
 const ASKED_ON = {
   wash: ['water_temp', 'fabric_softener'],
   repeat: ['plan', 'cadence', 'estimated_weight_lb'],
-  when: ['pickup_date', 'pickup_time', 'weekdays', 'plan'],
+  when: ['pickup_mode', 'pickup_date', 'pickup_time', 'weekdays', 'plan', 'alternative_partner_id'],
   address: ['name', 'address_line1', 'address_line2', 'city', 'postal_code',
             'spot', 'access_notes'],
 };
@@ -1996,21 +2009,32 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
   // dropped while the index kept climbing and it read "step 3 of 2". Carrying a
   // total through the flow would fix the arithmetic and still be a number nobody
   // needs; the step's own name says where you are and cannot go wrong.
-  let estimate = null;
+  let estimate = null, alternative = null;
   if (step === 'repeat' && require('../core/dev-checkout').enabled) {
-    try { estimate = await require('../core/dev-checkout').estimateAddress(customer,given.estimated_weight_lb??30); }
-    catch (_) { estimate = { unavailable: true }; }
+    if (!given.pickup_date || !given.pickup_time) step = 'when';
+    else {
+      try {
+        // Price the exact first pickup before asking for a plan. Recurrence is chosen next.
+        estimate = await require('../core/dev-checkout').previewQuote(customer,
+          { ...given, plan: 'ONE_TIME', cadence: '', weekdays: '' }, { publicPreview: true, resolvedPickup: true });
+        alternative = await require('../core/cheaper-pickup').find(customer,given,estimate);
+      } catch (err) {
+        step = 'when';
+        error = require('../web/customer-copy').customerText(err.message,
+          'We could not verify this pickup right now. Please try another time.');
+      }
+    }
   }
   const labels = { wash: 'wash preferences', repeat: 'your option', when: 'when', address: 'where' };
 
-  const regular = subscribing(given);
+  const regular = subscribing(given) && !config.supabase.isDevelopment;
 
   const heads = {
     wash: ['How would you like it washed?', 'We save this and use it on every pickup. Change it any time by text.'],
-    repeat: ['Choose your pickup plan.', 'Choose what works for you. You can change or cancel your subscription anytime.'],
+    repeat: ['Choose your pricing method.', 'Wash, dry & fold. Pickup, return and processing included.'],
     when: regular
       ? ['Which day?', 'Choose one pickup day for your subscription.']
-      : ['Schedule your pickup', 'Any day. There are no fixed route days.'],
+      : ['Schedule your pickup', config.supabase.isDevelopment ? 'Any time, any day.' : 'Any day. There are no fixed route days.'],
     address: ['Where should we pick up?', 'Confirm your pickup address first. Pricing depends on your location and pickup schedule.'],
   };
 
@@ -2021,7 +2045,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
   // details with it rather than saving and dropping them.
   const form =
     step === 'repeat'
-      ? repeatForm(given, estimate)
+      ? repeatForm(given, estimate, alternative)
       : step === 'when'
       ? whenForm(customer, given, opensOn)
       : (step === 'wash' ? setup.washForm(customer) : setup.addressForm(customer))
@@ -2049,6 +2073,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
   return `
 <section class="hero booking-heading">
   <div class="container">
+    ${given.pickup_updated==='yes' && step==='repeat' ? banner('You updated your pickup to '+escapeHtml(require('../web/cheaper-pickup').whenLine(given.pickup_date,given.pickup_time))+'.','suds') : ''}
     ${require("../web/booking-progress").render(step, customer)}
     <h1 class="display-2" style="margin-bottom:10px;">${escapeHtml(title)}</h1>
     <p style="font-size:18px;line-height:1.5;color:var(--ink-800);max-width:44ch;margin:0;">
@@ -2057,7 +2082,7 @@ async function stepPage({ customer, step, given, error = '', opensOn = null, gue
   </div>
 </section>
 
-<section class="container booking-content">
+<section class="container booking-content${step === 'repeat' ? ' booking-pricing-content' : ''}">
   ${error ? banner(escapeHtml(error)) : ''}
   <div class="${step === 'repeat' ? 'booking-plan-shell' : 'card card-xl'}"${step === 'repeat' ? '' : ' style="padding:30px;"'}>${form}</div>
   <p style="margin:22px 0 0;">${backControl(step, guest, customer)}</p>
@@ -2256,7 +2281,9 @@ function cardStep({ customer, intent }) {
 // subscription with no frequency on it. A checkout that needs a script to be
 // completable is one that cannot be completed on a bad connection.
 // ---------------------------------------------------------------------------
-function planChoice({ value, title, price, blurb, checked, children = '' }) {
+function planChoice({ value, title, price, blurb, checked, children = '', weightSnapshot = null }) {
+  if(weightSnapshot) return `<section class="weight-plan booking-weight-option">${require('../web/weight-pricing').estimate(weightSnapshot,{heading:true,action:false,headingCategory:value})}${children}
+    <button type="submit" name="plan" value="${value}" class="btn btn-full booking-weight-choice ${value==='SUBSCRIPTION'?'btn-primary':'btn-outline'}">Choose ${value==='SUBSCRIPTION'?'subscription':'one-time'}</button></section>`;
   return `<div class="card card-xl booking-plan-option">
           <label class="check booking-plan-choice">
             <input type="radio" name="plan" value="${value}"${checked ? ' checked' : ''}>
@@ -2268,14 +2295,15 @@ function planChoice({ value, title, price, blurb, checked, children = '' }) {
           </label>${children}</div>`;
 }
 
-function repeatForm(given, estimate) {
+function repeatForm(given, estimate, alternative) {
+  const offeredFrequencies = config.supabase.isDevelopment ? subscription.FREQUENCIES.filter(f=>f.cadence!=='MONTHLY') : subscription.FREQUENCIES;
   const estimateView = require('../web/booking-price');
   const weightModel=require('../core/weight-based-pricing').isSnapshot(estimate?.snapshot);
   const planEstimate = category => estimate && !estimate.unavailable
     ? estimateView.planEstimate(estimate.categories[estimate.snapshot?.category === 'WHOLESALE' ? 'WHOLESALE' : category]) : '';
   const estimateNote = estimate ? '<p class="field-hint">' + (estimate.unavailable
     ? 'An address estimate is unavailable. Choose a pickup date and time to try again.'
-    : 'Pricing for your address. Pickup and return availability has been checked. We check again after you choose a pickup date and time.') + '</p>' : '';
+    : 'Pricing for your selected pickup date and time. Laundromat availability has been checked. LYNDRY handles pickup and return. We check again before confirmation.') + '</p>' : '';
   const chosen = String(given.plan || '');
   // HOW OFTEN, ASKED ON THE SAME SCREEN AS THE PLAN IT BELONGS TO.
   //
@@ -2290,7 +2318,7 @@ function repeatForm(given, estimate) {
   const frequencies = `
           <fieldset class="booking-frequency">
             <legend>How often?</legend><div class="booking-frequency-options">
-            ${subscription.FREQUENCIES.map(
+            ${offeredFrequencies.map(
               (f) => `
             <label class="check booking-frequency-choice">
               <input type="radio" name="cadence" value="${f.cadence}"${
@@ -2302,7 +2330,7 @@ function repeatForm(given, estimate) {
               )}</span>
             </label>`
             ).join('')}
-            </div><p class="field-hint">Every month means every 4 weeks, on the same weekday.</p>
+            </div><p class="field-hint">${config.supabase.isDevelopment ? 'Your first pickup is on the selected date; future pickups repeat on that weekday at the selected time. Each pickup requires current availability and pricing approval.' : 'Every month means every 4 weeks, on the same weekday.'}</p>
           </fieldset>`;
 
   return `
@@ -2310,18 +2338,19 @@ function repeatForm(given, estimate) {
       <input type="hidden" name="step" value="repeat">
       ${weightModel?require('../web/weight-pricing').slider(estimate.snapshot.estimatedWeightLb,estimate.snapshot.category==='WHOLESALE'?{WHOLESALE:estimate.categories.WHOLESALE}:estimate.categories):''}
       ${carried(given, 'repeat')}
-      ${estimateNote}
+
 
       <fieldset style="border:0;padding:0;margin:0;">
-        <legend class="field-label" style="padding:0;">Choose your option</legend>
-        <div class="booking-plan-options">
+        <legend class="sr-only">Choose your pricing method</legend>
+        <div class="booking-plan-options${weightModel?' weight-tier-grid':''}">
           ${planChoice({
             value: subscription.PLANS.SUBSCRIPTION,
             title: 'Subscription',
             price: '',
-            blurb: `Automatic service ${subscription.FREQUENCIES.map((f) => f.label).join(', ')}.`,
+            blurb: `Automatic service ${offeredFrequencies.map((f) => f.label).join(', ')}.`,
             checked: chosen === subscription.PLANS.SUBSCRIPTION,
-            children: planEstimate('SUBSCRIPTION') + frequencies,
+            children: (weightModel?'':planEstimate('SUBSCRIPTION')) + frequencies,
+            weightSnapshot: weightModel?estimate.categories[estimate.snapshot.category==='WHOLESALE'?'WHOLESALE':'SUBSCRIPTION']:null,
           })}
 
           ${planChoice({
@@ -2330,14 +2359,18 @@ function repeatForm(given, estimate) {
             price: '',
             blurb: 'Book whenever you need us.',
             checked: chosen === subscription.PLANS.ONE_TIME,
-            children: planEstimate('ONE_TIME'),
+            children: weightModel?'':planEstimate('ONE_TIME'),
+            weightSnapshot: weightModel?estimate.categories[estimate.snapshot.category==='WHOLESALE'?'WHOLESALE':'ONE_TIME']:null,
           })}
         </div>
       </fieldset>
 
-      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:26px;">
+      ${estimateNote}${estimateView.pickupTiming(estimate?.snapshot)}
+      ${alternative ? require('../web/cheaper-pickup').render(alternative,given) : ''}
+
+      ${weightModel?'':`      <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top:26px;">
         Continue {{ICON_ARROW}}
-      </button>
+      </button>`}
     </form>${weightModel?require('../web/weight-pricing').script():''}`;
 }
 
@@ -2357,7 +2390,9 @@ const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 
 function whenForm(customer, given, opensOn) {
   const partnerHours = require('../core/dev-checkout').enabled;
-  const regular = subscribing(given);
+  const earliest=partnerHours?require('../core/pickup-timing').resolvePickup({pickup_mode:'EARLIEST'},{leadMinutes:config.shipday.pickupLeadMinutes??15}):null;
+  const pickupMode=given.pickup_mode||(given.pickup_date?'SCHEDULED':'EARLIEST');
+  const regular = subscribing(given) && !partnerHours;
   const { min, max } = dateBounds(opensOn);
 
   // The first window opens and the last window closes. One source of truth for
@@ -2411,7 +2446,7 @@ function whenForm(customer, given, opensOn) {
         <div class="field">
           <label class="field-label" for="pickup_date">Which day?</label>
           <input class="input input-lg" type="date" id="pickup_date" name="pickup_date" required
-                 min="${min}" max="${max}" value="${escapeHtml(given.pickup_date || min)}">
+                 min="${min}" max="${max}" value="${escapeHtml(given.pickup_date || earliest?.pickup_date || min)}">
         </div>`;
 
   return `
@@ -2420,19 +2455,22 @@ function whenForm(customer, given, opensOn) {
       <input type="hidden" name="plan" value="${escapeHtml(String(given.plan || ''))}">
       ${carried(given, 'when')}
       <div class="stack">
+        ${partnerHours?`<fieldset style="border:0;padding:0"><legend class="field-label">When would you like pickup?</legend>
+          <label class="check booking-frequency-choice"><input type="radio" name="pickup_mode" value="EARLIEST"${pickupMode==='EARLIEST'?' checked':''}><span class="check-box check-box-round" aria-hidden="true"></span><span><strong>Pick up now</strong><br>Earliest available pickup</span></label>
+          <label class="check booking-frequency-choice"><input type="radio" name="pickup_mode" value="SCHEDULED"${pickupMode==='SCHEDULED'?' checked':''}><span class="check-box check-box-round" aria-hidden="true"></span><span><strong>Schedule</strong><br>Choose a date and time</span></label>
+          </fieldset><div data-pickup-schedule>`:''}
         ${regular ? days : oneDay}
 
         <!-- Development checks the requested time against eligible partners.
              Legacy van bookings retain their fixed window bounds. -->
         <div class="field">
           <label class="field-label" for="pickup_time">What time?</label>
-          <input class="input input-lg" type="time" id="pickup_time" name="pickup_time" required
-                 ${partnerHours ? '' : `min="${opensAt}" max="${closesAt}"`}
-                 value="${escapeHtml(given.pickup_time || (partnerHours ? '' : startsAt))}">
+          ${partnerHours ? `<select class="input input-lg" id="pickup_time" name="pickup_time" required><option value="">Choose a time</option>${Array.from({length:24},(_,i)=>{const value=String(i).padStart(2,'0')+':00';return `<option value="${value}"${String(given.pickup_time||'').slice(0,5)===value?' selected':''}>${booking.readableTime(value)}</option>`;}).join('')}</select>` : `<input class="input input-lg" type="time" id="pickup_time" name="pickup_time" required min="${opensAt}" max="${closesAt}" value="${escapeHtml(given.pickup_time||startsAt)}">`}
           <span class="field-hint">
             ${partnerHours ? 'Pickup times depend on the laundromats serving your address. We check that a laundromat can receive your laundry and is open for collection the next day before confirming.' : `We pick up between ${booking.readableTime(opensAt)} and ${booking.readableTime(closesAt)}.`}
           </span>
         </div>
+        ${partnerHours?`</div><script>(function(){var form=document.getElementById('wizard'),panel=form.querySelector('[data-pickup-schedule]');function update(){var selected=form.querySelector('[name="pickup_mode"]:checked');var earliest=selected&&selected.value==='EARLIEST';panel.hidden=earliest;panel.querySelectorAll('input,select').forEach(function(input){input.disabled=earliest;});}form.querySelectorAll('[name="pickup_mode"]').forEach(function(input){input.addEventListener('change',update);});update();})();</script>`:''}
 
         <!-- WHAT YOU JUST CHOSE, SAID BACK TO YOU. Neil's ask, and it sits after
              the time because it cannot describe a pickup until it has one.
@@ -2568,8 +2606,12 @@ router.get('/account/book', async (req, res, next) => {
     if (!who.customer) return res.redirect(302, '/account/login');
 
     const opensOn = await settings.opensOn();
-    const given = req.query || {};
-    const customer = who.guest ? withAnswers(who.customer, given) : who.customer;
+    const handoff = require('../core/quote-booking-prefill');
+    const prefill = req.query.alternative_partner_id && req.query.address_confirmed === 'yes' ? null : handoff.read(req);
+    const given = { ...(prefill || {}), ...(req.query || {}) };
+    // Display the quoted address for confirmation; saving still validates it normally.
+    if (prefill) given.address_confirmed = '';
+    const customer = who.guest || prefill ? withAnswers(who.customer, given) : who.customer;
     const step = bookingStep(customer, given);
 
     // Nothing missing and a day already chosen means this was reached by going
@@ -2622,6 +2664,12 @@ router.post('/account/book', async (req, res, next) => {
     // more; every answer they HAVE given rides along in the form and is drawn
     // back onto whichever screen they land on.
     if (form.back && ORDER.includes(form.back)) return reshow(form.back);
+    if(config.supabase.isDevelopment&&form.step==='when'){
+      try{
+        const input=form.pickup_mode==='EARLIEST'?{pickup_mode:'EARLIEST'}:form;
+        Object.assign(form,require('../core/pickup-timing').resolvePickup(input,{leadMinutes:config.shipday.pickupLeadMinutes??15}));
+      }catch(error){return reshow('when',error.message);}
+    }
 
     // WHATEVER THIS STEP ANSWERED IS SAVED BEFORE ANYTHING ELSE - for somebody
     // who has an account. They abandon the booking halfway and we have still
@@ -2724,7 +2772,13 @@ router.post('/account/book', async (req, res, next) => {
     // A checkbox group is not a string. The 'when' step posts one `weekday` per
     // ticked day, and the rest of the flow carries them as a comma-separated
     // hidden field - so they are normalised here, once, on the way through.
-    if (form.step === 'when' && subscribing(form)) {
+    if (config.supabase.isDevelopment && form.pickup_date && subscribing(form)) {
+      const date = String(form.pickup_date);
+      const day = new Date(date + 'T12:00:00Z').getUTCDay();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(day)) return reshow('when', 'Please pick a valid day.');
+      form.weekdays = String(day);
+    }
+    if (!config.supabase.isDevelopment && form.step === 'when' && subscribing(form)) {
       if (weekdaysFrom(form).length !== 1) return reshow('when', 'Please choose one pickup day.');
       form.weekdays = weekdaysFrom(form).join(',');
     }
@@ -2742,18 +2796,24 @@ router.post('/account/book', async (req, res, next) => {
       if (blank) return reshow(from, blank);
     }
 
-    if (from === 'address') form.address_confirmed = 'yes';
+    if (from === 'address') { form.address_confirmed = 'yes'; require('../core/quote-booking-prefill').clear(res); }
     const step = form.address_confirmed !== 'yes'
       ? 'address'
       : from ? nextStep(from, customer) : bookingStep(customer, form);
     if (step !== 'book') return reshow(step);
+    if (config.supabase.isDevelopment) {
+      if (unanswered('when', form)) return reshow('when', unanswered('when', form));
+      if (unanswered('repeat', form)) return reshow('repeat', unanswered('repeat', form));
+    }
     if (subscribing(form) && !/^[0-6]$/.test(String(form.weekdays || '').trim())) return reshow('when', 'Please choose one pickup day.');
     const checkout = require('../core/dev-checkout');
     if (checkout.enabled) {
       if (req.get('origin') !== req.protocol+'://'+req.get('host')) return res.status(403).send('Open booking on LYNDRY and try again.');
       try {
         if (form.step !== 'quote') {
-          const quote = await checkout.createQuote(customer,form);
+          const quote = await checkout.createQuote(customer,form,{resolvedPickup:true});
+          form.pickup_date = quote.pickup_date; form.pickup_time = String(quote.pickup_time).slice(0,5);
+          if (subscribing(form)) form.weekdays = String(new Date(form.pickup_date+'T12:00:00Z').getUTCDay());
           delete form.dev_quote_id;
           return accountPage(res,{title:'Review your price',body:
             require('../web/booking-price').review(quote,carried(form,'quote'))});
@@ -2808,6 +2868,7 @@ router.post('/account/book', async (req, res, next) => {
       // worked out by the one function that knows how - without creating the
       // schedule that would normally answer it.
       const shape = {
+        dev_quote_id: wanted.devQuoteId,
         pickup_date: wanted.pickupDate,
         pickup_time: wanted.pickupTime,
         cadence: wanted.cadence,
@@ -2873,7 +2934,7 @@ router.post('/account/book', async (req, res, next) => {
     // exists before the booking and there is nothing to undo after it. The same
     // function turns a booking intent into an order, so the two doors cannot
     // drift.
-    const result = await recurring.bookAndSchedule(customer, {
+    const result = await require('../core/replacement-booking').book(customer, {
       devQuoteId: form.dev_quote_id || null,
       pickupDate: String(form.pickup_date || ''),
       pickupTime: String(form.pickup_time || ''),

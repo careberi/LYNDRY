@@ -350,6 +350,18 @@ function contactSentence() {
 // The tokens available inside public/pages/*.html files. Write
 // {{PRICE_PER_LB}} in the HTML and it becomes the real rate when the page is served.
 const tokens = Object.freeze({
+  HOME_PRICE_INTRO: config.supabase.isDevelopment
+    ? 'Enter your pickup address to see your estimated total and order minimum before you book.'
+    : 'Enter your pickup address to see your per-pound rate, operational fee and order minimum before you book.',
+  HOME_PRICE_ANSWER: config.supabase.isDevelopment
+    ? 'Review your inclusive price before confirming. Pickup, return and processing are included. The 18 lb allowance is included in the minimum; final billing uses measured weight and saved pricing terms. Each order is limited to 50 lb.'
+    : 'Check your address for your per-pound rate, order minimum and operational fee. Your final weight determines the bill. Review your price before confirming your booking.',
+  FAQ_PRICE_TERMS: config.supabase.isDevelopment
+    ? 'current pricing, estimated total and order minimum'
+    : 'current price per pound, order minimum and operational fee',
+  FAQ_PRICE_POLICY: config.supabase.isDevelopment
+    ? 'Pickup, return and processing are included. The minimum includes an 18 lb allowance, and final billing uses measured weight and the pricing terms saved with your order. Each order is limited to 50 lb. Review the complete price before confirming.'
+    : 'We charge one operational fee per order. Your minimum total includes that fee, and your final laundry weight determines the rest of your bill.',
   NAME: site.name,
   PHONE: site.publicPhoneDisplay,
   SMS_LINK: site.hasPublicPhone ? `sms:${site.publicPhoneLink}` : '/#get-started',

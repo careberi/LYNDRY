@@ -374,6 +374,9 @@ async function transition(order, to) {
   // but orders.js is required by half the system and a top-level import here is
   // how a cycle gets introduced later without anybody noticing.
   if (to === 'CANCELED') {
+    if (order.dev_quote_id) await require('./shipday-cancellation-runtime').reconcile(order.id)
+      .catch(err=>console.error('Shipday cancellation pending: '+err.message));
+
     require('./promotions')
       .releaseSlot(order.id)
       .catch((err) => console.error(`Could not release a promotion slot: ${err.message}`));

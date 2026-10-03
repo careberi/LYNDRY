@@ -24,4 +24,19 @@ function localArrival(at) {
   if(!Number.isFinite(Date.parse(at)))return null;
   return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(at));
 }
-module.exports={bufferMinutes,inHouseArrival,manualArrival,localArrival};
+function resolvePickup(form,{now=Date.now(),leadMinutes=15}={}) {
+  if(!Number.isInteger(leadMinutes)||leadMinutes<15||leadMinutes>120)throw Error('Pickup preparation time must be between 15 and 120 minutes.');
+  const mode=form.pickup_mode||'SCHEDULED';
+  if(!['EARLIEST','SCHEDULED'].includes(mode))throw Error('Choose earliest available or schedule for later.');
+  const earliest=Math.ceil((now+leadMinutes*60000)/(15*60000))*15*60000;
+  const at=mode==='EARLIEST'?new Date(earliest).toISOString():dispatchInstant(form.pickup_date,form.pickup_time);
+  if(!at)throw Error('Choose a valid, unambiguous pickup date and time.');
+  if(Date.parse(at)<now+leadMinutes*60000)throw Error('Choose a later pickup, at least '+leadMinutes+' minutes ahead, or choose earliest available.');
+  const local=localArrival(at);
+  return {pickup_mode:mode,pickup_date:local.slice(0,10),pickup_time:local.slice(11,16),pickupReadyAt:at};
+}
+function validateSavedPickup(at,{now=Date.now()}={}) {
+  if(!Number.isFinite(Date.parse(at))||Date.parse(at)<now+5*60000)throw Error('This pickup time is too close. Refresh your pickup time and price before confirming.');
+  return at;
+}
+module.exports={bufferMinutes,inHouseArrival,manualArrival,localArrival,resolvePickup,validateSavedPickup};

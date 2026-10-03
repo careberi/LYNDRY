@@ -5,6 +5,7 @@
 // as a new booking. The caller must durably save the order ID before assignment.
 const BASE = 'https://api.shipday.com';
 const {contactFields} = require('./shipday-contact');
+const timingRejected=response=>(Array.isArray(response)?response:[response]).some(row=>row?.error===true&&/pickup_ready_too_early|pickup.*(?:past|too early)/i.test(row.errorDescription||row.errorMessage||''));
 
 function cents(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
@@ -120,11 +121,13 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
       return {ok:result?.success === true};
     },
     async quote({ from, to, pickupReadyAt, dropoffReadyAt }) {
-      const options = estimates(await request('POST', '/on-demand/availability', {
+      const response = await request('POST', '/on-demand/availability', {
         pickupAddress: address(from), deliveryAddress: address(to),
         ...(pickupReadyAt ? { pickUpTime: instant(pickupReadyAt) } : {}),
         ...(dropoffReadyAt ? { deliveryTime: instant(dropoffReadyAt) } : {}),
-      })).filter((row) => !row.requiresFeeReview);
+      });
+      if(timingRejected(response))return {ok:false,reason:'pickup_time_rejected'};
+      const options = estimates(response).filter((row) => !row.requiresFeeReview);
       if (!options.length) return { ok: false, reason: 'no_confirmed_price' };
       const selected = options[0];
       return { ok: true, quoteId: selected.reference, service: selected.service,
@@ -176,9 +179,11 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
       if (requirePin && leaveAtDoor) throw new Error('PIN delivery cannot be contactless.');
       // Order estimates can quote an immediate pickup despite the job's saved
       // schedule. Availability explicitly accepts the requested UTC pickup time.
-      const options = pickupReadyAt && trip ? estimates(await request('POST','/on-demand/availability',{
+      const response = pickupReadyAt && trip ? await request('POST','/on-demand/availability',{
         pickupAddress:address(trip.from),deliveryAddress:address(trip.to),pickUpTime:instant(pickupReadyAt),
-      })) : estimates(await request('GET', `/on-demand/estimate/${orderId}`));
+      }) : await request('GET', `/on-demand/estimate/${orderId}`);
+      if(timingRejected(response))return {ok:false,quoteChanged:true,reason:'pickup_time_rejected'};
+      const options=estimates(response);
       const selected = options.find((row) => !row.requiresFeeReview && row.feeCents <= maxFeeCents &&
         (!pickupReadyAt || (['uber','doordash'].includes(row.service.toLowerCase()) &&
           Date.parse(row.pickupTime) >= Date.parse(pickupReadyAt) &&
@@ -196,6 +201,10 @@ function createClient({ apiKey, fetchImpl = globalThis.fetch, allowWrites = fals
     },
     async status(orderId) {
       return delivery(await request('GET', `/on-demand/details/${identifier(orderId)}`), orderId);
+    },
+    async removeOrder(orderId) {
+      await request('DELETE', '/orders/' + identifier(orderId), undefined, true);
+      return {ok:true};
     },
     async cancel(orderId) {
       const result = await request('POST', `/on-demand/cancel/${identifier(orderId)}`, undefined, true);

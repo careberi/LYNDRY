@@ -470,9 +470,13 @@ function summaryCards(customer, { needsCardNow = false } = {}) {
     );
   }
 
+  if (!booking.hasAddress(customer)) cards.push(card('/account/address','Address','No pickup address saved yet.'));
+
   if (booking.hasPreferences(customer)) {
     cards.push(card('/account/wash', 'Wash instructions', escapeHtml(wash.describeSaved(prefs))));
   }
+
+  if (!booking.hasPreferences(customer)) cards.push(card('/account/wash','Wash instructions','No wash instructions saved yet.'));
 
   if (customer.card_last4) {
     cards.push(
@@ -485,13 +489,12 @@ function summaryCards(customer, { needsCardNow = false } = {}) {
         { post: true }
       )
     );
-  } else if (needsCardNow) {
+  } else {
     cards.push(
       card(
         '/account/card',
         'Payment method',
-        '<span style="color:var(--stain-600);">No card on file. The driver cannot come ' +
-          'out until there is one.</span>',
+        needsCardNow ? '<span style="color:var(--stain-600);">No card on file. Add one before your pickup can be confirmed.</span>' : 'No card on file. Add one whenever you are ready.',
         { post: true }
       )
     );

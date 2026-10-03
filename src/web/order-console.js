@@ -840,7 +840,7 @@ function orderConsoleBody({
   // table existed, which is why paidTable() draws nothing without them rather
   // than inventing Card $0.
   paymentRows = [],
-  overviewHtml = '', dispatchHtml = '', shipdayWorkspace = false, cancellationHtml = '', editHtml = '',
+  overviewHtml = '', dispatchHtml = '', photosHtml = '', shipdayWorkspace = false, cancellationHtml = '', editHtml = '',
 }) {
   const n = order.order_number;
   const c = customer || {};
@@ -898,7 +898,7 @@ function orderConsoleBody({
       ])
     : '';
 
-  return `<div class="console">
+  return `<div class="console order-screen">
   <div class="crumb"><a href="/ops">Orders</a> / ${n}</div>
   <div class="title-row"><h1>${escapeHtml(title)}</h1><span class="id">#${n}</span> ${chips(order, exception)}</div>
   ${headerActions}
@@ -906,6 +906,7 @@ function orderConsoleBody({
   ${banner || ''}
   ${dispatchHtml ? '<section class="pos-next-action" aria-label="Dispatch and next action"><h2>Dispatch and next action</h2>'+dispatchHtml+'</section>' : ''}
   ${overviewHtml || ('<div class="order-summary">'+meta+'</div>')}
+  ${shipdayWorkspace && can.customers ? photosHtml : ''}
   ${shipdayWorkspace?toolbarHtml(order,actions,{...can,laundromats})+sideExtras+(can.money?cashForm(order,split,{money,can}):''):''}
   ${shipdayWorkspace?'':`<details class="order-controls order-management">
     <summary>Manage pickup and assignments</summary>

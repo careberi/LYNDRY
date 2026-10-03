@@ -37,3 +37,9 @@ test('update and cancel explanations no longer occupy toolbar lines',()=>{
  assert.match(html,/disabled title="Details can only change/);
  assert.match(html,/disabled title="Already collected/);
 });
+
+test('manual completion hint describes receipt attestation rather than requiring a photo',()=>{
+ const html=render({order:{status:'REQUESTED',order_number:1},can:{override:true}});
+ assert.doesNotMatch(html,/A photo is required/);
+ assert.match(html,/reason.*receipt/i);
+});

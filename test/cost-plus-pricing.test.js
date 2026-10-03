@@ -5,7 +5,7 @@ const economics = require('../src/core/pricing-economics');
 const dynamic = require('../src/core/dynamic-order-pricing');
 const pricing = require('../src/core/pricing');
 const policy = { pricingMethod: 'COST_PLUS_MARGIN_15', marginBps: { ONE_TIME:2000,SUBSCRIPTION:1000,WHOLESALE:500 }, processingBps:290,processingFixedCents:30,operationalFeeBps:2500,referenceWeightLb:33 };
-const candidate = {id:'shop',eligible:true,wholesaleCentsPerLb:70,pickupCents:699,returnCents:699,source:'SIMULATION',expiresAt:'2099-01-01'};
+const candidate = {id:'shop',eligible:true,wholesaleCentsPerLb:70,pickupCents:699,returnCents:699,source:'SHIPDAY',expiresAt:'2099-01-01'};
 const quote = (category='ONE_TIME', overrides={}) => dynamic.quoteCandidates([{...candidate,...overrides}],{policy,category});
 const orderFor = q => ({id:'test-order',status:'AT_PARTNER',pricing_snapshot:q,price_per_lb_cents:q.rateCentsPerLb,minimum_cents:q.minimumTotalCents,weight_lb:11,bag_count:1,payment_status:'UNPAID'});
 

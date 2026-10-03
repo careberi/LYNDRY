@@ -907,13 +907,13 @@ router.get('/bergen/sent', (req, res) => {
 router.get('/quote', async (req, res) => {
   if (config.courier.model !== 'DYNAMIC') return res.redirect(302, '/pricing');
 
-  // Look up the building only. Keep the unit separately for pickup details.
+  // Validate the complete address; keep the unit separately for pickup details.
   // Pricing submits separate address fields; existing quote links keep working.
   const part = (key, limit) => typeof req.query[key] === 'string'
     ? req.query[key].trim().slice(0, limit) : '';
   let street = part('street', 120);
   let address = street
-    ? [street, part('town', 80), (config.googleAddress?.enabled ? part('state', 2) : '') || 'NJ', part('zip', 5)].filter(Boolean).join(', ')
+    ? [street, part('unit', 80), part('town', 80), (config.googleAddress?.enabled ? part('state', 2) : '') || 'NJ', part('zip', 5)].filter(Boolean).join(', ')
     : part('address', 200);
 
   // The honeypot, same as every other public form: anything that fills it gets
@@ -944,7 +944,7 @@ router.get('/quote', async (req, res) => {
       const preview = await checkout.previewQuote({lat:place.lat,lng:place.lng,address_line1:street||address,address_line2:part('unit',60),city:validatedPlace?.town || part('town',80),postal_code:validatedPlace?.zip || part('zip',5)}, {pickup_date:pickupDate,pickup_time:pickupTime,plan:'ONE_TIME',estimated_weight_lb:part('estimated_weight_lb',6)||30}, {publicPreview:true,addressEstimate});
       result.quote = {ok:true,dynamic:true,indicative:!pickupDate && !pickupTime,...preview};
     } catch (err) {
-      if (/No eligible laundromat/i.test(err.message)) result.error = 'unavailable_area';
+      if (/No eligible laundromat/i.test(err.message)) result.error = addressEstimate ? 'unavailable_area' : 'unavailable_time';
       else result.error = 'unavailable';
     }
   }
@@ -957,6 +957,9 @@ router.get('/quote', async (req, res) => {
     }
   }
 
+  if (result.quote?.ok && dynamicPreview) require('../core/quote-booking-prefill').remember(res, {
+    street, unit: part('unit',60), town: validatedPlace?.town || part('town',80), zip: validatedPlace?.zip || part('zip',5),
+  });
   res.type('html').send(
     renderPage({
       signedIn: require("../core/customer-auth").isSignedIn(req),

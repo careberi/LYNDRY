@@ -673,6 +673,13 @@ async function inServiceArea(customer, laundromats = undefined, { courier } = {}
   // rather than the customer's. New Jersey still had to be true.
   if (shops == null) return inNewJersey(customer);
 
+  if (config.supabase.isDevelopment) {
+    if (!inNewJersey(customer)) return false;
+    const geo = require('./geocode');
+    const home = await geo.locate(customer);
+    return !!home && shops.some(shop => (!shop.status || shop.status === 'ACTIVE') && shop.lat != null && shop.lng != null && geo.milesBetween(home,{lat:Number(shop.lat),lng:Number(shop.lng)}) <= 15);
+  }
+
   const answer = await serviceable.reachable(customer, {
     laundromats: shops,
     at: coordsOf(customer),

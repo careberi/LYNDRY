@@ -117,7 +117,7 @@ const config = Object.freeze({
   port,
   baseUrl: normaliseBaseUrl(process.env.APP_BASE_URL, port),
   // Switch legacy browser links only after the POS domain has working HTTPS.
-  shipday: Object.freeze({ apiKey: process.env.SHIPDAY_API_KEY || '' }),
+  shipday: Object.freeze({ apiKey: process.env.SHIPDAY_API_KEY || '', pickupLeadMinutes:Number(process.env.SHIPDAY_PICKUP_LEAD_MINUTES||15) }),
 
   pos: Object.freeze({ host: require('./web/pos-host').configuredPosHost(process.env.POS_HOST, supabaseProjectRef), redirectLegacy: process.env.POS_REDIRECT_LEGACY === 'true' }),
 

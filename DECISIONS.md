@@ -1,3 +1,15 @@
+## 20261002 Approved pickup preparation and fixed quote timing
+
+Development booking offers Earliest available and Schedule for later. Earliest resolves once to a quarter hour at least 15 minutes ahead, configurable with SHIPDAY_PICKUP_LEAD_MINUTES from 15 to 120. The scheduled picker uses quarter hour increments. Preparation time means bag readiness, not guaranteed driver arrival. Show the selected Shipday offer pickup estimate separately. Keep the resolved UTC time through pricing, review and dispatch. Continuing checkout validates the fixed time rather than applying the initial buffer again. Fewer than five minutes remaining requires a refreshed pickup and price review. This supersedes the historical ten minute past time grace for new quotes. Existing historical order handling is retained.
+
+Use fresh supported Shipday offers and the lowest valid price that fits readiness and laundromat hours. A provider pickup timing rejection blocks quoting or assignment rather than silently selecting a more expensive surviving offer. API failure blocks price confirmation. Scheduled times never silently move. Midnight and ambiguous or nonexistent Eastern daylight saving times are tested. Quoting does not request a driver; card and payment guards remain.
+
+Local browser verification reached scheduled price review with the same bag ready time and courier estimate. Earliest was refused when shop hours did not fit. A transient quote failure blocked progress; a subsequent fresh request recovered. No booking, payment, driver assignment or message was submitted. Uncommitted development work only; independent Grok review and Neil acceptance remain pending.
+
+## 20261002 Shipday is the only customer delivery price source
+
+Neil explicitly requires fresh address based Shipday API quotes for public pricing, booking pricing, plan comparisons and POS repricing. Choose the lowest valid supported third party offer separately for pickup and return, subject to pickup and arrival eligibility. Never use configured in house labour, fuel, mileage, static bands or simulated prices as a substitute. A missing, expired or failed API quote withholds pricing and blocks booking. Recheck both directions at booking; changed fees require a new customer price review. Reject unused historical in house quotes. Keep existing accepted orders and payments unchanged until an explicit correction, and keep pricing source separate from driver assignment. Quoting must never dispatch a driver. This supersedes the in house pricing decision and the earlier higher courier fee policy. Development only; main is unchanged.
+
 ## 20261002 Approved Shipday address verification repair
 
 Neil approved the bounded design and requested commit and push to development, without merging main. New returns preserve the saved state rather than inventing NJ. Existing non-simulated in-house numeric LYNDRY development RETURN references accept only the exact historical NJ addition when the saved state is blank. Shared formatting and matching serve portal return verification and customer delivery observation. Explicit states, other address fields, linked identity, unique remote result and driver checks remain strict. Pickup verification stays strict. No payment, reminder, routing, customer-copy or duplicate-dispatch changes.
@@ -5,6 +17,14 @@ Neil approved the bounded design and requested commit and push to development, w
 Implementation: src/core/delivery-address.js, partner-delivery-gate.js, partner-return.js and delivery-sms.js; test/delivery-address-verification.test.js. Three reproductions failed before implementation; seven regression cases and 43 focused tests passed. Fresh full npm test on the development working tree with external network blocked: 1738 passed, zero failed. Other uncommitted work was preserved and excluded from this scoped commit.
 
 The original QA return passed read-only verification with the same linked trip and LYNDRY driver. The normal worker recorded a simulated out-for-delivery message. Browser pickup confirmation succeeded, the shop board recorded the handoff, and POS showed OUT_FOR_DELIVERY with the shop audit event. Shop completion is handoff to the driver, not final customer delivery. No replacement trip, reassignment, real SMS or payment action. Final delivery and photo verification, independent review and Neil acceptance remain pending. Development only; main is unchanged.
+
+## 20261002 Cancellation propagation
+
+Neil explicitly requires cancellation of existing LYNDRY orders to reach their linked Shipday jobs. For canceled development orders, remove exact unstarted in-house jobs and verify absence; keep local IDs and history. Started trips, identity conflicts and third-party jobs require visible review. Never create a replacement job during cancellation. Preserve existing payment release and customer notification choices.
+
+## 20261002 Silent admin delivery correction
+
+Neil explicitly removes the photo requirement for manual admin completion and requires no customer text. This supersedes the manual photo requirement in the 20261001 recovery decision. Keep reason, receipt attestation, administrator authorization and settled payment. Preserve existing photos. Automated Shipday reconciliation still requires verified proof. Manual completion suppresses later automated delivery notifications; staff can message separately from the customer account.
 
 ## 20261001 Customer pricing base restored for new quotes
 
@@ -959,3 +979,64 @@ Ready rows show order, weight, driver/contact, collection status and pickup-loca
 ## 20261001 Admin delivery recovery
 
 Neil authorized recovery actions at the top of an order. For development orders out for delivery, an admin may reconcile a verified Shipday return with proof or manually record completed delivery with photo, attestation and reason. Require paid or waived payment; transaction locks the order and checks current evidence. Recovery records the current confirmation time and audit reason, does not invent an earlier delivery time, and does not charge or resend messages. Existing edit and cancellation guards remain. This supersedes reliance on the legacy driver task list for admin completion of Shipday orders.
+
+
+## 20261002 Development customer booking and pricing method flow
+
+Neil explicitly assigned implementation in LYNDRY-dev and asked to proceed without approval. These rulings supersede earlier development quote selection and courier availability requirements for this flow. Production behavior and historical accepted order terms remain intact.
+
+Public address pricing compares the lowest overall estimated total without a pickup schedule. It presents subscription and one-time as pricing methods and has one Book a pickup action. The quoted address and apartment are editable setup defaults, not an accepted quote or an automatically saved profile.
+
+Booking confirms address and pickup details, collects missing wash instructions, asks date and time, then prices the closest eligible laundromat for that schedule. Arrival, washing turnaround, next-day collection, radius and capacity must fit. LYNDRY supplies delivery; third-party courier offers must not block this development flow. Delivery costs and travel estimates use the existing routing configuration, never fabricated zero costs. New in-house quotes cannot automatically enroll third-party dispatch. Existing card, authorization, hold, identity and delivery guards remain required.
+
+Time defaults to the current Eastern minute in the existing date/time controls. There is no Immediately selector. This minute is accepted regardless of seconds; earlier minutes are rejected, including at final quote validation. Scheduling copy is Any time, any day.
+
+The booking comparison uses the public pricing card component, side by side on desktop and stacked on narrow screens. Customers select their pricing method once. Measured weight determines the final bill. New development booking frequency choices are weekly or every two weeks; monthly is removed from this chooser without changing historical schedules.
+
+A cheaper alternative searches the next fourteen calendar dates from the chosen pickup, including later minutes that day. It finds each cheaper shop's earliest eligible minute, compares both pricing methods at the entered weight, and offers the lowest combined estimate with earlier time as the tie break. Neither pricing method may become more expensive. Estimates are per pound and explicitly tied to the shown weight. The customer must choose the alternative; availability and price are rechecked. Changing the pickup schedule clears the alternative shop choice.
+
+Full hyphenated house numbers are preserved by autocomplete. Server address validation refuses a number change rather than silently truncating the number. Changing an address without new verified coordinates clears old coordinates.
+
+Account address, wash and payment Update actions are always visible, including for an account without orders or a card. The existing authenticated card setup route works independently of booking. POS customer Details and Wash Preferences tables share the first row; Recurring Pickups follows beneath.
+
+
+### 2026-10-02 latest booking corrections
+
+Subscription frequency is inside the subscription card immediately above Choose subscription. Both pricing method buttons submit their own method and proceed to review. Choosing a cheaper alternative displays the new pickup date and time in a banner on the next page. Wholesale customers retain their applicable rates under both method headings.
+
+Scheduled development checkout accepts a pickup up to ten elapsed calendar minutes earlier than the current minute, so completing checkout does not lose a recently selected time. Eleven elapsed minutes is rejected. Future times remain eligible subject to laundromat hours, capacity and next day return. Arrival checks shift forward by elapsed checkout time while retaining travel and loading allowance. Saved quote expiry and approval remain required.
+
+Verification: npm test passed all 1770 tests with external network blocked. Browser verification confirmed the banner, equal width side by side cards and frequency placement. Changes remain local and uncommitted; main is unchanged. Neil's complete card and order flow, real phone check and Grok review remain outstanding.
+
+Pickup timing final verification 20261002: npm test passed 1784 tests, zero failures. Supplemental agent review findings were fixed with regression coverage; this is not independent Grok sign off.
+
+
+## 20261002 Pickup screen correction
+
+Neil clarified the screen must offer Pick up now with Earliest available pickup, or Schedule with date and time in 30 minute increments. Replaced the unclear controls with visible selection indicators and a half hour time dropdown. Removed preparation buffer copy. This supersedes the previous quarter hour customer picker. The change is limited to presentation and schedule selection; existing API pricing checks remain. Development only, not shipped.
+
+
+## 20261002 Hourly scheduled pickup choices
+
+Neil changed the scheduled pickup dropdown to hourly choices. This supersedes the 30 minute picker. Only the dropdown choices changed. All four focused booking screen tests pass. Local development only.
+
+
+## 20261002 Consistent quote and booking selection
+
+Neil requires the same pricing methodology when quote and booking have the same inputs and eligible opportunities. Investigation found public address quotes compared every eligible shop by customer total while booking retained only the closest shop. Booking now compares all eligible shops using the same lowest total calculation. This supersedes closest shop selection for new booking prices. Explicitly chosen alternative shops remain constrained to that choice. Scheduled hours, capacity, courier timing, fresh API fees and confirmation checks remain required, so different available offers can still produce different prices.
+
+Regression reproduced the more expensive booking selection before the fix and now verifies matching shop, totals and minimums across all pricing categories for matching eligible options. Full npm test passed 1784 tests with zero failures. Local development only; no deployment or existing order repricing.
+
+
+## 20261002 Quote schedule comparison correction
+
+Live API tracing reproduced both reported totals after shop selection was aligned. The unscheduled address quote used a 674 cent pickup. For the tested scheduled pickup, Uber estimated arrival about two minutes before readiness and was excluded; DoorDash cost 750 cents. Return cost remained 674 cents. This produced subscription totals 50.62 and 51.49 and one time totals 57.18 and 58.17. The previous shop selection correction alone did not resolve this difference.
+
+Public weight pricing now accepts a pickup date and hourly Eastern time using the existing scheduled quote path. The address estimate is identified as unscheduled. The weight field remains the single submitted weight control. Direct localhost checks verified 57.18 without a schedule and 58.17 with the tested booking schedule. Full suite passed 1784 tests before the final form association correction; direct page checks verified that correction. No booking or driver dispatch. Local development only.
+
+
+## 20261002 Remove unrequested public scheduling form
+
+Neil requested removal of the public quote scheduling form. It has been removed, including the weight form association. Booking keeps its existing pickup choices. Scheduled quote links now distinguish unavailable pickup time from address coverage failure. The previous route mapped every no eligible shop error to outside service area even when the selected schedule was the constraint.
+
+Verified the reported address returns public prices without a scheduling form. The reported Sunday evening URL now says Pickup time unavailable and does not claim the address is unserved. Full npm test passed 1785 tests. Development only. No order, dispatch or payment changes. This supersedes the prior public schedule form addition.

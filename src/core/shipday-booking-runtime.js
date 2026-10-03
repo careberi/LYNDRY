@@ -10,9 +10,10 @@ const enabled=config.supabase.projectRef==='psrphpgbiifvnlrgvbdg';
 const automaticEnabled=enabled&&config.env==='development';
 const provider=require('../providers/couriers/shipday').createClient({apiKey:config.shipday.apiKey,allowWrites:enabled});
 const data=shared.result;
+const inHouseOrder=order=>order.pricing_snapshot?.transportMode==='IN_HOUSE'||order.pricing_snapshot?.source==='IN_HOUSE';
 const find=id=>data(db.from('orders').select('*,customers(*)').eq('id',id).single());
 function eligible(order,setting) {
-  return automaticEnabled && setting.enabled && setting.automatic_pickups_from && order.dev_quote_id &&
+  return !inHouseOrder(order) && automaticEnabled && setting.enabled && setting.automatic_pickups_from && order.dev_quote_id &&
     Date.parse(order.created_at)>=Date.parse(setting.automatic_pickups_from);
 }
 async function enqueue(order,{recover=false,manual=false}={}) {
@@ -26,7 +27,7 @@ async function enqueue(order,{recover=false,manual=false}={}) {
   }
   const at=dispatchInstant(order.pickup_date,String(order.pickup_time||'').slice(0,5));
   if(!at||order.status!=='REQUESTED')return null;
-  await data(db.from('shipday_dispatch_plans').upsert({order_id:order.id,leg:'TO_PARTNER',mode:'THIRD_PARTY',simulation:false,booking_dispatch:true,dispatch_at:at},{onConflict:'order_id,leg',ignoreDuplicates:true}));
+  await data(db.from('shipday_dispatch_plans').upsert({order_id:order.id,leg:'TO_PARTNER',mode:inHouseOrder(order)?'IN_HOUSE':'THIRD_PARTY',simulation:false,booking_dispatch:true,dispatch_at:at},{onConflict:'order_id,leg',ignoreDuplicates:true}));
   let plan=await data(db.from('shipday_dispatch_plans').select('*').eq('order_id',order.id).eq('leg','TO_PARTNER').single());
   if(manual && plan.state==='CANCELED' && !plan.shipday_order_id && !plan.assignment_requested_at) {
     plan=await shared.store.save(plan,{state:'PLANNED',problem:null,next_attempt_at:null},{event:'MANUAL_DISPATCH_AFTER_REMOVAL',actor:'manual-enrollment',at:new Date().toISOString()});
@@ -46,7 +47,11 @@ async function validate(plan,{manual=false}={}) {
   const order=await find(plan.order_id),customer=require('./order-address').customerFor(order,order.customers);
   if(order.status!=='REQUESTED')return {ok:false,reason:'Pickup is canceled or already in progress. Review the Shipday job.'};
   const at=dispatchInstant(order.pickup_date,String(order.pickup_time||'').slice(0,5));
-  if(!at||Date.parse(at)<=Date.now())return {ok:false,reason:'The requested pickup time has passed. Choose a new pickup time before requesting a driver.'};
+  if(order.pricing_snapshot?.timingPolicyVersion==='PICKUP_TIME_V1'){
+    if(at!==order.pricing_snapshot.pickupReadyAt)return {ok:false,reason:'Pickup time changed. Review the saved pickup before dispatch.'};
+    try{require('./pickup-timing').validateSavedPickup(at,{now:Date.now()});}catch(e){return {ok:false,reason:e.message};}
+  }
+  if(!at||Date.parse(at)<(Math.floor(Date.now()/60000)-(inHouseOrder(order)?10:0))*60000)return {ok:false,reason:'The requested pickup time has passed. Choose a new pickup time before requesting a driver.'};
   if(!customer?.default_payment_method_id)return {ok:false,reason:'Save a payment method before dispatch.'};
   const billing=require('./billing'),dispatch=require('./dispatch');
   const refusal=dispatch.collectRefusal(order,await dispatch.heldCustomerIds([order.customer_id]));
@@ -54,7 +59,8 @@ async function validate(plan,{manual=false}={}) {
   const paymentsOk=order.payment_status==='WAIVED'||billing.holdIsFresh(order);
   if(!paymentsOk)return {ok:false,reason:billing.holdDueNow(order)?'A current payment authorization is required before scheduling the courier.':'Waiting for the existing payment authorization window before scheduling the courier.'};
   const partnerId=order.partner_id||order.intended_partner_id;
-  if(!order.dev_quote_id||order.pricing_snapshot?.source!=='SHIPDAY'||!partnerId)return {ok:false,reason:'A confirmed Shipday-backed quote and laundromat are required.'};
+  if(!order.dev_quote_id||!['SHIPDAY','IN_HOUSE'].includes(order.pricing_snapshot?.source)||!partnerId)return {ok:false,reason:'A confirmed Shipday-backed quote and laundromat are required.'};
+  if(inHouseOrder(order) && plan.mode==='THIRD_PARTY')return {ok:false,reason:'This pickup uses LYNDRY delivery. Choose an in-house driver.'};
   const shop=await require('./partners').find(partnerId);
   if(!shop||shop.status!=='ACTIVE')return {ok:false,reason:'The selected laundromat is inactive.'};
   const hours=await require('./partners').hoursForAll();
@@ -78,13 +84,19 @@ async function validate(plan,{manual=false}={}) {
     return local.slice(0,10)===order.pickup_date && require('./partners').isOpenAt(hours.get(shop.id)||[],new Date(order.pickup_date+'T12:00:00Z').getUTCDay(),local.slice(11,16)) &&
       require('./dev-checkout').scheduleFits(shop,hours.get(shop.id)||[],order.pickup_date,String(order.pickup_time).slice(0,5),row.deliveryTime);
   };
-  return {ok:true,canAssign:paymentsOk,reason:paymentsOk?null:'Waiting for the existing payment authorization window before requesting a courier.',trip,budgetCents,acceptEstimate,loadingBufferMinutes:order.pricing_snapshot.policy?.loadingBufferMinutes??10};
+  const inHouseArrivalAt=inHouseOrder(order)?(Number.isFinite(order.pricing_snapshot.inHouseArrivalMinutes)?new Date(Math.max(Date.parse(at),Math.floor(Date.now()/60000)*60000)+order.pricing_snapshot.inHouseArrivalMinutes*60000).toISOString():order.pricing_snapshot.arrivalChecks?.[0]):null;
+  return {ok:true,inHouseArrivalAt,canAssign:paymentsOk,reason:paymentsOk?null:'Waiting for the existing payment authorization window before requesting a courier.',trip,budgetCents,acceptEstimate,loadingBufferMinutes:order.pricing_snapshot.policy?.loadingBufferMinutes??10};
 }
 const dispatcher=createBookingDispatcher({store:shared.store,provider,validate});
 // Per-request validation avoids changing the global scheduler switch, including
 // when an automatic tick and an administrator's request overlap.
 const manualDispatcher=createBookingDispatcher({store:shared.store,provider,validate:plan=>validate(plan,{manual:true})});
 function run(id,override=null,actor){return (override?manualDispatcher:dispatcher).run(id,override,actor);}
+function observe(id) {
+ if(!enabled || !config.shipday.apiKey)return Promise.resolve({ok:false,reason:'Observation unavailable'});
+ const readOnly=require('../providers/couriers/shipday').createClient({apiKey:config.shipday.apiKey,allowWrites:false});
+ return require('./pickup-observation').createObserver({store:shared.store,provider:readOnly}).observe(id);
+}
 let busy=false,timer;
 async function tick() {
   if(!automaticEnabled||busy||!config.shipday.apiKey)return;
@@ -97,12 +109,15 @@ async function tick() {
     }
     const stale=await data(db.from('shipday_dispatch_plans').select('id,version').eq('booking_dispatch',true).eq('state','PROCESSING').lt('updated_at',new Date(Date.now()-180000).toISOString()));
     for(const p of stale)await data(db.from('shipday_dispatch_plans').update({state:'REVIEW',version:p.version+1,problem:'Dispatch was interrupted. Reconcile the existing Shipday reference before retrying.'}).eq('id',p.id).eq('version',p.version).eq('state','PROCESSING'));
-    // Pausing new automatic requests must not stop observing accepted manual jobs.
-    const states=setting.enabled&&setting.automatic_pickups_from?['PLANNED','BLOCKED','REQUESTED','ASSIGNED']:['REQUESTED','ASSIGNED'];
-    const plans=await data(db.from('shipday_dispatch_plans').select('id').eq('booking_dispatch',true).eq('simulation',false).in('state',states).order('updated_at').limit(50));
-    for(const plan of plans)await dispatcher.run(plan.id);
+    // Review pauses remote writes, not read-only evidence of an existing pickup.
+    const observed=await data(db.from('shipday_dispatch_plans').select('id').eq('booking_dispatch',true).eq('simulation',false).not('shipday_order_id','is',null).in('state',['REVIEW','REQUESTED','ASSIGNED']).order('updated_at').limit(50));
+    for(const plan of observed)await observe(plan.id).catch(e=>console.error('Pickup observation:',e.message));
+    if(setting.enabled&&setting.automatic_pickups_from) {
+      const plans=await data(db.from('shipday_dispatch_plans').select('id').eq('booking_dispatch',true).eq('simulation',false).in('state',['PLANNED','BLOCKED']).order('updated_at').limit(50));
+      for(const plan of plans)await dispatcher.run(plan.id);
+    }
   } finally {busy=false;}
 }
 function start(){if(!automaticEnabled||timer)return;timer=setInterval(()=>tick().catch(e=>console.error('Scheduled pickup dispatch:',e.message)),30000);timer.unref();tick().catch(e=>console.error('Scheduled pickup dispatch:',e.message));}
 async function booked(order){const plan=await enqueue(order);if(plan)dispatcher.run(plan.id).catch(e=>console.error('Booked pickup dispatch:',e.message));}
-module.exports={enabled,automaticEnabled,provider,eligible,enqueue,validate,booked,run,tick,start};
+module.exports={enabled,automaticEnabled,provider,eligible,enqueue,validate,booked,run,observe,tick,start};

@@ -1,3 +1,47 @@
+# Current change: photos on the POS order page
+
+Neil requests viewing the bags at intake or laundromat drop off and at customer delivery directly on the order detail screen. Show verified proof from each linked Shipday leg in separately labelled thumbnail groups with full size links. Use existing employee order and customer permissions, exact stored job and reference identity and both addresses, and the existing bounded private image proxy. Missing and unavailable photos need truthful states. Do not confuse a signature or a customer pickup image with delivery proof. Preserve statuses, intake, payment, messaging and dispatch. Development only; tests, browser verification and required Obsidian notes to follow.
+
+Validation: 1810 tests passed with external network blocked. Both photos loaded at 1284 pixels in the browser and full size viewing was verified. Required Obsidian notes updated. Uncommitted development only; independent review, real phone check and Neil acceptance pending.
+
+# Current change: correct stale awaiting intake label
+
+Neil requested correction of the pickup label after intake. Use the existing at_partner_at receipt timestamp in order list and detail labels. Show Received by laundromat after confirmed receipt; keep awaiting intake only before receipt and avoid claiming it when no order context is supplied. Preserve order, payment and dispatch behavior. Regression reproduced before fixing. Browser verified the corrected label. Development only, independent review pending.
+
+# Current change: observe verified Shipday pickup progress
+
+Neil reported Shipday showing Picked Up while POS remained Dispatch needs review for order 9028. Poll linked real booking pickup plans in REVIEW, REQUESTED and ASSIGNED through a read-only observer even when new automatic dispatch is paused. Require matching job ID, reference, addresses and schedule, matching in-house driver or corroborated third-party progress. Record provider status separately. Never create, assign, cancel, transition laundry receipt, charge, or send messages from this observer. Show verified collection in the dashboard pickup-in-progress group and disable reassignment after collection. Preserve all existing business guards.
+
+Development migration 0144 applied. The server observer verified existing job 54235368 and cleared its stale review warning. Browser confirmed Picked up and Pickup in progress for 9028. Full suite passed 1803 tests; all nine focused observer tests passed after adding the paused-dispatch regression and correcting the group eyebrow. Independent review and Neil acceptance remain pending. Development only, uncommitted; main unchanged.
+
+# Current change: permit editing an undispatched scheduling hold
+
+Neil reported the false existing courier job warning on order 9028. The development database rejected every REVIEW plan, including the exact historical UTC boundary rejection that occurred before any remote write. Migration 0143 permits editing only that booking pickup hold with no Shipday ID, assignment attempt, trip snapshot or external reference. Actual remote IDs and courier records remain blocked, and uncertain states get an accurate review warning. Preserve all other access, concurrency, pricing and dispatch checks.
+
+Validation: reproduced the failure against the existing database function. All 12 transactional SQL regression variants pass with fixture edits rolled back. Applied only migration 0143 to development and recorded its checksum. All 1795 npm tests pass. Browser order editor opens. No order data or selected pickup time was persistently changed, and no courier request was submitted. Independent review and Neil acceptance remain pending.
+
+# Current change: order screen layout and spacing
+
+Neil requested implementation on 2026-10-02. Improve the order detail page hierarchy, unify order details and saved quote card styling, group pickup and laundry facts, and align dispatch labels and controls. Retain payment and pricing presentation and all existing authorization, pricing, payment, dispatch and reminder rules. Scope to order screen markup and CSS. Verify desktop, narrow viewport, keyboard controls and the existing test suite. Development only; independent review and Neil click testing remain pending. Validation: 1795 tests passed; 12 focused tests passed after final polish. Desktop and 390px responsive checks found no horizontal overflow. Internal note dialog verified without submission. Real phone testing remains pending. Obsidian development notes updated.
+
+## Current change: evening pickup across midnight UTC
+
+Neil explicitly assigns Codex implementation and requests removing the exclusive Claude Code editing role from AGENTS.md. Fix valid evening pickup and arrival times crossing a UTC date boundary without shifting either instant. Preserve the existing Shipday delivery date and separate UTC times, matching its dashboard conversion. Cover creation and editing. Allow explicit manual retry of the exact legacy boundary hold only when no Shipday ID, assignment attempt or trip snapshot exists; retain order, card, hours, identity and duplicate checks. No automatic recovery of review states or real driver request during verification. Regression tests and npm test required. Development only; independent review and Neil acceptance remain pending.
+
+Validation: 1795 tests passed with external network blocked. Browser verified order 9028 retry controls; its original time is now past. No real driver request. Uncommitted on codex/order-detail-actions; independent review and Neil acceptance pending. Obsidian development notes updated.
+
+## 20261002 Approved pickup preparation and fixed quote timing
+
+Development booking offers Earliest available and Schedule for later. Earliest resolves once to a quarter hour at least 15 minutes ahead, configurable with SHIPDAY_PICKUP_LEAD_MINUTES from 15 to 120. The scheduled picker uses quarter hour increments. Preparation time means bag readiness, not guaranteed driver arrival. Show the selected Shipday offer pickup estimate separately. Keep the resolved UTC time through pricing, review and dispatch. Continuing checkout validates the fixed time rather than applying the initial buffer again. Fewer than five minutes remaining requires a refreshed pickup and price review. This supersedes the historical ten minute past time grace for new quotes. Existing historical order handling is retained.
+
+Use fresh supported Shipday offers and the lowest valid price that fits readiness and laundromat hours. A provider pickup timing rejection blocks quoting or assignment rather than silently selecting a more expensive surviving offer. API failure blocks price confirmation. Scheduled times never silently move. Midnight and ambiguous or nonexistent Eastern daylight saving times are tested. Quoting does not request a driver; card and payment guards remain.
+
+Local browser verification reached scheduled price review with the same bag ready time and courier estimate. Earliest was refused when shop hours did not fit. A transient quote failure blocked progress; a subsequent fresh request recovered. No booking, payment, driver assignment or message was submitted. Uncommitted development work only; independent Grok review and Neil acceptance remain pending.
+
+## 20261002 Shipday is the only customer delivery price source
+
+Neil explicitly requires fresh address based Shipday API quotes for public pricing, booking pricing, plan comparisons and POS repricing. Choose the lowest valid supported third party offer separately for pickup and return, subject to pickup and arrival eligibility. Never use configured in house labour, fuel, mileage, static bands or simulated prices as a substitute. A missing, expired or failed API quote withholds pricing and blocks booking. Recheck both directions at booking; changed fees require a new customer price review. Reject unused historical in house quotes. Keep existing accepted orders and payments unchanged until an explicit correction, and keep pricing source separate from driver assignment. Quoting must never dispatch a driver. This supersedes the in house pricing decision and the earlier higher courier fee policy. Development only; main is unchanged.
+
 ## 20261002 Finished booked order walkthrough and open defects
 
 Neil requested completion of the booked-order test, updated notes and development push. QA #9025 reached DELIVERED/PAID with verified original Shipday return and test proof photo, one simulated delivered text/photo and explicit POS sync. Repeated sync did not change payments, messages, trip IDs/versions or completion event. Final isolated npm test: 1738 passed; 95 focused lifecycle assertions passed. See docs/testing/2026-10-02-order-flow.md and TESTING.md. The address fix 2cb7d08 is pushed; other shared source work remains excluded from this documentation change. Flow required intake service workaround and address repair, so this is completed with failures/recovery, not clean sign-off. Pricing and wording, return REVIEW metadata, sync labels, simulation badge and billable weight defects remain open. Broader role/physical/concurrency/hosted/pilot variants and independent review remain pending. No main merge, third-party dispatch or live messages.
@@ -9,6 +53,28 @@ Neil approved the bounded design and requested commit and push to development, w
 Implementation: src/core/delivery-address.js, partner-delivery-gate.js, partner-return.js and delivery-sms.js; test/delivery-address-verification.test.js. Three reproductions failed before implementation; seven regression cases and 43 focused tests passed. Fresh full npm test on the development working tree with external network blocked: 1738 passed, zero failed. Other uncommitted work was preserved and excluded from this scoped commit.
 
 The original QA return passed read-only verification with the same linked trip and LYNDRY driver. The normal worker recorded a simulated out-for-delivery message. Browser pickup confirmation succeeded, the shop board recorded the handoff, and POS showed OUT_FOR_DELIVERY with the shop audit event. Shop completion is handoff to the driver, not final customer delivery. No replacement trip, reassignment, real SMS or payment action. Final delivery and photo verification, independent review and Neil acceptance remain pending. Development only; main is unchanged.
+
+## 20261002 Testing organization and local baseline
+
+Neil requested organized independent end-to-end testing, then one laundromat test-environment pilot, then production. TESTING.md is the single tracker, with actual state/role/issue matrices, failure and recovery cases, evidence requirements and launch gates. This documentation work changes no application behavior and does not replace the implementation specs below.
+
+Fresh isolated npm test on the dirty codex/order-detail-actions checkout at 8517473: 1708 passed, zero failed. Two attempted non-loopback connections were refused by a temporary test-process guard; attribution remains open. This is local assertion coverage, not provider integration or launch approval. First integrated test is return-weight issue resolution with failed/uncertain return dispatch and safe recovery. Exact writable test environment, Stripe test scope, Shipday driver/account and messaging interception need confirmation. No server start, provider request, customer write, production change, branch switch, commit or push. Independent review, integrated runs, Neil click tests and physical pilot remain pending.
+
+Final verification found concurrent source/test work in this shared checkout. It was preserved. The recorded 1708-pass run does not validate the latest working tree; a new baseline is needed after the candidate stabilizes. External testing remains paused pending exact test-site and provider/message scope approval requested by the parent session.
+
+## 20261002 Propagate canceled development orders to Shipday
+
+Neil explicitly requests cancellation of the linked Shipday job for order 9021 and a permanent cancellation connection. Verify exact ID and reference, remove only unstarted in house deliveries, verify absence, retain identifiers and audit history. Failed or ambiguous and third party cases need visible review, never silent success. Canceled order records supply durable reconciliation work; recover interrupted claims and throttle retries. Preserve existing payment release and notification choices. Do not create a replacement trip.
+
+## 20261002 Clear obsolete blocked checkout after replacement booking
+
+Neil requests removal of the stale account banner after placing the replacement order. Close the previously observed blocked intent only after a successful confirmed booking. Preserve failed bookings, newer concurrent intents and customer ownership. Do not change payment, dispatch or message behavior. Repair the confirmed stale intent for order 9021 without booking another order or sending a message.
+
+## 20261002 Paired order identifiers and silent manual completion
+
+Show pickup and return Shipday IDs beside the existing unique LYNDRY order number. Admin manual completion requires reason and receipt attestation but no photo. Preserve authorization, payment eligibility, audit and replay protection. Suppress subsequent automated delivery text and photo observations for manually completed orders. Verified Shipday sync continues requiring proof. No actual order completion during verification.
+
+Verified locally: 28 focused tests pass. Full suite has 1682 passes and the same two existing partner profile wording failures. Migration 0140 activated only on development. Database completion without photo, notification suppression, preserved existing photo and payment, and harmless replay verified in a rolled back transaction. Browser verifies paired identifiers and the photo free dialog. No order completed, no message sent. Obsidian updated. Not committed or pushed. Independent review and Neil click testing pending.
 
 ## 20261002 Shipday IDs and compact toolbar
 
@@ -599,3 +665,82 @@ Validation for order header actions: 31 focused tests pass; full suite 1669 pass
 Delivery recovery validation: 27 focused passes; full suite 1679 pass with two existing partner portal wording failures. Migration 0139 applied only in development. Atomic completion and replay tested with rollback. Browser verified dialogs and safe refusal on 9019 address mismatch. Obsidian updated. No actual completion, charge, message, commit or production release. Independent review pending.
 
 20261002 validation: linked pickup and return IDs verified on order 9019; requested toolbar lines absent. Seventeen focused tests pass; full suite 1681 pass and two existing partner portal wording failures. Obsidian updated. No order mutations or production release.
+
+
+20261002 verification: order 9021 linked Shipday pickup removed and absence verified. Account stale intent completed and banner absence verified in browser. Full suite 1696 passes, two existing partner profile wording failures. No commit or push. Full bidirectional lifecycle reconciliation remains outstanding; 30 minute schedule anchor awaits Neil clarification.
+
+
+## 20261002 Customer and POS audit remediation
+
+Neil explicitly assigned Codex implementation and approved the eleven audit plans, overriding Claude-only implementation ownership for this work. Implemented settings renderer recovery, stored-coordinate booking quotes and actionable duplicates, complete address-unit validation, validated atomic partner hours, truthful softener labels, policy-aware public/service copy, completion hint correction, explicit manual driver selection and eligibility hints, and development POS saved-quote review with no-card and quote-category protection. Production rates, historical accepted snapshots and existing payment/reminder/route guards remain intact.
+
+Migration 0141_atomic_partner_hours.sql was applied only to verified development database psrphpgbiifvnlrgvbdg. It is not activated in production. A fresh final npm test run passed 1738 tests with zero failures. New regressions were observed failing before their fixes. Final Codex review findings were resolved; this is not Grok-reviewed or Neil-click-accepted.
+
+Browser checks covered settings, one-time and subscription price review, public copy, structured unit quote, POS reviewed creation followed by silent cancellation of own QA order 9026, no-card refusal, invalid partner hours and explicit disabled driver selection. Automatic assignment was verified paused. No third-party driver was requested. Other work's QA orders and concurrent source changes were preserved. External-network-prohibited lifecycle regression suites passed, including pickup/return retries, cancellation, access checks, weight/payment holds and no-card route/reminder exclusion. Physical provider journey remains unverified.
+
+Two temporary browser price-verification failures succeeded on retry and remain an observation, not an availability bypass. Unstructured legacy quote query was not verified successful. Work remains scoped and uncommitted in the existing dirty development checkout; do not stage unrelated work. Independent Grok review, Neil click acceptance, branch separation and physical pilot are pending. No push, merge or production release.
+
+Evidence: implementation-results.md and implementation-ledger.md under C:/Users/neil/.codex/visualizations/2026/10/02/01a0fce4-0123-7012-af85-ea9c3e14cbf1; approved plans under bug-fix-plans. Full final test output: TEMP/lyndry-fixes-final-tests.log.
+
+
+## 20261002 Active development booking corrections
+
+Neil assigned implementation directly, including customer workflow, availability selection, minute-level pickup timing, full house numbers, consistent pricing method cards, cheaper alternatives, two offered frequencies, independent account updates, and POS customer table order. Implementation is local and uncommitted in the existing LYNDRY-dev linked worktree on codex/order-detail-actions. No main commit, push, merge, external dispatch, customer text or payment operation was performed.
+
+See the dated decision above in DECISIONS.md and docs/superpowers/plans/2026-10-02-available-laundromat.md. New LYNDRY delivery quotes use configured in-house costs and do not require a third-party quote. Public estimates rank by overall cost; scheduled booking chooses the closest available shop; the explicit cheaper alternative chooses an eligible cheaper shop/time. Existing quote approval and card gates remain.
+
+Regression tests cover closest and cheaper selection, actual Friday/Saturday hours, no external courier dependency, same-minute and final-confirmation boundaries, selected subscription first date and anchor, address number preservation and stale coordinate removal, editable address carryover, one public booking action, schedule before plans, and independent account updates. Reviewer findings about subscription dates, stale coordinates, runtime/admin source gates and pickup edit SQL were resolved. Migration 0142 alone was applied to the verified development database and its checksum/function read back. Other pending migrations and historical checksum drift were left untouched.
+
+Browser verified equal desktop cards in the 960px layout, no monthly choice, no horizontal overflow at 390px or 320px, all three account Update actions with no orders/card, and Details/Wash Preferences before Recurring Pickups. A real phone check, complete card/order click test, independent Grok review and publication remain Neil's final acceptance steps. No work is marked Reviewed or shipped.
+
+
+### 2026-10-02 latest booking corrections
+
+Subscription frequency is inside the subscription card immediately above Choose subscription. Both pricing method buttons submit their own method and proceed to review. Choosing a cheaper alternative displays the new pickup date and time in a banner on the next page. Wholesale customers retain their applicable rates under both method headings.
+
+Scheduled development checkout accepts a pickup up to ten elapsed calendar minutes earlier than the current minute, so completing checkout does not lose a recently selected time. Eleven elapsed minutes is rejected. Future times remain eligible subject to laundromat hours, capacity and next day return. Arrival checks shift forward by elapsed checkout time while retaining travel and loading allowance. Saved quote expiry and approval remain required.
+
+Verification: npm test passed all 1770 tests with external network blocked. Browser verification confirmed the banner, equal width side by side cards and frequency placement. Changes remain local and uncommitted; main is unchanged. Neil's complete card and order flow, real phone check and Grok review remain outstanding.
+
+
+Final follow up: all 1772 tests pass after regression coverage for grace period dispatch and single counted arrival delay. In house dispatch shares the checkout grace limit and uses the saved travel and loading duration. Independent narrow agent review found no remaining material issue; this does not replace Grok review or Neil acceptance.
+
+
+## 20261002 Shipday pricing verification
+
+Implemented locally on codex/order-detail-actions in the shared development checkout. New development public quotes, booking plan prices, alternatives and POS repricing use fresh Shipday address quotes and the lowest valid supported offer in each direction. Booking rechecks current API fees and address, rejects unused in house snapshots and requires review when fees change. Pricing source is separate from driver assignment so no automatic third party request is introduced. Existing accepted order 9027 was not repriced or charged.
+
+Validation: npm test passed 1776 tests with zero failures. Regression coverage includes asymmetric trip prices, missing and failed quotes, unsupported and invalid offers, cheapest eligible arrival, changed address, booking fee changes and driver assignment isolation. The live address API returned 674 cents each way for the original order address and shop; the updated 30 lb estimate was 5718 cents versus the saved 6396 cents. Public quote HTTP check returned 200 with pricing and booking action. Shipday dashboard screenshot showed 649 cents earlier; the existing job estimate endpoint returned HTTP 400, so exact dashboard/API parity remains unresolved. No driver request or customer charge was made for verification. Main unchanged. No commit or push. Independent Grok review and Neil click testing remain pending.
+
+Pickup timing final verification 20261002: npm test passed 1784 tests, zero failures. Supplemental agent review findings were fixed with regression coverage; this is not independent Grok sign off.
+
+
+## 20261002 Pickup screen correction
+
+Neil clarified the screen must offer Pick up now with Earliest available pickup, or Schedule with date and time in 30 minute increments. Replaced the unclear controls with visible selection indicators and a half hour time dropdown. Removed preparation buffer copy. This supersedes the previous quarter hour customer picker. The change is limited to presentation and schedule selection; existing API pricing checks remain. Development only, not shipped.
+
+
+## 20261002 Hourly scheduled pickup choices
+
+Neil changed the scheduled pickup dropdown to hourly choices. This supersedes the 30 minute picker. Only the dropdown choices changed. All four focused booking screen tests pass. Local development only.
+
+
+## 20261002 Consistent quote and booking selection
+
+Neil requires the same pricing methodology when quote and booking have the same inputs and eligible opportunities. Investigation found public address quotes compared every eligible shop by customer total while booking retained only the closest shop. Booking now compares all eligible shops using the same lowest total calculation. This supersedes closest shop selection for new booking prices. Explicitly chosen alternative shops remain constrained to that choice. Scheduled hours, capacity, courier timing, fresh API fees and confirmation checks remain required, so different available offers can still produce different prices.
+
+Regression reproduced the more expensive booking selection before the fix and now verifies matching shop, totals and minimums across all pricing categories for matching eligible options. Full npm test passed 1784 tests with zero failures. Local development only; no deployment or existing order repricing.
+
+
+## 20261002 Quote schedule comparison correction
+
+Live API tracing reproduced both reported totals after shop selection was aligned. The unscheduled address quote used a 674 cent pickup. For the tested scheduled pickup, Uber estimated arrival about two minutes before readiness and was excluded; DoorDash cost 750 cents. Return cost remained 674 cents. This produced subscription totals 50.62 and 51.49 and one time totals 57.18 and 58.17. The previous shop selection correction alone did not resolve this difference.
+
+Public weight pricing now accepts a pickup date and hourly Eastern time using the existing scheduled quote path. The address estimate is identified as unscheduled. The weight field remains the single submitted weight control. Direct localhost checks verified 57.18 without a schedule and 58.17 with the tested booking schedule. Full suite passed 1784 tests before the final form association correction; direct page checks verified that correction. No booking or driver dispatch. Local development only.
+
+
+## 20261002 Remove unrequested public scheduling form
+
+Neil requested removal of the public quote scheduling form. It has been removed, including the weight form association. Booking keeps its existing pickup choices. Scheduled quote links now distinguish unavailable pickup time from address coverage failure. The previous route mapped every no eligible shop error to outside service area even when the selected schedule was the constraint.
+
+Verified the reported address returns public prices without a scheduling form. The reported Sunday evening URL now says Pickup time unavailable and does not claim the address is unserved. Full npm test passed 1785 tests. Development only. No order, dispatch or payment changes. This supersedes the prior public schedule form addition.

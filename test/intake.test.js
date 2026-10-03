@@ -396,8 +396,13 @@ test('subscription is never inferred from how often somebody orders', () => {
 test('both rates come off subscription.js, never typed into a sentence', () => {
   const text = tableFor(SETTLED).get('service_type').text;
 
-  assert.ok(text.includes(subscription.oneTimeRate()), text);
-  assert.ok(text.includes(subscription.subscriptionRate()), text);
+  if (require('../src/config').config.supabase.isDevelopment) {
+    assert.doesNotMatch(text, /\$[\d.]+\/lb/);
+    assert.match(text, /Review your price/);
+  } else {
+    assert.ok(text.includes(subscription.oneTimeRate()), text);
+    assert.ok(text.includes(subscription.subscriptionRate()), text);
+  }
 
   const src = withoutComments(SRC('core', 'intake.js'));
   assert.ok(!/\$\d/.test(src), 'a price is typed into intake.js');

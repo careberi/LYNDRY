@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {quoteCandidates,assessWeight}=require('../src/core/dynamic-order-pricing');
 const policy={pricingMethod:'COST_PLUS_MARGIN_15',marginBps:{ONE_TIME:2000,SUBSCRIPTION:1000,WHOLESALE:500},processingBps:290,processingFixedCents:30,operationalFeeBps:2500,referenceWeightLb:33};
-const shop={id:'a',eligible:true,wholesaleCentsPerLb:70,customerBaseCentsPerLb:100,pickupCents:699,returnCents:699,source:'SIMULATION',expiresAt:'2099-01-01'};
+const shop={id:'a',eligible:true,wholesaleCentsPerLb:70,customerBaseCentsPerLb:100,pickupCents:699,returnCents:699,source:'SHIPDAY',expiresAt:'2099-01-01'};
 test('customer base drives all category rates, without replacing the actual wash cost',()=>{
  for(const [category,rate] of [['ONE_TIME',130],['SUBSCRIPTION',115],['WHOLESALE',109]]){
   const q=quoteCandidates([shop],{policy,category});assert.equal(q.rateCentsPerLb,rate);assert.equal(q.wholesaleCentsPerLb,70);assert.equal(q.customerBaseCentsPerLb,100);

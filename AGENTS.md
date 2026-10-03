@@ -16,8 +16,9 @@ the implementer.
 
 - **ChatGPT:** writes the spec in English. Rules, must-nots, edge cases. No code
   unless Neil explicitly assigns implementation.
-- **Claude Code:** the only agent that edits this repo. Implements one Issue at
-  a time on a branch.
+- **Implementing agent (Codex, Claude Code, or another agent Neil assigns):**
+  edits this repo when Neil assigns implementation. Implements one Issue at a
+  time on a branch. Claude Code has no exclusive editing role.
 - **Grok:** reviews the diff against the Issue. Looks for logic holes (example:
   reminder or route on an order with no card). Does not implement unless Neil
   asks for a patch spec.
@@ -29,12 +30,12 @@ the implementer.
 1. Neil states the requirement.
 2. ChatGPT returns a short spec. Neil puts that spec on a GitHub Issue (and may
    paste a copy into HANDOFF.md).
-3. Claude Code reads AGENTS.md, the Issue, and HANDOFF.md, then implements only
+3. The implementing agent reads AGENTS.md, the Issue, and HANDOFF.md, then implements only
    that spec on a branch.
 4. Neil pastes the diff or file list to Grok.
 5. Grok returns findings: severity, file, failure scenario, what to change. No
    rewrite of unrelated modules.
-6. Claude Code fixes only those findings.
+6. The implementing agent fixes only those findings.
 7. Neil click-tests. Then merge.
 
 ## Hard rules

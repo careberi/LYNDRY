@@ -99,6 +99,7 @@ function isRepeat(intent) {
 // cadence and an imagined row cannot know it.
 function firstDateFor(intent) {
   if (!intent) return '';
+  if (require('../config').config.supabase.isDevelopment && intent.dev_quote_id && intent.pickup_date) return intent.pickup_date;
   if (!isRepeat(intent)) return intent.pickup_date || '';
 
   // recurring owns this, because recurring owns schedules. A copy here would be
@@ -188,6 +189,18 @@ async function complete(intent, order) {
     .maybeSingle();
 
   if (error) throw error;
+  return data;
+}
+
+// Close only the blocked checkout observed before this replacement booking.
+// A newer checkout or concurrent conversion must remain untouched.
+async function completeReplacement(intent, order, customerId) {
+  if (!intent?.blocked_reason || !order?.id || intent.customer_id !== customerId || order.customer_id !== customerId) return null;
+  const {data,error} = await db.from('booking_intents').update({
+    order_id:order.id, completed_at:new Date().toISOString(), blocked_reason:null, updated_at:new Date().toISOString(),
+  }).eq('id',intent.id).eq('customer_id',customerId).eq('updated_at',intent.updated_at)
+    .is('completed_at',null).select(FIELDS).maybeSingle();
+  if(error)throw error;
   return data;
 }
 
@@ -412,6 +425,7 @@ module.exports = {
   claim,
   release,
   complete,
+  completeReplacement,
   blocked,
   convert,
   unfinished,

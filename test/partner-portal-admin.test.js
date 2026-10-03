@@ -84,7 +84,7 @@ test('THE PAGE RENDERS, WHICH IS NOT A GIVEN', () => {
 test('IT NAMES THE SHOP PORTAL AND LINKS TO IT', () => {
   const html = render();
 
-  assert.match(html, /Their portal/);
+  assert.match(html, /Portal access/);
   assert.match(html, /\/shop\/riverside-wash-co/, 'the portal address is not on the page');
   assert.match(html, /Maria Lopez/, 'the owner is not listed');
   assert.match(html, /201-555-0160/, 'the number is not in the house format');
@@ -94,7 +94,7 @@ test('and a shop with no address yet says so rather than linking nowhere', () =>
   const html = render({ partner: { ...SHOP, slug: null } });
 
   assert.doesNotMatch(html, /href="\/shop\/(null|undefined)/, 'it links to a broken portal address');
-  assert.match(html, /no portal address yet/i);
+  assert.match(html, /No portal address\. Edit and save this profile to create one\./);
 });
 
 test('ONLY OPS MAY NAME AN OWNER, AND THE PAGE IS WHERE THAT RUNG IS', () => {

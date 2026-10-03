@@ -95,7 +95,7 @@ test('a first observation of a completed trip does not backfill old messages',as
 });
 test('canceled, opted-out, cardless, expired or replaced trips never send queued text',async()=>{
  for(const change of [
-  x=>x.f.order.status='CANCELED',x=>x.f.order.customers.status='UNSUBSCRIBED',
+  x=>x.f.order.delivery_notifications_suppressed=true,x=>x.f.order.status='CANCELED',x=>x.f.order.customers.status='UNSUBSCRIBED',
   x=>x.f.order.customers.default_payment_method_id=null,x=>x.f.plan.shipday_order_id='100',
   x=>x.rows[0].created_at=new Date(stamp-120001).toISOString(),
   x=>x.f.remote.orderStatus.orderState='PICKED_UP']) {
@@ -118,3 +118,5 @@ test('contact adapter preserves both endpoint phones while clearing notification
  assert.deepEqual(contactFields({restaurantPhoneNumber:'+12015550111',customerPhoneNumber:'+12015550112',customerEmail:'private@example.com'}),
  {restaurantPhoneNumber:'+12015550111',customerPhoneNumber:'+12015550112',customerEmail:''});
 });
+
+test('manual recovery suppresses later delivery texts and photo observations',async()=>{const f=fixture('TO_CUSTOMER');f.order.delivery_notifications_suppressed=true;f.provider.findOrders=async()=>{throw Error('must not contact provider');};assert.equal(await observe(f),null);});

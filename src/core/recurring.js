@@ -123,6 +123,9 @@ function describeAll(schedules) {
 function nextDate(schedule, fromDate = booking.today()) {
   if (!schedule || schedule.status !== 'ACTIVE') return null;
 
+  // A future first pickup anchors the arrangement; never schedule before it.
+  const start = String(schedule.started_on || '').slice(0,10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(start) && start > fromDate) fromDate = start;
   let candidate = nextWeekday(fromDate, schedule.weekday);
 
   // ANY CADENCE WIDER THAN A WEEK COUNTS FROM THE ANCHOR, and this used to be
@@ -328,7 +331,7 @@ async function bookDue({ date } = {}) {
 // but bookPickup() was never told, and orders.placed_via read null. Null then
 // looks exactly like a thread booking, which is how a customer who had never
 // used the text thread came to be sent a payment link in one.
-async function addSchedule(customer, { cadence, weekday, timeOfDay = null, placedVia = null }) {
+async function addSchedule(customer, { cadence, weekday, timeOfDay = null, placedVia = null, startedOn = null }) {
   if (!CADENCES[cadence]) throw new Error(`Unknown cadence: ${cadence}`);
 
   const day = Number(weekday);
@@ -350,6 +353,9 @@ async function addSchedule(customer, { cadence, weekday, timeOfDay = null, place
   if (booking.DOORS[placedVia]) patch.placed_via = booking.DOORS[placedVia];
 
   if (existing) {
+    // Restarting an ended arrangement uses the newly chosen first date.
+    // An ongoing arrangement retains its existing cadence anchor.
+    if (startedOn && existing.status === 'ENDED') patch.started_on = startedOn;
     const { data, error } = await db
       .from('recurring_schedules')
       .update(patch)
@@ -363,7 +369,7 @@ async function addSchedule(customer, { cadence, weekday, timeOfDay = null, place
 
   const { data, error } = await db
     .from('recurring_schedules')
-    .insert({ customer_id: customer.id, cadence, weekday: day, ...patch })
+    .insert({ customer_id: customer.id, cadence, weekday: day, ...patch, ...(startedOn ? {started_on:startedOn} : {}) })
     .select('*')
     .single();
 
@@ -531,11 +537,18 @@ async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadenc
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
 
   const repeat = Boolean(CADENCES[cadence] && days.length);
-  const firstDate = repeat ? firstRepeatDate({ cadence, weekdays: days, pickupTime: devQuoteId ? pickupTime : '' }) : pickupDate;
+  let firstDate = repeat ? firstRepeatDate({ cadence, weekdays: days, pickupTime: devQuoteId ? pickupTime : '' }) : pickupDate;
+  let exactFirstDate = false;
   if(devQuoteId){
     const quote=await require('./dev-checkout').read(devQuoteId,customer.id);
     const category=customer.pricing_category==='WHOLESALE'?'WHOLESALE':repeat?'SUBSCRIPTION':'ONE_TIME';
     if(quote.snapshot.category!==category)throw Error('Your plan changed. Request a new quote.');
+    if (['CLOSEST_AVAILABLE_V1','AVAILABLE_ALTERNATIVE_V1'].includes(quote.snapshot.selectionMethod)) {
+      if (pickupDate !== quote.pickup_date) throw Error('Your pickup date changed. Request a new quote.');
+      if (repeat && (days.length !== 1 || days[0] !== new Date(pickupDate+'T12:00:00Z').getUTCDay())) throw Error('Your pickup weekday changed. Request a new quote.');
+      firstDate = quote.pickup_date;
+      exactFirstDate = true;
+    }
   }
 
   const result = await booking.bookPickup(customer, {
@@ -564,6 +577,7 @@ async function bookAndSchedule(customer, { pickupDate, pickupTime, notes, cadenc
           // The wizard is the web door and the schedule remembers it, so every
           // pickup this arrangement books is known to be a web customer's.
           placedVia: booking.DOORS.WEB,
+          ...(exactFirstDate ? {startedOn:firstDate} : {}),
         })
       );
     }

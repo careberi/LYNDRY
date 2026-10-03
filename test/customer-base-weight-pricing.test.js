@@ -6,7 +6,7 @@ const policy={pricingMethod:model.METHOD,laundryPricingBasis:model.CUSTOMER_BASE
  referenceWeightLb:33,operationalFeeBps:2500,processingBps:290,processingFixedCents:30,
  marginBps:{SUBSCRIPTION:1000,ONE_TIME:2000,WHOLESALE:500},cardHold:{mode:'FIXED',fixedCents:2500}};
 const shop={id:'fixture',eligible:true,wholesaleCentsPerLb:70,customerBaseCentsPerLb:100,retailCentsPerLb:250,
- pickupCents:699,returnCents:699,source:'SIMULATION',expiresAt:'2099-01-01'};
+ pickupCents:699,returnCents:699,source:'SHIPDAY',expiresAt:'2099-01-01'};
 const quote=(over={},category='SUBSCRIPTION',p=policy)=>dynamic.quoteCandidates([{...shop,...over}],{policy:p,category,estimatedWeightLb:30});
 
 test('new customer bases drive every tier, weight and minimum while supplier cost stays separate',()=>{

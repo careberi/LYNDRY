@@ -12,6 +12,7 @@ function fixture(options={}) {
   '../db':db,'../config':{config:{env:options.production?'production':'development',supabase:{projectRef:options.projectRef||'psrphpgbiifvnlrgvbdg'},shipday:{}}},
   './shipday-dispatch':require('../src/core/shipday-dispatch'),'./shipday-booking-dispatch':{createBookingDispatcher:({validate})=>({run:async()=>validate({order_id:'order'})})},
   './order-address':require('../src/core/order-address'),
+  './pickup-timing':require('../src/core/pickup-timing'),
   './shipday-dispatch-runtime':{result:async q=>(await q).data,settings:async()=>settings,store:{}},
   '../providers/couriers/shipday':{createClient:()=>({})},
   './billing':{holdIsFresh:()=>options.hold!==false,holdDueNow:()=>options.holdDue!==false},
@@ -20,7 +21,7 @@ function fixture(options={}) {
   './dev-checkout':{scheduleFits:()=>options.hours!==false},
   './courier-legs':{addressOf:(row,other)=>({line1:row.address_line1,city:row.city,state:row.state,postalCode:row.postal_code,...other})},
  };
- const context={require:n=>{if(!(n in modules))throw Error('Unexpected '+n);return modules[n];},module:{exports:{}},console,Date,Intl,Map};
+ const context={require:n=>{if(!(n in modules))throw Error('Unexpected '+n);return modules[n];},module:{exports:{}},console,Date:options.now?class extends Date {static now(){return options.now;}}:Date,Intl,Map};
  vm.runInNewContext(fs.readFileSync(require.resolve('../src/core/shipday-booking-runtime'),'utf8'),context);
  return {runtime:context.module.exports,order,settings,writes};
 }
@@ -85,4 +86,33 @@ test('real pickup uses exact Eastern schedule and saved budget, with photo-only 
  assert.equal(result.acceptEstimate({deliveryTime:'2099-09-28T21:00:00Z'}),true);assert.equal(result.acceptEstimate({deliveryTime:'2099-09-28T22:00:00Z'}),false);
  assert.equal(result.acceptEstimate({deliveryTime:'2099-09-29T17:00:00Z'}),false);
  const saved=await f.runtime.validate({order_id:'order',trip_snapshot:{dropoffDeadlineAt:'2099-09-28T20:17:00Z'}});assert.equal(saved.trip.dropoffDeadlineAt,'2099-09-28T20:17:00Z');
+});
+
+test('LYNDRY quotes only enroll manually in house and retain payment guards',async()=>{
+ const f=fixture({order:{pricing_snapshot:{source:'IN_HOUSE',pickupCents:600,arrivalChecks:['2099-09-28T20:25:00Z']}}});
+ assert.equal(await f.runtime.enqueue(f.order),null);assert.equal(f.writes.length,0);
+ await f.runtime.enqueue(f.order,{manual:true});assert.equal(f.writes[0].mode,'IN_HOUSE');
+ const checked=await f.runtime.validate({order_id:'order',mode:'IN_HOUSE'},{manual:true});assert.equal(checked.ok,true);assert.equal(checked.inHouseArrivalAt,'2099-09-28T20:25:00Z');
+ assert.equal((await f.runtime.validate({order_id:'order',mode:'THIRD_PARTY'},{manual:true})).ok,false);
+});
+test('new pickup timing retains the quoted instant and blocks stale or changed dispatch',async()=>{
+ const f=fixture({now:Date.parse('2099-09-28T19:45:00Z')});
+ f.order.pricing_snapshot={source:'SHIPDAY',pickupCents:699,timingPolicyVersion:'PICKUP_TIME_V1',pickupReadyAt:'2099-09-28T20:00:00.000Z'};
+ let checked=await f.runtime.validate({order_id:'order'});assert.equal(checked.ok,true);assert.equal(checked.trip.pickupReadyAt,f.order.pricing_snapshot.pickupReadyAt);
+ f.order.pickup_time='16:15:00';checked=await f.runtime.validate({order_id:'order'});assert.equal(checked.ok,false);assert.match(checked.reason,/changed/);
+ const stale=fixture({now:Date.parse('2099-09-28T19:56:00Z')});stale.order.pricing_snapshot=f.order.pricing_snapshot;
+ checked=await stale.runtime.validate({order_id:'order'});assert.equal(checked.ok,false);assert.match(checked.reason,/too close/);assert.equal(stale.writes.length,0);
+});
+
+test('Shipday pricing does not automatically book a third-party driver for an in-house pickup',async()=>{
+ const f=fixture({order:{pricing_snapshot:{source:'SHIPDAY',transportMode:'IN_HOUSE',pickupCents:674,arrivalChecks:['2099-09-28T20:25:00Z']}}});
+ assert.equal(await f.runtime.enqueue(f.order),null);assert.equal(f.writes.length,0);
+ await f.runtime.enqueue(f.order,{manual:true});assert.equal(f.writes[0].mode,'IN_HOUSE');
+});
+
+test('manual in-house pickup accepts checkout grace and advances arrival once',async()=>{
+ for(const [minute,ok] of [[10,true],[11,false]]){
+ const f=fixture({now:Date.parse('2099-09-28T20:'+minute+':59Z'),order:{pricing_snapshot:{source:'IN_HOUSE',pickupCents:600,inHouseArrivalMinutes:15,arrivalChecks:['2099-09-28T20:20:00Z']}}});
+ const result=await f.runtime.validate({order_id:'order',mode:'IN_HOUSE'},{manual:true});assert.equal(result.ok,ok);if(ok)assert.equal(result.inHouseArrivalAt,'2099-09-28T20:25:00.000Z');
+ }
 });

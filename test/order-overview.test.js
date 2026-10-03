@@ -18,8 +18,10 @@ test('archived proposals are not shown; saved pricing remains permission control
 
 test('pickup and return IDs come from separate linked trips, not the order number',()=>{
  const html=orderOverview({order:{order_number:9019},customer:{},deliveryPlans:[{leg:'TO_CUSTOMER',shipday_order_id:'222'},{leg:'TO_PARTNER',shipday_order_id:'111'}]});
- assert.match(html,/<dt>Shipday pickup ID<\/dt><dd>111<\/dd>/);
- assert.match(html,/<dt>Shipday return ID<\/dt><dd>222<\/dd>/);
+ assert.match(html,/<dt>Pickup · Shipday \/ LYNDRY<\/dt><dd>111 \/ #9019<\/dd>/);
+ assert.match(html,/<dt>Return · Shipday \/ LYNDRY<\/dt><dd>222 \/ #9019<\/dd>/);
  const missing=orderOverview({order:{order_number:9019},customer:{}});
  assert.equal((missing.match(/Not linked yet/g)||[]).length,2);
 });
+
+test('canceled order warns until linked Shipday cancellation is confirmed',()=>{const args={order:{order_number:1,status:'CANCELED'},customer:{},deliveryPlans:[{leg:'TO_PARTNER',shipday_order_id:'123',state:'REVIEW'}]};assert.match(orderOverview(args),/Shipday cancellation is not yet confirmed/);args.deliveryPlans[0].state='CANCELED';assert.doesNotMatch(orderOverview(args),/Shipday cancellation is not yet confirmed/);});

@@ -641,36 +641,34 @@ function describeHours(rows) {
     .join(', ');
 }
 
-// Replace a partner's hours wholesale from a submitted form.
-//
-// Delete-then-insert rather than a diff: the form IS the whole week, so what
-// is not in it is closed, and working out which individual rows changed would
-// be more code for exactly the same result.
-async function saveHours(partnerId, form) {
+// Validate the complete week before any profile or schedule write.
+function hoursFromForm(partnerId, form = {}) {
   const rows = [];
-
   for (let day = 0; day < 7; day += 1) {
-    // A day can carry a second shift. The form names them hours_1_open and
-    // hours_1_open_2, so a laundromat that shuts for lunch can say so.
+    const shifts = [];
     for (const suffix of ['', '_2']) {
-      const opens = hhmm((form || {})[`hours_${day}_open${suffix}`]);
-      const closes = hhmm((form || {})[`hours_${day}_close${suffix}`]);
-
-      // Both or neither. Half a pair is somebody mid-edit, and guessing the
-      // other half would invent an opening time nobody typed.
-      if (!opens || !closes) continue;
-      if (minutesOfDay(closes) <= minutesOfDay(opens)) continue;
-
-      rows.push({ partner_id: partnerId, weekday: day, opens_at: opens, closes_at: closes });
+      const rawOpen = String(form[`hours_${day}_open${suffix}`] || '').trim();
+      const rawClose = String(form[`hours_${day}_close${suffix}`] || '').trim();
+      if (!rawOpen && !rawClose) continue;
+      const opens = hhmm(rawOpen), closes = hhmm(rawClose);
+      if (!opens || !closes || minutesOfDay(closes) <= minutesOfDay(opens)) {
+        throw Error(`${WEEKDAYS[day]} hours: enter both times with closing after opening.`);
+      }
+      shifts.push({ partner_id: partnerId, weekday: day, opens_at: opens, closes_at: closes });
     }
+    shifts.sort((a, b) => a.opens_at.localeCompare(b.opens_at));
+    if (shifts.length === 2 && shifts[1].opens_at < shifts[0].closes_at) {
+      throw Error(`${WEEKDAYS[day]} hours: the two intervals overlap.`);
+    }
+    rows.push(...shifts);
   }
+  return rows;
+}
 
-  const { error: clearError } = await db.from('partner_hours').delete().eq('partner_id', partnerId);
-  if (clearError) throw clearError;
-
-  if (!rows.length) return [];
-
-  const { data, error } = await db.from('partner_hours').insert(rows).select('*');
+// The database function replaces the week in one transaction, including failure rollback.
+async function saveHours(partnerId, form) {
+  const rows = hoursFromForm(partnerId, form);
+  const { data, error } = await db.rpc('replace_partner_hours', { p_partner: partnerId, p_hours: rows });
   if (error) throw error;
   return data || [];
 }
@@ -888,6 +886,7 @@ module.exports = {
   canCollectOn,
   describeHours,
   saveHours,
+  hoursFromForm,
   loadByPartner,
   plannedByPartner,
   capacityOf,

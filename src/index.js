@@ -415,6 +415,7 @@ const server = app.listen(config.port, () => {
   require('./core/shipday-dispatch-runtime').start();
   require('./core/shipday-booking-runtime').start();
   require('./core/shipday-order-sync-runtime').start();
+  require('./core/shipday-cancellation-runtime').start();
   require('./core/delivery-sms-runtime').start();
 });
 

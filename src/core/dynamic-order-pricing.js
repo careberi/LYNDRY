@@ -11,7 +11,7 @@ function quoteCandidates(candidates, { policy, category, estimatedWeightLb, now 
     if (!Number.isFinite(Date.parse(candidate.expiresAt)) || Date.parse(candidate.expiresAt) <= now) {
       throw Error('Refresh both courier estimates before comparing prices.');
     }
-    if (!['SIMULATION', 'SHIPDAY'].includes(candidate.source)) throw Error('Courier estimate source is missing.');
+    if (candidate.source !== 'SHIPDAY') throw Error('A fresh Shipday courier estimate is required.');
   }
   const ranked = economics.compareCandidates(candidates, { policy, category, estimatedWeightLb });
   const winner = candidates.find(candidate => candidate.id === ranked[0].id);
@@ -21,6 +21,7 @@ function quoteCandidates(candidates, { policy, category, estimatedWeightLb, now 
     pickupCents: winner.pickupCents, returnCents: winner.returnCents,
     source: winner.source, expiresAt: winner.expiresAt,
     ...(winner.arrivalChecks?{arrivalChecks:winner.arrivalChecks}:{}),
+    ...(winner.pickupEstimateAt?{pickupEstimateAt:winner.pickupEstimateAt}:{}),
     comparisons: ranked.map(row => ({ partnerId: row.id, totalCents: row.estimatedReferenceTotalCents })),
   };
 }

@@ -6,8 +6,9 @@ const collected = new Set(['PICKED_UP','READY_TO_DELIVER','ALREADY_DELIVERED']);
 const failed = new Set(['CANCELED','CANCELLED','INCOMPLETE','FAILED_DELIVERY']);
 const {legacyNJReturn,matchesAddress}=require('./delivery-address');
 
+
 async function observe({provider,tracking,order,shop,plan,now=Date.now}) {
-  if (!order.customers?.default_payment_method_id || order.status === 'CANCELED' ||
+  if (order.delivery_notifications_suppressed || !order.customers?.default_payment_method_id || order.status === 'CANCELED' ||
       !plan || plan.simulation || !plan.shipday_order_id || !plan.external_reference ||
       !['TO_PARTNER','TO_CUSTOMER'].includes(plan.leg)) return null;
   const pickup = plan.leg === 'TO_PARTNER';

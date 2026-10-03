@@ -94,7 +94,7 @@ test('THE WIZARD DOES NOT BOOK A PICKUP FOR SOMEBODY WITH NO CARD', () => {
   const body = src.slice(at);
 
   const gate = body.indexOf('billing.needsCardOnFile(customer)');
-  const book = body.indexOf('recurring.bookAndSchedule(customer');
+  const book = body.indexOf("require('../core/replacement-booking').book(customer");
 
   assert.notEqual(gate, -1, 'the wizard never checks for a payment method');
   assert.notEqual(book, -1, 'the wizard never books at all');

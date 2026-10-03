@@ -1,0 +1,23 @@
+{
+  "run": "LOCAL-20261002-01",
+  "started": "2026-10-02T15:14:16.270Z",
+  "finished": "2026-10-02T15:14:28.558Z",
+  "exitCode": 0,
+  "command": "npm test",
+  "isolation": "loopback-only network preload inherited by test child processes",
+  "branch": "codex/order-detail-actions",
+  "head": "8517473",
+  "workingTree": "dirty; see checkout hash manifest",
+  "counts": {
+    "tests": 1708,
+    "pass": 1708,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "durationMs": 11774.451,
+  "nonLoopbackAttemptsBlocked": 2,
+  "subsequentCheckoutDriftObserved": true,
+  "latestWorkingTreeResult": "NOT RUN: stabilize candidate and run new isolated baseline"
+}
