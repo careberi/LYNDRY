@@ -40,7 +40,7 @@ test('a direction with no valid courier withholds the public price', async () =>
   }), null);
 });
 
-test('scheduled booking prices the cheapest courier that can meet arrival hours',async()=>{
+test('scheduled availability cannot replace the address price with a higher courier fee',async()=>{
  const pickupReadyAt='2030-01-01T17:00:00Z';
  const client={quote:async()=>quote([
   {service:'Uber',feeCents:674,pickupTime:'2030-01-01T16:58:00Z',deliveryTime:'2030-01-01T17:20:00Z'},
@@ -48,8 +48,31 @@ test('scheduled booking prices the cheapest courier that can meet arrival hours'
  ])};
  const args={customer:{},partner:{},pickupReadyAt};
  assert.ok(await verifyRoundTrip(client,{...args,acceptArrival:at=>Date.parse(at)<Date.parse('2030-01-01T17:40:00Z')}));
- assert.equal((await verifyRoundTrip(client,{...args,acceptArrival:at=>Date.parse(at)<Date.parse('2030-01-01T17:25:00Z')})).pickupCents,750);
+ const scheduled=await verifyRoundTrip(client,{...args,acceptArrival:at=>Date.parse(at)<Date.parse('2030-01-01T17:25:00Z')});
+ assert.equal(scheduled.pickupCents,674);
+ assert.equal(scheduled.pickupEstimateAt,pickupReadyAt);
+ assert.deepEqual(scheduled.arrivalChecks,['2030-01-01T17:15:00Z']);
  assert.equal(await verifyRoundTrip(client,{...args,acceptArrival:()=>false}),null);
+});
+
+test('booking uses the same address-only pricing requests as public quote plus a separate timing check',async()=>{
+ const customer='Home',partner='Shop',pickupReadyAt='2030-01-01T17:00:00Z',calls=[];
+ const client={quote:async trip=>{calls.push(trip);return quote(trip.pickupReadyAt?
+  [{service:'DoorDash',feeCents:950,pickupTime:pickupReadyAt,deliveryTime:'2030-01-01T17:15:00Z'}]:both(674,750));}};
+ const result=await verifyRoundTrip(client,{customer,partner,pickupReadyAt});
+ assert.equal(result.pickupCents,674);assert.equal(result.returnCents,674);
+ assert.deepEqual(calls,[{from:customer,to:partner},{from:partner,to:customer},{from:customer,to:partner,pickupReadyAt}]);
+});
+
+test('unavailable or stale scheduled estimates block booking despite valid address prices',async()=>{
+ const pickupReadyAt='2030-01-01T17:00:00Z';let scheduled={ok:false,options:[]};
+ const client={quote:async trip=>trip.pickupReadyAt?scheduled:quote(both(674,750))};
+ const args={customer:'Home',partner:'Shop',pickupReadyAt};
+ assert.equal(await verifyRoundTrip(client,args),null);
+ scheduled={reason:'pickup_time_rejected'};
+ await assert.rejects(verifyRoundTrip(client,args),{code:'PICKUP_TIME_REJECTED'});
+ scheduled=quote([{service:'Uber',feeCents:674,pickupTime:pickupReadyAt,deliveryTime:'2030-01-01T17:15:00Z'}],'2000-01-01');
+ await assert.rejects(verifyRoundTrip(client,args),/fresh/);
 });
 
 test('invalid, unsupported and fee-review offers cannot undercut a valid quote',()=>{

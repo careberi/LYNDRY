@@ -1,3 +1,15 @@
+## 20261002 Public address prices remain the booking price basis
+
+Neil explicitly confirmed the public quote is correct and approved fixing the
+higher booking quote. For development, use fresh address-only Shipday pickup
+and return estimates for customer pricing on both surfaces. Separately check
+scheduled pickup and arrival eligibility. The timing-compatible courier fee
+must not replace the address pricing input. This supersedes the earlier rule
+selecting the lowest timing-compatible offer as the customer price. Preserve
+availability checks, saved order prices, category margin targets and dispatch
+rules. Neil's request to explain margin versus markup is not a request to
+change the pricing formula.
+
 ## 20261002 Customer pickup messages and concise development confirmation
 
 Neil requested a short development booking confirmation with pickup and wash

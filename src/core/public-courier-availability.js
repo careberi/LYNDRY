@@ -1,6 +1,7 @@
 'use strict';
 
-// Prices use the cheapest usable Shipday third-party offer in each direction.
+// Public and booking prices use the same address-only offers in each direction.
+// Scheduled availability is checked separately and cannot replace that price.
 // One available supported courier is sufficient. This is an availability check only:
 // it never creates an order or requests a driver.
 const REQUIRED_SERVICES = Object.freeze(['uber', 'doordash']);
@@ -17,29 +18,31 @@ function requiredFee(quote, required = REQUIRED_SERVICES) {
 }
 
 async function verifyRoundTrip(client, { customer, partner, pickupReadyAt, acceptArrival, onUnavailable = () => {} }) {
-  const [pickup, returned] = await Promise.all([
-    client.quote({ from: customer, to: partner, ...(pickupReadyAt?{pickupReadyAt}:{}) }),
+  const [pickup, returned, scheduled] = await Promise.all([
+    client.quote({ from: customer, to: partner }),
     client.quote({ from: partner, to: customer }),
+    ...(pickupReadyAt ? [client.quote({ from: customer, to: partner, pickupReadyAt })] : []),
   ]);
-  if(pickup?.reason==='pickup_time_rejected'||returned?.reason==='pickup_time_rejected')throw Object.assign(Error('The courier rejected this pickup time. Choose a later time and refresh the quote.'),{code:'PICKUP_TIME_REJECTED'});
-  let pickupCents = requiredFee(pickup);
+  if([pickup,returned,scheduled].some(q=>q?.reason==='pickup_time_rejected'))throw Object.assign(Error('The courier rejected this pickup time. Choose a later time and refresh the quote.'),{code:'PICKUP_TIME_REJECTED'});
+  const pickupCents = requiredFee(pickup);
   const returnCents = requiredFee(returned);
   if (pickupCents === null || returnCents === null) { onUnavailable('courier_unavailable'); return null; }
   let arrivals,pickupEstimateAt;
   if(pickupReadyAt) {
-    const usable=pickup.options.filter(r=>/uber|doordash/i.test(r.service||'')&&Date.parse(r.pickupTime)>=Date.parse(pickupReadyAt)&&
+    if(requiredFee(scheduled)===null) { onUnavailable('courier_unavailable'); return null; }
+    const usable=scheduled.options.filter(r=>/uber|doordash/i.test(r.service||'')&&Date.parse(r.pickupTime)>=Date.parse(pickupReadyAt)&&
       Date.parse(r.pickupTime)<=Date.parse(pickupReadyAt)+30*60000&&Date.parse(r.deliveryTime)>Date.parse(r.pickupTime));
     if(!usable.length) { onUnavailable('arrival_estimate'); return null; }
     const fitting = usable.filter(r=>!acceptArrival||acceptArrival(r.deliveryTime));
-    pickupCents=requiredFee({...pickup,options:fitting});
-    if(pickupCents===null) { onUnavailable('arrival_hours'); return null; }
-    const selected=fitting.find(r=>!r.requiresFeeReview&&r.feeCents===pickupCents);
+    const scheduledFee=requiredFee({...scheduled,options:fitting});
+    if(scheduledFee===null) { onUnavailable('arrival_hours'); return null; }
+    const selected=fitting.find(r=>!r.requiresFeeReview&&r.feeCents===scheduledFee);
     arrivals=[selected.deliveryTime];
     pickupEstimateAt=selected.pickupTime;
   }
-  const expiries = [pickup.expiresAt, returned.expiresAt]
+  const expiries = [pickup.expiresAt, returned.expiresAt,...(pickupReadyAt?[scheduled.expiresAt]:[])]
     .map(Date.parse).filter(Number.isFinite);
-  if (expiries.length !== 2 || Math.min(...expiries)<=Date.now()) throw Error('Shipday did not return fresh courier estimates.');
+  if (expiries.length !== (pickupReadyAt?3:2) || Math.min(...expiries)<=Date.now()) throw Error('Shipday did not return fresh courier estimates.');
   return {
     pickupCents,
     returnCents,

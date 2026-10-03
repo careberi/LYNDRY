@@ -2,12 +2,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm'),path=require('path');
 const economics=require('../src/core/pricing-economics'),dynamic=require('../src/core/dynamic-order-pricing'),view=require('../src/web/quote-result');
 const policy={marginBps:{ONE_TIME:2000,SUBSCRIPTION:1000,WHOLESALE:500},processingBps:290,processingFixedCents:30,operationalFeeBps:2500,referenceWeightLb:33};
-function fixture(now=null){
+function fixture(now=null,pricingPolicy=policy){
  let writes=0;
  const shipdayClient={quote:async({pickupReadyAt='2030-01-01T17:00:00Z'}={})=>({ok:true,expiresAt:'2030-01-01T00:05:00.000Z',options:[
   {service:'Uber',feeCents:674,pickupTime:pickupReadyAt,deliveryTime:new Date(Date.parse(pickupReadyAt)+15*60000).toISOString()},{service:'DoorDash',feeCents:750,pickupTime:pickupReadyAt,deliveryTime:new Date(Date.parse(pickupReadyAt)+15*60000).toISOString()}
  ]})};
- const chain={select(){return this;},lte(){return this;},order(){return this;},limit(){return {data:[{id:'policy',policy}]};}};
+ const chain={select(){return this;},lte(){return this;},order(){return this;},limit(){return {data:[{id:'policy',policy:pricingPolicy}]};}};
  const modules={
   '../db':{from(table){if(table==='dev_pricing_policies')return chain;if(table==='dev_order_quotes')return {insert(q){writes++;return {select(){return {single(){return {data:q};}};}};}};throw Error('Unexpected table '+table);}},
   '../config':{config:{env:'development',supabase:{isProduction:false,isDevelopment:true},shipday:{apiKey:'test'},routing:{wagePerHour:20,gasPerGallon:3.4,milesPerGallon:22,wearPerMile:0.18,milesPerHour:24,roadFactor:1.3,minutesPerPickup:4,minutesPerDelivery:4,minutesPerPartnerVisit:10}}},
@@ -118,6 +118,36 @@ test('public and booking prices match when the eligible shops and courier fees m
   }
  }
 });
+
+test('reported 30 lb public price survives scheduled preview, saved quote and final confirmation',async()=>{
+ const model=require('../src/core/weight-based-pricing');
+ const pricingPolicy={...policy,pricingMethod:model.METHOD,laundryPricingBasis:model.CUSTOMER_BASE,minimumWeightLb:18,
+  minimumTotalCents:0,referenceWeightLb:30,otherCostCents:0,otherCostPerLbCents:0,cardHold:{mode:'FIXED',fixedCents:2500}};
+ const f=fixture(null,pricingPolicy),customer={id:'customer',address_line1:'1 Test St'},form={pickup_date:'2030-01-01',pickup_time:'12:00',estimated_weight_lb:30};
+ const original=f.shipdayClient.quote;
+ f.shipdayClient.quote=async args=>{const q=await original(args);return {...q,options:q.options.map(o=>
+  args.pickupReadyAt&&o.service==='Uber'?{...o,pickupTime:new Date(Date.parse(args.pickupReadyAt)-2*60000).toISOString()}:o)};};
+ const publicQuote=await f.service.previewQuote(customer,form,{publicPreview:true,addressEstimate:true});
+ const bookingQuote=await f.service.previewQuote(customer,form,{publicPreview:true});
+ assert.equal(publicQuote.categories.SUBSCRIPTION.estimatedTotalCents,5062);
+ assert.equal(publicQuote.categories.ONE_TIME.estimatedTotalCents,5718);
+ assert.equal(publicQuote.categories.SUBSCRIPTION.minimumTotalCents,3684);
+ assert.equal(publicQuote.categories.ONE_TIME.minimumTotalCents,4162);
+ for(const category of ['SUBSCRIPTION','ONE_TIME','WHOLESALE']) {
+  assert.deepEqual(bookingQuote.categories[category].weightTotalsCents,publicQuote.categories[category].weightTotalsCents);
+  const quotedCustomer={...customer,pricing_category:category==='WHOLESALE'?'WHOLESALE':'ONE_TIME'};
+  const saved=await f.service.createQuote(quotedCustomer,{...form,plan:category});
+  assert.equal(saved.snapshot.estimatedTotalCents,publicQuote.categories[category].estimatedTotalCents);
+  assert.equal(saved.snapshot.pickupCents,674);assert.equal(saved.snapshot.returnCents,674);
+  assert.equal(saved.snapshot.pickupEstimateAt,'2030-01-01T17:00:00.000Z');
+  saved.approved_at=new Date().toISOString();
+  const db=f.modules['../db'],from=db.from;
+  db.from=()=>{const q={select(){return q;},eq(){return q;},single:async()=>({data:saved})};return q;};
+  f.modules['./partners'].find=async()=>({id:'partner',status:'ACTIVE',type:'LAUNDROMAT',address_line1:'Test'});
+  assert.equal(await f.service.validateQuote('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',customer,form.pickup_date,form.pickup_time),saved);
+  db.from=from;
+ }
+});
 test('scheduled comparison excludes closed drop-off or return days, regardless of phone',async()=>{
  const f=fixture();
  f.modules['./partners'].list=async()=>['drop-closed','return-closed','open'].map((id,i)=>({id,status:'ACTIVE',phone:null,address_line1:'Test',lat:1,lng:1,wholesale_per_lb_cents:70+i*10}));
@@ -226,9 +256,9 @@ test('customer pricing fails closed when third-party quotes are unavailable',asy
 
 test('every customer tier uses separate API pickup and return fees even with an in-house driver',async()=>{
  const f=fixture();let calls=0;const original=f.shipdayClient.quote;
- f.shipdayClient.quote=async args=>{const q=await original(args);const fee=++calls%2?649:825;return {...q,options:q.options.map(o=>({...o,feeCents:fee}))};};
+ f.shipdayClient.quote=async args=>{calls++;const q=await original(args);const fee=args.from==='Test'?825:649;return {...q,options:q.options.map(o=>({...o,feeCents:fee}))};};
  const q=await f.service.previewQuote({},scheduledForm,{publicPreview:true});
- assert.equal(calls,2);
+ assert.equal(calls,3);
  for(const s of Object.values(q.categories)){assert.equal(s.source,'SHIPDAY');assert.equal(s.pickupCents,649);assert.equal(s.returnCents,825);assert.equal(s.transportMode,'IN_HOUSE');assert.equal(s.costBasis,'THIRD_PARTY_API_ESTIMATE');}
 });
 test('hours-valid arrival failure is reported accurately and other shops still compete',async()=>{
@@ -292,7 +322,7 @@ test('booking rechecks API fees, rejects stale in-house quotes, and detects chan
  f.shipdayClient.quote=async args=>{calls.push(args);return original(args);};
  const customer={id:'customer',address_line1:'1 Test St'};
  const validate=()=>f.service.validateQuote('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',customer,'2026-10-02','14:30');
- await validate();assert.equal(calls.length,2);assert.equal(calls[0].from,'1 Test St');assert.equal(calls[0].to,'2 Shop St');assert.equal(calls[1].from,'2 Shop St');
+ await validate();assert.equal(calls.length,3);assert.equal(calls[0].from,'1 Test St');assert.equal(calls[0].to,'2 Shop St');assert.equal(calls[1].from,'2 Shop St');assert.equal(calls[2].pickupReadyAt,'2026-10-02T18:30:00.000Z');
  q.snapshot.pickupCents=935;await assert.rejects(validate(),/prices changed/i);
  q.snapshot.source='IN_HOUSE';await assert.rejects(validate(),/Refresh the delivery quote/);
  q.snapshot.source='SHIPDAY';customer.address_line1='3 New St';await assert.rejects(validate(),/Address changed/);

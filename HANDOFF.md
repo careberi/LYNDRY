@@ -1,4 +1,27 @@
-# Current change: customer booking and pickup texts in development
+# Current change: quote and booking use one customer pricing basis
+
+Neil confirmed the public address quote is correct and assigned implementation,
+commit and push. Booking must use the same address-only pickup and return API
+estimates as the public page. Check scheduled driver availability and laundromat
+arrival hours separately; a higher scheduled offer must not replace the public
+pricing input. Keep fresh API requirements, supported couriers, pickup readiness,
+shop eligibility and customer approval checks. Existing accepted order terms,
+margin targets and driver assignment are unchanged. Development only.
+
+Reproduction: the public pickup estimate is 674 cents. Booking discarded that
+offer because its pickup estimate was two minutes before readiness and used a
+750 cent offer. At 30 lb this changed subscription 5062 to 5149 cents and one
+time 5718 to 5817 cents. The previous shop comparison fix did not address this
+second selection path; an existing test even expected the higher pickup fee.
+Regression coverage must check public, scheduled, saved and final confirmed
+quotes with the same address pricing and independently valid pickup timing.
+
+Validation: the exact mismatch failed before the fix. All 36 focused pricing
+tests now pass, including every 1 to 50 lb tier schedule, saved quotes and final
+confirmation. Full npm test: 1854 pass, zero fail, external network blocked.
+Independent review and Neil's hosted booking acceptance remain pending.
+
+# Previous change: customer booking and pickup texts in development
 
 Neil assigned Codex implementation and commit/push to dev. Remove the separate
 new order staff alert in development; customer confirmations go to the order
