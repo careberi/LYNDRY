@@ -5867,7 +5867,7 @@ router.get('/ops/clips', guard, withIssues, may('orders.drive'), async (req, res
   }
 });
 
-router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, next) => {
+router.get(['/ops/run', '/ops/run/order/:number'], guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
     // ?route= is the card he tapped. Validated to HH:MM so nothing odd reaches
     // the window lookup; anything else falls back to "wherever I am".
@@ -5875,7 +5875,7 @@ router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, 
       ? String(req.query.route)
       : null;
 
-    const state = await runCore.forDriver(req.opsUser.id, asked);
+    const state = await runCore.forDriver(req.opsUser.id, asked, req.params.number || null);
 
     return res.type('html').send(
       adminPage({
@@ -6207,13 +6207,11 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
       return res.redirect(303, '/ops/run');
     }
 
-    const position = Math.round(Number(req.params.position));
-    const count = Number(order.bag_count || 0);
-    if (!Number.isFinite(position) || position < 1 || position > count) {
-      return res.redirect(303, '/ops/run');
-    }
-
+    const position = Number(req.params.position);
     const tasks = await runCore.tasksForCollect(order);
+    if (!runCore.validPickupPosition(tasks, position)) {
+      return res.redirect(303, `/ops/run/order/${order.order_number}`);
+    }
 
     return res.type('html').send(
       adminPage({
@@ -6743,7 +6741,7 @@ function backTo(req, order) {
     return '/ops/run';
   }
 
-  return from === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
+  return from === 'run' ? `/ops/run/order/${order.order_number}` : `/ops/orders/${order.order_number}`;
 }
 
 // Every button route is this shape, so they are built rather than repeated.

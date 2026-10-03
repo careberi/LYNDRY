@@ -1,5 +1,20 @@
 # HANDOFF
 
+## Current change — keep pickup bag actions on their order
+
+Neil assigned implementation on 3 October after live orders 2090 and 2091
+appeared to share a bag. Their stored assignments were correct. The route
+returned to the first unfinished pickup, and the individual bag page rejected
+the new scan-first flow because bag_count is not set until Finish Pickup.
+
+Allow existing scanned bags and the next open slot using the derived pickup
+tasks, preserve the selected unfinished pickup after a route action, show the
+order number on its bag page, and do not list an optional unscanned bag as a
+required weighing. A weighed bag is not called loaded before pickup finishes.
+Do not alter bag ownership, payments, reminders, or card gates in this change.
+Regression tests must cover two unfinished orders and a null bag count.
+External review and Neil's click test are still outstanding.
+
 Issue: Audit-fix — collect door, hold page, select lists  
 Owner of the keyboard: Neil  
 Status: implemented locally; branch `fix/audit-hold-doors` cut from current main. Apply the patch, then click-test. Do not merge to main yet.

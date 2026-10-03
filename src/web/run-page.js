@@ -1821,6 +1821,7 @@ function pickupList(stop) {
 // implementation of "weigh a bag" is how the two would drift the first time one
 // of them learned something the other did not.
 function pickupBagBody({ order, position, tasks, problem = null }) {
+  const orderRoute = `/ops/run/order/${escapeHtml(order.order_number)}`;
   const mine = (tasks || []).filter((t) => t.position === position);
   const next = mine.find((t) => !t.done) || null;
   // THE LAST STEP GOES BACK TO THE LIST, the other three stay on the bag.
@@ -1835,9 +1836,9 @@ function pickupBagBody({ order, position, tasks, problem = null }) {
   const head = `
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
       <h1 style="font-family:var(--font-display);font-weight:900;font-size:32px;line-height:1;margin:0;">
-        Bag #${escapeHtml(position)}
+        Order #${escapeHtml(order.order_number)} · Bag #${escapeHtml(position)}
       </h1>
-      <a href="/ops/run" style="font-size:15px;font-weight:600;">Back to the list</a>
+      <a href="${orderRoute}" style="font-size:15px;font-weight:600;">Back to this pickup</a>
     </div>
     ${
       problem
@@ -1853,8 +1854,8 @@ function pickupBagBody({ order, position, tasks, problem = null }) {
   if (!next) {
     return `${head}
       <div style="${CARD}">
-        ${dropTask(`Bag #${position} is in the van`)}
-        <a class="btn btn-primary btn-lg btn-full" href="/ops/run">Back to the list</a>
+        ${dropTask(`Bag #${position} weighed`)}
+        <a class="btn btn-primary btn-lg btn-full" href="${orderRoute}">Continue this pickup</a>
       </div>`;
   }
 
