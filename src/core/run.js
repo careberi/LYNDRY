@@ -136,6 +136,8 @@ async function tasksForCollect(order) {
       needsLabel: !label,
     });
 
+    // An empty optional slot is a choice, not another bag that must be weighed.
+    if (!label && position > 1) continue;
     tasks.push({
       key: `weigh_${position}`,
       position,
@@ -658,7 +660,7 @@ async function doneToday(driverId, dateIso) {
 }
 
 // The whole run for one driver, and which stop they are on.
-async function forDriver(driverId, roundStart = null) {
+async function forDriver(driverId, roundStart = null, selectedOrder = null) {
   const now = booking.nowInService();
   // NO TIME PASSED, ON PURPOSE. board() works out a sensible start itself and
   // falls forward to the first pickup window when the clock is outside the
@@ -1002,7 +1004,7 @@ async function forDriver(driverId, roundStart = null) {
   // the last finished", because a stop can be completed out of order - somebody
   // ringing ahead, a building that would not open - and skipping back to the
   // unfinished one is right in every case.
-  const current = stops.find((s) => !s.done) || null;
+  const current = currentStop(stops, selectedOrder);
 
   // Arrival hangs on the order. A laundromat stop has no order of its own, so
   // it borrows the first bag going there - they arrive together, and there is
@@ -1180,7 +1182,20 @@ async function leave(orderId) {
   if (error) throw error;
 }
 
+function validPickupPosition(tasks, position) {
+  return Number.isInteger(position) && position >= 1 && tasks.some((t) => t.position === position);
+}
+
+function currentStop(stops, orderNumber = null) {
+  // Returning from a bag action must not switch to an earlier unfinished order.
+  return stops.find((s) => !s.done && s.kind === 'collect' &&
+    orderNumber != null && String(s.order.order_number) === String(orderNumber)) ||
+    stops.find((s) => !s.done) || null;
+}
+
 module.exports = {
+  validPickupPosition,
+  currentStop,
   forDriver,
   arrive,
   leave,

@@ -10,7 +10,26 @@ charge, not silently charge full price. Preserve the existing minimum,
 surcharges, card gates, and explicit Finish Pickup charge point. Label
 pre-settlement price rows as estimates before discounts, not completed charges.
 No customer messages are authorized for the live incident recovery.
-External review and Neil's click test remain outstanding.
+Independent agent review findings were addressed. Grok review and Neil's
+manual click test were not performed; Neil authorized emergency deployment.
+
+## Previous change — keep pickup bag actions on their order (PR #12)
+
+Neil assigned implementation on 3 October after live orders 2090 and 2091
+appeared to share a bag. Their stored assignments were correct. The route
+returned to the first unfinished pickup, and the individual bag page rejected
+the new scan-first flow because bag_count is not set until Finish Pickup.
+
+Allow existing scanned bags and the next open slot using the derived pickup
+tasks, preserve the selected unfinished pickup after a route action, show the
+order number on its bag page, and do not list an optional unscanned bag as a
+required weighing. A weighed bag is not called loaded before pickup finishes.
+Do not alter bag ownership, payments, reminders, or card gates in this change.
+Regression tests must cover two unfinished orders and a null bag count.
+Selecting a late pickup must keep its window while ETA calculations use the
+current time. Independent agent review findings were addressed. Grok review
+and Neil's manual click test were not performed; Neil authorized emergency
+deployment.
 
 Issue: Audit-fix — collect door, hold page, select lists  
 Owner of the keyboard: Neil  

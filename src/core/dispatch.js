@@ -249,7 +249,9 @@ function activeRoute(routes, { start, fromTime = null } = {}) {
   // by name, and answering a direct question with "actually you are on this
   // other one" would make the picker a suggestion. Somebody reading the 4pm
   // round over breakfast is reading, not driving.
-  if (fromTime) return clockRound;
+  // start may have been raised to now for honest ETAs on a late route.
+  // That must not replace the window the driver explicitly selected.
+  if (fromTime) return routes.find((r) => fromTime >= r.start && fromTime < r.end) || clockRound;
 
   // Catching up beats the clock: a route that started and still has bags in it
   // is somebody waiting right now.

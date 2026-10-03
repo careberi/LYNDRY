@@ -5890,15 +5890,33 @@ router.get('/ops/clips', guard, withIssues, may('orders.drive'), async (req, res
   }
 });
 
-router.get('/ops/run', guard, withIssues, may('orders.drive'), async (req, res, next) => {
+router.get(['/ops/run', '/ops/run/order/:number'], guard, withIssues, may('orders.drive'), async (req, res, next) => {
   try {
     // ?route= is the card he tapped. Validated to HH:MM so nothing odd reaches
     // the window lookup; anything else falls back to "wherever I am".
-    const asked = /^\d{1,2}:\d{2}$/.test(String(req.query.route || ''))
+    let asked = /^\d{1,2}:\d{2}$/.test(String(req.query.route || ''))
       ? String(req.query.route)
       : null;
 
-    const state = await runCore.forDriver(req.opsUser.id, asked);
+    if (req.params.number) {
+      const selected = await loadOrderForAction(req.params.number);
+      if (!selected || (selected.driver_id && selected.driver_id !== req.opsUser.id)) {
+        return notFoundPage(res, 'That pickup is not on your route.');
+      }
+      if (selected.van_confirmed_at) return res.redirect(303, '/ops/run');
+      if (!['REQUESTED', 'IN_PROCESS'].includes(selected.status)) {
+        return notFoundPage(res, 'That order is not awaiting pickup.');
+      }
+      // Choose the window before board() filters the stops. The board still
+      // enforces dates, card eligibility, holds and driver assignment.
+      asked = String(selected.pickup_window_start || booking.PICKUP_WINDOWS[0].start).slice(0, 5);
+    }
+
+    const state = await runCore.forDriver(req.opsUser.id, asked, req.params.number || null);
+    if (req.params.number && (!state.current || state.current.kind !== 'collect' ||
+        String(state.current.order.order_number) !== String(req.params.number))) {
+      return notFoundPage(res, 'That pickup is not available on your route. Open its order to check the status.');
+    }
 
     return res.type('html').send(
       adminPage({
@@ -5993,7 +6011,8 @@ router.post('/ops/run/here', guard, may('orders.drive'), async (req, res, next) 
     }
 
     await runCore.arrive(orderId);
-    return res.redirect(303, '/ops/run');
+    const pickup = ['REQUESTED', 'IN_PROCESS'].includes(order.status) && !order.van_confirmed_at;
+    return res.redirect(303, pickup ? `/ops/run/order/${order.order_number}` : '/ops/run');
   } catch (err) {
     return next(err);
   }
@@ -6230,13 +6249,11 @@ router.get('/ops/run/pickup/:number/:position', guard, withIssues, may('orders.d
       return res.redirect(303, '/ops/run');
     }
 
-    const position = Math.round(Number(req.params.position));
-    const count = Number(order.bag_count || 0);
-    if (!Number.isFinite(position) || position < 1 || position > count) {
-      return res.redirect(303, '/ops/run');
-    }
-
+    const position = Number(req.params.position);
     const tasks = await runCore.tasksForCollect(order);
+    if (!runCore.validPickupPosition(tasks, position)) {
+      return res.redirect(303, `/ops/run/order/${order.order_number}`);
+    }
 
     return res.type('html').send(
       adminPage({
@@ -6766,7 +6783,7 @@ function backTo(req, order) {
     return '/ops/run';
   }
 
-  return from === 'run' ? '/ops/run' : `/ops/orders/${order.order_number}`;
+  return from === 'run' ? `/ops/run/order/${order.order_number}` : `/ops/orders/${order.order_number}`;
 }
 
 // Every button route is this shape, so they are built rather than repeated.
