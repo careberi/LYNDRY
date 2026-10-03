@@ -5,7 +5,7 @@ const {createWorker}=require('./delivery-sms-worker');
 const {createClient}=require('../providers/couriers/shipday');
 const {createTracking}=require('../providers/couriers/shipday-tracking');
 const {sendAndLog}=require('./notify');
-// Development rollout only. Existing SMS adapter still simulates every send.
+// Development rollout only. The SMS adapter supplies its DEVELOPMENT prefix.
 // Polling manual jobs does not depend on the automatic-dispatch pause switch.
 const enabled=config.supabase.isDevelopment && Boolean(config.shipday.apiKey);
 const data=async q=>{const {data,error}=await q;if(error)throw error;return data;};

@@ -1811,6 +1811,21 @@ function confirmationMessage(
   // draw EXPLICIT against DEFAULT, so this and that screen cannot disagree.
   const washLine = hasPreferences(customer) ? ` ${wash.describeSaved(prefs)}.` : '';
 
+  // Neil's development confirmation keeps pickup instructions in the text;
+  // the accepted checkout already holds the price and payment explanation.
+  if (config.supabase.isDevelopment && order.pricing_snapshot) {
+    const greeting = source === DOORS.WEB ? '' : opener ? `${opener}! `
+      : source === DOORS.PHONE ? 'Thanks for calling! ' : 'Of course! ';
+    const lead = rolled
+      ? `${greeting}Today's routes are finished, so order #${order.order_number} is in for the earliest we can do:`
+      : `${greeting}Order #${order.order_number} is booked:`;
+    const address = customer.address_line1 ? ` at ${customer.address_line1}` : '';
+    const pickup = order.pickup_method === 'HAND_TO_DRIVER' || (dropoffSpot && dropoffSpot !== pickupSpot)
+      ? handover : `Leave the bag ${pickupSpot ? `at the ${pickupSpot}` : 'outside your door'}.`;
+    return `${lead} pickup ${whenLine(order)}${address}.${washLine} ${pickup} Put it in any bag. ` +
+      `Most wash and fold orders return next day when available. We'll let you know when yours is on the way back.`;
+  }
+
   // The price, and WHEN it gets taken. Stated as something that has not
   // happened yet, because it has not: no money moves until the bag is weighed.
   //

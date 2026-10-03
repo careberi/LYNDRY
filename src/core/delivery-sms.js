@@ -45,11 +45,21 @@ async function observe({provider,tracking,order,shop,plan,now=Date.now,forComple
     deliveryPhotos:!pickup ? require('../providers/couriers/shipday-proof').deliveryPhotos(remote) : []};
 }
 
-function estimate(observation,now) {
+function arrivalTime(observation,now) {
   if(observation.etaMinutes === null || now-Date.parse(observation.observedAt)>120000 || now<Date.parse(observation.observedAt)) return '';
   const arrival = Math.ceil((Date.parse(observation.observedAt)+observation.etaMinutes*60000)/300000)*300000;
   const time = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}).format(new Date(arrival));
-  return ` Estimated arrival around ${time} ET. Timing may change.`;
+  return `${time} ET`;
+}
+function estimate(observation,now) {
+  const time=arrivalTime(observation,now);
+  return time ? ` Estimated arrival around ${time}. Timing may change.` : '';
+}
+function pickupInstructions(order,observation,now) {
+  if(order.pickup_method==='HAND_TO_DRIVER')return ' Please have your bag ready to hand to the driver.';
+  const spot=String(order.preferences?.special_instructions ?? order.customers?.preferences?.special_instructions ?? '').trim();
+  const time=arrivalTime(observation,now);
+  return ` Please put your bag ${spot?`at the ${spot}`:'at your pickup spot'} ${time?`between now and ${time}`:'now'}.`;
 }
 
 function nextMessage(order,plan,state,observation,now=Date.now()) {
@@ -58,9 +68,9 @@ function nextMessage(order,plan,state,observation,now=Date.now()) {
   const pickup=plan.leg==='TO_PARTNER',rank=Math.max(state.rank,observation.rank);
   const prefix=`LYNDRY #${order.order_number}: `;
   if(rank>state.rank) {
-    const text=pickup ? {1:'Your driver is on the way to pick up your laundry. Please have your bag ready at your pickup spot.',2:'Your pickup driver should arrive soon. Please have your bag ready at your pickup spot.',3:"Your laundry has been collected. Most wash and fold orders return next day when available. We will let you know when yours is on the way back."}[rank]
+    const text=pickup ? {1:'Your driver is on the way to pick up your laundry.',2:'Your pickup driver is on the way and should arrive soon.',3:"Your laundry has been collected. Most wash and fold orders return next day when available. We will let you know when yours is on the way back."}[rank]
       : {1:'Your clean laundry is out for delivery.',2:'Your clean laundry is out for delivery. Your driver should arrive soon.',3:'Your laundry has been delivered.'}[rank];
-    return {key:`milestone-${rank}`,rank,body:prefix+text+(rank<3?estimate(observation,now):'')};
+    return {key:`milestone-${rank}`,rank,body:prefix+text+(pickup&&rank<3?pickupInstructions(order,observation,now):'')+(rank<3?estimate(observation,now):'')};
   }
   if(rank>=3 || observation.etaMinutes===null || !state.last_message_at || now-Date.parse(state.last_message_at)<15*60000) return null;
   const arrival=Date.parse(observation.observedAt)+observation.etaMinutes*60000;

@@ -115,6 +115,11 @@ function skipReason({ bookedByTheSystem } = {}) {
 // sentence, so taking it as an argument is cheaper than moving whenLine().
 // ---------------------------------------------------------------------------
 async function newOrder({ customer, order, booking, needsCard, freeOrder, bookedByTheSystem }) {
+  // Development bookings notify their customer through the normal confirmation.
+  // A staff alert would create an unrelated conversation (including SUPPORT_PHONE).
+  if (config.supabase.isDevelopment) {
+    return { sent: [], skipped: 'development order texts go to the customer' };
+  }
   // Deliberately not defaulted anywhere in this file: undefined is falsy, so a
   // door that has never heard of the flag gets a text rather than silence.
   const quiet = skipReason({ bookedByTheSystem });

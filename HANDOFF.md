@@ -1,4 +1,30 @@
-# Current change: real development texts
+# Current change: customer booking and pickup texts in development
+
+Neil assigned Codex implementation and commit/push to dev. Remove the separate
+new order staff alert in development; customer confirmations go to the order
+customer. Keep real SMS with DEVELOPMENT prefix and no recipient allowlist.
+Use Neil's short booking confirmation: order, pickup time/address, saved wash
+instructions, bag location, any bag and conditional next day return wording.
+Keep distinct phone/text greetings and legacy handoff instructions.
+
+Notify the customer once a verified assigned driver starts the pickup. Include
+the order's bag location and current customer pickup ETA, asking for the bag
+between now and that time. If no reliable ETA exists, ask for the bag now
+without inventing a time. Keep missing card, opt out, identity, cancellation
+and duplicate protections. A provider read failure before attempting SMS must
+retry with fresh verification; an uncertain SMS send must not retry. Delayed
+on-way milestones may send only while fresh provider status still supports
+that exact milestone. Never replay an old pickup notice after collection.
+Production notification behavior is unchanged. Independent review and Neil's
+next pickup click test remain pending.
+
+Validation: 30 focused tests and all 1851 tests pass with external network
+blocked and placeholder credentials. The regression reproduces a provider HTTP
+429 before SMS, verifies a later single send to the order customer, refreshes
+delayed ETA and preserves uncertain send review. No historical on-way message
+was resent; the reported pickup has already completed.
+
+# Previous change: real development texts
 
 Neil explicitly assigned Codex implementation. Enable outbound SMS only on the
 known hosted Railway development site, with explicit opt-in. Neil explicitly
@@ -788,3 +814,11 @@ Public weight pricing now accepts a pickup date and hourly Eastern time using th
 Neil requested removal of the public quote scheduling form. It has been removed, including the weight form association. Booking keeps its existing pickup choices. Scheduled quote links now distinguish unavailable pickup time from address coverage failure. The previous route mapped every no eligible shop error to outside service area even when the selected schedule was the constraint.
 
 Verified the reported address returns public prices without a scheduling form. The reported Sunday evening URL now says Pickup time unavailable and does not claim the address is unserved. Full npm test passed 1785 tests. Development only. No order, dispatch or payment changes. This supersedes the prior public schedule form addition.
+# Current change: development booking texts belong to the customer
+
+Neil requested removal of the unrelated new order text shown for order 9030.
+Development bookings must not send or log the separate staff new order alert to
+ops users or SUPPORT_PHONE. Keep normal customer confirmations addressed to the
+order customer. This is not a recipient allowlist. Preserve production behavior.
+The reported dummy number had a simulated record and no carrier message ID.
+Implement on codex/development-order-customer-texts and publish to dev.

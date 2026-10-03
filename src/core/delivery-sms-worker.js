@@ -25,10 +25,11 @@ function createWorker({store,provider,tracking,send,now=Date.now,onError=()=>{}}
   async function deliver(row) {
     const claimed=await store.claim(row);
     if(!claimed)return;
+    let sendAttempted=false;
     try {
       const plan=await store.plan(row.order_id,row.leg);
       if(!plan || String(plan.shipday_order_id)!==row.remote_id ||
-         now()-Date.parse(row.created_at)>120000) {
+         (now()-Date.parse(row.created_at)>120000 && !(row.event_key.startsWith('milestone-') && row.rank<3))) {
         return await store.finish(row,'SKIPPED','Trip changed or update expired.');
       }
       const current=await snapshot(plan);
@@ -40,13 +41,16 @@ function createWorker({store,provider,tracking,send,now=Date.now,onError=()=>{}}
       const state={rank:previous,last_eta_at:'1970-01-01',last_message_at:'1970-01-01'};
       const message=nextMessage(current.order,plan,state,current.observation,now());
       if(!message)return await store.finish(row,'SKIPPED','No reliable current update.');
+      sendAttempted=true;
       const result=await send(current.order.customers.phone,message.body,current.order.customer_id);
       const status=result?.uncertain?'REVIEW':result?.sent?(result.simulated?'SIMULATED':'SENT')
         :result?.refused?'SKIPPED':'REVIEW';
       await store.finish(row,status,result?.refused || (status==='REVIEW'?'SMS outcome uncertain; review before resending.':null));
     } catch(error) {
-      // A timeout after the provider accepted a message must never cause a retry.
-      await store.finish(row,'REVIEW','Update interrupted; review before resending.').catch(()=>{});
+      // Provider reads can fail before any SMS is attempted. Retry those with a
+      // fresh trip check; only a possibly accepted SMS needs manual review.
+      await store.finish(row,sendAttempted?'REVIEW':'PENDING',sendAttempted?
+        'Update interrupted; review before resending.':'Trip verification unavailable; retry before sending.').catch(()=>{});
       onError(error);
     }
   }
@@ -54,13 +58,20 @@ function createWorker({store,provider,tracking,send,now=Date.now,onError=()=>{}}
   async function tick() {
     if(busy)return;
     busy=true;
+    const attempted=new Set();
+    const deliverPending=async()=>{
+      for(const row of await store.pending()) {
+        if(attempted.has(row.id))continue;
+        attempted.add(row.id);await deliver(row);
+      }
+    };
     try {
       await store.expireClaims();
-      for(const row of await store.pending())await deliver(row);
+      await deliverPending();
       for(const plan of await store.plans()) {
         try {await poll(plan);} catch(error) {onError(error);}
         // Send while the observation is fresh, even if later providers stall.
-        for(const row of await store.pending())await deliver(row);
+        await deliverPending();
       }
     } finally {busy=false;}
   }

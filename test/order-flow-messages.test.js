@@ -4,11 +4,18 @@ const booking=require('../src/core/booking');
 const customer={id:'c',stripe_customer_id:'cus_test',default_payment_method_id:'pm_test',card_brand:'visa',card_last4:'4242',address_line1:'Test road',preferences:{}};
 const snapshot={pricingMethod:'WEIGHT_BASED_MARGIN_V1',category:'ONE_TIME',estimatedWeightLb:30,wholesaleCentsPerLb:70,customerBaseCentsPerLb:100,pickupCents:699,returnCents:699,minimumTotalCents:2800,policy:{pricingMethod:'WEIGHT_BASED_MARGIN_V1',marginBps:{ONE_TIME:2000},processingBps:290,processingFixedCents:30,otherCostCents:0,otherCostPerLbCents:0}};
 const order={order_number:9025,pickup_date:'2026-10-03',pickup_time:'10:00',pricing_snapshot:snapshot,authorization_intent_id:'pi_test',authorized_cents:2500};
-test('saved quote confirmation explains its hold, measured settlement and conditional return',()=>{
+test('development confirmation gives pickup instructions without repeating payment details',()=>{
  const text=booking.confirmationMessage(customer,order,{source:booking.DOORS.WEB});
- assert.match(text,/Estimated total/);assert.doesNotMatch(text,/\$2\.00 a pound|\$45\.00|at your door/);
- assert.match(text,/hold \$25\.00/);assert.match(text,/Visa ending 4242/);assert.match(text,/laundromat weighs/);assert.match(text,/next day when available/);
+ assert.match(text,/Order #9025 is booked: pickup/);
+ assert.doesNotMatch(text,/Estimated total|Quoted price|hold \$25\.00|Visa ending|laundromat weighs|trash bag/);
+ assert.match(text,/Put it in any bag\. Most wash and fold orders return next day when available\./);
  assert.equal(booking.confirmationMessage(customer,order).replace('Of course! ',''),text);
+});
+
+test('website card-saved booking uses Neil\'s concise confirmation wording',()=>{
+ const person={...customer,address_line1:'Test road',preferences:{water_temp:'COLD',detergent:'STANDARD',fabric_softener:'STANDARD',special_instructions:'Front door'}};
+ const text=booking.confirmationMessage(person,{...order,order_number:9030,pickup_date:'2026-10-02',pickup_time:'23:00'}, {source:booking.DOORS.WEB,opener:'Card saved'});
+ assert.equal(text,"Order #9030 is booked: pickup Friday 2 Oct at 23:00 Eastern at Test road. Washed cold with softener. Leave the bag at the Front door. Put it in any bag. Most wash and fold orders return next day when available. We'll let you know when yours is on the way back.");
 });
 test('legacy accepted price remains while future confirmation uses conditional turnaround',()=>{
  const text=booking.confirmationMessage(customer,{...order,pricing_snapshot:null,price_per_lb_cents:180});
@@ -23,7 +30,7 @@ for(const file of ['orders','booking-intents'])test(file+' refuses a missing dev
 });
 test('pickup movement and collection explain the next customer action without promising a date',()=>{
  const {nextMessage}=require('../src/core/delivery-sms');const now=Date.now();const plan={leg:'TO_PARTNER'};const seen={rank:1,observedAt:new Date(now).toISOString(),etaMinutes:null};
- assert.match(nextMessage({...order,customers:customer},plan,{rank:0},seen,now).body,/have your bag ready/i);
+ assert.match(nextMessage({...order,customers:customer},plan,{rank:0},seen,now).body,/put your bag.*now/i);
  assert.match(nextMessage({...order,customers:customer},plan,{rank:1},{...seen,rank:3},now).body,/next day when available.*let you know/i);
  assert.equal(nextMessage({...order,customers:{}},plan,{rank:0},seen,now),null);
 });

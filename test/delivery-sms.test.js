@@ -20,6 +20,18 @@ test('customer pickup uses pickup ETA, not arrival at the laundromat',async()=>{
  const message=nextMessage(f.order,f.plan,{rank:0},obs,stamp);
  assert.match(message.body,/2:10 PM ET/);assert.doesNotMatch(message.body,/shipday|ordertracking|Home|Shop|40|http/i);
 });
+test('pickup tells the customer to put the bag at the order location before its ETA',async()=>{
+ const f=fixture();f.order.preferences={special_instructions:'Side gate'};
+ f.order.customers.preferences={special_instructions:'Front door'};
+ const message=nextMessage(f.order,f.plan,{rank:0},await observe(f),stamp);
+ assert.match(message.body,/driver is on the way/i);
+ assert.match(message.body,/Please put your bag at the Side gate between now and 2:10 PM ET\./);
+ assert.doesNotMatch(message.body,/Front door/);
+ f.tracking=async()=>({});
+ const withoutEta=nextMessage(f.order,f.plan,{rank:0},await observe(f),stamp);
+ assert.match(withoutEta.body,/Please put your bag at the Side gate now\./);
+ assert.doesNotMatch(withoutEta.body,/between|Estimated arrival/);
+});
 test('pickup never substitutes destination ETA if pickup ETA unavailable',async()=>{
  const f=fixture();f.tracking=async()=>({etaMinutes:4});const obs=await observe(f);
  assert.equal(obs.rank,1);assert.equal(obs.etaMinutes,null);
@@ -93,15 +105,38 @@ test('a first observation of a completed trip does not backfill old messages',as
  const x=workerFixture();x.f.remote.orderStatus.orderState='ALREADY_DELIVERED';
  await x.worker.tick();assert.equal(x.sent.length,0);assert.equal(x.rows.length,0);
 });
-test('canceled, opted-out, cardless, expired or replaced trips never send queued text',async()=>{
+test('canceled, opted-out, cardless or replaced trips never send queued text',async()=>{
  for(const change of [
   x=>x.f.order.delivery_notifications_suppressed=true,x=>x.f.order.status='CANCELED',x=>x.f.order.customers.status='UNSUBSCRIBED',
   x=>x.f.order.customers.default_payment_method_id=null,x=>x.f.plan.shipday_order_id='100',
-  x=>x.rows[0].created_at=new Date(stamp-120001).toISOString(),
   x=>x.f.remote.orderStatus.orderState='PICKED_UP']) {
    const x=workerFixture();await x.worker.poll(x.f.plan);change(x);
    await x.worker.deliver(x.rows[0]);assert.equal(x.sent.length,0);assert.equal(x.rows[0].state,'SKIPPED');
  }
+});
+test('a provider read failure before sending is retried once on the next tick',async()=>{
+ const x=workerFixture();await x.worker.poll(x.f.plan);
+ let calls=0;const original=x.f.provider.findOrders;
+ x.f.provider.findOrders=async()=>{calls++;throw Error('Shipday request failed (HTTP 429).');};
+ await x.worker.tick();assert.equal(x.rows[0].state,'PENDING');assert.equal(x.sent.length,0);
+ // One delivery read and at most one polling read, not repeated delivery attempts.
+ assert.ok(calls<=2);
+ x.f.provider.findOrders=original;
+ await x.worker.tick();await x.worker.tick();
+ assert.equal(x.sent.length,1);assert.equal(x.sent[0].to,x.f.order.customers.phone);
+ assert.equal(x.rows[0].state,'SIMULATED');
+});
+test('a delayed on-way milestone uses a freshly verified ETA instead of expiring unsent',async()=>{
+ const x=workerFixture();await x.worker.poll(x.f.plan);
+ x.rows[0].created_at=new Date(stamp-5*60000).toISOString();
+ x.args.tracking=async()=>({pickupEtaMinutes:3});
+ await createWorker(x.args).deliver(x.rows[0]);
+ assert.equal(x.sent.length,1);assert.match(x.sent[0].body,/2:05 PM ET/);
+});
+test('expired ETA-only updates remain skipped',async()=>{
+ const x=workerFixture();await x.worker.poll(x.f.plan);
+ Object.assign(x.rows[0],{event_key:'eta-1',created_at:new Date(stamp-120001).toISOString()});
+ await x.worker.deliver(x.rows[0]);assert.equal(x.sent.length,0);assert.equal(x.rows[0].state,'SKIPPED');
 });
 test('uncertain sends are recorded for review and not retried',async()=>{
  const x=workerFixture();let attempts=0;

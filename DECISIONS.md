@@ -1,3 +1,18 @@
+## 20261002 Customer pickup messages and concise development confirmation
+
+Neil requested a short development booking confirmation with pickup and wash
+instructions, bag location, any bag and conditional next day return. Omit the
+repeated price, card and hold explanation from that confirmation only. Payment
+rules and distinct phone/text greetings remain unchanged.
+
+When the verified assigned driver starts a pickup, notify that order's customer
+with their saved bag location and current pickup ETA. Ask for the bag between
+now and the estimated arrival; if ETA is unavailable, say now without inventing
+a deadline. Retry failed provider reads before SMS is attempted, always
+rechecking current status and ETA. Never retry an uncertain SMS delivery or
+send an on-way notice after collection. This repairs the observed HTTP 429
+failure that wrongly stopped an unsent message. Development only.
+
 ## 20261002 Approved pickup preparation and fixed quote timing
 
 Development booking offers Earliest available and Schedule for later. Earliest resolves once to a quarter hour at least 15 minutes ahead, configurable with SHIPDAY_PICKUP_LEAD_MINUTES from 15 to 120. The scheduled picker uses quarter hour increments. Preparation time means bag readiness, not guaranteed driver arrival. Show the selected Shipday offer pickup estimate separately. Keep the resolved UTC time through pricing, review and dispatch. Continuing checkout validates the fixed time rather than applying the initial buffer again. Fewer than five minutes remaining requires a refreshed pickup and price review. This supersedes the historical ten minute past time grace for new quotes. Existing historical order handling is retained.
@@ -1050,3 +1065,11 @@ with DEVELOPMENT. Local processes retain their existing simulated sending.
 Development delivery receipts use a per-message webhook; the
 live number's incoming replies remain on production. No global webhook switch,
 payment-mode change or shared customer database is authorized by this change.
+## 20261002 Development booking notifications go to the customer
+
+Neil explicitly requested that order texts go to the customer associated with
+the order, after a staff alert created an unrelated dummy-number conversation.
+Disable the separate new order staff alert in development. Customer booking
+confirmations retain their existing order customer recipient. This supersedes
+the historical admin new order notification rule for development only. It does
+not add a recipient allowlist or change production notifications.
