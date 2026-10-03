@@ -6,6 +6,15 @@ const run = require('../src/core/run');
 const { pickupBagBody } = require('../src/web/run-page');
 const db = require('../src/db');
 const { router } = require('../src/routes/admin');
+const dispatch = require('../src/core/dispatch');
+
+test('selecting a late morning pickup uses its window with afternoon ETAs', () => {
+  const routes = [
+    { start: '10:00', end: '12:00', begun: true, complete: false },
+    { start: '14:00', end: '16:00', begun: true, complete: false },
+  ];
+  assert.equal(dispatch.activeRoute(routes, { start: '14:30', fromTime: '10:00' }), routes[0]);
+});
 
 function routeHandler(path, method) {
   const route = router.stack.find(layer => layer.route && layer.route.methods[method] &&
