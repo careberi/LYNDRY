@@ -163,7 +163,7 @@ test('and the money columns still never reach a driver', () => {
 
   // And the row's money group carries exactly the four the headings promise.
   // A row and a heading list that disagree shift every column after the gap.
-  assert.match(boardRow(), /showMoney \? \[planCell\(o\), promoCell\(o\), money\(o\.price_cents\), paymentBadge\(o\)\]/);
+  assert.match(boardRow(), /showMoney \? \[planCell\(o\), promoCell\(o\), pickupPriceCell\(o, \{ money \}\), paymentBadge\(o\)\]/);
 });
 
 // --- the same shape one click away ------------------------------------------

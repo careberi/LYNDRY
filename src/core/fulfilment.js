@@ -1619,6 +1619,22 @@ async function settleWeight(order, { by = {}, chosenLb = null, partnerLb = null,
 // unweighed bag is a charge short by a bag - and unlike the old flow, where
 // the sequence physically hid the next step, nothing stops a driver reaching
 // this button early.
+async function pickupQuote(order) {
+  const weight = Number(order.weight_lb || 0);
+  if (!Number.isFinite(weight) || weight <= 0) throw new Error('Weigh the bags before pricing this pickup.');
+  if (order.customer_id && !order.customers) throw new Error('Load the customer before checking their discount.');
+  const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
+  const floor = order.minimum_cents != null ? order.minimum_cents : 0;
+  const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
+  const byWeight = Math.round(weight * rate);
+  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
+  // A lookup failure must stop payment, never turn a promised discount into zero.
+  const deal = order.customers ? await promotions.discountFor(order.customers, order, beforeDiscount) : null;
+  const discountCents = deal ? deal.cents : 0;
+  return { weight, rate, floor, surcharge, byWeight, beforeDiscount, deal, discountCents,
+    priceCents: Math.max(0, beforeDiscount - discountCents) };
+}
+
 async function finishPickup(order, { by = {} } = {}) {
   if (order.van_confirmed_at) return { ok: true, already: true };
 
@@ -1699,28 +1715,8 @@ async function loadVan(order, { by = {} } = {}) {
   if (order.van_confirmed_at) return { ok: true, already: true };
 
   const customer = order.customers || null;
-  const weight = Number(order.weight_lb || 0);
-
-  // --- What it comes to, in memory ----------------------------------------
-  const rate = order.price_per_lb_cents || config.pricing.perPoundCents;
-  const floor = order.minimum_cents != null ? order.minimum_cents : 0;
-  const surcharge = Math.max(0, Number(order.surcharge_cents || 0));
-
-  const byWeight = Math.round(weight * rate);
-  // Paid wash options sit on top of the minimum, not inside it - the same order
-  // settleWeight() has always used, because the minimum is what a small load is
-  // worth and an extra we were asked for is separate work.
-  const beforeDiscount = Math.max(byWeight, floor) + surcharge;
-
-  const deal = customer
-    ? await promotions.discountFor(customer, order, beforeDiscount).catch((err) => {
-        console.error(`Could not work out a discount for ${order.id}: ${err.message}`);
-        return null;
-      })
-    : null;
-
-  const discountCents = deal ? deal.cents : 0;
-  const priceCents = Math.max(0, beforeDiscount - discountCents);
+  const { weight, floor, surcharge, byWeight, beforeDiscount, deal, discountCents, priceCents } =
+    await pickupQuote(order);
 
   // --- The card, before anything is written --------------------------------
   //
@@ -2231,6 +2227,7 @@ async function reconcileReturn(order, returned, { by = {} } = {}) {
 }
 
 module.exports = {
+  pickupQuote,
   collectedMessage,
   waivedWeighInText,
   // Exported so a test can read the sentence a customer actually gets. The

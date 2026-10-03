@@ -28,7 +28,7 @@ const reminders = require('../core/reminders');
 const { intakeTable } = require('../web/intake-table');
 const { runEconomicsBody } = require('../web/run-economics');
 const { routePlannerBody, routePlannerHead } = require('../web/route-planner');
-const { orderConsoleBody } = require('../web/order-console');
+const { orderConsoleBody, pickupPriceCell } = require('../web/order-console');
 const { processBody } = require('../web/process');
 const { journeyBody } = require('../web/journey');
 const {
@@ -1878,7 +1878,7 @@ const ORDER_FIELDS =
   // order page would quietly call every subscriber's pickup a one-off and
   // show the wrong rate beside it. Same trap as every other field in this
   // list, and the money is on this one.
-  'subscription_id, price_per_lb_cents, ' +
+  'subscription_id, price_per_lb_cents, minimum_cents, surcharge_cents, ' +
   // preferences carries where the driver should look and how it gets washed.
   // Without it the order page could show "leave outside" but not "front door",
   // which is the half the driver actually needs.
@@ -2110,7 +2110,7 @@ router.get('/ops', guard, withIssues, may('orders.view'), async (req, res, next)
         // APPLIED ONLY. A promotion that is merely expected has not come off
         // anything yet, and showing it in a column headed Promotion says it
         // has. Neil's rule: do not show it as if it is applied.
-        ...(showMoney ? [planCell(o), promoCell(o), money(o.price_cents), paymentBadge(o)] : []),
+        ...(showMoney ? [planCell(o), promoCell(o), pickupPriceCell(o, { money }), paymentBadge(o)] : []),
       ];
     };
 
@@ -3043,6 +3043,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // down and sent.
 const SMS_MAX_CHARS = 1600;
 
+async function pickupQuoteForConsole(order) {
+  try {
+    // The detail read projects the customer relation, not order.customer_id.
+    // Keep the optional wholesale column out of the shared board query:
+    // code may deploy before its migration. A failed preview must not take
+    // the page down or guess that the customer is retail.
+    const customerId = order.customers && order.customers.id;
+    if (!customerId) throw new Error('Customer pricing unavailable.');
+    const { data: buyer, error: buyerError } = await db.from('customers')
+      .select('id, wholesale_rate_cents').eq('id', customerId).single();
+    if (buyerError) throw buyerError;
+    if (!buyer) throw new Error('Customer pricing unavailable.');
+    return await fulfilment.pickupQuote({ ...order, customers: buyer });
+  } catch (_) {
+    return { unavailable: true };
+  }
+}
+
 router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req, res, next) => {
   try {
     // Accepts either form: the UUID, or the number a person would actually
@@ -3238,6 +3256,11 @@ router.get('/ops/orders/:id', guard, withIssues, may('orders.view'), async (req,
       partnerName: order.partners ? order.partners.name : null,
       promotionName: order.promotions ? order.promotions.code || order.promotions.name : null,
     };
+    if (showMoney && order.weight_lb != null && !order.weight_settled_at &&
+        !['PAID', 'WAIVED'].includes(order.payment_status) &&
+        labels.filter(l => l.leg === 'PICKUP').every(l => l.weight_lb != null)) {
+      consoleOrder.pickupQuote = await pickupQuoteForConsole(order);
+    }
     const askedView = String(req.query.log || '').trim();
     const view = ['human', 'exceptions', 'all'].includes(askedView) ? askedView : 'human';
     const banner = req.query.problem
@@ -4311,7 +4334,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
       // screen can say.
       .select(
         'id, order_number, status, pickup_date, pickup_time, ' +
-          'pickup_window_start, pickup_window_end, weight_lb, price_cents, payment_status, ' +
+          'pickup_window_start, pickup_window_end, weight_lb, price_cents, payment_status, van_confirmed_at, ' +
           'customers(stripe_customer_id, default_payment_method_id)'
       )
       .eq('customer_id', person.id)
@@ -4667,7 +4690,7 @@ router.get('/ops/customers/:id', guard, withIssues, may('customers.view'), async
           o.pickup_window_start ? escapeHtml(booking.arrivalWindow(o)) : '—',
           statusBadge(o.status, o),
           o.weight_lb ? `${o.weight_lb} lb` : '—',
-          ...(showMoney ? [money(o.price_cents), paymentBadge(o)] : []),
+          ...(showMoney ? [pickupPriceCell(o, { money }), paymentBadge(o)] : []),
         ])
       )}`;
 
@@ -12271,4 +12294,4 @@ function notFoundPage(res, message) {
 // opsNote is exported for the same reason statusBadge and labelState are: the
 // rule it carries is worth pinning, and the only way to pin "a notice writes no
 // colour into its own markup" is to call it and look at what comes back.
-module.exports = { router, statusBadge, labelState, opsNote };
+module.exports = { router, statusBadge, labelState, opsNote, pickupQuoteForConsole };
