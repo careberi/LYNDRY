@@ -253,7 +253,8 @@ async function sendAndLog(
   // Swap typographic characters for their plain twins first, then warn about
   // anything genuinely un-plainable that is left (an emoji, say). Sending and
   // logging both use the cleaned text so the record matches the message.
-  const text = toPlainText(body);
+  const plainText = toPlainText(body);
+  const text = sms.prepareText ? sms.prepareText(plainText) : plainText;
   warnIfExpensive(text);
 
   // ---------------------------------------------------------------------

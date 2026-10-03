@@ -1,3 +1,23 @@
+# Current change: real development texts
+
+Neil explicitly assigned Codex implementation. Enable outbound SMS only on the
+known hosted Railway development site, with explicit opt-in. Neil explicitly
+authorized real texts to any recipient selected by the app, with no additional
+recipient or link restriction. Use the live Telnyx sender and credentials. Prefix
+every development text with DEVELOPMENT on its own line, including direct login
+codes. Log the prefixed body
+and truthful send outcomes. Route development delivery receipts to development
+without changing the live number's incoming-reply webhook. Preserve production,
+local send blocking, Stripe test mode, and separate development data. No payment,
+order, reminder scheduling or driver route rules change. Tests and development
+deployment required. Independent review and Neil handset acceptance are pending.
+
+Validation: 1844 tests passed with placeholder service credentials, development
+feature settings, and external network blocked. New coverage includes arbitrary
+app-selected recipients, direct login-message prefixes, exact logged/deduplicated
+bodies, carrier failures, delivery callback overrides and unchanged production
+selection. No additional recipient or link restrictions were implemented.
+
 # 20261002 Complete development publication
 
 Neil explicitly requested committing every pending development change and pushing to dev, never main. Commit b6ac765 captures all 112 pending files, including booking and pricing, customer pages, order layout and photos, pickup observation, migration records and tests. The current merge retains the six newer origin/dev commits through b2b0b68, including verified delivery completion and the data refresh record. Overlaps preserve delivery completion checks, manual delivery attestation, both sets of notes and current portal behavior.

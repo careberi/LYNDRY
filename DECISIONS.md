@@ -1040,3 +1040,13 @@ Public weight pricing now accepts a pickup date and hourly Eastern time using th
 Neil requested removal of the public quote scheduling form. It has been removed, including the weight form association. Booking keeps its existing pickup choices. Scheduled quote links now distinguish unavailable pickup time from address coverage failure. The previous route mapped every no eligible shop error to outside service area even when the selected schedule was the constraint.
 
 Verified the reported address returns public prices without a scheduling form. The reported Sunday evening URL now says Pickup time unavailable and does not claim the address is unserved. Full npm test passed 1785 tests. Development only. No order, dispatch or payment changes. This supersedes the prior public schedule form addition.
+# 2026-10-02: real SMS from hosted development
+
+Neil requested the same Telnyx number and credentials for development testing.
+This supersedes the blanket development outbound block only for the explicitly
+enabled, known Railway development site. Neil explicitly authorized any recipient
+selected by the app, with no extra recipient or link restriction. Every text starts
+with DEVELOPMENT. Local processes retain their existing simulated sending.
+Development delivery receipts use a per-message webhook; the
+live number's incoming replies remain on production. No global webhook switch,
+payment-mode change or shared customer database is authorized by this change.

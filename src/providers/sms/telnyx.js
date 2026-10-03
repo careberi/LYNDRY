@@ -191,12 +191,13 @@ function parseDeliveryReceipt(body) {
 // which is what a two-way conversation needs. Passed in, it overrides the
 // sender for that one message — that is how sign-in codes can come from a
 // short code or a second number while the conversation stays where it is.
-async function sendMessage({ to, text, from, mediaUrls, noRetry = false }) {
+async function sendMessage({ to, text, from, mediaUrls, noRetry = false, webhookUrl }) {
   const sender = from || config.telnyx.phoneNumber;
   const attempts=noRetry?1:ATTEMPTS;
   if(mediaUrls && (!Array.isArray(mediaUrls) || mediaUrls.length!==1 || !/^https:\/\//.test(mediaUrls[0])))throw Error('One HTTPS photo is required for MMS.');
 
   const body = {
+    ...(webhookUrl ? { webhook_url: webhookUrl, webhook_failover_url: webhookUrl, use_profile_webhooks: false } : {}),
     to,
     text,
     ...(mediaUrls ? {type:'MMS',media_urls:mediaUrls} : {}),

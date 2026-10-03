@@ -159,6 +159,8 @@ const config = Object.freeze({
     // must keep coming from the main number, because a customer replies to
     // those and a short code is not where that conversation lives.
     codeNumber: process.env.LYNDRY_CODE_NUMBER || '',
+    developmentEnabled: process.env.DEVELOPMENT_SMS_ENABLED === 'true',
+    railway: Boolean(process.env.RAILWAY_ENVIRONMENT_ID && process.env.RAILWAY_SERVICE_ID),
   }),
 
   // HOW LONG THE AI WAITS BEFORE ANSWERING.

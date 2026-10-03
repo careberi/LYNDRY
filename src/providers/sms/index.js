@@ -33,7 +33,8 @@ const disabled = {
 };
 
 // ---------------------------------------------------------------------------
-// A REAL CARRIER KEY ONLY EVER SENDS FROM PRODUCTION.
+// DEFAULT: A REAL CARRIER KEY ONLY SENDS FROM PRODUCTION.
+// The explicit hosted-development exception is defined below.
 //
 // 25 September. The laptop's .env held a real Telnyx API key, and the ONLY
 // thing stopping it texting real customers was that TELNYX_PUBLIC_KEY happened
@@ -78,10 +79,14 @@ const grounded = {
 // send real texts the moment somebody pasted carrier keys into it to "test
 // properly". There is nobody real in the development database to text, so the
 // honest test is whose rows these are.
-function pick({ configured, production, realData }) {
-  // Real keys only ever send from the real system: production behaviour AND
-  // production data. Anything else prints the text and says it did not send.
-  if (configured) return production && realData ? 'telnyx' : 'telnyx-grounded';
+function pick({ configured, production, realData, development = false }) {
+  // Preserve production and local behavior. The opted-in development service
+  // uses the same carrier through a wrapper that labels every message.
+  if (configured) {
+    if (production && realData) return 'telnyx';
+    if (production && development) return 'telnyx-development';
+    return 'telnyx-grounded';
+  }
 
   // The fake driver accepts unsigned webhooks. Harmless where the data is
   // invented, and on the real public server it would let anybody impersonate a
@@ -91,12 +96,45 @@ function pick({ configured, production, realData }) {
   return 'fake';
 }
 
-const DRIVERS = { telnyx, 'telnyx-grounded': grounded, disabled, fake };
+// A development database alone must never authorize a real send. Neil opted
+// in to this hosted site on 2 October. Recipient selection stays with callers.
+function developmentAllowed({ enabled, railway, production, projectRef, baseUrl }) {
+  return Boolean(enabled && railway && production &&
+    projectRef === 'psrphpgbiifvnlrgvbdg' &&
+    baseUrl === 'https://lyndry-production-de2c.up.railway.app');
+}
+
+function developmentText(text) {
+  const body = String(text == null ? '' : text);
+  return body.startsWith('DEVELOPMENT\n') ? body : `DEVELOPMENT\n${body}`;
+}
+
+function createDevelopmentDriver(carrier, sender, baseUrl) {
+  return {
+    ...carrier,
+    name: 'telnyx-development',
+    prepareText: developmentText,
+    sendMessage: async (args) => {
+      return carrier.sendMessage({ ...args, text: developmentText(args.text), from: sender,
+        // Only delivery receipts change destination. Incoming replies still
+        // use the live number's existing messaging profile and webhook.
+        ...(baseUrl ? { webhookUrl: `${baseUrl}/sms` } : {}),
+      });
+    },
+  };
+}
+
+const development = createDevelopmentDriver(telnyx, config.telnyx.phoneNumber, config.baseUrl);
+const DRIVERS = { telnyx, 'telnyx-development': development, 'telnyx-grounded': grounded, disabled, fake };
 
 function chooseDriver() {
   const configured = Boolean(config.telnyx.apiKey && config.telnyx.publicKey);
   const production = config.env === 'production';
-  const name = pick({ configured, production, realData: config.supabase.isProduction });
+  const name = pick({ configured, production, realData: config.supabase.isProduction,
+    development: developmentAllowed({ enabled: config.telnyx.developmentEnabled,
+      railway: config.telnyx.railway, production, projectRef: config.supabase.projectRef,
+      baseUrl: config.baseUrl }),
+  });
 
   if (name === 'telnyx-grounded') {
     console.warn(
@@ -119,14 +157,14 @@ const driver = chooseDriver();
 
 module.exports = {
   name: driver.name,
-  // "Nothing this sends reaches a real phone." True of the fake driver, of the
-  // grounded one above, and of the refusing one - everything except Telnyx
-  // itself. Asked as "is it Telnyx" so a driver added later is assumed live
-  // until it says otherwise, which is the safe direction for a question whose
-  // wrong answer is a text somebody did not expect.
-  isFake: driver !== telnyx,
+  // Both carrier-backed drivers reach real phones, including development.
+  // Media attachments and send results must not label those sends simulated.
+  isFake: driver !== telnyx && driver !== development,
   // Exposed for the test that pins which driver each situation gets.
   pick,
+  developmentAllowed,
+  createDevelopmentDriver,
+  prepareText: driver.prepareText || ((text) => text),
   verifySignature: driver.verifySignature,
   parseInbound: driver.parseInbound,
   parseDeliveryReceipt: driver.parseDeliveryReceipt || (() => null),
